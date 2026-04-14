@@ -1,0 +1,123 @@
+{
+    "title": "PROJET DE MISE EN PLACE D’UN SYSTÈME DE CONTRÔLE DES AMENDES",
+    "subtitle": "Préparé par : Mohamed Abdallah & Hadhi Ahmed\nDate : 01/01/2026",
+    "slides": [
+        {
+            "title": "Table des matières",
+            "content": [
+                "Contexte institutionnel",
+                "Problématique",
+                "Objectifs du projet",
+                "Description du système proposé",
+                "Fonctionnalités principales",
+                "Architecture technique",
+                "Sécurité et gouvernance des données",
+                "Plan de mise en œuvre",
+                "Impact financier et recouvrement",
+                "Résultats attendus",
+                "Conclusion"
+            ]
+        },
+        {
+            "title": "Contexte institutionnel",
+            "content": [
+                "Modernisation de l’administration publique et renforcement des capacités opérationnelles.",
+                "Besoin d’un système numérique pour le contrôle des véhicules de la Police Nationale.",
+                "Croissance du parc automobile et méthodes de gestion manuelles actuelles.",
+                "Objectif : meilleure organisation, traçabilité et exploitation efficace des données."
+            ]
+        },
+        {
+            "title": "Problématique",
+            "content": [
+                "Absence de base de données centralisée et fiable.",
+                "Difficulté d’accès rapide à l’information lors des contrôles routiers.",
+                "Manque de statistiques consolidées pour l’aide à la décision.",
+                "Suivi des amendes inefficace, notifications non automatisées.",
+                "Pertes financières et baisse de crédibilité publique."
+            ]
+        },
+        {
+            "title": "Objectifs du projet",
+            "content": [
+                "Objectif général : Système centralisé pour la gestion, le suivi et l’analyse des véhicules contrôlés.",
+                "Objectifs spécifiques : Centraliser les informations, faciliter le travail des agents, fournir des statistiques fiables, améliorer la transparence et préparer un système évolutif."
+            ]
+        },
+        {
+            "title": "Description du système proposé",
+            "content": [
+                "Système numérique intégré assurant continuité entre contrôle, enregistrement, suivi des amendes et vérification des paiements.",
+                "Suppression des ruptures dans le processus et traçabilité renforcée."
+            ]
+        },
+        {
+            "title": "Alignement avec les problématiques",
+            "content": [
+                "Centralisation des données sur véhicules, infractions et amendes.",
+                "Suivi et horodatage des amendes.",
+                "Notification automatique par SMS.",
+                "Réduction des contestations et traçabilité complète."
+            ]
+        },
+        {
+            "title": "Fonctionnalités principales",
+            "content": [
+                "Tableau de bord décisionnel",
+                "Gestion des véhicules",
+                "Recherche et consultation rapide",
+                "Statistiques et graphiques"
+            ]
+        },
+        {
+            "title": "Architecture technique",
+            "content": [
+                "Application web centrale, base de données centralisée.",
+                "Interfaces pour agents autorisés.",
+                "Évolutivité vers applications mobiles."
+            ]
+        },
+        {
+            "title": "Sécurité et gouvernance des données",
+            "content": [
+                "Accès contrôlé et traçabilité des opérations.",
+                "Protection des données sensibles.",
+                "Séparation des environnements (dev/prod).",
+                "Conformité aux normes nationales de protection des données."
+            ]
+        },
+        {
+            "title": "Plan de mise en œuvre",
+            "content": [
+                "Phase 1 : Conception et développement.",
+                "Phase 2 : Déploiement pilote et ajustements.",
+                "Phase 3 : Généralisation et renforcement des capacités."
+            ]
+        },
+        {
+            "title": "Impact financier et recouvrement",
+            "content": [
+                "Amélioration du recouvrement des amendes.",
+                "Augmentation des recettes publiques.",
+                "Transparence et crédibilité financière."
+            ]
+        },
+        {
+            "title": "Résultats attendus",
+            "content": [
+                "Efficacité accrue des contrôles routiers.",
+                "Disponibilité de données fiables pour décisions publiques.",
+                "Transparence et crédibilité renforcées.",
+                "Préparation pour projets futurs (amendes électroniques, paiements numériques)."
+            ]
+        },
+        {
+            "title": "Conclusion",
+            "content": [
+                "Projet stratégique pour modernisation de la Police Nationale.",
+                "Renforcement de la sécurité routière.",
+                "Promotion des technologies numériques au service de l’État."
+            ]
+        }
+    ]
+}
