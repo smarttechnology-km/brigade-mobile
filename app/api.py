@@ -1303,5 +1303,84 @@ def get_photo_submission(submission_id):
             mimetype='image/jpeg',
             as_attachment=False
         )
+
+
+@api_bp.route('/vehicle/track/<track_token>', methods=['GET'])
+@jwt_required()
+def api_get_vehicle_by_track_token(track_token):
+    """
+    Get vehicle information by track token (QR code).
+    REQUIRES JWT authentication - ensures only authorized mobile app + admin can access.
+    This prevents public scanning of QR codes from revealing private info.
+    """
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
     
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    # Only policier, judiciaire, and administrateur can access vehicle info
+    if user.role not in ['policier', 'judiciaire', 'administrateur']:
+        return jsonify({"error": "Unauthorized - only police/admin can access vehicle info"}), 403
+    
+    # Find vehicle by track token
+    vehicle = Vehicle.query.filter_by(track_token=track_token).first()
+    
+    if not vehicle:
+        return jsonify({"error": "Vehicle not found"}), 404
+    
+    # Check island access for judiciaire users
+    if user.role == 'judiciaire' and user.country:
+        if vehicle.owner_island != user.country:
+            return jsonify({"error": "Access denied - different island"}), 403
+    
+    # Get vehicle fines
+    fines = Fine.query.filter_by(vehicle_id=vehicle.id).all()
+    
+    fines_data = []
+    total_amount = 0
+    unpaid_amount = 0
+    
+    for fine in fines:
+        total_amount += fine.amount
+        if not fine.paid:
+            unpaid_amount += fine.amount
+        
+        fines_data.append({
+            'id': fine.id,
+            'amount': float(fine.amount),
+            'reason': fine.reason,
+            'date': fine.date.isoformat() if fine.date else None,
+            'location': fine.location,
+            'paid': fine.paid,
+            'payment_date': fine.payment_date.isoformat() if fine.payment_date else None,
+            'fine_type': fine.fine_type
+        })
+    
+    return jsonify({
+        'success': True,
+        'vehicle': {
+            'id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name,
+            'owner_phone': vehicle.owner_phone,
+            'owner_email': vehicle.owner_email,
+            'vehicle_type': vehicle.vehicle_type,
+            'brand': vehicle.brand,
+            'color': vehicle.color,
+            'registration_date': vehicle.registration_date.isoformat() if vehicle.registration_date else None,
+            'registration_expiry': vehicle.registration_expiry.isoformat() if vehicle.registration_expiry else None,
+            'track_token': vehicle.track_token,
+            'owner_island': vehicle.owner_island
+        },
+        'fines': {
+            'list': fines_data,
+            'count': len(fines),
+            'paid_count': sum(1 for f in fines if f.paid),
+            'unpaid_count': sum(1 for f in fines if not f.paid),
+            'total_amount': float(total_amount),
+            'unpaid_amount': float(unpaid_amount)
+        }
+    })
+
     return send_file(submission.photo_path, mimetype='image/jpeg')
