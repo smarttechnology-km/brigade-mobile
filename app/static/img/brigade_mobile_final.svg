@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" role="img" aria-label="Brigade Mobile logo">
+  <defs>
+    <linearGradient id="blueGrad" x1="0" x2="1">
+      <stop offset="0" stop-color="#0b6ef6"/>
+      <stop offset="1" stop-color="#003a8c"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Outer circular badge -->
+  <g transform="translate(100,100)">
+    <circle cx="500" cy="350" r="420" fill="url(#blueGrad)" filter="url(#shadow)"/>
+    <circle cx="500" cy="350" r="320" fill="#fff"/>
+
+    <!-- Stylized star/badge emblem -->
+    <g transform="translate(0,0)">
+      <polygon points="500,140 560,300 740,320 600,420 640,600 500,500 360,600 400,420 260,320 440,300"
+               fill="#0b6ef6"/>
+      <polygon points="500,190 540,320 690,335 575,400 610,520 500,455 390,520 425,400 310,335 460,320"
+               fill="#fff" opacity="0.92"/>
+    </g>
+
+    <!-- Thin ring accent -->
+    <circle cx="500" cy="350" r="380" fill="none" stroke="#e6f0ff" stroke-width="10"/>
+
+    <!-- Wordmark -->
+    <text x="500" y="830" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial"
+          font-size="68" font-weight="700" fill="#0b6ef6" text-anchor="middle">Brigade Mobile</text>
+    <text x="500" y="885" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial"
+          font-size="28" font-weight="500" fill="#6b7c93" text-anchor="middle">Service mobile de contrôle et reçus</text>
+  </g>
+</svg>
