@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Reçu - Amande {{ fine.receipt_number or fine.id }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="receipt card p-4 shadow-sm">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div class="d-flex align-items-center">
+            <div class="me-3">
+              <i class="fas fa-shield-alt fa-2x text-primary"></i>
+            </div>
+            <div>
+              <h5 class="mb-0">Police Nationale — Contrôle Routier</h5>
+              <div class="small text-muted">Service des amendes et paiements</div>
+            </div>
+          </div>
+          <div class="text-end">
+            <div class="fw-bold">Reçu n° {{ fine.receipt_number or ('REC-' ~ fine.id) }}</div>
+            <div class="small text-muted">{{ fine.paid_at.strftime('%d/%m/%Y %H:%M') if fine.paid_at else '' }}</div>
+          </div>
+        </div>
+
+        <hr />
+
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <h6 class="fw-semibold">Informations Véhicule / Propriétaire</h6>
+            <p class="mb-1"><strong>Immatriculation:</strong> {{ vehicle.license_plate if vehicle else '—' }}</p>
+            <p class="mb-1"><strong>Propriétaire:</strong> {{ vehicle.owner_name if vehicle else '—' }}</p>
+            <p class="mb-1"><strong>Téléphone:</strong> {{ vehicle.owner_phone if vehicle and vehicle.owner_phone else '—' }}</p>
+            <p class="mb-1"><strong>Adresse:</strong> {{ vehicle.owner_address if vehicle and vehicle.owner_address else '—' }}</p>
+          </div>
+          <div class="col-md-6">
+            <h6 class="fw-semibold">Détails du paiement</h6>
+            <p class="mb-1"><strong>Motif:</strong> {{ fine.reason }}</p>
+            <p class="mb-1"><strong>Agent:</strong> {{ fine.officer or '—' }}</p>
+            <p class="mb-1"><strong>Montant payé:</strong> <span class="h5 fw-bold">{{ ('%.0f'|format(fine.amount|float)) }} KMF</span></p>
+            <p class="mb-0"><strong>Référence reçu:</strong> {{ fine.receipt_number or '—' }}</p>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <table class="table table-borderless">
+            <tbody>
+              <tr>
+                <td style="width:65%; vertical-align:top;">
+                  <div class="small text-muted">Notes</div>
+                  <div>{{ fine.notes or '—' }}</div>
+                </td>
+                <td class="text-center" style="vertical-align:top;">
+                  <a href="{{ url_for('main.public_track', token=vehicle.track_token) if vehicle else '#' }}" title="Voir le suivi" class="d-inline-block" target="_self" onclick="event.preventDefault(); window.location.href=this.href; return false;">
+                    <img src="{{ url_for('main.public_track_qrcode', token=vehicle.track_token) if vehicle else '' }}" alt="QR" style="max-width:120px;" />
+                  </a>
+                  <div class="small text-muted mt-1">Voir le suivi</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-4">
+          <div>
+            <div class="small text-muted">Signature de l'agent</div>
+            <div class="mt-4" style="height:60px; width:220px; border-bottom:1px solid #000"></div>
+          </div>
+          <div class="text-end">
+            <button class="btn btn-outline-secondary me-2" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
+            <a href="/payments" class="btn btn-secondary">Retour</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Receipt print styles */
+  .receipt { background: #fff; }
+  @media print {
+    body * { visibility: hidden; }
+    .receipt, .receipt * { visibility: visible; }
+    .receipt { position: absolute; left: 0; top: 0; width: 100%; }
+    .btn, a { display: none !important; }
+  }
+</style>
+{% endblock %}

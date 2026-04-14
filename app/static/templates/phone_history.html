@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Historique du Téléphone{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center">
+                <a href="{{ return_to or '/phones' }}" class="btn btn-outline-secondary me-3">
+                    <i class="fas fa-arrow-left"></i> Retour
+                </a>
+                <h2 class="mb-0">
+                    <i class="fas fa-mobile-alt me-2"></i>
+                    <span id="phone-title">Chargement...</span>
+                </h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- DÉTAILS DU TÉLÉPHONE -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informations</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Code</span>
+                            <strong id="detail-code">-</strong>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Marque</span>
+                            <strong id="detail-brand">-</strong>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Modèle</span>
+                            <strong id="detail-model">-</strong>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Couleur</span>
+                            <strong id="detail-color">-</strong>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Pays</span>
+                            <strong id="detail-island">-</strong>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Statut</span>
+                            <span id="detail-status">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Statistiques d'Utilisation</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Total d'emprunts</span>
+                            <strong id="stat-total-uses">-</strong>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Actuellement emprunté</span>
+                            <strong id="stat-active-use">-</strong>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Temps total utilisé</span>
+                            <strong id="stat-total-time">-</strong>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted d-block">Policier actuel</span>
+                            <strong id="stat-current-user">-</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABLEAU HISTORIQUE -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-history me-2"></i>Historique d'Utilisation (du plus récent au plus ancien)</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0" id="history-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>#</th>
+                      <th>Policier</th>
+                      <th>Date/Heure Emprunt</th>
+                      <th>Date/Heure Retour</th>
+                      <th>Durée d'Utilisation</th>
+                      <th>Notes</th>
+                      <th>Statut</th>
+                    </tr>
+                  </thead>
+                    <tbody id="history-tbody">
+                        <tr><td colspan="7" class="text-center py-4">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Détails Utilisateur -->
+<div class="modal fade" id="userDetailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title"><i class="fas fa-user me-2"></i>Détails du Policier</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <span class="text-muted d-block">Nom d'utilisateur</span>
+            <strong id="modal-username">-</strong>
+          </div>
+          <div class="col-md-6">
+            <span class="text-muted d-block">Nom complet</span>
+            <strong id="modal-fullname">-</strong>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <span class="text-muted d-block">Email</span>
+            <strong id="modal-email">-</strong>
+          </div>
+          <div class="col-md-6">
+            <span class="text-muted d-block">Téléphone</span>
+            <strong id="modal-phone">-</strong>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <span class="text-muted d-block">Pays</span>
+            <strong id="modal-country">-</strong>
+          </div>
+          <div class="col-md-6">
+            <span class="text-muted d-block">Région</span>
+            <strong id="modal-region">-</strong>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <span class="text-muted d-block">Rôle</span>
+            <strong id="modal-role">-</strong>
+          </div>
+          <div class="col-md-6">
+            <span class="text-muted d-block">Statut</span>
+            <span id="modal-status">-</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-2"></i>Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+    .phone-stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    .phone-stats-card .card-header {
+        background-color: rgba(0, 0, 0, 0.15);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+    
+    .phone-stats-card .card-body {
+        color: white;
+    }
+    
+    .phone-stats-card .stats-label {
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 0.85rem;
+    }
+    
+    .phone-stats-card strong {
+        color: white;
+    }
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/phone_history.js') }}"></script>
+<script>
+    const phoneId = {{ phone_id }};
+</script>
+{% endblock %}
