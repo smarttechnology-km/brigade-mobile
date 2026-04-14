@@ -17,10 +17,14 @@ login_manager = LoginManager()
 scheduler = BackgroundScheduler()
 
 def create_app():
-    app = Flask(__name__)
+    # Get absolute paths for templates and static folders
+    basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    template_folder = os.path.join(basedir, 'app', 'templates')
+    static_folder = os.path.join(basedir, 'app', 'static')
+    
+    app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
 
     # Configuration
-    basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     db_path = os.path.join(basedir, 'police.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
