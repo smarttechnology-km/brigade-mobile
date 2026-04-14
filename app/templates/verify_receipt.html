@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vérification du Reçu - Police des Comores</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .logo {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        
+        .status-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+        
+        .valid {
+            color: #28a745;
+        }
+        
+        .invalid {
+            color: #dc3545;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        
+        .message {
+            font-size: 18px;
+            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 12px;
+        }
+        
+        .message.valid {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+        
+        .message.invalid {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #dc3545;
+        }
+        
+        .payment-details {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-top: 30px;
+            text-align: left;
+        }
+        
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .detail-value {
+            color: #333;
+            font-weight: 700;
+        }
+        
+        .amount {
+            font-size: 24px;
+            color: #28a745;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            color: #856404;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 30px;
+            text-align: left;
+        }
+        
+        .warning-box h3 {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        
+        .warning-box ul {
+            margin-left: 20px;
+            line-height: 1.8;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        
+        .badge.paid {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🧾</div>
+        
+        {% if valid %}
+            <div class="status-icon valid">✓</div>
+            <h1>Reçu Authentique</h1>
+            <div class="message valid">
+                {{ message }}
+            </div>
+        {% else %}
+            <div class="status-icon invalid">✗</div>
+            <h1>Reçu Invalide</h1>
+            <div class="message invalid">
+                {{ message }}
+            </div>
+        {% endif %}
+        
+        {% if payment %}
+        <div class="payment-details">
+            <h2 style="margin-bottom: 20px; color: #333;">Détails du Paiement</h2>
+            
+            <div class="detail-row">
+                <span class="detail-label">Numéro de reçu</span>
+                <span class="detail-value">#{{ payment.id }}</span>
+            </div>
+            
+            <div class="detail-row">
+                <span class="detail-label">Montant</span>
+                <span class="detail-value amount">{{ "{:,.0f}".format(payment.amount) }} KMF</span>
+            </div>
+            
+            <div class="detail-row">
+                <span class="detail-label">Statut</span>
+                <span class="badge {% if payment.status == 'paid' %}paid{% else %}pending{% endif %}">
+                    {% if payment.status == 'paid' %}Payé ✓{% else %}En attente{% endif %}
+                </span>
+            </div>
+            
+            {% if payment.license_plate %}
+            <div class="detail-row">
+                <span class="detail-label">Immatriculation</span>
+                <span class="detail-value">{{ payment.license_plate }}</span>
+            </div>
+            {% endif %}
+            
+            {% if payment.owner_name %}
+            <div class="detail-row">
+                <span class="detail-label">Propriétaire</span>
+                <span class="detail-value">{{ payment.owner_name }}</span>
+            </div>
+            {% endif %}
+            
+            {% if payment.payer_name %}
+            <div class="detail-row">
+                <span class="detail-label">Payeur</span>
+                <span class="detail-value">{{ payment.payer_name }}</span>
+            </div>
+            {% endif %}
+            
+            {% if payment.created_at %}
+            <div class="detail-row">
+                <span class="detail-label">Date de création</span>
+                <span class="detail-value">{{ payment.created_at.strftime('%d/%m/%Y à %H:%M') }}</span>
+            </div>
+            {% endif %}
+            
+            {% if payment.paid_at %}
+            <div class="detail-row">
+                <span class="detail-label">Date de paiement</span>
+                <span class="detail-value">{{ payment.paid_at.strftime('%d/%m/%Y à %H:%M') }}</span>
+            </div>
+            {% endif %}
+            
+            {% if payment.huri_payment_id %}
+            <div class="detail-row">
+                <span class="detail-label">Référence Huri Money</span>
+                <span class="detail-value" style="font-size: 12px;">{{ payment.huri_payment_id }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if not valid %}
+        <div class="warning-box">
+            <h3>⚠️ Mesures de Sécurité</h3>
+            <ul>
+                <li>Ne faites pas confiance à ce document</li>
+                <li>Contactez immédiatement la Police des Comores</li>
+                <li>Conservez ce reçu comme preuve de fraude</li>
+                <li>Ne procédez à aucun paiement supplémentaire</li>
+            </ul>
+        </div>
+        {% endif %}
+        
+        <div class="footer">
+            <p><strong>Police Nationale des Comores</strong></p>
+            <p>Vérification effectuée le {{ now.strftime('%d/%m/%Y à %H:%M') }}</p>
+            <p style="margin-top: 10px; font-size: 12px;">
+                Ce système de vérification utilise une signature cryptographique<br/>
+                pour garantir l'authenticité des reçus de paiement.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

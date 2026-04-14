@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Amendes - Contrôle Policier{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1 class="mb-2">
+        <i class="fas fa-file-invoice-dollar"></i> Gestion des Amendes
+      </h1>
+      <p class="text-muted">Système moderne de contrôle et gestion des infractions routières</p>
+    </div>
+  </div>
+
+  <div class="row mb-3 align-items-center">
+    <div class="col-12 col-md-6">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input id="fines-search" type="text" class="form-control" placeholder="Rechercher par immatriculation ou propriétaire..." />
+        <button class="btn btn-outline-secondary" type="button" id="clear-fines-search" title="Effacer la recherche" style="display:none;"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 text-end">
+      {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+      <button class="btn btn-outline-primary me-3" type="button" data-bs-toggle="modal" data-bs-target="#fine-types-modal">
+        <i class="fas fa-cog me-1"></i> Paramètres Amendes
+      </button>
+      {% endif %}
+      <div class="d-inline-block me-3" id="fines-filter-container">
+        <div class="btn-group btn-group-sm" role="group" id="fines-filter-group" aria-label="Filtres amendes">
+          <button type="button" class="btn btn-outline-secondary active" data-filter="all">Tous</button>
+          <button type="button" class="btn btn-outline-secondary" data-filter="paid">Payées</button>
+          <button type="button" class="btn btn-outline-secondary" data-filter="unpaid">Impayées</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="fines-create-form">
+        <h5 class="mb-3"><i class="fas fa-plus-circle me-2"></i>Créer une Nouvelle Amende</h5>
+        <form id="fines-create-form" class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label small fw-bold">Immatriculation</label>
+            <div class="input-group">
+              <input type="text" id="fine-vehicle-plate" class="form-control" placeholder="Ex: 123-ABC" required />
+              <button class="btn btn-outline-secondary btn-sm" type="button" id="clear-fine-plate" title="Effacer l'immatriculation"><i class="fas fa-times"></i></button>
+            </div>
+            <input type="hidden" id="fine-vehicle-id" />
+            <div class="form-text"><span id="fine-plate-status" class="text-muted small"></span></div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small fw-bold">Type d'Amende</label>
+            <select id="fine-type-select" class="form-select">
+              <option value="">-- Optionnel: choisir type --</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small fw-bold">Montant (KMF)</label>
+            <input type="number" step="0.01" id="fine-amount" class="form-control" required />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small fw-bold">Motif</label>
+            <input type="text" id="fine-reason" class="form-control" required />
+          </div>
+          <div class="col-md-1 text-end">
+            <div class="d-flex flex-column gap-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="reset-fine-form"><i class="fas fa-eraser me-1"></i>Effacer</button>
+              <button type="submit" class="btn btn-fine-primary btn-sm" id="create-fine-btn" disabled><i class="fas fa-check me-1"></i>Créer</button>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover" id="fines-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Immatriculation</th>
+              <th>Montant</th>
+              <th>Motif</th>
+              <th>Agent</th>
+              <th>Émis le</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="fines-tbody">
+            <tr><td colspan="8" class="text-center text-muted">Chargement des données...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Pagination Controls -->
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="text-muted small">
+          Affichage <span id="fines-pagination-start">0</span>-<span id="fines-pagination-end">0</span> sur <span id="fines-pagination-total">0</span> amendes
+        </div>
+        <nav aria-label="Pagination des amendes">
+          <ul class="pagination mb-0" id="fines-pagination-controls">
+            <li class="page-item"><a class="page-link" href="#" onclick="finesGoToPreviousPage(); return false;"><i class="fas fa-chevron-left"></i></a></li>
+            <li class="page-item"><span class="page-link" id="fines-page-info">Page 1</span></li>
+            <li class="page-item"><a class="page-link" href="#" onclick="finesGoToNextPage(); return false;"><i class="fas fa-chevron-right"></i></a></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Paramètres des amendes (types) - modal centered -->
+<div class="modal fade" id="fine-types-modal" tabindex="-1" aria-labelledby="fineTypesLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="fineTypesLabel">Paramètres des amendes</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="container py-1">
+          <div class="row">
+            <div class="col-12">
+          <form id="fine-type-form" class="row g-2 align-items-end mb-3">
+            <input type="hidden" id="fine-type-id" />
+            <div class="col-md-6">
+              <label class="form-label small">Motif (libellé)</label>
+              <input type="text" id="fine-type-label" class="form-control" placeholder="Ex: Non-port du casque" required />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">Montant (KMF)</label>
+              <input type="number" step="0.01" id="fine-type-amount" class="form-control" required />
+            </div>
+            <div class="col-md-3 text-end">
+              <button type="button" id="fine-type-cancel" class="btn btn-outline-secondary me-2 d-none">Annuler</button>
+              <button type="submit" class="btn btn-outline-primary">Ajouter Type</button>
+            </div>
+          </form>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Motif</th>
+                  <th>Montant (KMF)</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="fine-types-tbody">
+                <tr><td colspan="4" class="text-center text-muted">Chargement...</td></tr>
+              </tbody>
+            </table>
+          </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/fines_list.js') }}"></script>
+{% endblock %}

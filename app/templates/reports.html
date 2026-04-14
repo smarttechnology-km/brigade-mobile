@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Rapports - Contrôle Policier{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row align-items-center mb-3">
+    <div class="col-12 col-md-4">
+      <h2 class="mb-0"><i class="fas fa-file-alt"></i> Rapports</h2>
+      <p class="text-muted small mb-0">Filtrer, visualiser et exporter</p>
+    </div>
+    
+    <div class="col-12 col-md-4 text-end">
+        <!-- Buttons moved into the filters card for consistent UX on all viewports -->
+        <span class="text-muted small">Utilisez les filtres ci-dessous pour affiner les résultats</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-3 shadow-sm reports-card">
+        <div class="card-body">
+              <!-- Debug panel removed in production -->
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-3">
+              <label class="form-label small">Période (début)</label>
+              <input type="date" id="filter-start" class="form-control form-control-sm" />
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label small">Période (fin)</label>
+              <input type="date" id="filter-end" class="form-control form-control-sm" />
+            </div>
+            <div class="col-12 col-md-2">
+              <label class="form-label small">Type</label>
+              <select id="filter-type" class="form-select form-select-sm">
+                <option value="">Tous</option>
+                <option value="voiture">Voiture</option>
+                <option value="taxi">Taxi</option>
+                <option value="moto">Moto</option>
+                <option value="camion">Camion</option>
+                <option value="minibus">Minibus</option>
+                <option value="ambulance">Ambulance</option>
+                <option value="suv">SUV</option>
+                <option value="other">Autre</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-2">
+              <label class="form-label small">Statut</label>
+              <select id="filter-status" class="form-select form-select-sm">
+                <option value="">Tous</option>
+                <option value="active">Actif</option>
+                <option value="inactive">Inactif</option>
+                <option value="suspended">Suspendu</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-2">
+              <label class="form-label small">Type de rapport</label>
+              <select id="report-kind" class="form-select form-select-sm">
+                <option value="vehicles">Véhicules</option>
+                <option value="expired">Vignette expirée</option>
+                <option value="fines">Amendes (Tous)</option>
+                <option value="fines_unpaid">Amendes — Impayées</option>
+                <option value="fines_paid">Amendes — Payées</option>
+              </select>
+            </div>
+            <!-- Hidden input to hold paid filter; quick buttons below are the visible controls -->
+            <div class="col-12 col-md-2" style="display:none;">
+              <input type="hidden" id="filter-paid" value="">
+            </div>
+            <div class="col-12 col-md-2" id="fines-quick-filters" style="display:none;">
+              <label class="form-label small d-block">Rapide</label>
+              <div class="btn-group" role="group" aria-label="fines quick filters">
+                <button type="button" id="fines-unpaid-btn" class="btn btn-sm btn-outline-danger active" data-paid="false">Impayées</button>
+                <button type="button" id="fines-paid-btn" class="btn btn-sm btn-outline-success" data-paid="true">Payées</button>
+              </div>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label small">Recherche</label>
+              <input id="filter-q" type="text" class="form-control form-control-sm" placeholder="immatriculation, propriétaire, VIN...">
+            </div>
+              <div class="col-12">
+                <div class="d-flex justify-content-end mt-3 gap-2">
+                  <button class="btn btn-outline-secondary" id="btn-reset-filters">Réinitialiser</button>
+                  <button class="btn btn-primary" id="btn-apply-filters">Appliquer</button>
+                  <button class="btn btn-success" id="btn-export-csv"><i class="fas fa-file-pdf me-1"></i> Export PDF</button>
+                </div>
+              </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+      <!-- Summary cards -->
+      <div class="row mb-4" id="reports-summary">
+            <div class="col-md-3">
+          <div class="card">
+            <div class="card-body">
+              <h6 class="text-muted">Total Véhicules</h6>
+              <h3 id="rep-total" class="rep-value">0</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card">
+            <div class="card-body">
+              <h6 class="text-muted">Actifs</h6>
+              <h3 id="rep-active" class="rep-value">0</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card">
+            <div class="card-body">
+              <h6 class="text-muted">Suspendus</h6>
+              <h3 id="rep-suspended" class="rep-value">0</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card">
+            <div class="card-body">
+              <h6 class="text-muted">Expiration Vignette (<span id="expiring-days">30</span>j)</h6>
+              <h3 id="rep-expiring" class="rep-value">0</h3>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results table -->
+      <div class="card">
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm" id="reports-table">
+              <thead class="table-light" id="reports-thead">
+                  <tr>
+                    <th>#</th>
+                    <th>Immatriculation</th>
+                    <th>Propriétaire</th>
+                    <th>Type</th>
+                    <th>Statut</th>
+                    <th>Expiration Vignette</th>
+                    <th>Enregistré</th>
+                  </tr>
+              </thead>
+              <tbody id="reports-tbody">
+                <tr><td colspan="7" class="text-center text-muted">Appliquer des filtres pour afficher les résultats</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+    <script>
+// Fallback: minimal handlers if reports.js failed to run — no visible debug output
+document.addEventListener('DOMContentLoaded', function(){
+  try{
+    const log = function(m){ console.log('[reports-fallback] ' + m); };
+    if(typeof applyFilters !== 'function' || typeof resetFilters !== 'function' || typeof exportCsv !== 'function'){
+      // attach safe fallbacks that do not manipulate the page UI
+      log('reports.js not loaded or functions missing. Attaching minimal fallback handlers.');
+      const btnApply = document.getElementById('btn-apply-filters'); if(btnApply) btnApply.addEventListener('click', function(){ window.location.reload(); });
+      const btnReset = document.getElementById('btn-reset-filters'); if(btnReset) btnReset.addEventListener('click', function(){ location.reload(); });
+      const btnExport = document.getElementById('btn-export-csv'); if(btnExport) btnExport.addEventListener('click', function(){ alert('Export unavailable: JS failed to load'); });
+    } else {
+        // silently note availability and trigger initial load of all results
+        console.log('reports.js loaded — functions available. Triggering initial report load.');
+        setTimeout(function(){
+          const applyBtn = document.getElementById('btn-apply-filters');
+          if(applyBtn) { applyBtn.click(); }
+          else if(typeof applyFilters === 'function') { applyFilters(); }
+        }, 50);
+      }
+  }catch(e){ console.error('reports fallback error', e); }
+});
+</script>
+<script>
+// Inline fallback full implementation (only defines functions if missing).
+(function(){
+  if(typeof applyFilters === 'function' && typeof resetFilters === 'function' && typeof exportCsv === 'function') return;
+  console.warn('Inline reports fallback active: defining report functions in-page');
+
+  function collectFilters(){
+    const start = document.getElementById('filter-start') ? document.getElementById('filter-start').value : '';
+    const end = document.getElementById('filter-end') ? document.getElementById('filter-end').value : '';
+    const type = document.getElementById('filter-type') ? document.getElementById('filter-type').value : '';
+    const status = document.getElementById('filter-status') ? document.getElementById('filter-status').value : '';
+    const q = document.getElementById('filter-q') ? document.getElementById('filter-q').value : '';
+    const params = new URLSearchParams();
+    if(start) params.append('start_date', start);
+    if(end) params.append('end_date', end);
+    if(type) params.append('type', type);
+    if(status) params.append('status', status);
+    if(q) params.append('q', q);
+    return params;
+  }
+
+  function renderReportsTable(items){
+    const tbody = document.getElementById('reports-tbody');
+    if(!items || items.length===0){ tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun résultat</td></tr>'; return; }
+    tbody.innerHTML = items.map((v,i)=>`<tr>
+      <td>${i+1}</td>
+      <td><strong>${v.license_plate||''}</strong></td>
+      <td>${v.owner_name||''}</td>
+      <td>${(v.vehicle_type||'')}</td>
+      <td>${(v.status||'')}</td>
+      <td>${v.registration_expiry||''}</td>
+      <td>${v.created_at||''}</td>
+    </tr>`).join('');
+  }
+
+  function renderFinesTable(items){
+    const tbody = document.getElementById('reports-tbody');
+    if(!items || items.length===0){ tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun résultat</td></tr>'; return; }
+    tbody.innerHTML = items.map((f,i)=>`<tr>
+      <td>${i+1}</td>
+      <td><strong>${f.license_plate||''}</strong></td>
+      <td>${f.reason||''}</td>
+      <td>${Math.round(f.amount||0)} KMF</td>
+      <td>${f.issued_at_str||f.issued_at||''}</td>
+      <td>${f.paid?'<span class="badge bg-success">Payée</span>':'<span class="badge bg-danger">Impayée</span>'}</td>
+      <td>${f.receipt_number||''}</td>
+    </tr>`).join('');
+  }
+
+  function updateFinesSummary(items){
+    const total = items.length; const paid = items.filter(i=>i.paid).length; const unpaid = total-paid;
+    document.getElementById('rep-total').textContent = total;
+    document.getElementById('rep-active').textContent = paid;
+    document.getElementById('rep-suspended').textContent = unpaid;
+    document.getElementById('rep-expiring').textContent = '—';
+  }
+
+  function setReportsHeader(kind){
+    const thead = document.getElementById('reports-thead'); if(!thead) return;
+    if(kind && kind.indexOf('fines')===0){
+      thead.innerHTML = `<tr><th>#</th><th>Immatriculation</th><th>Motif</th><th>Montant</th><th>Émis le</th><th>Statut</th><th>Reçu</th></tr>`;
+    } else {
+      thead.innerHTML = `<tr><th>#</th><th>Immatriculation</th><th>Propriétaire</th><th>Type</th><th>Statut</th><th>Expiration Vignette</th><th>Enregistré</th></tr>`;
+    }
+  }
+
+  function updateSummary(items){
+    const total = items.length; const active = items.filter(i=>i.status==='active').length; const suspended = items.filter(i=>i.status==='suspended').length;
+    const now = new Date(); const future = new Date(); future.setDate(now.getDate()+30);
+    const expiring = items.filter(i=>{ if(!i.registration_expiry) return false; const d=new Date(i.registration_expiry); return d>=now && d<=future; }).length;
+    document.getElementById('rep-total').textContent = total;
+    document.getElementById('rep-active').textContent = active;
+    document.getElementById('rep-suspended').textContent = suspended;
+    document.getElementById('rep-expiring').textContent = expiring;
+  }
+
+  window.applyFilters = function(){
+    const kind = document.getElementById('report-kind') ? document.getElementById('report-kind').value : 'vehicles';
+    if(kind && kind.indexOf('fines')===0){
+      // determine paid filter from kind value or hidden filter
+      let paid = '';
+      if(kind === 'fines_paid') paid = 'true';
+      else if(kind === 'fines_unpaid') paid = 'false';
+      else paid = document.getElementById('filter-paid') ? document.getElementById('filter-paid').value : '';
+      const q = document.getElementById('filter-q') ? document.getElementById('filter-q').value : '';
+      const paidParam = paid?`&paid=${paid}`:'';
+      fetch(`/api/vehicles/fines/all?q=${encodeURIComponent(q)}${paidParam}`).then(r=>r.json()).then(data=>{ renderFinesTable(data); updateFinesSummary(data); }).catch(e=>alert('Erreur'));
+      return;
+    }
+    if(kind === 'expired'){
+      const params = collectFilters(); params.append('expired','true');
+      fetch(`/api/vehicles/query?${params.toString()}`).then(r=>r.json()).then(data=>{ renderReportsTable(data); updateSummary(data); }).catch(e=>alert('Erreur'));
+      return;
+    }
+    const params = collectFilters(); fetch(`/api/vehicles/query?${params.toString()}`).then(r=>r.json()).then(data=>{ renderReportsTable(data); updateSummary(data); }).catch(e=>alert('Erreur'));
+  };
+
+  window.resetFilters = function(){
+    const elems=['filter-start','filter-end','filter-type','filter-status','filter-q','filter-paid']; elems.forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+    // reset report kind to default and trigger change so UI updates
+    try{ const kindEl = document.getElementById('report-kind'); if(kindEl){ kindEl.value='vehicles'; kindEl.dispatchEvent(new Event('change')); } }catch(e){ console.error('resetFilters fallback set kind failed', e); }
+    // apply filters after clearing so results reload
+    try{ if(typeof applyFilters === 'function') applyFilters(); else { const btnApply = document.getElementById('btn-apply-filters'); if(btnApply) btnApply.click(); } }catch(e){ console.error('resetFilters fallback apply failed', e); }
+  };
+
+  window.exportCsv = function(){
+    const kind = document.getElementById('report-kind') ? document.getElementById('report-kind').value : 'vehicles';
+    if(kind && kind.indexOf('fines')===0){ const paid = kind === 'fines_paid' ? 'true' : (kind === 'fines_unpaid' ? 'false' : (document.getElementById('filter-paid') ? document.getElementById('filter-paid').value : '')); const paidParam = paid?`&paid=${paid}`:''; window.location.href=`/api/vehicles/fines/all?export=pdf${paidParam}`; return; }
+    const params = collectFilters(); if(kind==='expired') params.append('expired','true'); params.append('export','pdf'); window.location.href=`/api/vehicles/export?${params.toString()}`;
+  };
+
+  // attach handlers if buttons exist
+  document.addEventListener('DOMContentLoaded', function(){
+    const btnApply = document.getElementById('btn-apply-filters'); if(btnApply) btnApply.addEventListener('click', applyFilters);
+    const btnReset = document.getElementById('btn-reset-filters'); if(btnReset) btnReset.addEventListener('click', resetFilters);
+    const btnExport = document.getElementById('btn-export-csv'); if(btnExport) btnExport.addEventListener('click', exportCsv);
+    // Trigger initial load so the table shows all results by default
+    try{ if(typeof applyFilters === 'function') applyFilters(); }catch(e){ console.error('initial applyFilters failed', e); }
+  });
+
+})();
+</script>
+{% endblock %}

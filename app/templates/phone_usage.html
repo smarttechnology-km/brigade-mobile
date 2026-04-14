@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Historique d'Utilisation des Téléphones{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row align-items-center mb-4">
+      <div class="col-12 col-md-8">
+        <h2 class="mb-0"><i class="fas fa-history"></i> Historique d'Utilisation</h2>
+      </div>
+    </div>
+
+    <!-- STATISTIQUES -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-primary text-white">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase"><i class="fas fa-mobile-alt me-2"></i>Total Téléphones</h6>
+                    <h3 class="mb-0" id="stat-total">-</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase"><i class="fas fa-check-circle me-2"></i>Actifs</h6>
+                    <h3 class="mb-0" id="stat-active">-</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-danger text-white">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase"><i class="fas fa-times-circle me-2"></i>Inactifs</h6>
+                    <h3 class="mb-0" id="stat-inactive">-</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-warning text-white">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase"><i class="fas fa-clock me-2"></i>Empruntés</h6>
+                    <h3 class="mb-0" id="stat-borrowed">-</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bouton et Barre de recherche -->
+    <div class="row align-items-center mb-4">
+      <div class="col-12 col-md-8">
+        <div class="input-group">
+          <span class="input-group-text bg-white">
+            <i class="fas fa-search"></i>
+          </span>
+          <input 
+            type="text" 
+            class="form-control" 
+            id="search-usage-code" 
+            placeholder="Rechercher par code téléphone..."
+            autocomplete="off"
+          />
+          <button 
+            class="btn btn-outline-secondary" 
+            type="button" 
+            id="btn-clear-search"
+            title="Effacer la recherche"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      <div class="col-12 col-md-4 text-end">
+        <button class="btn btn-secondary" id="btn-toggle-history" title="Afficher tous les enregistrements">
+          <i class="fas fa-list"></i> Tous les enregistrements
+        </button>
+      </div>
+    </div>
+
+    <!-- TABLEAU HISTORIQUE -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-table me-2"></i>Utilisation Détaillée</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0" id="usage-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Policier</th>
+                      <th>Code Téléphone</th>
+                      <th>Date/Heure Emprunt</th>
+                      <th>Date/Heure Retour</th>
+                      <th>Durée</th>
+                      <th>Statut</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                    <tbody id="usage-tbody">
+                        <tr><td colspan="7" class="text-center py-4">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Check-out -->
+<div class="modal fade" id="checkoutModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">
+          <i class="fas fa-sign-out-alt me-2"></i>Emprunter un Téléphone
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <form id="checkout-form">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">
+                <i class="fas fa-user text-muted me-1"></i>Policier <span class="text-danger">*</span>
+              </label>
+              <select id="user-select" class="form-select" required>
+                <option value="">-- Sélectionner un policier --</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">
+                <i class="fas fa-mobile-alt text-muted me-1"></i>Téléphone <span class="text-danger">*</span>
+              </label>
+              <select id="phone-select" class="form-select" required>
+                <option value="">-- Sélectionner un téléphone --</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">
+                <i class="fas fa-sticky-note text-muted me-1"></i>Notes
+              </label>
+              <textarea id="checkout-notes" class="form-control" rows="2" placeholder="Ex: Motif de l'emprunt..."></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Annuler
+        </button>
+        <button type="button" class="btn btn-primary px-4" id="btn-confirm-checkout">
+          <i class="fas fa-check me-1"></i>Emprunter
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Check-in -->
+<div class="modal fade" id="checkinModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">
+          <i class="fas fa-sign-in-alt me-2"></i>Retourner le Téléphone
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <p class="mb-3">Êtes-vous sûr de vouloir retourner ce téléphone?</p>
+        <div class="alert alert-info mb-0">
+          <i class="fas fa-info-circle me-2"></i>
+          <small id="checkin-info">...</small>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Annuler
+        </button>
+        <button type="button" class="btn btn-success px-4" id="btn-confirm-checkin">
+          <i class="fas fa-check me-1"></i>Retourner
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal QR Code -->
+<div class="modal fade" id="qrcodeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title d-flex align-items-center" id="qrcodeModalLabel">
+          <i class="fas fa-qrcode me-2"></i>
+          <span>QR Code du Téléphone</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center p-4">
+        <div id="qrcode-container" style="padding: 20px;">
+          <p class="text-muted">Chargement du QR code...</p>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Fermer
+        </button>
+        <a id="download-qrcode-btn" class="btn btn-primary" href="#" download>
+          <i class="fas fa-download me-1"></i>Télécharger
+        </a>
+        <button type="button" class="btn btn-success" onclick="window.print()">
+          <i class="fas fa-print me-1"></i>Imprimer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- View User Modal -->
+<div class="modal fade" id="viewUserModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title"><i class="fas fa-user-circle me-2"></i>Détails du Policier</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <h6 class="text-muted mb-4"><i class="fas fa-id-card me-2"></i>Informations personnelles</h6>
+        <div class="row mb-4">
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Nom d'utilisateur</small></label>
+            <p class="h6 mb-0" id="view-u-username">-</p>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Nom complet</small></label>
+            <p class="h6 mb-0" id="view-u-fullname">-</p>
+          </div>
+        </div>
+        <div class="row mb-4">
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Email</small></label>
+            <p class="h6 mb-0" id="view-u-email">-</p>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Téléphone</small></label>
+            <p class="h6 mb-0" id="view-u-phone">-</p>
+          </div>
+        </div>
+        <div class="row mb-4">
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Pays</small></label>
+            <p class="h6 mb-0" id="view-u-country">-</p>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Région</small></label>
+            <p class="h6 mb-0" id="view-u-region">-</p>
+          </div>
+        </div>
+        
+        <hr class="my-4"/>
+        
+        <h6 class="text-muted mb-4"><i class="fas fa-user-shield me-2"></i>Permissions et statut</h6>
+        <div class="row mb-4">
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Rôle</small></label>
+            <p class="h6 mb-0" id="view-u-role">-</p>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Statut</small></label>
+            <div id="view-u-status">-</div>
+          </div>
+        </div>
+        
+        <hr class="my-4"/>
+        
+        <h6 class="text-muted mb-3"><i class="fas fa-calendar me-2"></i>Information système</h6>
+        <div class="row">
+          <div class="col-12 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Créé le</small></label>
+            <p class="h6 mb-0" id="view-u-created">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-2"></i>Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/phone_usage.js') }}"></script>
+{% endblock %}

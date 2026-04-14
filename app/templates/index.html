@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Accueil - Contrôle Policier des Véhicules{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-5">
+    <div class="row">
+        <div class="col-lg-8 mx-auto text-center">
+            <h1 class="display-4 mb-4">
+                <i class="fas fa-shield-alt text-primary"></i>
+                Bienvenue au Système de Contrôle Policier
+            </h1>
+            <p class="lead text-muted mb-4">
+                Gestion centralisée du contrôle des véhicules aux Comores
+            </p>
+            <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
+                {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+                <a href="/dashboard" class="btn btn-primary btn-lg px-4 gap-3">
+                    <i class="fas fa-chart-line"></i> Accéder au Dashboard
+                </a>
+                {% elif current_user.is_authenticated and (current_user.role == 'policier') %}
+                <a href="/fines" class="btn btn-primary btn-lg px-4 gap-3">
+                    <i class="fas fa-file-invoice-dollar"></i> Accéder aux Amandes
+                </a>
+                {% else %}
+                <a href="/dashboard" class="btn btn-primary btn-lg px-4 gap-3">
+                    <i class="fas fa-chart-line"></i> Accéder au Dashboard
+                </a>
+                {% endif %}
+
+                {% if not (current_user.is_authenticated and (current_user.role == 'policier')) %}
+                <a href="/vehicles" class="btn btn-outline-secondary btn-lg px-4">
+                    <i class="fas fa-file"></i> Gérer les Véhicules
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Informations rapides -->
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-car fa-3x text-primary mb-3"></i>
+                        <h5 class="card-title">Gestion des Véhicules</h5>
+                        <p class="card-text">Enregistrer et suivre les véhicules avec leurs informations détaillées.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-bar fa-3x text-success mb-3"></i>
+                        <h5 class="card-title">Statistiques</h5>
+                        <p class="card-text">Visualiser les statistiques et les tendances de contrôle.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-alt fa-3x text-info mb-3"></i>
+                        <h5 class="card-title">Rapports</h5>
+                        <p class="card-text">Générer des rapports détaillés sur les contrôles effectués.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
