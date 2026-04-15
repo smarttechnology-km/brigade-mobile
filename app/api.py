@@ -51,6 +51,15 @@ def get_current_user():
     return None
 
 
+@api_bp.route('/health', methods=['GET'])
+def api_health():
+    """Health check endpoint - lightweight, no auth required"""
+    return jsonify({
+        "status": "ok",
+        "message": "Police API is running"
+    }), 200
+
+
 @api_bp.route('/auth/login', methods=['POST'])
 def api_login():
     data = request.get_json() or {}
