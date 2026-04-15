@@ -975,8 +975,9 @@ def get_vehicle_qrcode(vehicle_id):
 
 
 @main_bp.route('/track/<token>')
+@login_required
 def public_track(token):
-    # page publique pour suivre l'historique via token
+    # page sécurisée - accessible seulement aux utilisateurs connectés
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
     # collect history entries and fines
     history_items = []
@@ -1011,15 +1012,8 @@ def public_track(token):
             })
         # sort by date desc
         history_items.sort(key=lambda x: x['created_at'], reverse=True)
-        # compute unpaid fines count only for authenticated users (avoid leaking info on public page)
-        try:
-            from flask_login import current_user
-            if current_user and getattr(current_user, 'is_authenticated', False):
-                unpaid_count = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).count()
-            else:
-                unpaid_count = 0
-        except Exception:
-            unpaid_count = 0
+        # compute unpaid fines count
+        unpaid_count = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).count()
     except Exception:
         history_items = []
     
@@ -1272,8 +1266,9 @@ def api_users_profile_password():
 
 
 @main_bp.route('/track/<token>/qrcode')
+@login_required
 def public_track_qrcode(token):
-    """Générer un QR public pour le token (affiché sur la page publique de suivi)"""
+    """Générer un QR sécurisé pour le token (accessible seulement aux utilisateurs connectés)"""
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
     # point the QR to the public tracking page itself
     track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
