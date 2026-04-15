@@ -102,15 +102,6 @@ h1.display-4, h1.page-title {
 /* Center the search input when placed in the column */
 .search-bar.mx-auto { margin-left: auto !important; margin-right: auto !important; }
 
-/* Sidebar layout */
-.sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    width: 250px;
-    overflow-y: auto;
-    z-index: 1030;
 }
 
 /* User card inside sidebar */
@@ -192,11 +183,61 @@ main { padding-top: 24px; padding-bottom: 24px; }
     footer {
         margin-left: 250px;
     }
+    /* Display sidebar normally on large screens */
+    .sidebar {
+        transform: translateX(0) !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
 }
 
-/* Mobile: sidebar hidden by default; we'll toggle with simple class via JS */
-.sidebar-hidden {
-    display: none !important;
+/* Mobile sidebar slide animation */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 250px;
+    overflow-y: auto;
+    z-index: 1035;
+}
+
+/* Mobile: sidebar slides in from left */
+@media (max-width: 991.98px) {
+    .sidebar {
+        transform: translateX(-100%);
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .sidebar.sidebar-open {
+        transform: translateX(0);
+        opacity: 1;
+        visibility: visible;
+    }
+    
+    main {
+        padding: 24px 16px;
+    }
+}
+
+/* Sidebar backdrop/overlay for mobile */
+.sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0);
+    z-index: 1025;
+    transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+.sidebar-backdrop.sidebar-backdrop-visible {
+    background: rgba(0, 0, 0, 0.5);
+    pointer-events: auto;
 }
 
 /* Navigation */
