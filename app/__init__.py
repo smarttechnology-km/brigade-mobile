@@ -56,6 +56,17 @@ def create_app():
     jwt = JWTManager()
     jwt.init_app(app)
 
+    # Error handlers
+    @app.errorhandler(403)
+    def forbidden(error):
+        from flask import render_template
+        return render_template('unauthorized.html'), 403
+
+    @app.errorhandler(401)
+    def unauthorized(error):
+        from flask import render_template
+        return render_template('unauthorized.html'), 401
+
     # Initialize scheduler
     scheduler.start()
 
