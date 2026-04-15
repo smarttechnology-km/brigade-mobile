@@ -976,34 +976,12 @@ def get_vehicle_qrcode(vehicle_id):
 
 @main_bp.route('/track/<token>')
 def public_track(token):
-    """
-    PUBLIC page for tracking - SECURITY: Does NOT display sensitive information.
-    App mobile and admin must use /api/vehicle/track/<token> with JWT authentication.
-    """
-    # Verify vehicle exists (404 if not)
+    # page publique pour suivre l'historique via token
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
-    
-    # Check if user is authenticated and authorized
-    try:
-        from flask_login import current_user
-        is_authorized = (current_user and 
-                        getattr(current_user, 'is_authenticated', False) and
-                        getattr(current_user, 'role', None) in ['policier', 'judiciaire', 'administrateur'])
-    except Exception:
-        is_authorized = False
-    
-    from datetime import datetime
-    
-    # If NOT authorized, show security message (no vehicle info leaked)
-    if not is_authorized:
-        return render_template('track_secure.html', 
-                              vehicle_found=True,
-                              api_endpoint='/api/vehicle/track/' + token)
-    
-    # If authorized, show full vehicle information (like before)
+    # collect history entries and fines
     history_items = []
     unpaid_count = 0
-    
+    # vehicle history
     try:
         from app.models import VehicleHistory, Fine
         hist = VehicleHistory.query.filter_by(vehicle_id=vehicle.id).order_by(VehicleHistory.created_at.desc()).all()
@@ -1031,11 +1009,22 @@ def public_track(token):
                 'details': f.notes or '',
                 'actor': f.officer or ''
             })
+        # sort by date desc
         history_items.sort(key=lambda x: x['created_at'], reverse=True)
-        unpaid_count = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).count()
+        # compute unpaid fines count only for authenticated users (avoid leaking info on public page)
+        try:
+            from flask_login import current_user
+            if current_user and getattr(current_user, 'is_authenticated', False):
+                unpaid_count = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).count()
+            else:
+                unpaid_count = 0
+        except Exception:
+            unpaid_count = 0
     except Exception:
         history_items = []
     
+    # Pass datetime.now for expiry calculations in template
+    from datetime import datetime
     return render_template('track.html', vehicle=vehicle, history=history_items, unpaid_count=unpaid_count, now=datetime.now)
 
 
