@@ -975,9 +975,10 @@ def get_vehicle_qrcode(vehicle_id):
 
 
 @main_bp.route('/track/<token>')
-@login_required
 def public_track(token):
     # page sécurisée - accessible seulement aux utilisateurs connectés
+    if not current_user.is_authenticated:
+        abort(403)
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
     # collect history entries and fines
     history_items = []
@@ -1266,9 +1267,10 @@ def api_users_profile_password():
 
 
 @main_bp.route('/track/<token>/qrcode')
-@login_required
 def public_track_qrcode(token):
     """Générer un QR sécurisé pour le token (accessible seulement aux utilisateurs connectés)"""
+    if not current_user.is_authenticated:
+        abort(403)
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
     # point the QR to the public tracking page itself
     track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
