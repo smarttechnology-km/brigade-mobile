@@ -14,7 +14,8 @@ var currentVehiclesDisplayed = window.currentVehiclesDisplayed || [];
 window.currentVehiclesDisplayed = currentVehiclesDisplayed;
 var currentPageVehicles = window.currentPageVehicles || 1;
 window.currentPageVehicles = currentPageVehicles;
-const VEHICLES_PER_PAGE = 20;
+var VEHICLES_PER_PAGE = window.VEHICLES_PER_PAGE || 20;
+window.VEHICLES_PER_PAGE = VEHICLES_PER_PAGE;
 
 function setupVehicleTypeToggle(){
     const selectEl = document.getElementById('vehicle_type_select');

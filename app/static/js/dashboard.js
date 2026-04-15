@@ -18,19 +18,31 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
- * Charger les données du dashboard via l'API
+ * Charger les données du dashboard via l'API avec retry pour les erreurs 502
  */
-function loadDashboardData() {
+function loadDashboardData(retryCount = 0) {
+    const maxRetries = 2;
+    const retryDelay = 2000; // 2 secondes entre les tentatives
+    
     fetch('/api/vehicles/stats', { credentials: 'same-origin' })
         .then(async response => {
             if(!response.ok){
                 let body = '';
                 try{ body = await response.text(); }catch(e){}
+                
+                // Si c'est une erreur 502 et qu'on n'a pas dépassé les retry max, attendre et réessayer
+                if(response.status === 502 && retryCount < maxRetries){
+                    console.warn(`Erreur 502. Nouvelle tentative ${retryCount + 1}/${maxRetries}...`);
+                    setTimeout(() => loadDashboardData(retryCount + 1), retryDelay);
+                    return;
+                }
+                
                 throw new Error('HTTP ' + response.status + ' ' + (response.statusText || '') + ' - ' + body);
             }
             return response.json();
         })
         .then(data => {
+            if (data === undefined) return; // Retry en cours
             clearDashboardError();
             try{
                 // Compare to last fetched stats to avoid unnecessary re-renders
@@ -53,10 +65,10 @@ function loadDashboardData() {
         })
         .catch(error => {
             console.error('Erreur lors du chargement des statistiques:', error);
-            showDashboardError('Impossible de charger les statistiques: ' + (error.message || String(error)));
+            showDashboardError('Impossible de charger les statistiques: ' + (error.message || String(error)) + ' (le serveur reprend du service, veuillez patienter...)');
         });
 
-    loadVehiclesList();
+    loadVehiclesList(retryCount);
 }
 
 /**
@@ -273,7 +285,10 @@ function updateStatusChart(statusData) {
 /**
  * Charger la liste des véhicules
  */
-function loadVehiclesList() {
+function loadVehiclesList(retryCount = 0) {
+    const maxRetries = 2;
+    const retryDelay = 2000; // 2 secondes entre les tentatives
+    
     // hide table while loading to prevent flash of stale/partial content
     const table = document.getElementById('vehicles-table');
     // if server already provided initial vehicles, or we've already loaded once, don't hide
@@ -286,11 +301,20 @@ function loadVehiclesList() {
             if(!response.ok){
                 let body = '';
                 try{ body = await response.text(); }catch(e){}
+                
+                // Si c'est une erreur 502 et qu'on n'a pas dépassé les retry max, attendre et réessayer
+                if(response.status === 502 && retryCount < maxRetries){
+                    console.warn(`Erreur 502 sur /api/vehicles/list. Nouvelle tentative ${retryCount + 1}/${maxRetries}...`);
+                    setTimeout(() => loadVehiclesList(retryCount + 1), retryDelay);
+                    return;
+                }
+                
                 throw new Error('HTTP ' + response.status + ' ' + (response.statusText || '') + ' - ' + body);
             }
             return response.json();
         })
         .then(data => {
+            if (data === undefined) return; // Retry en cours
             try{
                 // Build a compact key for the first 10 vehicles to detect changes
                 const keyItems = (data || []).slice(0, 10).map(v => ({
