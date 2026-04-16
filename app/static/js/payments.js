@@ -85,30 +85,80 @@ function bindViewControls(){
     }
 }
 
+let archiveData = [];
+let pendingData = [];
+
 function loadPayments(view){
     // view: 'pending' or 'archive'
     if(view === 'archive'){
         fetch('/api/vehicles/fines/all?paid=true')
             .then(r=>r.json())
             .then(data=>{
-                renderPaymentsTable(data, true);
+                // Store archive data for searching
+                archiveData = data || [];
+                // Sort by paid_at descending (most recent first)
+                archiveData.sort((a, b) => {
+                    const dateA = a.paid_at ? new Date(a.paid_at) : new Date(0);
+                    const dateB = b.paid_at ? new Date(b.paid_at) : new Date(0);
+                    return dateB - dateA;
+                });
+                renderPaymentsTable(archiveData, true);
                 // show export button
                 const exp = document.getElementById('export-archive'); if(exp) exp.style.display='inline-block';
+                // show search bar
+                const searchBar = document.getElementById('payments-search-bar'); if(searchBar) searchBar.style.display='';
+                // clear search input
+                const searchInput = document.getElementById('payments-search-input'); if(searchInput) searchInput.value = '';
             }).catch(err=>{
                 console.error('Erreur chargement archive', err);
-                document.getElementById('payments-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-muted">Erreur</td></tr>';
+                document.getElementById('payments-tbody').innerHTML = '<tr><td colspan="8" class="text-center text-muted">Erreur</td></tr>';
             });
     } else {
         fetch('/api/vehicles/fines/all?paid=false')
             .then(r=>r.json())
             .then(data=>{
-                renderPaymentsTable(data, false);
+                // Store pending data for searching
+                pendingData = data || [];
+                // Sort by issued_at descending (newest first)
+                pendingData.sort((a, b) => {
+                    const dateA = a.issued_at ? new Date(a.issued_at) : new Date(0);
+                    const dateB = b.issued_at ? new Date(b.issued_at) : new Date(0);
+                    return dateB - dateA;
+                });
+                renderPaymentsTable(pendingData, false);
                 const exp = document.getElementById('export-archive'); if(exp) exp.style.display='none';
+                // show search bar
+                const searchBar = document.getElementById('payments-search-bar'); if(searchBar) searchBar.style.display='';
+                // clear search input
+                const searchInput = document.getElementById('payments-search-input'); if(searchInput) searchInput.value = '';
             }).catch(err=>{
                 console.error('Erreur chargement paiements', err);
                 document.getElementById('payments-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-muted">Erreur</td></tr>';
             });
     }
+}
+
+function searchPayments(query){
+    const activeBtn = document.querySelector('#payments-view-group button.active');
+    const currentView = activeBtn ? activeBtn.dataset.view : 'pending';
+    
+    if(!query.trim()){
+        if(currentView === 'archive'){
+            renderPaymentsTable(archiveData, true);
+        } else {
+            renderPaymentsTable(pendingData, false);
+        }
+        return;
+    }
+    
+    const dataSource = currentView === 'archive' ? archiveData : pendingData;
+    const filtered = dataSource.filter(f => 
+        (f.license_plate || '').toLowerCase().includes(query.toLowerCase()) ||
+        (f.reason || '').toLowerCase().includes(query.toLowerCase()) ||
+        (f.receipt_number || '').toLowerCase().includes(query.toLowerCase())
+    );
+    const isArchive = currentView === 'archive';
+    renderPaymentsTable(filtered, isArchive);
 }
 
 function renderPaymentsTable(items, isArchive){

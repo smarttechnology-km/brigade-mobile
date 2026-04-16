@@ -102,9 +102,6 @@ function renderUsers(list){
             <td>${u.is_active ? '<span class="badge bg-success">Actif</span>' : '<span class="badge bg-secondary">Inactif</span>'}</td>
             <td>${escapeHtml(u.created_at||'')}</td>
             <td>
-              <button class="btn btn-sm btn-outline-info me-1" data-view="${u.id}" title="Voir détails">
-                <i class="fas fa-eye"></i>
-              </button>
               <button class="btn btn-sm btn-outline-primary me-1" data-edit="${u.id}" title="Éditer">
                 <i class="fas fa-edit"></i>
               </button>
@@ -115,7 +112,6 @@ function renderUsers(list){
         </tr>`).join('');
     tbody.querySelectorAll('button[data-uid]').forEach(b=>b.addEventListener('click', deleteUser));
     tbody.querySelectorAll('button[data-edit]').forEach(b=>b.addEventListener('click', function(){ openEditUser(this.dataset.edit); }));
-    tbody.querySelectorAll('button[data-view]').forEach(b=>b.addEventListener('click', function(){ viewUser(this.dataset.view); }));
 }
 
 // small helper to avoid HTML injection
@@ -232,21 +228,4 @@ function deleteUser(ev){
     }).then(res=>{ loadUsers(); }).catch(e=>{ alert(e.error || 'Erreur suppression'); });
 }
 
-function viewUser(id){
-    const u = usersCache.find(x=>String(x.id)===String(id));
-    if(!u) return alert('Utilisateur introuvable');
-    
-    // Display user details in a read-only format
-    document.getElementById('view-u-username').textContent = escapeHtml(u.username||'');
-    document.getElementById('view-u-fullname').textContent = escapeHtml(u.full_name||'');
-    document.getElementById('view-u-email').textContent = escapeHtml(u.email||'');
-    document.getElementById('view-u-phone').textContent = escapeHtml(u.phone||'');
-    document.getElementById('view-u-country').textContent = escapeHtml(u.country||'');
-    document.getElementById('view-u-region').textContent = escapeHtml(u.region||'');
-    document.getElementById('view-u-role').textContent = u.role ? (u.role === 'administrateur' ? '👤 Administrateur' : u.role === 'policier' ? '🚔 Policier' : '⚖️ Judiciaire') : '';
-    document.getElementById('view-u-status').innerHTML = u.is_active ? '<span class="badge bg-success">Actif</span>' : '<span class="badge bg-secondary">Inactif</span>';
-    document.getElementById('view-u-created').textContent = escapeHtml(u.created_at||'');
-    
-    const modal = new bootstrap.Modal(document.getElementById('viewUserModal'));
-    modal.show();
-}
+

@@ -482,8 +482,24 @@ function saveVehicle() {
 }
 
 let currentQrUrl = null;
+let currentLicensePlate = null;
+let currentVehicleId = null;
+
 function showQRCodeFor(id){
-    fetch(`/api/vehicles/${id}/qrcode`)
+    currentVehicleId = id;
+    // First fetch vehicle data to get license plate
+    fetch(`/api/vehicles/${id}`)
+        .then(r => r.json())
+        .then(vehicle => {
+            currentLicensePlate = vehicle.license_plate;
+            // Update license plate display in modal
+            const licensePlateDisplay = document.getElementById('license-plate-display');
+            if(licensePlateDisplay) {
+                licensePlateDisplay.textContent = vehicle.license_plate;
+            }
+            // Now fetch the QR code
+            return fetch(`/api/vehicles/${id}/qrcode`);
+        })
         .then(r => {
             if(!r.ok) throw new Error('Erreur génération QR');
             return r.blob();
@@ -515,6 +531,7 @@ function printQRCode(){
     }
     const printWindow = window.open('', '', 'height=500,width=500');
     if(printWindow){
+        const licensePlateHtml = currentLicensePlate ? `<p style="font-size: 18px; font-weight: bold; margin-top: 10px; margin-bottom: 0; color: #333;">${currentLicensePlate}</p>` : '';
         printWindow.document.write(`
             <html>
                 <head>
@@ -528,9 +545,8 @@ function printQRCode(){
                 </head>
                 <body>
                     <div class="qr-container">
-                        <h2>QR Code de suivi</h2>
                         <img src="${img.src}" alt="QR Code" />
-                        <p>Scannez ce QR pour voir l'historique du véhicule</p>
+                        ${licensePlateHtml}
                     </div>
                 </body>
             </html>
@@ -540,6 +556,19 @@ function printQRCode(){
             printWindow.print();
         }, 250);
     }
+}
+
+function downloadQRCodePDF(){
+    if(!currentVehicleId){
+        alert('Véhicule non disponible');
+        return;
+    }
+    const link = document.createElement('a');
+    link.href = `/api/vehicles/${currentVehicleId}/qrcode/pdf`;
+    link.download = `${currentLicensePlate || 'qrcode'}_qrcode.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 /**
