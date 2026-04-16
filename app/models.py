@@ -156,6 +156,7 @@ class Fine(db.Model):
     officer = db.Column(db.String(100))
     paid = db.Column(db.Boolean, default=False)
     paid_at = db.Column(db.DateTime)
+    paid_by = db.Column(db.String(100), nullable=True)
     receipt_number = db.Column(db.String(100), nullable=True)
     notes = db.Column(db.Text)
     issued_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
@@ -172,6 +173,7 @@ class Fine(db.Model):
             'paid': self.paid,
             'paid_at': self.paid_at.isoformat() if self.paid_at else None,
             'paid_at_str': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else None,
+            'paid_by': self.paid_by,
             'receipt_number': self.receipt_number,
             'notes': self.notes,
             'issued_at': self.issued_at.isoformat(),

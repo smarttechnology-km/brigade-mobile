@@ -584,14 +584,14 @@ def create_fine(vehicle_id):
     
     fine = Fine(vehicle_id=vehicle.id, amount=amount, reason=reason, officer=officer, notes=notes)
     
-    # If vehicle is exonerated, mark it for automatic payment after 24 hours
-    # (don't mark as paid immediately - will be handled by background task)
+    # If vehicle is exonerated, mark it for automatic deletion after 60 minutes
+    # (will be deleted automatically by background task - no trace left)
     if is_exonerated:
-        # Add a note indicating this fine will be auto-paid after 24h
+        # Add a note indicating this fine will be auto-deleted after 60 minutes
         if notes:
-            fine.notes = f"{notes}\n[EXONÉRÉ - Paiement automatique dans 24h]"
+            fine.notes = f"{notes}\n[EXONÉRÉ - Suppression automatique après 60 min]"
         else:
-            fine.notes = "[EXONÉRÉ - Paiement automatique dans 24h]"
+            fine.notes = "[EXONÉRÉ - Suppression automatique après 60 min]"
     
     db.session.add(fine)
     
@@ -844,6 +844,7 @@ def pay_fine(fine_id):
     from datetime import datetime
     fine.paid = True
     fine.paid_at = now_comoros()
+    fine.paid_by = paid_by  # Store the agent who marked as paid
     # generate a simple receipt number
     fine.receipt_number = f"REC-{fine.id}-{int(fine.paid_at.timestamp())}"
     db.session.add(fine)
@@ -960,7 +961,6 @@ def get_fines_stats():
 def get_vehicle_qrcode(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
-    vehicle = Vehicle.query.get_or_404(vehicle_id)
     # URL publique de suivi
     track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
     # Générer QR code PNG
@@ -972,6 +972,76 @@ def get_vehicle_qrcode(vehicle_id):
     img.save(buf, format='PNG')
     buf.seek(0)
     return send_file(buf, mimetype='image/png', download_name=f'{vehicle.license_plate}_qrcode.png')
+
+
+@vehicle_bp.route('/<int:vehicle_id>/qrcode/pdf', methods=['GET'])
+@login_required
+def get_vehicle_qrcode_pdf(vehicle_id):
+    """Retourne un PDF avec QR code + numéro d'immatriculation"""
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+    
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({'error': 'PDF generation not available'}), 500
+    
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.lib.enums import TA_CENTER
+        
+        # Générer QR code
+        track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+        qr = qrcode.QRCode(box_size=6, border=2)
+        qr.add_data(track_url)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Sauvegarder QR code dans un buffer
+        qr_buf = io.BytesIO()
+        qr_img.save(qr_buf, format='PNG')
+        qr_buf.seek(0)
+        
+        # Générer le PDF avec format petit (carte autocollante 10x10cm)
+        pdf_buf = io.BytesIO()
+        card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise
+        doc = SimpleDocTemplate(pdf_buf, pagesize=card_size, topMargin=0.3*cm, bottomMargin=0.3*cm, leftMargin=0.3*cm, rightMargin=0.3*cm)
+        styles = getSampleStyleSheet()
+        elems = []
+        
+        # QR Code image (plus grand)
+        qr_image = RLImage(qr_buf, width=7*cm, height=7*cm)
+        
+        # Créer une table pour centrer l'image
+        qr_table = Table([[qr_image]])
+        qr_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+        ]))
+        elems.append(qr_table)
+        elems.append(Spacer(1, 0.1*cm))
+        
+        # Numéro d'immatriculation légèrement réduit
+        license_plate_style = ParagraphStyle(
+            'LicensePlate',
+            parent=styles['Normal'],
+            fontSize=16,
+            textColor=colors.HexColor('#000000'),
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceAfter=0
+        )
+        elems.append(Paragraph(f'<b>{vehicle.license_plate}</b>', license_plate_style))
+        
+        # Créer le PDF
+        doc.build(elems)
+        pdf_buf.seek(0)
+        
+        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'{vehicle.license_plate}_qrcode.pdf')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @main_bp.route('/track/<token>')
@@ -988,6 +1058,9 @@ def public_track(token):
         from app.models import VehicleHistory, Fine
         hist = VehicleHistory.query.filter_by(vehicle_id=vehicle.id).order_by(VehicleHistory.created_at.desc()).all()
         for h in hist:
+            # Skip exoneration history entries
+            if 'exonération' in h.action.lower() or 'exonération' in (h.notes or '').lower():
+                continue
             history_items.append({
                 'type': 'history',
                 'created_at': h.created_at.isoformat(),
@@ -998,6 +1071,9 @@ def public_track(token):
             })
         fines = Fine.query.filter_by(vehicle_id=vehicle.id).order_by(Fine.issued_at.desc()).all()
         for f in fines:
+            # Skip exonerated fines (with auto-deletion note)
+            if f.notes and '[EXONÉRÉ - Suppression automatique après 60 min]' in f.notes:
+                continue
             history_items.append({
                 'type': 'fine',
                 'id': f.id,
@@ -1150,6 +1226,11 @@ def api_users_delete(user_id):
     if current_user.id == user_id:
         return jsonify({'error':'cannot delete yourself'}), 400
     u = User.query.get_or_404(user_id)
+    
+    # Delete related phone_usages records first (to avoid foreign key constraint)
+    from app.models import PhoneUsage
+    PhoneUsage.query.filter_by(user_id=user_id).delete()
+    
     db.session.delete(u)
     db.session.commit()
     return jsonify({'ok': True})
@@ -1282,6 +1363,77 @@ def public_track_qrcode(token):
     img.save(buf, format='PNG')
     buf.seek(0)
     return send_file(buf, mimetype='image/png')
+
+
+@main_bp.route('/track/<token>/qrcode/pdf')
+def public_track_qrcode_pdf(token):
+    """Télécharger QR code en PDF avec numéro d'immatriculation"""
+    if not current_user.is_authenticated:
+        abort(403)
+    
+    vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
+    
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({'error': 'PDF generation not available'}), 500
+    
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.lib.enums import TA_CENTER
+        
+        # Générer QR code
+        track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+        qr = qrcode.QRCode(box_size=6, border=2)
+        qr.add_data(track_url)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Sauvegarder QR code dans un buffer
+        qr_buf = io.BytesIO()
+        qr_img.save(qr_buf, format='PNG')
+        qr_buf.seek(0)
+        
+        # Générer le PDF avec format petit (carte autocollante 10x10cm)
+        pdf_buf = io.BytesIO()
+        card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise
+        doc = SimpleDocTemplate(pdf_buf, pagesize=card_size, topMargin=0.3*cm, bottomMargin=0.3*cm, leftMargin=0.3*cm, rightMargin=0.3*cm)
+        styles = getSampleStyleSheet()
+        elems = []
+        
+        # QR Code image (plus grand)
+        qr_image = RLImage(qr_buf, width=7*cm, height=7*cm)
+        
+        # Créer une table pour centrer l'image
+        qr_table = Table([[qr_image]])
+        qr_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+        ]))
+        elems.append(qr_table)
+        elems.append(Spacer(1, 0.1*cm))
+        
+        # Numéro d'immatriculation légèrement réduit
+        license_plate_style = ParagraphStyle(
+            'LicensePlate',
+            parent=styles['Normal'],
+            fontSize=16,
+            textColor=colors.HexColor('#000000'),
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceAfter=0
+        )
+        elems.append(Paragraph(f'<b>{vehicle.license_plate}</b>', license_plate_style))
+        
+        # Créer le PDF
+        doc.build(elems)
+        pdf_buf.seek(0)
+        
+        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'{vehicle.license_plate}_qrcode.pdf')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @vehicle_bp.route('/<int:vehicle_id>', methods=['PUT'])

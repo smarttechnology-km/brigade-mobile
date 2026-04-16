@@ -1,5 +1,5 @@
 from app import db
-from app.models import Fine, ExoneratedVehicle, Phone
+from app.models import Fine, ExoneratedVehicle, Phone, VehicleHistory, PhoneUsage
 from app.timezone_utils import now_comoros
 from datetime import timedelta
 import logging
@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 
 def process_exonerated_fines():
     """
-    Process fines for exonerated vehicles that are older than 24 hours.
-    Marks them as paid automatically.
+    Delete fines for exonerated vehicles that are older than 60 minutes.
+    Removes all traces from the system - no history, no record, completely deleted.
     """
     try:
         # Get current time
@@ -23,39 +23,36 @@ def process_exonerated_fines():
             logger.info("No exonerated vehicles found")
             return
 
-        # Find unpaid fines for exonerated vehicles that are older than 24 hours
-        cutoff_time = current_time - timedelta(hours=24)
+        # Find unpaid fines for exonerated vehicles that are older than 60 minutes
+        cutoff_time = current_time - timedelta(minutes=60)
 
-        fines_to_process = Fine.query.filter(
+        fines_to_delete = Fine.query.filter(
             Fine.vehicle_id.in_(exonerated_vehicle_ids),
             Fine.paid == False,
             Fine.issued_at <= cutoff_time
         ).all()
 
-        processed_count = 0
-        for fine in fines_to_process:
-            # Mark as paid
-            fine.paid = True
-            fine.paid_at = current_time
-            fine.receipt_number = f"REC-AUTO-{fine.vehicle_id}-{int(current_time.timestamp())}"
+        deleted_count = 0
+        for fine in fines_to_delete:
+            fine_id = fine.id
+            vehicle_id = fine.vehicle_id
+            
+            # Delete related history records to remove all traces
+            VehicleHistory.query.filter(
+                VehicleHistory.vehicle_id == vehicle_id,
+                VehicleHistory.action.contains(f"Amende")
+            ).delete()
+            
+            # Delete the fine itself
+            db.session.delete(fine)
+            deleted_count += 1
+            logger.info(f"Deleted fine ID {fine_id} for exonerated vehicle {vehicle_id} (60+ minutes old)")
 
-            # Update notes to indicate automatic payment
-            if "[EXONÉRÉ - Paiement automatique dans 24h]" in (fine.notes or ""):
-                fine.notes = (fine.notes or "").replace(
-                    "[EXONÉRÉ - Paiement automatique dans 24h]",
-                    "[EXONÉRÉ - Payé automatiquement après 24h]"
-                )
-            else:
-                fine.notes = f"{fine.notes or ''}\n[EXONÉRÉ - Payé automatiquement après 24h]".strip()
-
-            processed_count += 1
-            logger.info(f"Auto-paid fine ID {fine.id} for vehicle {fine.vehicle_id}")
-
-        if processed_count > 0:
+        if deleted_count > 0:
             db.session.commit()
-            logger.info(f"Processed {processed_count} exonerated fines")
+            logger.info(f"Deleted {deleted_count} exonerated fines with all traces removed")
         else:
-            logger.info("No fines to process")
+            logger.info("No fines to delete")
 
     except Exception as e:
         logger.error(f"Error processing exonerated fines: {str(e)}")
