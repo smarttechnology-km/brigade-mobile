@@ -24,6 +24,16 @@
     </div>
   </div>
 
+  <!-- Search bar for both pending and archive views -->
+  <div class="row mb-3" id="payments-search-bar" style="display:none;">
+    <div class="col-md-6">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" class="form-control" id="payments-search-input" placeholder="Rechercher par immatriculation, motif ou n° reçu..." onkeyup="searchPayments(this.value)">
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-body">
       <div class="table-responsive">

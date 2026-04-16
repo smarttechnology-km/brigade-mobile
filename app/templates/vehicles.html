@@ -281,11 +281,15 @@
       </div>
       <div class="modal-body text-center">
         <img id="qr-image" alt="QR Code" style="max-width:100%; height:auto;" />
+        <p id="license-plate-display" style="font-size: 18px; font-weight: bold; margin-top: 15px; margin-bottom: 10px;"></p>
         <p class="small text-muted mt-2">Scannez ce QR pour voir l'historique du véhicule</p>
       </div>
       <div class="modal-footer bg-light">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
           <i class="fas fa-times me-1"></i>Fermer
+        </button>
+        <button type="button" class="btn btn-success" id="download-qr-btn" onclick="downloadQRCodePDF()">
+          <i class="fas fa-download me-1"></i>Télécharger
         </button>
         <button type="button" class="btn btn-primary" id="print-qr-btn" onclick="printQRCode()">
           <i class="fas fa-print me-1"></i>Imprimer

@@ -64,7 +64,8 @@
         <div class="d-flex justify-content-between align-items-center mt-4">
           <div>
             <div class="small text-muted">Signature de l'agent</div>
-            <div class="mt-4" style="height:60px; width:220px; border-bottom:1px solid #000"></div>
+            <div class="mt-2 mb-2 fw-semibold">{{ fine.paid_by or '—' }}</div>
+            <div class="mt-2" style="height:60px; width:220px; border-bottom:1px solid #000"></div>
           </div>
           <div class="text-end">
             <button class="btn btn-outline-secondary me-2" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
