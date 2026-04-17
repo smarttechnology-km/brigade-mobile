@@ -16,6 +16,18 @@
             if (savedTheme === 'dark') {
                 document.documentElement.setAttribute('data-bs-theme', 'dark');
             }
+            
+            // Set theme icon early to prevent flashing
+            document.addEventListener('DOMContentLoaded', function() {
+                const html = document.documentElement;
+                const currentTheme = html.getAttribute('data-bs-theme') || 'light';
+                const themeBtn = document.getElementById('themeToggle');
+                if (themeBtn) {
+                    themeBtn.innerHTML = currentTheme === 'dark' ?
+                        '<i class="fas fa-sun"></i>' :
+                        '<i class="fas fa-moon"></i>';
+                }
+            });
         })();
     </script>
     
@@ -88,6 +100,18 @@
                             <button onclick="toggleTheme()" class="btn btn-outline-light btn-sm" id="themeToggle" title="Basculer thème sombre/clair">
                                 <i class="fas fa-moon"></i>
                             </button>
+                            <script>
+                                (function() {
+                                    const html = document.documentElement;
+                                    const currentTheme = html.getAttribute('data-bs-theme') || 'light';
+                                    const themeBtn = document.getElementById('themeToggle');
+                                    if (themeBtn) {
+                                        themeBtn.innerHTML = currentTheme === 'dark' ?
+                                            '<i class="fas fa-sun"></i>' :
+                                            '<i class="fas fa-moon"></i>';
+                                    }
+                                })();
+                            </script>
                             <a href="/auth/logout" class="btn btn-outline-light btn-sm w-100">Se déconnecter</a>
                         </div>
                 </div>
