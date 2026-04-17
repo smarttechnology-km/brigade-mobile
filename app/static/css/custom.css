@@ -216,9 +216,46 @@
   color: #ffffff !important;
 }
 
+[data-bs-theme="dark"] .table-light {
+  background-color: transparent !important;
+  color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] thead.table-light {
+  background-color: #2a2a2a !important;
+  color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] thead.table-light th {
+  background-color: #2a2a2a !important;
+  border-color: #333333 !important;
+  color: #ffffff !important;
+  --bs-table-bg: #2a2a2a !important;
+  --bs-table-color: #ffffff !important;
+}
+
 [data-bs-theme="dark"] .table thead th {
   background-color: #2a2a2a !important;
   border-color: #333333 !important;
+  color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .table thead {
+  background-color: #2a2a2a !important;
+  --bs-table-bg: #2a2a2a;
+}
+
+[data-bs-theme="dark"] .table thead tr {
+  background-color: #2a2a2a !important;
+}
+
+[data-bs-theme="dark"] th {
+  background-color: transparent;
+  color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] table thead th {
+  background-color: #2a2a2a;
   color: #ffffff !important;
 }
 
@@ -545,6 +582,37 @@
 [data-bs-theme="dark"] .input-group-text {
   color: #888888 !important;
 }}
+
+/* Reports table en mode sombre - styles très explicites */
+[data-bs-theme="dark"] #reports-table {
+  background-color: #1e1e1e !important;
+}
+
+[data-bs-theme="dark"] #reports-table thead th {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+  border-color: #333333 !important;
+  font-weight: 600;
+}
+
+[data-bs-theme="dark"] #reports-table tbody tr {
+  background-color: #2a2a2a !important;
+  color: #ffffff !important;
+  border-color: #333333 !important;
+}
+
+[data-bs-theme="dark"] #reports-table tbody tr:nth-child(even) {
+  background-color: #323232 !important;
+}
+
+[data-bs-theme="dark"] #reports-table tbody tr:hover {
+  background-color: #404040 !important;
+}
+
+[data-bs-theme="dark"] #reports-table tbody td {
+  color: #ffffff !important;
+  border-color: #333333 !important;
+}
 
 /* Track page improvements */
 .card-header {
