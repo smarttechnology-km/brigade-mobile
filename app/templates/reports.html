@@ -59,24 +59,25 @@
                 <option value="vehicles">Véhicules</option>
                 <option value="expired">Vignette expirée</option>
                 <option value="fines">Amendes (Tous)</option>
-                <option value="fines_unpaid">Amendes — Impayées</option>
-                <option value="fines_paid">Amendes — Payées</option>
+                <option value="qr_expired">QR CODE expirer</option>
+                <option value="insurance_expired">Assurance expirer</option>
               </select>
             </div>
             <!-- Hidden input to hold paid filter; quick buttons below are the visible controls -->
             <div class="col-12 col-md-2" style="display:none;">
               <input type="hidden" id="filter-paid" value="">
             </div>
-            <div class="col-12 col-md-2" id="fines-quick-filters" style="display:none;">
-              <label class="form-label small d-block">Rapide</label>
-              <div class="btn-group" role="group" aria-label="fines quick filters">
-                <button type="button" id="fines-unpaid-btn" class="btn btn-sm btn-outline-danger active" data-paid="false">Impayées</button>
-                <button type="button" id="fines-paid-btn" class="btn btn-sm btn-outline-success" data-paid="true">Payées</button>
-              </div>
-            </div>
             <div class="col-12 col-md-4">
               <label class="form-label small">Recherche</label>
               <input id="filter-q" type="text" class="form-control form-control-sm" placeholder="immatriculation, propriétaire, VIN...">
+            </div>
+            <div class="col-12 col-md-2" id="fines-quick-filters" style="display:none;">
+              <label class="form-label small d-block">Rapide</label>
+              <div class="btn-group" role="group" aria-label="fines quick filters">
+                <button type="button" id="fines-all-btn" class="btn btn-sm btn-outline-primary active" data-paid="">Tous</button>
+                <button type="button" id="fines-unpaid-btn" class="btn btn-sm btn-outline-danger" data-paid="false">Impayées</button>
+                <button type="button" id="fines-paid-btn" class="btn btn-sm btn-outline-success" data-paid="true">Payées</button>
+              </div>
             </div>
               <div class="col-12">
                 <div class="d-flex justify-content-end mt-3 gap-2">
@@ -92,7 +93,7 @@
   </div>
 
       <!-- Summary cards -->
-      <div class="row mb-4" id="reports-summary">
+      <div class="row mb-4 d-none" id="reports-summary">
             <div class="col-md-3">
           <div class="card">
             <div class="card-body">
@@ -128,7 +129,7 @@
       </div>
 
       <!-- Results table -->
-      <div class="card">
+      <div class="card d-none" id="reports-card">
         <div class="card-body">
           <div class="table-responsive">
             <table class="table table-sm" id="reports-table">
@@ -170,13 +171,8 @@ document.addEventListener('DOMContentLoaded', function(){
       const btnReset = document.getElementById('btn-reset-filters'); if(btnReset) btnReset.addEventListener('click', function(){ location.reload(); });
       const btnExport = document.getElementById('btn-export-csv'); if(btnExport) btnExport.addEventListener('click', function(){ alert('Export unavailable: JS failed to load'); });
     } else {
-        // silently note availability and trigger initial load of all results
-        console.log('reports.js loaded — functions available. Triggering initial report load.');
-        setTimeout(function(){
-          const applyBtn = document.getElementById('btn-apply-filters');
-          if(applyBtn) { applyBtn.click(); }
-          else if(typeof applyFilters === 'function') { applyFilters(); }
-        }, 50);
+        // silently note availability
+        console.log('reports.js loaded — functions available.');
       }
   }catch(e){ console.error('reports fallback error', e); }
 });
@@ -297,8 +293,6 @@ document.addEventListener('DOMContentLoaded', function(){
     const btnApply = document.getElementById('btn-apply-filters'); if(btnApply) btnApply.addEventListener('click', applyFilters);
     const btnReset = document.getElementById('btn-reset-filters'); if(btnReset) btnReset.addEventListener('click', resetFilters);
     const btnExport = document.getElementById('btn-export-csv'); if(btnExport) btnExport.addEventListener('click', exportCsv);
-    // Trigger initial load so the table shows all results by default
-    try{ if(typeof applyFilters === 'function') applyFilters(); }catch(e){ console.error('initial applyFilters failed', e); }
   });
 
 })();

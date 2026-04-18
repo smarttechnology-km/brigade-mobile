@@ -140,6 +140,34 @@
             </div>
             <div class="col-md-6">
               <div class="d-flex align-items-start">
+                <i class="fas fa-qrcode text-success me-2 mt-1"></i>
+                <div>
+                  <small class="text-muted d-block">Code QR de suivi</small>
+                  {% if vehicle.qr_code_expiry %}
+                    <strong>Expire le : {{ vehicle.qr_code_expiry.strftime('%d/%m/%Y') }}</strong>
+                    {% set days_qr = (vehicle.qr_code_expiry - now()).days %}
+                    {% if days_qr < 0 %}
+                      <span class="badge bg-danger ms-1">Expiré</span>
+                      <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-warning" onclick="regenerateQRCode('{{ vehicle.track_token }}')">
+                          <i class="fas fa-sync-alt me-1"></i>Régénérer QR Code
+                        </button>
+                      </div>
+                    {% elif days_qr <= 30 %}
+                      <span class="badge bg-warning text-dark ms-1">Expire bientôt</span>
+                    {% elif days_qr <= 365 %}
+                      <span class="badge bg-info ms-1">À renouveler</span>
+                    {% else %}
+                      <span class="badge bg-success ms-1">Valide</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted small">Non défini</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="d-flex align-items-start">
                 <i class="fas fa-shield-alt text-info me-2 mt-1"></i>
                 <div>
                   <small class="text-muted d-block">Assurance</small>
@@ -355,6 +383,67 @@
       } else paymentFilter.style.display = 'none';
     }
     applyFilter();
+
+    // Function to regenerate QR code
+    window.regenerateQRCode = function(trackToken) {
+      if (!confirm('Êtes-vous sûr de vouloir régénérer le code QR? Le véhicule sera réactivé et le token changera.')) {
+        return;
+      }
+
+      const button = event.target.closest('button');
+      button.disabled = true;
+      button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours...';
+
+      fetch(`/api/vehicle/track/${trackToken}/renew-qrcode`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          const message = `Code QR régénéré et véhicule réactivé!\n\nNouvel expiry: ${data.new_expiry}\nNouveau token: ${data.new_token}`;
+          showNotification('success', 'Succès', message);
+          // Redirect to new track token URL after 2 seconds
+          setTimeout(() => {
+            window.location.href = `/track/${data.new_token}`;
+          }, 2000);
+        } else {
+          showNotification('error', 'Erreur', data.error || 'Erreur lors de la régénération');
+          button.disabled = false;
+          button.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Régénérer QR Code';
+        }
+      })
+      .catch(error => {
+        console.error('Erreur:', error);
+        showNotification('error', 'Erreur', 'Erreur lors de la communication');
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Régénérer QR Code';
+      });
+    };
+
+    // Helper function to show notifications
+    window.showNotification = function(type, title, message) {
+      const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+      const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+          <strong>${title}:</strong> ${message}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      `;
+      const container = document.querySelector('.container');
+      const alertDiv = document.createElement('div');
+      alertDiv.innerHTML = alertHtml;
+      container.insertBefore(alertDiv.firstElementChild, container.firstElementChild);
+      
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        const alert = container.querySelector('.alert');
+        if (alert) alert.remove();
+      }, 5000);
+    };
   });
   </script>
   {% endblock %}
