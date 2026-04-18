@@ -55,6 +55,25 @@ function setupEventListeners() {
             filterUsageByCode('');
         });
     }
+
+    // Event listeners pour emprunt manuel
+    const manualBorrowModal = document.getElementById('manualBorrowModal');
+    if (manualBorrowModal) {
+        manualBorrowModal.addEventListener('show.bs.modal', function() {
+            loadPoliciersList();
+            loadPhonesList();
+            setDefaultBorrowDateTime();
+        });
+
+        manualBorrowModal.addEventListener('hidden.bs.modal', function() {
+            document.getElementById('manualBorrowForm').reset();
+        });
+    }
+
+    const submitBorrowBtn = document.getElementById('submitBorrowBtn');
+    if (submitBorrowBtn) {
+        submitBorrowBtn.addEventListener('click', submitManualBorrow);
+    }
 }
 
 function loadStats() {
@@ -349,6 +368,195 @@ function viewUserFromUsage(userId) {
             console.error('Error loading user:', err);
             alert('Erreur: ' + (err.message || 'Utilisateur introuvable'));
         });
+}
+
+// === GESTION EMPRUNT MANUEL ===
+function loadPoliciersList() {
+    const select = document.getElementById('borrowerSelect');
+    select.innerHTML = '<option value="">-- Chargement... --</option>';
+
+    fetch('/api/users/policiers')
+        .then(r => {
+            console.log('Policiers API Status:', r.status);
+            if (!r.ok) {
+                throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+            }
+            return r.json();
+        })
+        .then(data => {
+            console.log('API Response:', data);
+            
+            // La réponse est directement un array
+            let users = Array.isArray(data) ? data : [];
+            console.log('All users extracted:', users);
+            
+            // Filtrer les policiers actifs
+            let policiers = users.filter(u => u.is_active);
+            console.log('Active policiers found:', policiers.length);
+            
+            select.innerHTML = '<option value="">-- Sélectionner un policier --</option>';
+            
+            policiers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.username} (${user.full_name || user.email || 'N/A'})`;
+                select.appendChild(option);
+            });
+
+            if (policiers.length === 0) {
+                select.innerHTML = '<option value="">-- Aucun policier actif disponible --</option>';
+                console.warn('No policiers found!');
+            }
+        })
+        .catch(err => {
+            console.error('Erreur chargement policiers:', err.message);
+            select.innerHTML = `<option value="">-- Erreur: ${err.message} --</option>`;
+        });
+}
+
+function loadPhonesList() {
+    const select = document.getElementById('borrowPhoneSelect');
+    select.innerHTML = '<option value="">-- Chargement... --</option>';
+
+    fetch('/api/phones/list')
+        .then(r => {
+            if (!r.ok) throw r;
+            return r.json();
+        })
+        .then(data => {
+            console.log('Phones API Response:', data);
+            
+            // Gérer les deux formats possibles de réponse
+            let phones = [];
+            if (Array.isArray(data)) {
+                phones = data;
+            } else if (data.phones && Array.isArray(data.phones)) {
+                phones = data.phones;
+            }
+            
+            // Filtrer seulement les téléphones actifs
+            let activePhones = phones.filter(p => p.status === 'active');
+            
+            select.innerHTML = '<option value="">-- Sélectionner un téléphone --</option>';
+            
+            activePhones.forEach(phone => {
+                const option = document.createElement('option');
+                option.value = phone.id;
+                option.textContent = `${phone.phone_code} - ${phone.brand} ${phone.model}`;
+                select.appendChild(option);
+            });
+
+            if (activePhones.length === 0) {
+                select.innerHTML = '<option value="">-- Aucun téléphone actif disponible --</option>';
+            }
+        })
+        .catch(err => {
+            console.error('Erreur chargement téléphones:', err);
+            select.innerHTML = '<option value="">-- Erreur chargement --</option>';
+        });
+}
+
+function setDefaultBorrowDateTime() {
+    const now = new Date();
+    const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16);
+    document.getElementById('borrowDatetime').value = localDateTime;
+}
+
+function submitManualBorrow() {
+    const userId = document.getElementById('borrowerSelect').value;
+    const phoneId = document.getElementById('borrowPhoneSelect').value;
+    const borrowDatetime = document.getElementById('borrowDatetime').value;
+    const notes = document.getElementById('borrowNotes').value.trim();
+
+    if (!userId) {
+        alert('Veuillez sélectionner un policier');
+        return;
+    }
+
+    if (!phoneId) {
+        alert('Veuillez sélectionner un téléphone');
+        return;
+    }
+
+    if (!borrowDatetime) {
+        alert('Veuillez spécifier la date/heure d\'emprunt');
+        return;
+    }
+
+    const submitBtn = document.getElementById('submitBorrowBtn');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Traitement...';
+
+    const checkoutAt = new Date(borrowDatetime).toISOString();
+
+    fetch('/api/phone-usage/checkout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            phone_id: parseInt(phoneId),
+            user_id: parseInt(userId),
+            checkout_at: checkoutAt,
+            notes: notes || null
+        })
+    })
+    .then(r => {
+        if (!r.ok) {
+            return r.json().then(data => {
+                throw new Error(data.error || 'Erreur lors de l\'emprunt');
+            });
+        }
+        return r.json();
+    })
+    .then(data => {
+        // Fermer le modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('manualBorrowModal'));
+        if (modal) modal.hide();
+
+        // Montrer message de succès
+        showSuccessAlert('Emprunt enregistré avec succès!');
+
+        // Recharger l'historique et les stats
+        loadStats();
+        loadUsageHistory();
+
+        // Réinitialiser le formulaire
+        document.getElementById('manualBorrowForm').reset();
+    })
+    .catch(err => {
+        console.error('Erreur emprunt:', err);
+        alert('Erreur: ' + err.message);
+    })
+    .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
+}
+
+function showSuccessAlert(message) {
+    const alertHtml = `
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    const container = document.querySelector('.container-fluid');
+    const alertDiv = document.createElement('div');
+    alertDiv.innerHTML = alertHtml;
+    container.insertBefore(alertDiv.firstElementChild, container.firstChild);
+
+    setTimeout(() => {
+        const alert = container.querySelector('.alert');
+        if (alert) {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }
+    }, 3000);
 }
 
 function escapeHtml(s){
