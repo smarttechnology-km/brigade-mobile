@@ -812,7 +812,13 @@ def api_checkout_phone():
     data = request.get_json() or {}
     phone_id = data.get('phone_id')
     user_id = data.get('user_id')
-    notes = data.get('notes', '').strip() or None
+    # Handle notes safely - can be None or empty string
+    notes = data.get('notes')
+    if notes:
+        notes = notes.strip() or None
+    else:
+        notes = None
+    checkout_at = data.get('checkout_at')  # Optional: for manual borrow by admin/judiciaire
     
     if not phone_id or not user_id:
         return jsonify({'error': 'phone_id and user_id are required'}), 400
@@ -830,10 +836,32 @@ def api_checkout_phone():
     if active_usage:
         return jsonify({'error': f'Phone already checked out to {active_usage.user.username}'}), 400
     
+    # Use provided checkout_at or current time
+    if checkout_at:
+        try:
+            from datetime import datetime
+            # Clean up the ISO string for parsing
+            # Remove 'Z' and replace it with empty (assume UTC)
+            clean_checkout = checkout_at.replace('Z', '')
+            # Remove timezone offset if present
+            if '+' in clean_checkout:
+                clean_checkout = clean_checkout.split('+')[0]
+            elif clean_checkout.count('-') > 2:  # More than date dashes
+                # Has timezone offset
+                clean_checkout = clean_checkout[:clean_checkout.rfind('-')]
+            
+            # Parse using fromisoformat
+            checkout_datetime = datetime.fromisoformat(clean_checkout)
+        except Exception as e:
+            print(f'Date parsing error: {str(e)}, Input: {checkout_at}')
+            return jsonify({'error': f'Invalid date format. Please use ISO 8601 format.'}), 400
+    else:
+        checkout_datetime = now_comoros()
+    
     usage = PhoneUsage(
         phone_id=phone_id,
         user_id=user_id,
-        checkout_at=now_comoros(),
+        checkout_at=checkout_datetime,
         notes=notes
     )
     
@@ -922,6 +950,36 @@ def api_users_list():
             'created_at': u.created_at.strftime('%d/%m/%Y %H:%M') if u.created_at else None
         } for u in users]
     })
+
+
+@api_bp.route('/users/policiers', methods=['GET'])
+@login_required
+def api_policiers_list():
+    """Get list of policiers - accessible to admin and judiciaire
+    If judiciaire, filters by their country. If admin, shows all."""
+    # Allow admin and judiciaire to access this endpoint
+    if not (current_user.is_admin or current_user.role == 'judiciaire'):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    query = User.query.filter(User.role == 'policier')
+    
+    # If user is judiciaire, filter by their country
+    if current_user.role == 'judiciaire' and current_user.country:
+        query = query.filter(User.country == current_user.country)
+    
+    users = query.order_by(User.username).all()
+    return jsonify([{
+        'id': u.id,
+        'username': u.username,
+        'full_name': u.full_name,
+        'email': u.email,
+        'phone': u.phone,
+        'country': u.country,
+        'region': u.region,
+        'role': u.role,
+        'is_active': u.is_active,
+        'created_at': u.created_at.strftime('%d/%m/%Y %H:%M') if u.created_at else None
+    } for u in users])
 
 
 @api_bp.route('/users/<int:user_id>/details', methods=['GET'])
