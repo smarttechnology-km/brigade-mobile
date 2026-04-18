@@ -1396,6 +1396,17 @@ def upload_photo_submission():
     }), 201
 
 
+@api_bp.route('/photo-submissions/count-pending', methods=['GET'])
+def count_pending_photo_submissions():
+    """Get count of pending photo submissions"""
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    pending_count = PhotoSubmission.query.filter_by(status='pending').count()
+    return jsonify({'pending_count': pending_count})
+
+
 @api_bp.route('/photo-submissions/list', methods=['GET'])
 def list_photo_submissions():
     # Support both JWT (mobile) and session auth (web admin)
