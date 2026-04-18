@@ -93,8 +93,13 @@
 
     <!-- TABLEAU HISTORIQUE -->
     <div class="card border-0 shadow-sm">
-        <div class="card-header bg-light">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="fas fa-history me-2"></i>Historique d'Utilisation (du plus récent au plus ancien)</h5>
+            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#manualBorrowModal">
+                <i class="fas fa-plus me-2"></i>Emprunter manuellement
+            </button>
+            {% endif %}
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -172,6 +177,51 @@
       <div class="modal-footer bg-light">
         <button class="btn btn-secondary" data-bs-dismiss="modal">
           <i class="fas fa-times me-2"></i>Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Emprunt Manuel -->
+<div class="modal fade" id="manualBorrowModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i>Emprunter Manuellement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="manualBorrowForm">
+          <div class="mb-3">
+            <label for="borrowerSelect" class="form-label">Policier <span class="text-danger">*</span></label>
+            <select class="form-select" id="borrowerSelect" required>
+              <option value="">-- Sélectionner un policier --</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="borrowDatetime" class="form-label">Date/Heure d'emprunt <span class="text-danger">*</span></label>
+            <input type="datetime-local" class="form-control" id="borrowDatetime" required>
+          </div>
+
+          <div class="mb-3">
+            <label for="borrowNotes" class="form-label">Notes</label>
+            <textarea class="form-control" id="borrowNotes" rows="3" placeholder="Notes optionnelles..."></textarea>
+          </div>
+
+          <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle me-2"></i>
+            Cet emprunt sera enregistré dans l'historique du téléphone.
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-2"></i>Annuler
+        </button>
+        <button type="button" class="btn btn-primary" id="submitBorrowBtn">
+          <i class="fas fa-check me-2"></i>Confirmer l'emprunt
         </button>
       </div>
     </div>
