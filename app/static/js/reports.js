@@ -27,23 +27,18 @@ document.addEventListener('DOMContentLoaded', function () {
   const finesQuick = document.getElementById('fines-quick-filters');
   if (kind) {
     kind.addEventListener('change', function () {
-      // If any fines-related kind selected, show quick filters and set paid state accordingly
-      if (this.value && this.value.indexOf('fines') === 0) {
+      // Show quick filters only when "Amendes (Tous)" is selected
+      if (this.value === 'fines') {
         if (finesQuick) finesQuick.style.display = '';
+        // Reset to "Tous" by default
         const paidEl = document.getElementById('filter-paid');
+        const btnAll = document.getElementById('fines-all-btn');
         const btnUnpaid = document.getElementById('fines-unpaid-btn');
         const btnPaid = document.getElementById('fines-paid-btn');
-        if (this.value === 'fines_paid') {
-          if (paidEl) paidEl.value = 'true';
-          btnPaid && btnPaid.classList.add('active'); btnUnpaid && btnUnpaid.classList.remove('active');
-        } else if (this.value === 'fines_unpaid') {
-          if (paidEl) paidEl.value = 'false';
-          btnUnpaid && btnUnpaid.classList.add('active'); btnPaid && btnPaid.classList.remove('active');
-        } else {
-          // generic 'fines' selection - default to unpaid if not set
-          if (paidEl && !paidEl.value) paidEl.value = 'false';
-          btnUnpaid && btnUnpaid.classList.add('active'); btnPaid && btnPaid.classList.remove('active');
-        }
+        if (paidEl) paidEl.value = '';
+        if (btnAll) btnAll.classList.add('active');
+        if (btnUnpaid) btnUnpaid.classList.remove('active');
+        if (btnPaid) btnPaid.classList.remove('active');
       } else {
         if (finesQuick) finesQuick.style.display = 'none';
       }
@@ -51,39 +46,37 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     // initialize header state
     setReportsHeader(kind.value || 'vehicles');
-    // if initial kind is any fines variant, set state
-    if (kind.value && kind.value.indexOf('fines') === 0) {
-      const paidEl = document.getElementById('filter-paid');
-      const btnUnpaid = document.getElementById('fines-unpaid-btn');
-      const btnPaid = document.getElementById('fines-paid-btn');
-      if (kind.value === 'fines_paid') {
-        if (paidEl) paidEl.value = 'true';
-        btnPaid && btnPaid.classList.add('active'); btnUnpaid && btnUnpaid.classList.remove('active');
-      } else if (kind.value === 'fines_unpaid') {
-        if (paidEl) paidEl.value = 'false';
-        btnUnpaid && btnUnpaid.classList.add('active'); btnPaid && btnPaid.classList.remove('active');
-      } else {
-        if (paidEl && !paidEl.value) paidEl.value = 'false';
-        btnUnpaid && btnUnpaid.classList.add('active'); btnPaid && btnPaid.classList.remove('active');
-      }
-      if (finesQuick) finesQuick.style.display = '';
-    }
   }
-
-  // attach quick filter handlers
+  
+  // attach quick filter handlers for all/unpaid/paid buttons
+  const btnAll = document.getElementById('fines-all-btn');
   const btnUnpaid = document.getElementById('fines-unpaid-btn');
   const btnPaid = document.getElementById('fines-paid-btn');
-  if (btnUnpaid) btnUnpaid.addEventListener('click', function () {
-    const paidEl = document.getElementById('filter-paid'); if (paidEl) paidEl.value = 'false';
-    btnUnpaid.classList.add('active'); btnPaid && btnPaid.classList.remove('active');
-    // ensure report kind is fines
-    const kindEl = document.getElementById('report-kind'); if (kindEl) { kindEl.value = 'fines'; setReportsHeader('fines'); }
+  
+  if (btnAll) btnAll.addEventListener('click', function () {
+    const paidEl = document.getElementById('filter-paid');
+    if (paidEl) paidEl.value = '';
+    btnAll.classList.add('active');
+    if (btnUnpaid) btnUnpaid.classList.remove('active');
+    if (btnPaid) btnPaid.classList.remove('active');
     applyFilters();
   });
+  
+  if (btnUnpaid) btnUnpaid.addEventListener('click', function () {
+    const paidEl = document.getElementById('filter-paid');
+    if (paidEl) paidEl.value = 'false';
+    btnUnpaid.classList.add('active');
+    if (btnAll) btnAll.classList.remove('active');
+    if (btnPaid) btnPaid.classList.remove('active');
+    applyFilters();
+  });
+  
   if (btnPaid) btnPaid.addEventListener('click', function () {
-    const paidEl = document.getElementById('filter-paid'); if (paidEl) paidEl.value = 'true';
-    btnPaid.classList.add('active'); btnUnpaid && btnUnpaid.classList.remove('active');
-    const kindEl = document.getElementById('report-kind'); if (kindEl) { kindEl.value = 'fines'; setReportsHeader('fines'); }
+    const paidEl = document.getElementById('filter-paid');
+    if (paidEl) paidEl.value = 'true';
+    btnPaid.classList.add('active');
+    if (btnAll) btnAll.classList.remove('active');
+    if (btnUnpaid) btnUnpaid.classList.remove('active');
     applyFilters();
   });
 });
@@ -169,6 +162,24 @@ function applyFilters() {
     return;
   }
 
+  if (kind === 'qr_expired') {
+    const params = collectFilters(); params.append('qr_expired', 'true');
+    fetchJson(`/api/vehicles/query?${params.toString()}`)
+      .then(data => { renderReportsTable(data); updateSummary(data); })
+      .catch(err => { logError('Erreur chargement rapports: ' + (err && err.message)); alert('Erreur lors du chargement des rapports'); })
+      .finally(() => { try { if (btnApply) { btnApply.disabled = false; btnApply.innerHTML = btnApply.dataset.orig || 'Appliquer'; } if (btnReset) btnReset.disabled = false; if (btnExport) btnExport.disabled = false; } catch (e) { logError('finally error: ' + (e && e.message)); } });
+    return;
+  }
+
+  if (kind === 'insurance_expired') {
+    const params = collectFilters(); params.append('insurance_expired', 'true');
+    fetchJson(`/api/vehicles/query?${params.toString()}`)
+      .then(data => { renderReportsTable(data); updateSummary(data); })
+      .catch(err => { logError('Erreur chargement rapports: ' + (err && err.message)); alert('Erreur lors du chargement des rapports'); })
+      .finally(() => { try { if (btnApply) { btnApply.disabled = false; btnApply.innerHTML = btnApply.dataset.orig || 'Appliquer'; } if (btnReset) btnReset.disabled = false; if (btnExport) btnExport.disabled = false; } catch (e) { logError('finally error: ' + (e && e.message)); } });
+    return;
+  }
+
   // default vehicles report
   const params = collectFilters();
   fetchJson(`/api/vehicles/query?${params.toString()}`)
@@ -180,34 +191,69 @@ function applyFilters() {
  function resetFilters() {
    const elems = ['filter-start', 'filter-end', 'filter-type', 'filter-status', 'filter-q', 'filter-paid'];
    elems.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+   // hide the reports card and summary when resetting
+   const card = document.getElementById('reports-card');
+   const summary = document.getElementById('reports-summary');
+   if (card) card.classList.add('d-none');
+   if (summary) summary.classList.add('d-none');
    // reset report kind to default
    try{
      const kindEl = document.getElementById('report-kind');
      if(kindEl){ kindEl.value = 'vehicles'; kindEl.dispatchEvent(new Event('change')); }
    }catch(e){ console.error('[reports] reset kind failed', e); }
-   // after clearing filters, immediately apply them so the table shows results
-   try{ if (typeof applyFilters === 'function') { applyFilters(); } else { const btnApply = document.getElementById('btn-apply-filters'); if(btnApply) btnApply.click(); } }catch(e){ console.error('resetFilters apply failed', e); }
  }
 
 function renderReportsTable(items) {
   const tbody = document.getElementById('reports-tbody');
-  if (!items || items.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun résultat</td></tr>'; return; }
-  tbody.innerHTML = items.map((v, i) => `
-    <tr>
-      <td>${i+1}</td>
-      <td><strong>${v.license_plate || ''}</strong></td>
-      <td>${v.owner_name || ''}</td>
-      <td>${capitalize(v.vehicle_type)}</td>
-      <td>${capitalizeStatus(v.status)}</td>
-      <td>${v.registration_expiry || ''}</td>
-      <td>${v.created_at || ''}</td>
-    </tr>`).join('');
+  const card = document.getElementById('reports-card');
+  const kind = document.getElementById('report-kind') ? document.getElementById('report-kind').value : 'vehicles';
+  
+  if (!items || items.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun résultat</td></tr>'; }
+  else {
+    if (kind === 'qr_expired') {
+      tbody.innerHTML = items.map((v, i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td><strong>${v.license_plate || ''}</strong></td>
+        <td>${v.owner_name || ''}</td>
+        <td>${capitalize(v.vehicle_type)}</td>
+        <td>${capitalizeStatus(v.status)}</td>
+        <td>${v.qr_code_expiry || ''}</td>
+        <td>${v.created_at || ''}</td>
+      </tr>`).join('');
+    } else if (kind === 'insurance_expired') {
+      tbody.innerHTML = items.map((v, i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td><strong>${v.license_plate || ''}</strong></td>
+        <td>${v.owner_name || ''}</td>
+        <td>${v.insurance_company || ''}</td>
+        <td>${capitalizeStatus(v.status)}</td>
+        <td>${v.insurance_expiry || ''}</td>
+        <td>${v.created_at || ''}</td>
+      </tr>`).join('');
+    } else {
+      tbody.innerHTML = items.map((v, i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td><strong>${v.license_plate || ''}</strong></td>
+        <td>${v.owner_name || ''}</td>
+        <td>${capitalize(v.vehicle_type)}</td>
+        <td>${capitalizeStatus(v.status)}</td>
+        <td>${v.registration_expiry || ''}</td>
+        <td>${v.created_at || ''}</td>
+      </tr>`).join('');
+    }
+  }
+  if (card) card.classList.remove('d-none');
 }
 
 function renderFinesTable(items) {
   const tbody = document.getElementById('reports-tbody');
-  if (!items || items.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun résultat</td></tr>'; return; }
-  tbody.innerHTML = items.map((f, i) => `
+  const card = document.getElementById('reports-card');
+  if (!items || items.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun résultat</td></tr>'; }
+  else {
+    tbody.innerHTML = items.map((f, i) => `
     <tr>
       <td>${i+1}</td>
       <td><strong>${f.license_plate || ''}</strong></td>
@@ -217,6 +263,8 @@ function renderFinesTable(items) {
       <td>${f.paid ? '<span class="badge bg-success">Payée</span>' : '<span class="badge bg-danger">Impayée</span>'}</td>
       <td>${f.receipt_number || ''}</td>
     </tr>`).join('');
+  }
+  if (card) card.classList.remove('d-none');
 }
 
 function updateFinesSummary(items) {
@@ -227,6 +275,9 @@ function updateFinesSummary(items) {
   document.getElementById('rep-active').textContent = paid;
   document.getElementById('rep-suspended').textContent = unpaid;
   document.getElementById('rep-expiring').textContent = '—';
+  // show the summary cards
+  const summary = document.getElementById('reports-summary');
+  if (summary) summary.classList.remove('d-none');
 }
 
 function setReportsHeader(kind) {
@@ -241,6 +292,28 @@ function setReportsHeader(kind) {
         <th>Émis le</th>
         <th>Statut</th>
         <th>Reçu</th>
+      </tr>`;
+  } else if (kind === 'qr_expired') {
+    thead.innerHTML = `
+      <tr>
+        <th>#</th>
+        <th>Immatriculation</th>
+        <th>Propriétaire</th>
+        <th>Type</th>
+        <th>Statut</th>
+        <th>QR Code Expiration</th>
+        <th>Enregistré</th>
+      </tr>`;
+  } else if (kind === 'insurance_expired') {
+    thead.innerHTML = `
+      <tr>
+        <th>#</th>
+        <th>Immatriculation</th>
+        <th>Propriétaire</th>
+        <th>Compagnie Assurance</th>
+        <th>Statut</th>
+        <th>Expiration Assurance</th>
+        <th>Enregistré</th>
       </tr>`;
   } else {
     thead.innerHTML = `
@@ -271,6 +344,9 @@ function updateSummary(items) {
   document.getElementById('rep-active').textContent = active;
   document.getElementById('rep-suspended').textContent = suspended;
   document.getElementById('rep-expiring').textContent = expiring;
+  // show the summary cards
+  const summary = document.getElementById('reports-summary');
+  if (summary) summary.classList.remove('d-none');
 }
 
 function exportCsv() {
@@ -284,6 +360,8 @@ function exportCsv() {
   }
   const params = collectFilters();
   if (kind === 'expired') params.append('expired', 'true');
+  if (kind === 'qr_expired') params.append('qr_expired', 'true');
+  if (kind === 'insurance_expired') params.append('insurance_expired', 'true');
   // request PDF instead of CSV
   params.append('export', 'pdf');
   const url = `/api/vehicles/export?${params.toString()}`;

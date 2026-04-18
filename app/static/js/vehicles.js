@@ -89,6 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // we're on the vehicles management page — load and bind add button
         console.log('Loading vehicles...');
         loadVehicles();
+        
         // wire search input if present
         const searchInput = document.getElementById('vehicle-search');
         if (searchInput) {
@@ -97,10 +98,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 // debounce to avoid rapid re-renders
                 if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
                 searchDebounceTimer = setTimeout(()=>{
-                    filterAndRenderVehicles(q.trim());
+                    loadVehicles();
                 }, 200);
             });
         }
+        
+        // wire status filter if present
+        const statusFilter = document.getElementById('status-filter');
+        if (statusFilter) {
+            statusFilter.addEventListener('change', function() {
+                loadVehicles();
+            });
+        }
+        
         addBtn.addEventListener('click', function() {
             openVehicleModal();
         });
@@ -153,7 +163,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function loadVehicles() {
     console.log('loadVehicles called');
-    fetch('/api/vehicles/list', { credentials: 'same-origin' })
+    
+    // Build query parameters based on current filter values
+    const params = new URLSearchParams();
+    
+    // Get search query
+    const searchInput = document.getElementById('vehicle-search');
+    if (searchInput && searchInput.value.trim()) {
+        params.append('q', searchInput.value.trim());
+    }
+    
+    // Get status filter
+    const statusFilter = document.getElementById('status-filter');
+    if (statusFilter && statusFilter.value) {
+        params.append('status', statusFilter.value);
+    }
+    
+    const url = params.toString() ? `/api/vehicles/query?${params.toString()}` : '/api/vehicles/query';
+    
+    fetch(url, { credentials: 'same-origin' })
         .then(r => {
             console.log('Response status:', r.status);
             if (!r.ok) {
