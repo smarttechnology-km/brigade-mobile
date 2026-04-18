@@ -1326,7 +1326,7 @@ def api_my_checked_out_phone():
         'phone_code': phone.phone_code,
         'brand': phone.brand,
         'model': phone.model,
-        'phone_number': phone.phone_number,
+        'color': phone.color,
         'check_out_time': active_usage.checkout_at.isoformat() if active_usage.checkout_at else None,
         'qr_code_data': phone.qr_code_data,
         'phone_id': phone.id,
