@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, send_file, g
 from app.models import User, Vehicle, Fine, FineType, Phone, PhoneUsage, PhotoSubmission
 from app import db
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
 from datetime import timedelta, datetime
 from app.timezone_utils import now_comoros
@@ -12,6 +12,30 @@ import uuid
 from werkzeug.utils import secure_filename
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
+
+
+# Helper function to validate JWT session version
+def validate_jwt_session():
+    """Validate that the JWT's session_version matches user's current session_version.
+    This allows admins to invalidate all tokens by incrementing session_version."""
+    try:
+        claims = get_jwt()
+        uid = get_jwt_identity()
+        user = User.query.get(int(uid))
+        
+        if not user or not user.is_active:
+            return jsonify({"error": "User not found or inactive"}), 401
+        
+        # Check if session_version in token matches user's current version
+        token_session_version = claims.get('session_version', 0)
+        if token_session_version != user.session_version:
+            print(f"[SESSION] Token invalid for {user.username}: version {token_session_version} != {user.session_version}")
+            return jsonify({"error": "Session expired. Please login again."}), 401
+        
+        return None  # Valid
+    except Exception as e:
+        print(f"[SESSION] Validation error: {e}")
+        return jsonify({"error": "Invalid token"}), 401
 
 
 # Helper function to apply island filter for judiciaire and policier users
@@ -1172,6 +1196,97 @@ def api_phone_current_status(phone_code):
         'is_checked_out_by_current_user': active_usage and active_usage.user_id == user.id
     })
 
+@api_bp.route('/phone/manual-checkout', methods=['POST'])
+@jwt_required()
+def api_manual_checkout_debug():
+    """Admin endpoint to manually checkout a phone to a user (for setup purposes)"""
+    uid = get_jwt_identity()
+    admin = User.query.get(int(uid))
+    
+    if not admin or admin.role != 'administrateur':
+        return jsonify({"error": "Only admins can use this"}), 403
+    
+    data = request.get_json()
+    phone_code = data.get('phone_code')
+    username = data.get('username')
+    
+    if not phone_code or not username:
+        return jsonify({"error": "phone_code and username required"}), 400
+    
+    # Find phone
+    phone = Phone.query.filter_by(phone_code=phone_code).first()
+    if not phone:
+        return jsonify({"error": f"Phone {phone_code} not found"}), 404
+    
+    # Find user
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"error": f"User {username} not found"}), 404
+    
+    # Check if already checked out to someone else
+    existing = PhoneUsage.query.filter_by(phone_id=phone.id, checkin_at=None).first()
+    if existing and existing.user_id != user.id:
+        return jsonify({"error": f"Phone already checked out to {existing.user.username}"}), 409
+    
+    # If already checked out to same user, return it
+    if existing and existing.user_id == user.id:
+        return jsonify({
+            'message': f'Phone {phone_code} already checked out to {user.username}',
+            'phone': existing.to_dict()
+        })
+    
+    # Create new checkout
+    from datetime import datetime
+    usage = PhoneUsage(
+        phone_id=phone.id,
+        user_id=user.id,
+        checkout_at=now_comoros(),
+        notes=f"Manual checkout by admin {admin.username}"
+    )
+    db.session.add(usage)
+    db.session.commit()
+    
+    print(f"[MANUAL CHECKOUT] Phone {phone_code} checked out to {user.username}")
+    
+    return jsonify({
+        'message': f'Phone {phone_code} successfully checked out to {user.username}',
+        'phone': usage.to_dict()
+    }), 201
+
+@api_bp.route('/debug/user-phones', methods=['GET'])
+@jwt_required()
+def api_debug_user_phones():
+    """Debug endpoint to see user's phone assignments"""
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    # Find ALL phone usages for this user (active or not)
+    all_usages = PhoneUsage.query.filter_by(user_id=user.id).all()
+    
+    usages = []
+    for usage in all_usages:
+        usages.append({
+            'id': usage.id,
+            'phone_id': usage.phone_id,
+            'phone_code': usage.phone.phone_code if usage.phone else 'N/A',
+            'checkout_at': usage.checkout_at.isoformat() if usage.checkout_at else None,
+            'checkin_at': usage.checkin_at.isoformat() if usage.checkin_at else None,
+            'is_active': usage.checkin_at is None,
+            'notes': usage.notes
+        })
+    
+    return jsonify({
+        'user_id': user.id,
+        'username': user.username,
+        'role': user.role,
+        'total_usages': len(all_usages),
+        'active_usages': sum(1 for u in all_usages if u.checkin_at is None),
+        'usages': usages
+    })
+
 @api_bp.route('/phone/my-checkout', methods=['GET'])
 @jwt_required()
 def api_my_checked_out_phone():
@@ -1179,27 +1294,50 @@ def api_my_checked_out_phone():
     uid = get_jwt_identity()
     user = User.query.get(int(uid))
     
+    print(f"[my-checkout] User ID: {uid}, User: {user.username if user else 'NOT FOUND'}")
+    
     if not user or user.role not in ['policier', 'administrateur']:
+        print(f"[my-checkout] Unauthorized: role={user.role if user else 'N/A'}")
         return jsonify({"error": "Unauthorized"}), 403
     
     # Find active (checked out) phone usage for current user
     active_usage = PhoneUsage.query.filter_by(user_id=user.id, checkin_at=None).first()
     
+    print(f"[my-checkout] Query result for user {user.id}: {active_usage}")
+    
     if not active_usage:
+        # Debug: Log if no phone found
+        print(f"[my-checkout] No active phone usage found for user {user.id} ({user.username})")
+        # Also list all usages to debug
+        all_usages = PhoneUsage.query.filter_by(user_id=user.id).all()
+        print(f"[my-checkout] Total usages for user: {len(all_usages)}")
+        for usage in all_usages:
+            print(f"  - Usage {usage.id}: phone_id={usage.phone_id}, checkout={usage.checkout_at}, checkin={usage.checkin_at}")
         return jsonify({'phone': None})
     
     phone = active_usage.phone
+    if not phone:
+        print(f"[my-checkout] PhoneUsage exists but phone is None for usage {active_usage.id}")
+        return jsonify({'phone': None})
+    
+    print(f"[my-checkout] Found phone {phone.phone_code} for user {user.username}")
+    
+    phone_data = {
+        'phone_code': phone.phone_code,
+        'brand': phone.brand,
+        'model': phone.model,
+        'phone_number': phone.phone_number,
+        'check_out_time': active_usage.checkout_at.isoformat() if active_usage.checkout_at else None,
+        'qr_code_data': phone.qr_code_data,
+        'phone_id': phone.id,
+        'usage_id': active_usage.id
+    }
+    
+    print(f"[my-checkout] Returning phone data: {phone_data}")
+    
     return jsonify({
-        'phone': {
-            'phone_code': phone.phone_code,
-            'brand': phone.brand,
-            'model': phone.model,
-            'phone_number': phone.phone_number,
-            'check_out_time': active_usage.checkout_at.isoformat(),
-            'qr_code_data': phone.qr_code_data,
-            'phone_id': phone.id,
-            'usage_id': active_usage.id
-        }
+        'phone': phone_data,
+        'success': True
     })
 
 @api_bp.route('/photo-submissions/upload', methods=['POST'])
