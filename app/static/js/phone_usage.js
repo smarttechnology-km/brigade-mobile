@@ -375,9 +375,14 @@ function loadPoliciersList() {
     const select = document.getElementById('borrowerSelect');
     select.innerHTML = '<option value="">-- Chargement... --</option>';
 
+    // Essayer d'abord le nouvel endpoint
     fetch('/api/users/policiers')
         .then(r => {
             console.log('Policiers API Status:', r.status);
+            if (r.status === 404) {
+                // Si 404, utiliser l'ancien endpoint
+                throw new Error('NEW_ENDPOINT_NOT_FOUND');
+            }
             if (!r.ok) {
                 throw new Error(`HTTP ${r.status}: ${r.statusText}`);
             }
@@ -394,24 +399,68 @@ function loadPoliciersList() {
             let policiers = users.filter(u => u.is_active);
             console.log('Active policiers found:', policiers.length);
             
-            select.innerHTML = '<option value="">-- Sélectionner un policier --</option>';
-            
-            policiers.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user.id;
-                option.textContent = `${user.username} (${user.full_name || user.email || 'N/A'})`;
-                select.appendChild(option);
-            });
-
-            if (policiers.length === 0) {
-                select.innerHTML = '<option value="">-- Aucun policier actif disponible --</option>';
-                console.warn('No policiers found!');
-            }
+            populatePoliciersList(select, policiers);
         })
         .catch(err => {
-            console.error('Erreur chargement policiers:', err.message);
-            select.innerHTML = `<option value="">-- Erreur: ${err.message} --</option>`;
+            console.warn('Erreur avec /api/users/policiers:', err.message);
+            // Fallback: utiliser l'ancien endpoint /api/users/list
+            if (err.message === 'NEW_ENDPOINT_NOT_FOUND') {
+                console.log('Utilisation du fallback /api/users/list');
+                loadPoliciersFallback();
+            } else {
+                console.error('Erreur chargement policiers:', err.message);
+                select.innerHTML = `<option value="">-- Erreur: ${err.message} --</option>`;
+            }
         });
+}
+
+function loadPoliciersFallback() {
+    const select = document.getElementById('borrowerSelect');
+    
+    fetch('/api/users/list')
+        .then(r => {
+            if (!r.ok) throw r;
+            return r.json();
+        })
+        .then(data => {
+            console.log('Fallback API Response:', data);
+            
+            // Gérer les deux formats possibles
+            let users = [];
+            if (Array.isArray(data)) {
+                users = data;
+            } else if (data.users && Array.isArray(data.users)) {
+                users = data.users;
+            }
+            
+            console.log('All users extracted:', users);
+            
+            // Filtrer policiers actifs
+            let policiers = users.filter(u => u.role === 'policier' && u.is_active);
+            console.log('Active policiers found:', policiers.length);
+            
+            populatePoliciersList(select, policiers);
+        })
+        .catch(err => {
+            console.error('Erreur chargement policiers (fallback):', err);
+            select.innerHTML = '<option value="">-- Erreur chargement --</option>';
+        });
+}
+
+function populatePoliciersList(select, policiers) {
+    select.innerHTML = '<option value="">-- Sélectionner un policier --</option>';
+    
+    policiers.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = `${user.username} (${user.full_name || user.email || 'N/A'})`;
+        select.appendChild(option);
+    });
+
+    if (policiers.length === 0) {
+        select.innerHTML = '<option value="">-- Aucun policier actif disponible --</option>';
+        console.warn('No policiers found!');
+    }
 }
 
 function loadPhonesList() {
