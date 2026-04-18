@@ -128,9 +128,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Ensure we clean up modal when it is hidden (covers cancel/backdrop click)
     const modalEl = document.getElementById('vehicleModal');
     if (modalEl) {
+        // Clean up when modal starts hiding
+        modalEl.addEventListener('hide.bs.modal', function (event) {
+            // Force cleanup immediately when hide starts
+            setTimeout(() => cleanupModalResources(), 0);
+        });
+        
+        // Additional cleanup after modal is completely hidden
         modalEl.addEventListener('hidden.bs.modal', function (event) {
-            // cleanup resources after modal hidden
+            // Final cleanup resources after modal hidden
             cleanupModalResources();
+            // Reset form for next use
+            const vehicleForm = document.getElementById('vehicle-form');
+            if (vehicleForm) vehicleForm.reset();
         });
     }
 
@@ -630,12 +640,26 @@ function cleanupModalResources(){
         // dispose instance if exists
         try{ if(vehicleModalInstance) vehicleModalInstance.dispose(); }catch(e){}
         vehicleModalInstance = null;
+        
         // remove any backdrop element left
         const backdrop = document.querySelector('.modal-backdrop');
         if(backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
-        // ensure body scroll is restored
+        
+        // ensure body scroll is restored completely
         document.body.classList.remove('modal-open');
         document.body.style.paddingRight = '';
+        document.body.style.overflow = '';
+        
+        // also check for and remove any remaining modal-open classes
+        document.querySelectorAll('.modal-open').forEach(el => {
+            el.classList.remove('modal-open');
+        });
+        
+        // restore overflow on html element if needed
+        document.documentElement.style.overflow = '';
+        
+        // Force scroll to be re-enabled
+        document.body.style.touchAction = 'auto';
     }catch(e){
         console.error('Erreur during modal cleanup', e);
     }
