@@ -337,6 +337,9 @@ def query_vehicles():
     end = request.args.get('end_date', type=str)
 
     expired = request.args.get('expired', type=str)
+    qr_expired = request.args.get('qr_expired', type=str)
+    insurance_expired = request.args.get('insurance_expired', type=str)
+    
     query = Vehicle.query
     query = apply_island_filter(query, Vehicle.owner_island)
     if vtype:
@@ -367,6 +370,24 @@ def query_vehicles():
                 query = query.filter(Vehicle.registration_expiry != None).filter(Vehicle.registration_expiry <= now_comoros())
         except Exception:
             pass
+    
+    # filter by expired QR codes if requested
+    if qr_expired is not None:
+        try:
+            if qr_expired.lower() in ('1','true','yes'):
+                # include vehicles with qr_code_expiry set and before now
+                query = query.filter(Vehicle.qr_code_expiry != None).filter(Vehicle.qr_code_expiry <= now_comoros())
+        except Exception:
+            pass
+    
+    # filter by expired insurance if requested
+    if insurance_expired is not None:
+        try:
+            if insurance_expired.lower() in ('1','true','yes'):
+                # include vehicles with insurance_expiry set and before now
+                query = query.filter(Vehicle.insurance_expiry != None).filter(Vehicle.insurance_expiry <= now_comoros())
+        except Exception:
+            pass
 
     vehicles = query.order_by(Vehicle.created_at.desc()).all()
     return jsonify([v.to_dict() for v in vehicles])
@@ -384,6 +405,9 @@ def export_vehicles_csv():
     end = request.args.get('end_date', type=str)
 
     expired = request.args.get('expired', type=str)
+    qr_expired = request.args.get('qr_expired', type=str)
+    insurance_expired = request.args.get('insurance_expired', type=str)
+    
     query = Vehicle.query
     query = apply_island_filter(query, Vehicle.owner_island)
     if vtype:
@@ -410,6 +434,22 @@ def export_vehicles_csv():
         try:
             if expired.lower() in ('1','true','yes'):
                 query = query.filter(Vehicle.registration_expiry != None).filter(Vehicle.registration_expiry <= now_comoros())
+        except Exception:
+            pass
+    
+    # handle expired QR code filter
+    if qr_expired is not None:
+        try:
+            if qr_expired.lower() in ('1','true','yes'):
+                query = query.filter(Vehicle.qr_code_expiry != None).filter(Vehicle.qr_code_expiry <= now_comoros())
+        except Exception:
+            pass
+    
+    # handle expired insurance filter
+    if insurance_expired is not None:
+        try:
+            if insurance_expired.lower() in ('1','true','yes'):
+                query = query.filter(Vehicle.insurance_expiry != None).filter(Vehicle.insurance_expiry <= now_comoros())
         except Exception:
             pass
 
@@ -961,6 +1001,12 @@ def get_fines_stats():
 def get_vehicle_qrcode(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
+    
+    # Initialize QR code expiry if not already set
+    if not vehicle.qr_code_expiry:
+        vehicle.generate_qr_code_with_expiry()
+        db.session.commit()
+    
     # URL publique de suivi
     track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
     # Générer QR code PNG
@@ -977,7 +1023,7 @@ def get_vehicle_qrcode(vehicle_id):
 @vehicle_bp.route('/<int:vehicle_id>/qrcode/pdf', methods=['GET'])
 @login_required
 def get_vehicle_qrcode_pdf(vehicle_id):
-    """Retourne un PDF avec QR code + numéro d'immatriculation"""
+    """Retourne un PDF avec QR code + numéro d'immatriculation + date d'expiration"""
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
     
@@ -991,6 +1037,11 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import cm
         from reportlab.lib.enums import TA_CENTER
+        
+        # Initialize QR code expiry if not set
+        if not vehicle.qr_code_expiry:
+            vehicle.generate_qr_code_with_expiry()
+            db.session.commit()
         
         # Générer QR code
         track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
@@ -1012,7 +1063,7 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         elems = []
         
         # QR Code image (plus grand)
-        qr_image = RLImage(qr_buf, width=7*cm, height=7*cm)
+        qr_image = RLImage(qr_buf, width=6.5*cm, height=6.5*cm)
         
         # Créer une table pour centrer l'image
         qr_table = Table([[qr_image]])
@@ -1021,19 +1072,35 @@ def get_vehicle_qrcode_pdf(vehicle_id):
             ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
         ]))
         elems.append(qr_table)
-        elems.append(Spacer(1, 0.1*cm))
+        elems.append(Spacer(1, 0.05*cm))
         
-        # Numéro d'immatriculation légèrement réduit
+        # Numéro d'immatriculation
         license_plate_style = ParagraphStyle(
             'LicensePlate',
             parent=styles['Normal'],
-            fontSize=16,
+            fontSize=14,
             textColor=colors.HexColor('#000000'),
             alignment=TA_CENTER,
             fontName='Helvetica-Bold',
-            spaceAfter=0
+            spaceAfter=0.15*cm
         )
         elems.append(Paragraph(f'<b>{vehicle.license_plate}</b>', license_plate_style))
+        
+        # Espace supplémentaire avant la date
+        elems.append(Spacer(1, 0.1*cm))
+        
+        # Date d'expiration du QR code
+        expiry_style = ParagraphStyle(
+            'Expiry',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.HexColor('#666666'),
+            alignment=TA_CENTER,
+            fontName='Helvetica',
+            spaceAfter=0
+        )
+        expiry_date_str = vehicle.qr_code_expiry.strftime('%d/%m/%Y') if vehicle.qr_code_expiry else 'N/A'
+        elems.append(Paragraph(f'Expires: {expiry_date_str}', expiry_style))
         
         # Créer le PDF
         doc.build(elems)
@@ -1041,6 +1108,53 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         
         return send_file(pdf_buf, mimetype='application/pdf', download_name=f'{vehicle.license_plate}_qrcode.pdf')
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/qrcode/renew', methods=['POST'])
+@login_required
+def renew_vehicle_qrcode(vehicle_id):
+    """Renouvelle le QR code d'un véhicule avec une nouvelle date d'expiration de 2 ans et génère un nouveau token"""
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+    
+    try:
+        old_token = vehicle.track_token
+        old_expiry = vehicle.qr_code_expiry.strftime('%Y-%m-%d') if vehicle.qr_code_expiry else 'Non défini'
+        old_status = vehicle.status
+        
+        # Générer un nouveau QR code avec expiration ET nouveau token
+        vehicle.generate_qr_code_with_expiry()
+        new_token = vehicle.track_token
+        
+        # Réactiver le véhicule s'il était inactif
+        if vehicle.status == 'inactive':
+            vehicle.status = 'active'
+        
+        # Enregistrer dans l'historique
+        from app.models import VehicleHistory
+        history = VehicleHistory(
+            vehicle_id=vehicle.id,
+            action=f"QR Code renouvelé - Token changé",
+            officer=current_user.username,
+            notes=f"Ancien token: {old_token}\nNouveau token: {new_token}\nAncien expiry: {old_expiry}\nNouveau expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
+        )
+        db.session.add(history)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Code QR renouvelé pour {vehicle.license_plate}',
+            'old_token': old_token,
+            'new_token': new_token,
+            'old_expiry': old_expiry,
+            'new_expiry': vehicle.qr_code_expiry.strftime('%Y-%m-%d'),
+            'old_status': old_status,
+            'new_status': vehicle.status,
+            'generated_at': vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S')
+        }), 200
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 
@@ -1367,7 +1481,7 @@ def public_track_qrcode(token):
 
 @main_bp.route('/track/<token>/qrcode/pdf')
 def public_track_qrcode_pdf(token):
-    """Télécharger QR code en PDF avec numéro d'immatriculation"""
+    """Télécharger QR code en PDF avec numéro d'immatriculation et date d'expiration"""
     if not current_user.is_authenticated:
         abort(403)
     
@@ -1383,6 +1497,11 @@ def public_track_qrcode_pdf(token):
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import cm
         from reportlab.lib.enums import TA_CENTER
+        
+        # Initialize QR code expiry if not set
+        if not vehicle.qr_code_expiry:
+            vehicle.generate_qr_code_with_expiry()
+            db.session.commit()
         
         # Générer QR code
         track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
@@ -1404,7 +1523,7 @@ def public_track_qrcode_pdf(token):
         elems = []
         
         # QR Code image (plus grand)
-        qr_image = RLImage(qr_buf, width=7*cm, height=7*cm)
+        qr_image = RLImage(qr_buf, width=6.5*cm, height=6.5*cm)
         
         # Créer une table pour centrer l'image
         qr_table = Table([[qr_image]])
@@ -1413,19 +1532,35 @@ def public_track_qrcode_pdf(token):
             ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
         ]))
         elems.append(qr_table)
-        elems.append(Spacer(1, 0.1*cm))
+        elems.append(Spacer(1, 0.05*cm))
         
-        # Numéro d'immatriculation légèrement réduit
+        # Numéro d'immatriculation
         license_plate_style = ParagraphStyle(
             'LicensePlate',
             parent=styles['Normal'],
-            fontSize=16,
+            fontSize=14,
             textColor=colors.HexColor('#000000'),
             alignment=TA_CENTER,
             fontName='Helvetica-Bold',
-            spaceAfter=0
+            spaceAfter=0.15*cm
         )
         elems.append(Paragraph(f'<b>{vehicle.license_plate}</b>', license_plate_style))
+        
+        # Espace supplémentaire avant la date
+        elems.append(Spacer(1, 0.1*cm))
+        
+        # Date d'expiration du QR code
+        expiry_style = ParagraphStyle(
+            'Expiry',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.HexColor('#666666'),
+            alignment=TA_CENTER,
+            fontName='Helvetica',
+            spaceAfter=0
+        )
+        expiry_date_str = vehicle.qr_code_expiry.strftime('%d/%m/%Y') if vehicle.qr_code_expiry else 'N/A'
+        elems.append(Paragraph(f'Expires: {expiry_date_str}', expiry_style))
         
         # Créer le PDF
         doc.build(elems)

@@ -70,8 +70,12 @@ def create_app():
     # Initialize scheduler
     scheduler.start()
 
+    # Set app instance for background tasks
+    from app.tasks import set_app as tasks_set_app
+    tasks_set_app(app)
+
     # Add the exoneration task to run every hour
-    from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes
+    from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry
     scheduler.add_job(
         func=process_exonerated_fines,
         trigger=IntervalTrigger(hours=1),
@@ -86,6 +90,15 @@ def create_app():
         trigger=CronTrigger(hour=1, minute=0),
         id='regenerate_phone_qr_codes',
         name='Regenerate phone QR codes daily at 01:00 AM',
+        replace_existing=True
+    )
+
+    # Add the vehicle QR code expiry check task to run daily at 02:00 AM
+    scheduler.add_job(
+        func=check_vehicle_qr_code_expiry,
+        trigger=CronTrigger(hour=2, minute=0),
+        id='check_vehicle_qr_code_expiry',
+        name='Check vehicle QR code expiry and mark as inactive daily at 02:00 AM',
         replace_existing=True
     )
 

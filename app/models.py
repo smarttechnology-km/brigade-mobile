@@ -56,12 +56,43 @@ class Vehicle(db.Model):
     insurance_company = db.Column(db.String(100))
     insurance_expiry = db.Column(db.DateTime)
     vignette_expiry = db.Column(db.DateTime)
+    qr_code_generated_at = db.Column(db.DateTime, nullable=True)  # When QR code was generated
+    qr_code_expiry = db.Column(db.DateTime, nullable=True)  # When QR code expires (2 years after generation)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
     
     def __repr__(self):
         return f'<Vehicle {self.license_plate}>'
+    
+    def generate_qr_code_with_expiry(self):
+        """
+        Generate a new QR code token for this vehicle with 2-year expiry.
+        Expiry date = Today + 2 years (730 days)
+        Also generates a new unique track_token for security.
+        """
+        from app.timezone_utils import now_comoros
+        from datetime import timedelta
+        
+        # Use current date/time as generation date
+        current_time = now_comoros()
+        self.qr_code_generated_at = current_time
+        
+        # Set expiry to 2 years (730 days) from today
+        TWO_YEARS_IN_DAYS = 730
+        self.qr_code_expiry = current_time + timedelta(days=TWO_YEARS_IN_DAYS)
+        
+        # Generate a new unique track_token for security
+        self.track_token = str(uuid.uuid4())
+        
+        return self.qr_code_expiry
+    
+    def is_qr_code_expired(self):
+        """Check if the QR code has expired"""
+        if not self.qr_code_expiry:
+            return False
+        from app.timezone_utils import now_comoros
+        return now_comoros() > self.qr_code_expiry
     
     def to_dict(self):
         return {
@@ -83,6 +114,8 @@ class Vehicle(db.Model):
             'insurance_company': self.insurance_company,
             'insurance_expiry': self.insurance_expiry.strftime('%Y-%m-%d') if self.insurance_expiry else None,
             'vignette_expiry': self.vignette_expiry.strftime('%Y-%m-%d') if self.vignette_expiry else None,
+            'qr_code_generated_at': self.qr_code_generated_at.strftime('%Y-%m-%d') if self.qr_code_generated_at else None,
+            'qr_code_expiry': self.qr_code_expiry.strftime('%Y-%m-%d') if self.qr_code_expiry else None,
             'track_token': self.track_token,
             'registration_date': self.registration_date.strftime('%Y-%m-%d'),
             'created_at': self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
