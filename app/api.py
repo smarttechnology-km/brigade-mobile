@@ -1172,6 +1172,36 @@ def api_phone_current_status(phone_code):
         'is_checked_out_by_current_user': active_usage and active_usage.user_id == user.id
     })
 
+@api_bp.route('/phone/my-checkout', methods=['GET'])
+@jwt_required()
+def api_my_checked_out_phone():
+    """Get current user's checked-out phone (if any)"""
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    
+    if not user or user.role not in ['policier', 'administrateur']:
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    # Find active (checked out) phone usage for current user
+    active_usage = PhoneUsage.query.filter_by(user_id=user.id, checkin_at=None).first()
+    
+    if not active_usage:
+        return jsonify({'phone': None})
+    
+    phone = active_usage.phone
+    return jsonify({
+        'phone': {
+            'phone_code': phone.phone_code,
+            'brand': phone.brand,
+            'model': phone.model,
+            'phone_number': phone.phone_number,
+            'check_out_time': active_usage.checkout_at.isoformat(),
+            'qr_code_data': phone.qr_code_data,
+            'phone_id': phone.id,
+            'usage_id': active_usage.id
+        }
+    })
+
 @api_bp.route('/photo-submissions/upload', methods=['POST'])
 @jwt_required()
 def upload_photo_submission():
