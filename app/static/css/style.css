@@ -102,8 +102,6 @@ h1.display-4, h1.page-title {
 /* Center the search input when placed in the column */
 .search-bar.mx-auto { margin-left: auto !important; margin-right: auto !important; }
 
-}
-
 /* User card inside sidebar */
 .sidebar .user-card {
     background: rgba(255,255,255,0.04);

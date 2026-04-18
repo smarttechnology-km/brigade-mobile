@@ -581,7 +581,7 @@
 [data-bs-theme="dark"] .form-text,
 [data-bs-theme="dark"] .input-group-text {
   color: #888888 !important;
-}}
+}
 
 /* Reports table en mode sombre - styles très explicites */
 [data-bs-theme="dark"] #reports-table {
