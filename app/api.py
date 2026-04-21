@@ -39,10 +39,15 @@ def validate_jwt_session():
 
 
 # Helper function to apply island filter for judiciaire and policier users
-def apply_island_filter(query, island_field):
+def apply_island_filter(query, island_field, force_country=None):
     """Apply island/country filter for judiciaire and policier users.
-    Judiciaire and policier users can only see data for their assigned island/country."""
-    if current_user.role in ['judiciaire', 'policier'] and current_user.country:
+    - Administrateur users can optionally filter by a specific country using force_country parameter.
+    - Judiciaire and policier users can only see data for their assigned island/country."""
+    # If force_country is explicitly provided and user is admin, apply it
+    if force_country and current_user.role == 'administrateur':
+        query = query.filter(island_field == force_country)
+    # Otherwise apply default role-based filter
+    elif current_user.role in ['judiciaire', 'policier'] and current_user.country:
         query = query.filter(island_field == current_user.country)
     return query
 
@@ -683,8 +688,9 @@ def api_vehicle_qr_code(vehicle_id):
 @login_required
 def api_phones_list():
     """Get all phones"""
+    country = request.args.get('country', '')
     query = Phone.query
-    query = apply_island_filter(query, Phone.island)
+    query = apply_island_filter(query, Phone.island, force_country=country)
     phones = query.order_by(Phone.created_at.desc()).all()
     return jsonify({
         'success': True,
@@ -918,9 +924,10 @@ def api_phone_usage_list():
     """Get phone usage records - by default only active (checked out) phones"""
     # Get query parameter: show_all=true to show all records, otherwise only active
     show_all = request.args.get('show_all', 'false').lower() == 'true'
+    country = request.args.get('country', '')
     
     query = PhoneUsage.query.join(Phone)
-    query = apply_island_filter(query, Phone.island)
+    query = apply_island_filter(query, Phone.island, force_country=country)
     
     if show_all:
         usages = query.order_by(PhoneUsage.checkout_at.desc()).all()
@@ -935,15 +942,17 @@ def api_phone_usage_list():
 @login_required
 def api_phone_usage_stats():
     """Get phone usage statistics"""
+    country = request.args.get('country', '')
+    
     query_phones = Phone.query
-    query_phones = apply_island_filter(query_phones, Phone.island)
+    query_phones = apply_island_filter(query_phones, Phone.island, force_country=country)
     
     total_phones = query_phones.count()
     active_phones = query_phones.filter_by(status='active').count()
     inactive_phones = query_phones.filter_by(status='inactive').count()
     
     query_usages = PhoneUsage.query.join(Phone)
-    query_usages = apply_island_filter(query_usages, Phone.island)
+    query_usages = apply_island_filter(query_usages, Phone.island, force_country=country)
     active_usages = query_usages.filter(PhoneUsage.checkin_at.is_(None)).count()
     
     return jsonify({
@@ -957,23 +966,23 @@ def api_phone_usage_stats():
 @api_bp.route('/users/list', methods=['GET'])
 @login_required
 def api_users_list():
-    """Get all users"""
-    users = User.query.filter(User.role.in_(['policier', 'administrateur'])).order_by(User.username).all()
-    return jsonify({
-        'success': True,
-        'users': [{
-            'id': u.id,
-            'username': u.username,
-            'full_name': u.full_name,
-            'email': u.email,
-            'phone': u.phone,
-            'country': u.country,
-            'region': u.region,
-            'role': u.role,
-            'is_active': u.is_active,
-            'created_at': u.created_at.strftime('%d/%m/%Y %H:%M') if u.created_at else None
-        } for u in users]
-    })
+    """Get all users - no country filtering"""
+    # Show all policiers and admins regardless of country
+    query = User.query.filter(User.role.in_(['policier', 'administrateur']))
+    users = query.order_by(User.username).all()
+    
+    return jsonify([{
+        'id': u.id,
+        'username': u.username,
+        'full_name': u.full_name,
+        'email': u.email,
+        'phone': u.phone,
+        'country': u.country,
+        'region': u.region,
+        'role': u.role,
+        'is_active': u.is_active,
+        'created_at': u.created_at.strftime('%d/%m/%Y %H:%M') if u.created_at else None
+    } for u in users])
 
 
 @api_bp.route('/users/policiers', methods=['GET'])
@@ -1416,6 +1425,7 @@ def list_photo_submissions():
         return jsonify({"error": "Forbidden"}), 403
     
     status = request.args.get('status', 'all')
+    country = request.args.get('country', '')
     
     # Join with Vehicle (for owner_island) and User (for submitter's country)
     query = PhotoSubmission.query.join(
@@ -1425,9 +1435,13 @@ def list_photo_submissions():
     )
     
     # Apply island filter: 
-    # - Administrators see all submissions
+    # - Administrators can filter by country parameter, or see all if no country specified
     # - Policiers and Judiciaires see submissions for vehicles in their country OR submissions by officers in their country
-    if user.role in ['policier', 'judiciaire'] and user.country:
+    if user.role == 'administrateur' and country:
+        # Admin with country filter
+        query = query.filter(Vehicle.owner_island == country)
+    elif user.role in ['policier', 'judiciaire'] and user.country:
+        # Non-admin: filter by their country
         query = query.filter(
             (Vehicle.owner_island == user.country) | 
             (User.country == user.country)

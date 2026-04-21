@@ -31,10 +31,15 @@ vehicle_bp = Blueprint('vehicles', __name__, url_prefix='/api/vehicles')
 logo_path = os.path.join(os.path.dirname(__file__), 'static', 'img', 'logo.png')
 
 # Helper function to apply island filter for judiciaire and policier users
-def apply_island_filter(query, island_field):
+def apply_island_filter(query, island_field, force_country=None):
     """Apply island/country filter for judiciaire and policier users with assigned country.
-    Judiciaire and policier users can only see data for their assigned island/country."""
-    if current_user.role in ['judiciaire', 'policier'] and current_user.country:
+    Judiciaire and policier users can only see data for their assigned island/country.
+    Administrateur users can optionally filter by a specific country using force_country parameter."""
+    # If force_country is explicitly provided and user is admin, apply it
+    if force_country and current_user.role == 'administrateur':
+        query = query.filter(island_field == force_country)
+    # Otherwise apply default role-based filtering
+    elif current_user.role in ['judiciaire', 'policier'] and current_user.country:
         query = query.filter(island_field == current_user.country)
     return query
 
@@ -294,8 +299,10 @@ def exoneration_page():
 @login_required
 def get_vehicle_stats():
     """Retourner les statistiques des véhicules en JSON"""
+    country = request.args.get('country', type=str)  # New country filter for admin
+    
     query = db.session.query(Vehicle)
-    query = apply_island_filter(query, Vehicle.owner_island)
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
     
     total_vehicles = query.with_entities(func.count(Vehicle.id)).scalar() or 0
 
@@ -320,8 +327,10 @@ def get_vehicle_stats():
 @login_required
 def get_vehicles_list():
     """Retourner la liste des véhicules"""
+    country = request.args.get('country', type=str)  # New country filter for admin
+    
     query = Vehicle.query
-    query = apply_island_filter(query, Vehicle.owner_island)
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
     vehicles = query.order_by(Vehicle.created_at.desc()).all()
     return jsonify([v.to_dict() for v in vehicles])
 
@@ -335,13 +344,14 @@ def query_vehicles():
     status = request.args.get('status', type=str)
     start = request.args.get('start_date', type=str)
     end = request.args.get('end_date', type=str)
+    country = request.args.get('country', type=str)  # New country filter for admin
 
     expired = request.args.get('expired', type=str)
     qr_expired = request.args.get('qr_expired', type=str)
     insurance_expired = request.args.get('insurance_expired', type=str)
     
     query = Vehicle.query
-    query = apply_island_filter(query, Vehicle.owner_island)
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
     if vtype:
         query = query.filter(Vehicle.vehicle_type == vtype)
     if status:
@@ -403,13 +413,14 @@ def export_vehicles_csv():
     status = request.args.get('status', type=str)
     start = request.args.get('start_date', type=str)
     end = request.args.get('end_date', type=str)
+    country = request.args.get('country', type=str)  # New country filter for admin
 
     expired = request.args.get('expired', type=str)
     qr_expired = request.args.get('qr_expired', type=str)
     insurance_expired = request.args.get('insurance_expired', type=str)
     
     query = Vehicle.query
-    query = apply_island_filter(query, Vehicle.owner_island)
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
     if vtype:
         query = query.filter(Vehicle.vehicle_type == vtype)
     if status:
@@ -687,12 +698,13 @@ def list_all_fines():
     export = request.args.get('export', type=str)
     start_date = request.args.get('start_date', type=str)
     end_date = request.args.get('end_date', type=str)
+    country = request.args.get('country', type=str)  # New country filter for admin
     
     # Debug logging
     print(f"[FINES EXPORT] Received params - start_date: {start_date}, end_date: {end_date}, paid: {paid}, export: {export}")
 
     query = Fine.query.join(Vehicle)
-    query = apply_island_filter(query, Vehicle.owner_island)
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
     if q:
         like = f"%{q}%"
         query = query.filter((Vehicle.license_plate.ilike(like)) | (Vehicle.owner_name.ilike(like)))
@@ -906,11 +918,13 @@ def get_fines_stats():
     from app.models import Fine
     from sqlalchemy import func, extract
     from datetime import datetime, timedelta
+    
+    country = request.args.get('country', type=str)  # New country filter for admin
 
     try:
         # Build base query with island filter for judiciaire users
         base_query = db.session.query(Fine).join(Vehicle)
-        base_query = apply_island_filter(base_query, Vehicle.owner_island)
+        base_query = apply_island_filter(base_query, Vehicle.owner_island, force_country=country)
         
         # Statistiques générales
         total_fines = base_query.with_entities(func.count(Fine.id)).scalar() or 0
