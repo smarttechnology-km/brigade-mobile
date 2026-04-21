@@ -15,16 +15,27 @@ document.addEventListener('DOMContentLoaded', function() {
     loadDashboardData();
     // Actualiser les données toutes les 30 secondes
     setInterval(loadDashboardData, 30000);
+    
+    // country filter binding for admin
+    const countryFilterEl = document.getElementById('dashboard-country-filter');
+    if(countryFilterEl){
+        countryFilterEl.addEventListener('change', function(){
+            loadDashboardData(0, this.value);
+        });
+    }
 });
 
 /**
  * Charger les données du dashboard via l'API avec retry pour les erreurs 502
  */
-function loadDashboardData(retryCount = 0) {
+function loadDashboardData(retryCount = 0, country = null) {
     const maxRetries = 2;
     const retryDelay = 2000; // 2 secondes entre les tentatives
     
-    fetch('/api/vehicles/stats', { credentials: 'same-origin' })
+    let url = '/api/vehicles/stats';
+    if(country) url += '?country=' + encodeURIComponent(country);
+    
+    fetch(url, { credentials: 'same-origin' })
         .then(async response => {
             if(!response.ok){
                 let body = '';
@@ -68,7 +79,7 @@ function loadDashboardData(retryCount = 0) {
             showDashboardError('Impossible de charger les statistiques: ' + (error.message || String(error)) + ' (le serveur reprend du service, veuillez patienter...)');
         });
 
-    loadVehiclesList(retryCount);
+    loadVehiclesList(retryCount, country);
 }
 
 /**
@@ -285,7 +296,7 @@ function updateStatusChart(statusData) {
 /**
  * Charger la liste des véhicules
  */
-function loadVehiclesList(retryCount = 0) {
+function loadVehiclesList(retryCount = 0, country = null) {
     const maxRetries = 2;
     const retryDelay = 2000; // 2 secondes entre les tentatives
     
@@ -296,7 +307,10 @@ function loadVehiclesList(retryCount = 0) {
     const shouldHide = !hasInitial && !window._vehiclesLoaded;
     if (table && shouldHide) table.classList.add('invisible');
 
-    fetch('/api/vehicles/list', { credentials: 'same-origin' })
+    let url = '/api/vehicles/list';
+    if(country) url += '?country=' + encodeURIComponent(country);
+    
+    fetch(url, { credentials: 'same-origin' })
         .then(async response => {
             if(!response.ok){
                 let body = '';
@@ -305,7 +319,7 @@ function loadVehiclesList(retryCount = 0) {
                 // Si c'est une erreur 502 et qu'on n'a pas dépassé les retry max, attendre et réessayer
                 if(response.status === 502 && retryCount < maxRetries){
                     console.warn(`Erreur 502 sur /api/vehicles/list. Nouvelle tentative ${retryCount + 1}/${maxRetries}...`);
-                    setTimeout(() => loadVehiclesList(retryCount + 1), retryDelay);
+                    setTimeout(() => loadVehiclesList(retryCount + 1, country), retryDelay);
                     return;
                 }
                 

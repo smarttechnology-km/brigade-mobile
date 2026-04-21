@@ -187,6 +187,19 @@ document.addEventListener('DOMContentLoaded', function(){
             else loadFines(q, null);
         });
     }
+
+    // country filter binding
+    const countryFilterEl = document.getElementById('fines-country-filter');
+    if(countryFilterEl){
+        countryFilterEl.addEventListener('change', function(){
+            const q = (document.getElementById('fines-search')||{value:''}).value.trim();
+            const filter = document.querySelector('#fines-filter-group .active');
+            const fval = filter ? filter.dataset.filter : 'all';
+            if(fval === 'paid') loadFinesWithParams(q.trim(), true, this.value);
+            else if(fval === 'unpaid') loadFinesWithParams(q.trim(), false, this.value);
+            else loadFinesWithParams(q.trim(), null, this.value);
+        });
+    }
 });
 
 function loadFines(){
@@ -198,11 +211,12 @@ function loadFines(q, paid){
     loadFinesWithParams(q || '', paid === undefined ? null : paid);
 }
 
-function loadFinesWithParams(q, paid){
+function loadFinesWithParams(q, paid, country){
     let url = '/api/vehicles/fines/all';
     const parts = [];
     if(q) parts.push('q=' + encodeURIComponent(q));
     if(paid !== null && paid !== undefined) parts.push('paid=' + (paid ? 'true' : 'false'));
+    if(country) parts.push('country=' + encodeURIComponent(country));
     if(parts.length) url += '?' + parts.join('&');
 
     fetch(url)

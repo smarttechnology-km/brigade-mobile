@@ -111,6 +111,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         
+        // wire country filter if present
+        const countryFilter = document.getElementById('country-filter');
+        if (countryFilter) {
+            countryFilter.addEventListener('change', function() {
+                loadVehicles();
+            });
+        }
+        
         addBtn.addEventListener('click', function() {
             openVehicleModal();
         });
@@ -187,6 +195,12 @@ function loadVehicles() {
     const statusFilter = document.getElementById('status-filter');
     if (statusFilter && statusFilter.value) {
         params.append('status', statusFilter.value);
+    }
+    
+    // Get country filter
+    const countryFilter = document.getElementById('country-filter');
+    if (countryFilter && countryFilter.value) {
+        params.append('country', countryFilter.value);
     }
     
     const url = params.toString() ? `/api/vehicles/query?${params.toString()}` : '/api/vehicles/query';

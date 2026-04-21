@@ -31,6 +31,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Country filter listener for admin
+    const countryFilter = document.getElementById('phones-country-filter');
+    if (countryFilter) {
+        countryFilter.addEventListener('change', loadPhones);
+    }
+
     // Ensure we clean up modal when it is hidden
     const modalEl = document.getElementById('phoneModal');
     if (modalEl) {
@@ -41,7 +47,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadPhones() {
-    fetch('/api/phones/list')
+    const countryFilter = document.getElementById('phones-country-filter');
+    const country = countryFilter ? countryFilter.value : '';
+    const url = country ? `/api/phones/list?country=${encodeURIComponent(country)}` : '/api/phones/list';
+    fetch(url)
         .then(r => r.json())
         .then(data => {
             phonesCache = (data.phones && Array.isArray(data.phones)) ? data.phones : (Array.isArray(data) ? data : []);

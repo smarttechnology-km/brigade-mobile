@@ -82,14 +82,25 @@ function loadUsers(){
         if(!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
     }).then(data=>{
-        usersCache = data || [];
+        // API returns array directly
+        usersCache = Array.isArray(data) ? data : (data.users || []);
         renderUsers(usersCache);
-    }).catch(err=>{ console.error('load users failed', err); const tbody = document.getElementById('users-tbody'); if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger">Erreur chargement</td></tr>'; });
+    }).catch(err=>{ 
+        console.error('load users failed', err); 
+        const tbody = document.getElementById('users-tbody'); 
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger">Erreur chargement</td></tr>'; 
+    });
 }
 
 function renderUsers(list){
-    const tbody = document.getElementById('users-tbody'); if(!tbody) return;
-    if(!list || list.length===0){ tbody.innerHTML = '<tr><td colspan="11" class="text-center">Aucun utilisateur</td></tr>'; return; }
+    const tbody = document.getElementById('users-tbody'); 
+    if(!tbody) return;
+    
+    if(!list || list.length===0){ 
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center">Aucun utilisateur</td></tr>'; 
+        return; 
+    }
+    
     tbody.innerHTML = list.map((u,i)=>`<tr>
             <td>${i+1}</td>
             <td>${escapeHtml(u.username||'')}</td>
@@ -110,6 +121,7 @@ function renderUsers(list){
               </button>
             </td>
         </tr>`).join('');
+    
     tbody.querySelectorAll('button[data-uid]').forEach(b=>b.addEventListener('click', deleteUser));
     tbody.querySelectorAll('button[data-edit]').forEach(b=>b.addEventListener('click', function(){ openEditUser(this.dataset.edit); }));
 }

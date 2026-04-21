@@ -1,18 +1,29 @@
 document.addEventListener('DOMContentLoaded', function(){
     loadFinesStats(false);
+    
+    // country filter binding
+    const countryFilterEl = document.getElementById('stats-country-filter');
+    if(countryFilterEl){
+        countryFilterEl.addEventListener('change', function(){
+            loadFinesStats(false, this.value);
+        });
+    }
 });
 
 // Variable globale pour stocker toutes les données
 let allStatsData = null;
 
-async function loadFinesStats(forceRefresh = false) {
+async function loadFinesStats(forceRefresh = false, country = null) {
     try {
         // Charger directement sans vérifier le cache
 
         // Afficher les spinners de chargement
         showLoadingSpinners(true);
 
-        const response = await fetch('/api/vehicles/fines/stats');
+        let url = '/api/vehicles/fines/stats';
+        if(country) url += '?country=' + encodeURIComponent(country);
+
+        const response = await fetch(url);
 
         if (!response.ok) {
             throw new Error(`Erreur HTTP: ${response.status} ${response.statusText}`);

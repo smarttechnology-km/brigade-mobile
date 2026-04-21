@@ -19,6 +19,16 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     
     loadPayments(initialView);
+    
+    // country filter binding
+    const countryFilterEl = document.getElementById('payments-country-filter');
+    if(countryFilterEl){
+        countryFilterEl.addEventListener('change', function(){
+            const activeBtn = document.querySelector('#payments-view-group button.active');
+            const currentView = activeBtn ? activeBtn.dataset.view : 'pending';
+            loadPayments(currentView, this.value);
+        });
+    }
 });
 
 function bindViewControls(){
@@ -32,7 +42,9 @@ function bindViewControls(){
         const view = btn.dataset.view;
         // Save current view to sessionStorage
         sessionStorage.setItem('payments-current-view', view);
-        loadPayments(view);
+        const countryFilter = document.getElementById('payments-country-filter');
+        const country = countryFilter ? countryFilter.value : null;
+        loadPayments(view, country);
     });
 
     const exportBtn = document.getElementById('export-archive');
@@ -88,10 +100,13 @@ function bindViewControls(){
 let archiveData = [];
 let pendingData = [];
 
-function loadPayments(view){
+function loadPayments(view, country){
     // view: 'pending' or 'archive'
+    let url = '/api/vehicles/fines/all?paid=true';
+    if(country) url += '&country=' + encodeURIComponent(country);
+    
     if(view === 'archive'){
-        fetch('/api/vehicles/fines/all?paid=true')
+        fetch(url)
             .then(r=>r.json())
             .then(data=>{
                 // Store archive data for searching
@@ -114,7 +129,10 @@ function loadPayments(view){
                 document.getElementById('payments-tbody').innerHTML = '<tr><td colspan="8" class="text-center text-muted">Erreur</td></tr>';
             });
     } else {
-        fetch('/api/vehicles/fines/all?paid=false')
+        let pendingUrl = '/api/vehicles/fines/all?paid=false';
+        if(country) pendingUrl += '&country=' + encodeURIComponent(country);
+        
+        fetch(pendingUrl)
             .then(r=>r.json())
             .then(data=>{
                 // Store pending data for searching

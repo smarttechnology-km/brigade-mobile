@@ -79,6 +79,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (btnUnpaid) btnUnpaid.classList.remove('active');
     applyFilters();
   });
+
+  // Add country filter listener for admin
+  const countryFilter = document.getElementById('report-country');
+  if (countryFilter) {
+    countryFilter.addEventListener('change', applyFilters);
+  }
 });
 
 function collectFilters() {
@@ -87,12 +93,14 @@ function collectFilters() {
   const type = document.getElementById('filter-type') ? document.getElementById('filter-type').value : '';
   const status = document.getElementById('filter-status') ? document.getElementById('filter-status').value : '';
   const q = document.getElementById('filter-q') ? document.getElementById('filter-q').value : '';
+  const country = document.getElementById('report-country') ? document.getElementById('report-country').value : '';
   const params = new URLSearchParams();
   if (start) params.append('start_date', start);
   if (end) params.append('end_date', end);
   if (type) params.append('type', type);
   if (status) params.append('status', status);
   if (q) params.append('q', q);
+  if (country) params.append('country', country);
   return params;
 }
 
@@ -145,8 +153,10 @@ function applyFilters() {
     else if (kind === 'fines_unpaid') paid = 'false';
     else paid = document.getElementById('filter-paid') ? document.getElementById('filter-paid').value : '';
     const q = document.getElementById('filter-q') ? document.getElementById('filter-q').value : '';
+    const country = document.getElementById('report-country') ? document.getElementById('report-country').value : '';
     const paidParam = paid ? `&paid=${paid}` : '';
-    fetchJson(`/api/vehicles/fines/all?q=${encodeURIComponent(q)}${paidParam}`)
+    const countryParam = country ? `&country=${encodeURIComponent(country)}` : '';
+    fetchJson(`/api/vehicles/fines/all?q=${encodeURIComponent(q)}${paidParam}${countryParam}`)
       .then(data => { renderFinesTable(data); updateFinesSummary(data); })
       .catch(err => { logError('Erreur chargement amandes: ' + (err && err.message)); alert('Erreur lors du chargement des amandes'); })
       .finally(() => { try { if (btnApply) { btnApply.disabled = false; btnApply.innerHTML = btnApply.dataset.orig || 'Appliquer'; } if (btnReset) btnReset.disabled = false; if (btnExport) btnExport.disabled = false; } catch (e) { logError('finally error: ' + (e && e.message)); } });
@@ -189,7 +199,7 @@ function applyFilters() {
 }
 
  function resetFilters() {
-   const elems = ['filter-start', 'filter-end', 'filter-type', 'filter-status', 'filter-q', 'filter-paid'];
+   const elems = ['filter-start', 'filter-end', 'filter-type', 'filter-status', 'filter-q', 'filter-paid', 'report-country'];
    elems.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
    // hide the reports card and summary when resetting
    const card = document.getElementById('reports-card');
@@ -353,9 +363,11 @@ function exportCsv() {
   const kind = document.getElementById('report-kind') ? document.getElementById('report-kind').value : 'vehicles';
   if (kind === 'fines') {
     const paid = document.getElementById('filter-paid') ? document.getElementById('filter-paid').value : '';
+    const country = document.getElementById('report-country') ? document.getElementById('report-country').value : '';
     const paidParam = paid ? `&paid=${paid}` : '';
+    const countryParam = country ? `&country=${encodeURIComponent(country)}` : '';
     // request PDF instead of CSV
-    window.location.href = `/api/vehicles/fines/all?export=pdf${paidParam}`;
+    window.location.href = `/api/vehicles/fines/all?export=pdf${paidParam}${countryParam}`;
     return;
   }
   const params = collectFilters();

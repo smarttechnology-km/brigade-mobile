@@ -56,6 +56,15 @@ function setupEventListeners() {
         });
     }
 
+    // Country filter listener for admin
+    const countryFilter = document.getElementById('usage-country-filter');
+    if (countryFilter) {
+        countryFilter.addEventListener('change', function() {
+            loadStats();
+            loadUsageHistory();
+        });
+    }
+
     // Event listeners pour emprunt manuel
     const manualBorrowModal = document.getElementById('manualBorrowModal');
     if (manualBorrowModal) {
@@ -77,7 +86,10 @@ function setupEventListeners() {
 }
 
 function loadStats() {
-    fetch('/api/phone-usage/stats')
+    const countryFilter = document.getElementById('usage-country-filter');
+    const country = countryFilter ? countryFilter.value : '';
+    const url = country ? `/api/phone-usage/stats?country=${encodeURIComponent(country)}` : '/api/phone-usage/stats';
+    fetch(url)
         .then(r => r.json())
         .then(data => {
             document.getElementById('stat-total').textContent = data.total_phones;
@@ -89,9 +101,18 @@ function loadStats() {
 }
 
 function loadUsageHistory() {
-    const url = showAllHistory 
-        ? '/api/phone-usage/list?show_all=true'
-        : '/api/phone-usage/list';
+    const countryFilter = document.getElementById('usage-country-filter');
+    const country = countryFilter ? countryFilter.value : '';
+    
+    const params = new URLSearchParams();
+    if (showAllHistory) {
+        params.append('show_all', 'true');
+    }
+    if (country) {
+        params.append('country', country);
+    }
+    
+    const url = `/api/phone-usage/list${params.toString() ? '?' + params.toString() : ''}`;
     
     fetch(url)
         .then(r => r.json())

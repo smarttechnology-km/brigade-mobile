@@ -12,13 +12,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-resolve').addEventListener('click', resolveSubmission);
     document.getElementById('btn-delete').addEventListener('click', deleteSubmission);
     
+    // Country filter listener for admin
+    const countryFilter = document.getElementById('filter-country');
+    if (countryFilter) {
+        countryFilter.addEventListener('change', loadSubmissions);
+    }
+    
     // Auto-load every 10s
     setInterval(loadSubmissions, 10000);
 });
 
 async function loadSubmissions() {
     try {
-        const response = await fetch('/api/photo-submissions/list', {
+        const countryFilter = document.getElementById('filter-country');
+        const country = countryFilter ? countryFilter.value : '';
+        const url = country ? `/api/photo-submissions/list?country=${encodeURIComponent(country)}` : '/api/photo-submissions/list';
+        
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
@@ -74,13 +84,15 @@ function filterSubmissions() {
     const status = document.getElementById('filter-status').value;
     const plate = document.getElementById('filter-plate').value.toUpperCase();
     const username = document.getElementById('filter-username').value.toLowerCase();
+    const country = document.getElementById('filter-country') ? document.getElementById('filter-country').value : '';
 
     let filtered = allSubmissions.filter(sub => {
         const matchStatus = !status || sub.status === status;
         const matchPlate = !plate || (sub.license_plate && sub.license_plate.includes(plate));
         const matchUser = !username || (sub.user?.username?.toLowerCase().includes(username));
+        const matchCountry = !country || (sub.vehicle?.owner_island === country);
         
-        return matchStatus && matchPlate && matchUser;
+        return matchStatus && matchPlate && matchUser && matchCountry;
     });
 
     renderSubmissions(filtered);
