@@ -9,7 +9,10 @@
         <h2><i class="fas fa-car me-2"></i>Véhicules</h2>
         <p class="text-muted mb-0">Gestion et suivi du parc de véhicules</p>
       </div>
-      <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+      <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
+        <button class="btn btn-outline-secondary" id="btn-settings" data-bs-toggle="modal" data-bs-target="#settingsModal" title="Paramètres">
+          <i class="fas fa-cog me-2"></i>Paramètres
+        </button>
         <button class="btn btn-primary" id="btn-add-vehicle" data-bs-toggle="modal" data-bs-target="#vehicleModal">
           <i class="fas fa-plus me-2"></i>Ajouter un Véhicule
         </button>
@@ -70,6 +73,154 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Modal Paramètres -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-secondary text-white">
+        <h5 class="modal-title d-flex align-items-center">
+          <i class="fas fa-cog me-2"></i>
+          <span>Paramètres</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <!-- Nav tabs for settings -->
+        <ul class="nav nav-tabs mb-4" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="insurances-tab" data-bs-toggle="tab" data-bs-target="#insurances-content" type="button" role="tab" aria-controls="insurances-content" aria-selected="true">
+              <i class="fas fa-shield-alt me-2"></i>Compagnies d'Assurance
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="insurance-accounts-tab" data-bs-toggle="tab" data-bs-target="#insurance-accounts-content" type="button" role="tab" aria-controls="insurance-accounts-content" aria-selected="false">
+              <i class="fas fa-user-tie me-2"></i>Comptes d'Assurance
+            </button>
+          </li>
+        </ul>
+
+        <!-- Tab content -->
+        <div class="tab-content">
+          <!-- Insurances Tab -->
+          <div class="tab-pane fade show active" id="insurances-content" role="tabpanel" aria-labelledby="insurances-tab">
+            <h6 class="mb-3">Gérer les compagnies d'assurance</h6>
+            
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <input type="text" id="insurance_name_input" class="form-control" placeholder="Nom de la compagnie" required />
+              </div>
+              <div class="col-md-3">
+                <input type="text" id="insurance_phone_input" class="form-control" placeholder="Téléphone" />
+              </div>
+              <div class="col-md-3">
+                <select id="insurance_island_input" class="form-select" required>
+                  <option value="">-- Île --</option>
+                  <option value="Grande Comores">Grande Comores</option>
+                  <option value="Anjouan">Anjouan</option>
+                  <option value="Moheli">Moheli</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <button class="btn btn-success w-100" onclick="addInsurance()">
+                  <i class="fas fa-plus me-1"></i>Ajouter
+                </button>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-12">
+                <input type="text" id="insurance_address_input" class="form-control" placeholder="Adresse complète" />
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-hover table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>Compagnie</th>
+                    <th>Téléphone</th>
+                    <th>Île</th>
+                    <th>Adresse</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="insurances-tbody">
+                  <tr><td colspan="5" class="text-center text-muted">Chargement...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Insurance Accounts Tab -->
+          <div class="tab-pane fade" id="insurance-accounts-content" role="tabpanel" aria-labelledby="insurance-accounts-tab">
+            <h6 class="mb-3">Gérer les comptes d'assurance</h6>
+            
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <select id="account_insurance_select" class="form-select">
+                  <option value="">-- Sélectionner une Compagnie --</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <input type="text" id="account_username_input" class="form-control" placeholder="Nom d'utilisateur" />
+              </div>
+              <div class="col-md-4">
+                <input type="password" id="account_password_input" class="form-control" placeholder="Mot de passe" />
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-3">
+                <input type="text" id="account_contact_person_input" class="form-control" placeholder="Personne de contact" />
+              </div>
+              <div class="col-md-3">
+                <input type="email" id="account_contact_email_input" class="form-control" placeholder="Email" />
+              </div>
+              <div class="col-md-2">
+                <input type="text" id="account_contact_phone_input" class="form-control" placeholder="Téléphone" />
+              </div>
+              <div class="col-md-2 d-flex align-items-center">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="account_is_active_input" checked>
+                  <label class="form-check-label" for="account_is_active_input">Actif</label>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <button id="insurance-account-submit-btn" class="btn btn-success w-100" onclick="addInsuranceAccount()">
+                  <i class="fas fa-plus me-1"></i>Ajouter
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-hover table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>Compagnie</th>
+                    <th>Nom d'utilisateur</th>
+                    <th>Contact</th>
+                    <th>Email</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="insurance-accounts-tbody">
+                  <tr><td colspan="6" class="text-center text-muted">Chargement...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Fermer
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal Ajouter / Éditer -->
@@ -232,7 +383,12 @@
                 <label class="form-label fw-semibold">
                   <i class="fas fa-building text-muted me-1"></i>Compagnie d'assurance
                 </label>
-                <input type="text" id="insurance_company" name="insurance_company" class="form-control" placeholder="Ex: Amana Assurance" />
+                <select id="insurance_company" name="insurance_company" class="form-select">
+                  <option value="">-- Sélectionner une compagnie --</option>
+                  <option value="Autre">➕ Autre...</option>
+                </select>
+                <input type="text" id="insurance_company_other" class="form-control mt-2 d-none" placeholder="Précisez la compagnie" />
+                <input type="hidden" id="insurance_company_hidden" />
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-semibold">
@@ -310,5 +466,12 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+  // Pass current user's country to JavaScript for insurance management
+  window.currentUserCountry = '{{ current_user.country if current_user.country else "" }}';
+  window.currentUserRole = '{{ current_user.role if current_user.role else "" }}';
+</script>
+<script src="{{ url_for('static', filename='js/insurance-settings.js') }}"></script>
+<script src="{{ url_for('static', filename='js/insurance-accounts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicles.js') }}"></script>
 {% endblock %}

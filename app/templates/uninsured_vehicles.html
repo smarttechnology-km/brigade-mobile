@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}Véhicules à Assurer{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-car-side me-2"></i>Véhicules à Assurer</h2>
+            <p class="text-muted mb-0">Véhicules sans assurance ou avec assurance expirée disponibles pour changement</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-primary" onclick="refreshVehicles()">
+                <i class="fas fa-sync-alt me-1"></i>Actualiser
+            </button>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text bg-light border-0">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" id="search-input" class="form-control border-start-0" placeholder="Chercher par immatriculation, propriétaire..." />
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 15%;">
+                            <i class="fas fa-id-card text-muted me-1"></i>Immatriculation
+                        </th>
+                        <th style="width: 25%;">
+                            <i class="fas fa-user text-muted me-1"></i>Propriétaire
+                        </th>
+                        <th style="width: 20%;">
+                            <i class="fas fa-car me-1"></i>Type
+                        </th>
+                        <th style="width: 15%;">
+                            <i class="fas fa-map-marker-alt me-1"></i>Île
+                        </th>
+                        <th style="width: 25%; text-align: center;">
+                            <i class="fas fa-cog text-muted me-1"></i>Actions
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="vehicles-tbody">
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Chargement...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- No results message -->
+    <div id="no-results-alert" class="alert alert-info mt-4" style="display: none;">
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>Aucun véhicule à assurer trouvé.</strong> Tous les véhicules ont une assurance valide.
+    </div>
+</div>
+
+<!-- Add Vehicle to Insurance Modal -->
+<div class="modal fade" id="addVehicleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle me-2"></i>
+                    <span>Ajouter le Véhicule</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="modal-vehicle-id" />
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-id-card text-muted me-1"></i>Immatriculation</label>
+                        <input type="text" id="modal-license-plate" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-industry text-muted me-1"></i>Marque</label>
+                        <input type="text" id="modal-make" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-cubes text-muted me-1"></i>Modèle</label>
+                        <input type="text" id="modal-model" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-calendar text-muted me-1"></i>Année</label>
+                        <input type="text" id="modal-year" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-palette text-muted me-1"></i>Couleur</label>
+                        <input type="text" id="modal-color" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-car text-muted me-1"></i>Type</label>
+                        <input type="text" id="modal-vehicle-type" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-user text-muted me-1"></i>Propriétaire</label>
+                        <input type="text" id="modal-owner-name" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-map-marker-alt text-muted me-1"></i>Île</label>
+                        <input type="text" id="modal-owner-island" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-briefcase text-muted me-1"></i>Usage</label>
+                        <input type="text" id="modal-usage-type" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <hr class="my-3" />
+
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <label class="form-label fw-semibold">
+                            <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" id="modal-insurance-expiry" class="form-control" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Annuler
+                </button>
+                <button type="button" class="btn btn-success" onclick="confirmAddVehicle()">
+                    <i class="fas fa-check me-1"></i>Ajouter
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let vehiclesCache = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadUninsuredVehicles();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    const searchInput = document.getElementById('search-input');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', filterVehicles);
+    }
+}
+
+function loadUninsuredVehicles() {
+    console.log('Loading uninsured vehicles...');
+    fetch('/api/vehicles/uninsured', {
+        credentials: 'same-origin'
+    })
+    .then(r => {
+        if (!r.ok) throw new Error('Failed to load vehicles');
+        return r.json();
+    })
+    .then(data => {
+        vehiclesCache = data.vehicles || [];
+        console.log('Loaded ' + vehiclesCache.length + ' uninsured vehicles');
+        renderVehiclesTable(vehiclesCache);
+    })
+    .catch(err => {
+        console.error('Error loading vehicles:', err);
+        const tbody = document.getElementById('vehicles-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4"><i class="fas fa-exclamation-circle me-2"></i>Erreur lors du chargement</td></tr>';
+        }
+    });
+}
+
+function filterVehicles() {
+    const searchTerm = (document.getElementById('search-input').value || '').toLowerCase();
+    
+    const filtered = vehiclesCache.filter(v => {
+        const matchesSearch = !searchTerm || 
+            (v.license_plate && v.license_plate.toLowerCase().includes(searchTerm)) ||
+            (v.owner_name && v.owner_name.toLowerCase().includes(searchTerm));
+        
+        return matchesSearch;
+    });
+    
+    renderVehiclesTable(filtered);
+}
+
+function renderVehiclesTable(vehicles) {
+    const tbody = document.getElementById('vehicles-tbody');
+    const noResults = document.getElementById('no-results-alert');
+    
+    if (!tbody) return;
+    
+    if (vehicles.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Aucun véhicule trouvé</td></tr>';
+        if (noResults) noResults.style.display = vehiclesCache.length === 0 ? 'block' : 'none';
+        return;
+    }
+    
+    if (noResults) noResults.style.display = 'none';
+    
+    tbody.innerHTML = vehicles.map(v => `
+        <tr>
+            <td><strong>${v.license_plate}</strong></td>
+            <td>${v.owner_name || '-'}</td>
+            <td>${v.vehicle_type || '-'}</td>
+            <td>
+                <span class="badge bg-info">${v.owner_island || 'N/A'}</span>
+            </td>
+            <td style="text-align: center;">
+                <button class="btn btn-sm btn-outline-success" onclick="addVehicleToInsurance(${v.id}, '${v.license_plate}')" title="Ajouter ce véhicule">
+                    <i class="fas fa-plus"></i> Ajouter
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function viewVehicleDetails(vehicleId) {
+    // Find vehicle in cache
+    const vehicle = vehiclesCache.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+    
+    // Show vehicle details in alert (or could open a modal)
+    const details = `
+ID: ${vehicle.id}
+Immatriculation: ${vehicle.license_plate}
+Propriétaire: ${vehicle.owner_name}
+Type: ${vehicle.vehicle_type}
+Île: ${vehicle.owner_island}
+Marque: ${vehicle.make || '-'}
+Modèle: ${vehicle.model || '-'}
+Année: ${vehicle.year || '-'}
+Couleur: ${vehicle.color || '-'}
+Téléphone: ${vehicle.owner_phone || '-'}
+Adresse: ${vehicle.owner_address || '-'}
+    `;
+    alert(details);
+}
+
+function addVehicleToInsurance(vehicleId, licensePlate) {
+    const vehicle = vehiclesCache.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+    
+    // Populate modal fields
+    document.getElementById('modal-vehicle-id').value = vehicle.id;
+    document.getElementById('modal-license-plate').value = vehicle.license_plate;
+    document.getElementById('modal-make').value = vehicle.make || '-';
+    document.getElementById('modal-model').value = vehicle.model || '-';
+    document.getElementById('modal-year').value = vehicle.year || '-';
+    document.getElementById('modal-color').value = vehicle.color || '-';
+    document.getElementById('modal-vehicle-type').value = vehicle.vehicle_type || '-';
+    document.getElementById('modal-owner-name').value = vehicle.owner_name || '-';
+    document.getElementById('modal-owner-island').value = vehicle.owner_island || '-';
+    document.getElementById('modal-usage-type').value = vehicle.usage_type || '-';
+    document.getElementById('modal-insurance-expiry').value = vehicle.insurance_expiry ? vehicle.insurance_expiry.split('T')[0] : '';
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('addVehicleModal'));
+    modal.show();
+}
+
+function confirmAddVehicle() {
+    const vehicleId = document.getElementById('modal-vehicle-id').value;
+    const insuranceExpiry = document.getElementById('modal-insurance-expiry').value;
+    
+    // Call the API to assign the vehicle to the insurance account
+    fetch('/api/vehicles/assign-to-insurance', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+            vehicle_id: vehicleId,
+            insurance_expiry: insuranceExpiry || null
+        })
+    })
+    .then(r => {
+        if (!r.ok) throw new Error('Failed to assign vehicle');
+        return r.json();
+    })
+    .then(data => {
+        bootstrap.Modal.getInstance(document.getElementById('addVehicleModal')).hide();
+        alert('Véhicule ajouté avec succès à votre assurance!');
+        loadUninsuredVehicles(); // Reload the list
+    })
+    .catch(err => {
+        console.error('Error:', err);
+        alert('Erreur: ' + err.message);
+    });
+}
+
+function refreshVehicles() {
+    loadUninsuredVehicles();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Assurance{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-shield-alt me-2"></i>Mon Espace Assurance</h2>
+            <p class="text-muted mb-0">Gestion des véhicules assignés à votre assurance</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="alert alert-info mb-0">
+                <small><i class="fas fa-building me-1"></i><strong id="company-name">Chargement...</strong></small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 class="text-primary mb-0" id="total-vehicles">0</h3>
+                    <small class="text-muted">Véhicules assignés</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 class="text-warning mb-0" id="expiring-soon">0</h3>
+                    <small class="text-muted">Assurances expirant bientôt</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 class="text-danger mb-0" id="expired-count">0</h3>
+                    <small class="text-muted">Assurances expirées</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 class="text-success mb-0" id="active-count">0</h3>
+                    <small class="text-muted">Assurances actives</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input id="vehicle-search" type="text" class="form-control" placeholder="Rechercher par immatriculation, propriétaire...">
+            </div>
+        </div>
+        <div class="col-md-6">
+            <select id="insurance-filter" class="form-select">
+                <option value="">Tous les statuts</option>
+                <option value="active">Assurance active</option>
+                <option value="expiring">Expiration < 30 jours</option>
+                <option value="expired">Expirée</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Vehicles Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0"><i class="fas fa-list me-2"></i>Liste des Véhicules</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="vehicles-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 12%;">Immatriculation</th>
+                                    <th style="width: 13%;">Propriétaire</th>
+                                    <th style="width: 10%;">Type</th>
+                                    <th style="width: 11%;">Île</th>
+                                    <th style="width: 13%;">Téléphone</th>
+                                    <th style="width: 12%;">Usage</th>
+                                    <th style="width: 12%;">Assurance Exp.</th>
+                                    <th style="width: 13%;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vehicles-tbody">
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Chargement...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Dates Modal -->
+<div class="modal fade" id="editDatesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-calendar-alt me-2"></i>
+                    <span>Mettre à jour les dates</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="edit-vehicle-id" />
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-id-card text-muted me-1"></i>Immatriculation</label>
+                        <input type="text" id="edit-license-plate" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-user text-muted me-1"></i>Propriétaire</label>
+                        <input type="text" id="edit-owner-name" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-car text-muted me-1"></i>Type</label>
+                        <input type="text" id="edit-vehicle-type" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-map-marker-alt text-muted me-1"></i>Île</label>
+                        <input type="text" id="edit-owner-island" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-phone text-muted me-1"></i>Téléphone</label>
+                        <input type="text" id="edit-owner-phone" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold"><i class="fas fa-briefcase text-muted me-1"></i>Usage</label>
+                        <input type="text" id="edit-usage-type" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <hr class="my-3" />
+
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <label class="form-label fw-semibold">
+                            <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" id="edit-insurance-expiry" class="form-control" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Annuler
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveVehicleDates()">
+                    <i class="fas fa-save me-1"></i>Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/insurance-dashboard.js') }}"></script>
+{% endblock %}

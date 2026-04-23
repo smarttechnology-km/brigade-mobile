@@ -54,7 +54,11 @@
                 <i class="fas fa-bars"></i>
             </button>
             <div class="flex-grow-1 text-center">
+                {% if current_user.is_authenticated and current_user.is_insurance_account %}
+                <span class="text-white fw-bold" style="font-size: 1.1rem;">Police Comores</span>
+                {% else %}
                 <a href="/" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">Police Comores</a>
+                {% endif %}
             </div>
             <div style="width: 40px;"></div>
         </div>
@@ -66,10 +70,17 @@
     <!-- Left sidebar -->
     <aside class="sidebar bg-dark text-white" id="appSidebar">
         <div class="sidebar-header p-3">
+            {% if current_user.is_authenticated and current_user.is_insurance_account %}
+            <span class="navbar-brand text-white d-inline-block">
+                <i class="fas fa-car"></i>
+                <span class="ms-2">Police Comores</span>
+            </span>
+            {% else %}
             <a class="navbar-brand text-white" href="/">
                 <i class="fas fa-car"></i>
                 <span class="ms-2">Police Comores</span>
             </a>
+            {% endif %}
         </div>
         
         <!-- Global Country Filter for Admin -->
@@ -89,6 +100,16 @@
         
         <nav class="nav flex-column px-2 pb-4">
             {# Role-guarded navigation: show only links permitted for the current user #}
+            
+            {# Navigation for Insurance Accounts #}
+            {% if current_user.is_authenticated and current_user.is_insurance_account %}
+            <a class="nav-link text-white {% if request.path.startswith('/insurance-dashboard') %}active{% endif %}" href="/insurance-dashboard"><i class="fas fa-shield-alt me-2"></i> Mon Espace Assurance</a>
+            <a class="nav-link text-white {% if request.path.startswith('/uninsured-vehicles') %}active{% endif %}" href="/uninsured-vehicles"><i class="fas fa-car me-2"></i> Véhicules à Assurer</a>
+            <a class="nav-link text-white {% if request.path.startswith('/add-vehicle-insurance') %}active{% endif %}" href="/add-vehicle-insurance"><i class="fas fa-plus-circle me-2"></i> Ajouter un Véhicule</a>
+            <a class="nav-link text-white {% if request.path.startswith('/insurance-reports') %}active{% endif %}" href="/insurance-reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
+            <a class="nav-link text-white {% if request.path.startswith('/insurance-profile') %}active{% endif %}" href="/insurance-profile"><i class="fas fa-user-circle me-2"></i> Mon Profil</a>
+            {% endif %}
+            
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
             <a class="nav-link text-white {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard"><i class="fas fa-chart-line me-2"></i> Dashboard</a>
             <a class="nav-link text-white {% if request.path.startswith('/vehicles') %}active{% endif %}" href="/vehicles"><i class="fas fa-car-side me-2"></i> Véhicules</a>
@@ -121,7 +142,9 @@
             {% if current_user.is_authenticated %}
             <div class="px-3 mt-3">
                         <div class="d-grid gap-2">
+                            {% if not current_user.is_insurance_account %}
                             <a href="/profile" class="btn btn-light btn-sm">Mon profil</a>
+                            {% endif %}
                             <button onclick="toggleTheme()" class="btn btn-outline-light btn-sm" id="themeToggle" title="Basculer thème sombre/clair">
                                 <i class="fas fa-moon"></i>
                             </button>

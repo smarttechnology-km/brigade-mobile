@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}Ajouter un Véhicule{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-car-side me-2"></i>Ajouter un Véhicule</h2>
+            <p class="text-muted mb-0">Saisissez l'immatriculation pour autocomplete les informations</p>
+        </div>
+    </div>
+
+    <!-- Form Card -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+            <form id="vehicle-form">
+                <div class="row">
+                    <!-- License Plate -->
+                    <div class="col-md-6 mb-3">
+                        <label for="license_plate" class="form-label">
+                            <i class="fas fa-id-card text-primary me-1"></i>Immatriculation <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="license_plate" name="license_plate" placeholder="Ex: 974-AA-123" required autocomplete="off" />
+                        <small class="text-muted" id="search-status" style="display: none;"></small>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="make" class="form-label">
+                            <i class="fas fa-industry text-muted me-1"></i>Marque
+                        </label>
+                        <input type="text" class="form-control" id="make" name="make" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="model" class="form-label">
+                            <i class="fas fa-cubes text-muted me-1"></i>Modèle
+                        </label>
+                        <input type="text" class="form-control" id="model" name="model" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="year" class="form-label">
+                            <i class="fas fa-calendar text-muted me-1"></i>Année
+                        </label>
+                        <input type="text" class="form-control" id="year" name="year" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="color" class="form-label">
+                            <i class="fas fa-palette text-muted me-1"></i>Couleur
+                        </label>
+                        <input type="text" class="form-control" id="color" name="color" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="vehicle_type" class="form-label">
+                            <i class="fas fa-car text-muted me-1"></i>Type
+                        </label>
+                        <input type="text" class="form-control" id="vehicle_type" name="vehicle_type" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="owner_name" class="form-label">
+                            <i class="fas fa-user text-muted me-1"></i>Propriétaire
+                        </label>
+                        <input type="text" class="form-control" id="owner_name" name="owner_name" readonly />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="owner_island" class="form-label">
+                            <i class="fas fa-map-marker-alt text-muted me-1"></i>Île
+                        </label>
+                        <input type="text" class="form-control" id="owner_island" name="owner_island" readonly />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="usage_type" class="form-label">
+                            <i class="fas fa-briefcase text-muted me-1"></i>Usage
+                        </label>
+                        <input type="text" class="form-control" id="usage_type" name="usage_type" readonly />
+                    </div>
+                </div>
+
+                <hr class="my-4" />
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="insurance_expiry" class="form-label">
+                            <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" class="form-control" id="insurance_expiry" name="insurance_expiry" required />
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="mt-4 pt-3 border-top">
+                    <button type="submit" class="btn btn-primary btn-lg me-2">
+                        <i class="fas fa-save me-2"></i>Ajouter le Véhicule
+                    </button>
+                    <a href="/insurance-dashboard" class="btn btn-outline-secondary btn-lg">
+                        <i class="fas fa-arrow-left me-2"></i>Retour au Dashboard
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Success Message -->
+    <div id="success-alert" class="alert alert-success mt-4" style="display: none;">
+        <i class="fas fa-check-circle me-2"></i>
+        <strong>Succès!</strong> Le véhicule a été ajouté avec succès.
+    </div>
+
+    <!-- Error Message -->
+    <div id="error-alert" class="alert alert-danger mt-4" style="display: none;">
+        <i class="fas fa-exclamation-circle me-2"></i>
+        <strong>Erreur!</strong> <span id="error-message"></span>
+    </div>
+</div>
+
+<script>
+let loadedVehicle = null;
+let vehicleHasActiveInsurance = false;
+
+function setAddFormAvailability(canAdd) {
+    const submitBtn = document.querySelector('#vehicle-form button[type="submit"]');
+    const insuranceExpiryInput = document.getElementById('insurance_expiry');
+    if (submitBtn) submitBtn.disabled = !canAdd;
+    if (insuranceExpiryInput) insuranceExpiryInput.disabled = !canAdd;
+}
+
+// Search for vehicle when license plate changes
+document.getElementById('license_plate').addEventListener('change', async function() {
+    const licensePlate = this.value.trim();
+    
+    if (!licensePlate) {
+        clearVehicleFields();
+        return;
+    }
+    
+    const searchStatus = document.getElementById('search-status');
+    searchStatus.style.display = 'block';
+    searchStatus.textContent = 'Recherche du véhicule...';
+    searchStatus.className = 'text-info';
+    
+    try {
+        const response = await fetch(`/api/vehicles/search-by-license-plate?license_plate=${encodeURIComponent(licensePlate)}`, {
+            credentials: 'same-origin'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Véhicule non trouvé');
+        }
+        
+        const data = await response.json();
+        loadedVehicle = data.vehicle;
+        vehicleHasActiveInsurance = !!data.has_active_insurance;
+        
+        // Populate all fields
+        document.getElementById('make').value = loadedVehicle.make || '-';
+        document.getElementById('model').value = loadedVehicle.model || '-';
+        document.getElementById('year').value = loadedVehicle.year || '-';
+        document.getElementById('color').value = loadedVehicle.color || '-';
+        document.getElementById('vehicle_type').value = loadedVehicle.vehicle_type || '-';
+        document.getElementById('owner_name').value = loadedVehicle.owner_name || '-';
+        document.getElementById('owner_island').value = loadedVehicle.owner_island || '-';
+        document.getElementById('usage_type').value = loadedVehicle.usage_type || '-';
+        
+        if (vehicleHasActiveInsurance) {
+            const insurer = data.active_insurance_company ? ` (${data.active_insurance_company})` : '';
+            searchStatus.textContent = `✗ Véhicule déjà assuré activement${insurer}`;
+            searchStatus.className = 'text-danger';
+            setAddFormAvailability(false);
+        } else {
+            searchStatus.textContent = '✓ Véhicule trouvé';
+            searchStatus.className = 'text-success';
+            setAddFormAvailability(true);
+        }
+        
+        // Focus on insurance expiry field
+        if (!vehicleHasActiveInsurance) {
+            setTimeout(() => {
+                document.getElementById('insurance_expiry').focus();
+            }, 500);
+        }
+        
+    } catch (err) {
+        console.error('Error:', err);
+        clearVehicleFields();
+        searchStatus.textContent = '✗ Véhicule non trouvé';
+        searchStatus.className = 'text-danger';
+        loadedVehicle = null;
+        vehicleHasActiveInsurance = false;
+        setAddFormAvailability(false);
+    }
+});
+
+function clearVehicleFields() {
+    document.getElementById('make').value = '';
+    document.getElementById('model').value = '';
+    document.getElementById('year').value = '';
+    document.getElementById('color').value = '';
+    document.getElementById('vehicle_type').value = '';
+    document.getElementById('owner_name').value = '';
+    document.getElementById('owner_island').value = '';
+    document.getElementById('usage_type').value = '';
+    document.getElementById('insurance_expiry').value = '';
+    loadedVehicle = null;
+    vehicleHasActiveInsurance = false;
+    setAddFormAvailability(false);
+}
+
+setAddFormAvailability(false);
+
+document.getElementById('vehicle-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    if (!loadedVehicle) {
+        alert('Veuillez saisir une immatriculation valide');
+        return;
+    }
+
+    if (vehicleHasActiveInsurance) {
+        alert('Ce véhicule a déjà une assurance active. Vous ne pouvez pas l\'ajouter.');
+        return;
+    }
+    
+    const form = this;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const successAlert = document.getElementById('success-alert');
+    const errorAlert = document.getElementById('error-alert');
+    const errorMessage = document.getElementById('error-message');
+    
+    // Hide alerts
+    successAlert.style.display = 'none';
+    errorAlert.style.display = 'none';
+    
+    const insuranceExpiry = document.getElementById('insurance_expiry').value;
+    if (!insuranceExpiry) {
+        alert('Veuillez entrer une date d\'expiration pour l\'assurance');
+        return;
+    }
+    
+    // Disable submit button
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement...';
+    
+    try {
+        // Get current user's insurance company name to auto-assign
+        const meResponse = await fetch('/api/vehicles/insurance-accounts/me', {
+            credentials: 'same-origin'
+        });
+        
+        if (!meResponse.ok) {
+            throw new Error('Could not retrieve insurance company information');
+        }
+        
+        const meData = await meResponse.json();
+        const insuranceCompanyName = meData.insurance_name;
+        
+        // Prepare data for update
+        const data = {
+            insurance_company: insuranceCompanyName,
+            insurance_expiry: insuranceExpiry
+        };
+        
+        // Update the vehicle with new insurance company and date
+        const response = await fetch(`/api/vehicles/${loadedVehicle.id}`, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erreur lors de la création du véhicule');
+        }
+        
+        // Create assignment
+        const assignResponse = await fetch('/api/vehicles/assignments', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                vehicle_id: loadedVehicle.id,
+                insurance_account_id: meData.id,
+                notes: 'Assigned by insurance account'
+            })
+        });
+        
+        // Show success message
+        successAlert.style.display = 'block';
+        
+        // Reset form
+        clearVehicleFields();
+        form.reset();
+        
+        // Redirect after 2 seconds
+        setTimeout(() => {
+            window.location.href = '/insurance-dashboard';
+        }, 2000);
+        
+    } catch (err) {
+        console.error('Error:', err);
+        errorMessage.textContent = err.message;
+        errorAlert.style.display = 'block';
+    } finally {
+        // Re-enable submit button
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-save me-2"></i>Ajouter le Véhicule';
+    }
+});
+</script>
+{% endblock %}
