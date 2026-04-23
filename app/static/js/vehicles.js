@@ -75,8 +75,56 @@ function setupUsageTypeToggle(){
     }
 }
 
+function setupInsuranceCompanyToggle(){
+    const selectEl = document.getElementById('insurance_company');
+    const otherEl = document.getElementById('insurance_company_other');
+    if(!selectEl) return;
+    // set initial visibility
+    if(selectEl.value === 'Autre'){
+        if(otherEl) otherEl.classList.remove('d-none');
+    } else {
+        if(otherEl) otherEl.classList.add('d-none');
+    }
+
+    selectEl.addEventListener('change', function(){
+        if(selectEl.value === 'Autre'){
+            if(otherEl){ otherEl.classList.remove('d-none'); otherEl.required = true; }
+        } else {
+            if(otherEl){ otherEl.classList.add('d-none'); otherEl.required = false; otherEl.value = ''; }
+        }
+    });
+
+    if(otherEl){
+        otherEl.addEventListener('input', function(){
+            if(selectEl.value === 'Autre' && selectEl){ selectEl.value = otherEl.value.trim(); }
+        });
+    }
+}
+
+function setupIslandInsuranceFilter(){
+    const islandEl = document.getElementById('owner_island');
+    if(!islandEl) return;
+    
+    islandEl.addEventListener('change', function(){
+        const selectedIsland = islandEl.value;
+        console.log('Island changed to:', selectedIsland);
+        // Update insurance select with filtering by island
+        if (typeof updateInsuranceSelect === 'function') {
+            console.log('Calling updateInsuranceSelect with:', selectedIsland);
+            updateInsuranceSelect(selectedIsland);
+        } else {
+            console.error('updateInsuranceSelect is not defined');
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOMContentLoaded: vehicles.js loaded');
+    
+    // Load insurances early so filtering by island works in vehicle modal
+    if (typeof loadInsurances === 'function') {
+        loadInsurances();
+    }
     
     // Only load the full vehicles table on the dedicated vehicles page
     // (the vehicles page includes a #btn-add-vehicle button). On the
@@ -89,6 +137,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // we're on the vehicles management page — load and bind add button
         console.log('Loading vehicles...');
         loadVehicles();
+        
+        // Load insurances for the vehicle form
+        if (typeof loadInsurances === 'function') {
+            loadInsurances();
+        }
         
         // wire search input if present
         const searchInput = document.getElementById('vehicle-search');
@@ -130,19 +183,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // always wire the usage-type select toggle if present (works on dashboard and vehicles pages)
     setupUsageTypeToggle();
 
+    // always wire the insurance-company select toggle if present (works on dashboard and vehicles pages)
+    setupInsuranceCompanyToggle();
+
+    // Wire island select to filter insurances
+    setupIslandInsuranceFilter();
+
     const saveBtn = document.getElementById('save-vehicle-btn');
     if (saveBtn) saveBtn.addEventListener('click', saveVehicle);
 
     // Ensure we clean up modal when it is hidden (covers cancel/backdrop click)
     const modalEl = document.getElementById('vehicleModal');
     if (modalEl) {
-        // Clean up when modal starts hiding
-        modalEl.addEventListener('hide.bs.modal', function (event) {
-            // Force cleanup immediately when hide starts
-            setTimeout(() => cleanupModalResources(), 0);
-        });
-        
-        // Additional cleanup after modal is completely hidden
+        // Clean up AFTER modal is completely hidden
         modalEl.addEventListener('hidden.bs.modal', function (event) {
             // Final cleanup resources after modal hidden
             cleanupModalResources();
@@ -379,6 +432,30 @@ function openVehicleModal(vehicle) {
     if(usageOtherEl){ usageOtherEl.classList.add('d-none'); usageOtherEl.value = ''; usageOtherEl.required = false; }
     if(usageHiddenEl){ usageHiddenEl.value = ''; }
 
+    // ensure insurance company controls are in known default state
+    const insuranceSelectEl = document.getElementById('insurance_company');
+    const insuranceOtherEl = document.getElementById('insurance_company_other');
+    if(insuranceSelectEl){ insuranceSelectEl.value = ''; }
+    if(insuranceOtherEl){ insuranceOtherEl.classList.add('d-none'); insuranceOtherEl.value = ''; insuranceOtherEl.required = false; }
+
+    // Load insurances first, then update select
+    if (typeof loadInsurances === 'function') {
+        loadInsurances().then(() => {
+            // After insurances are loaded, update the select (no filter for new vehicles)
+            if (typeof updateInsuranceSelect === 'function') {
+                if (vehicle) {
+                    // If editing, filter by selected island
+                    const islandEl = document.getElementById('owner_island');
+                    const selectedIsland = (islandEl && islandEl.value) ? islandEl.value : '';
+                    updateInsuranceSelect(selectedIsland);
+                } else {
+                    // If adding new, keep select empty until island is selected
+                    clearInsuranceSelect();
+                }
+            }
+        });
+    }
+
     if (vehicle) {
         document.getElementById('vehicle-id').value = vehicle.id;
         document.getElementById('license_plate').value = vehicle.license_plate;
@@ -390,6 +467,7 @@ function openVehicleModal(vehicle) {
             islandEl.value = (vehicle.owner_island && vehicle.owner_island.trim()) ? vehicle.owner_island : '';
             console.log('Setting owner_island to:', islandEl.value, 'from vehicle:', vehicle.owner_island);
         }
+        
         // populate vehicle type: if it's a known type use select, otherwise set 'other' and fill the free-text
         if(selectEl){
             const vt = (vehicle.vehicle_type || '').toString();
@@ -420,6 +498,22 @@ function openVehicleModal(vehicle) {
         } else {
             if(usageHiddenEl) usageHiddenEl.value = vehicle.usage_type || '';
         }
+        // populate insurance company: if it's a known company use select, otherwise set 'Autre' and fill the free-text
+        if(insuranceSelectEl){
+            const ic = (vehicle.insurance_company || '').toString().trim();
+            // Get known insurance companies from cache (if available, otherwise empty list)
+            const knownInsuranceCompanies = typeof insurancesCache !== 'undefined' ? insurancesCache.map(i => i.company_name) : [];
+            if(ic === '') {
+                insuranceSelectEl.value = '';
+                if(insuranceOtherEl){ insuranceOtherEl.classList.add('d-none'); insuranceOtherEl.value = ''; insuranceOtherEl.required = false; }
+            } else if(knownInsuranceCompanies.includes(ic)){
+                insuranceSelectEl.value = ic;
+                if(insuranceOtherEl){ insuranceOtherEl.classList.add('d-none'); insuranceOtherEl.value = ''; insuranceOtherEl.required = false; }
+            } else {
+                insuranceSelectEl.value = 'Autre';
+                if(insuranceOtherEl){ insuranceOtherEl.classList.remove('d-none'); insuranceOtherEl.value = ic || ''; insuranceOtherEl.required = true; }
+            }
+        }
         document.getElementById('color').value = vehicle.color || '';
         document.getElementById('status').value = vehicle.status || 'active';
         document.getElementById('notes').value = vehicle.notes || '';
@@ -430,7 +524,6 @@ function openVehicleModal(vehicle) {
         if(document.getElementById('vin')) document.getElementById('vin').value = vehicle.vin || '';
         if(document.getElementById('owner_address')) document.getElementById('owner_address').value = vehicle.owner_address || '';
         if(document.getElementById('registration_expiry')) document.getElementById('registration_expiry').value = vehicle.registration_expiry || '';
-        if(document.getElementById('insurance_company')) document.getElementById('insurance_company').value = vehicle.insurance_company || '';
         if(document.getElementById('insurance_expiry')) document.getElementById('insurance_expiry').value = vehicle.insurance_expiry || '';
     }
 
@@ -465,6 +558,15 @@ function saveVehicle() {
         usageTypeValue = usageHiddenEl.value.trim();
     }
 
+    // compute insurance company from select/other controls
+    const insuranceSelectEl = document.getElementById('insurance_company');
+    const insuranceOtherEl = document.getElementById('insurance_company_other');
+    let insuranceCompanyValue = '';
+    if(insuranceSelectEl){
+        if(insuranceSelectEl.value === 'Autre') insuranceCompanyValue = insuranceOtherEl ? insuranceOtherEl.value.trim() : '';
+        else insuranceCompanyValue = insuranceSelectEl.value;
+    }
+
     const payload = {
         license_plate: document.getElementById('license_plate').value.trim(),
         owner_name: document.getElementById('owner_name').value.trim(),
@@ -480,13 +582,10 @@ function saveVehicle() {
         status: document.getElementById('status').value,
         notes: document.getElementById('notes').value.trim(),
         owner_address: document.getElementById('owner_address') ? document.getElementById('owner_address').value.trim() : '',
-        registration_expiry: document.getElementById('registration_expiry') ? document.getElementById('registration_expiry').value : ''
+        registration_expiry: document.getElementById('registration_expiry') ? document.getElementById('registration_expiry').value : '',
+        insurance_company: insuranceCompanyValue
     };
 
-    // optional insurance company
-    if(document.getElementById('insurance_company')){
-        payload.insurance_company = document.getElementById('insurance_company').value.trim();
-    }
     if(document.getElementById('insurance_expiry')){
         payload.insurance_expiry = document.getElementById('insurance_expiry').value || '';
     }
