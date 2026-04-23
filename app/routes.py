@@ -1,10 +1,10 @@
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort, send_file
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort, send_file, current_app
 from flask_login import login_required, current_user
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
 from sqlalchemy import func
 from app import db
-from app.models import Vehicle, User, Phone
+from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment
 from decimal import Decimal
 import qrcode
 import io
@@ -45,8 +45,17 @@ def apply_island_filter(query, island_field, force_country=None):
 
 def check_island_access(island):
     """Check if current user has access to data from a specific island.
-    Raises 403 Forbidden if judiciaire or policier user doesn't have access."""
-    if current_user.role in ['judiciaire', 'policier'] and current_user.country:
+    Raises 403 Forbidden if judiciaire or policier user doesn't have access.
+    Insurance accounts can only access their own island."""
+    
+    # Insurance accounts can only access their own island
+    if isinstance(current_user, InsuranceAccount):
+        if island != current_user.insurance.island:
+            abort(403)
+        return True
+    
+    # Regular users (judiciaire/policier) can only access their country's data
+    if hasattr(current_user, 'role') and current_user.role in ['judiciaire', 'policier'] and hasattr(current_user, 'country'):
         if island != current_user.country:
             abort(403)
     return True
@@ -258,6 +267,60 @@ def dashboard():
     recent = query.order_by(Vehicle.created_at.desc()).limit(10).all()
     initial_vehicles = [v.to_dict() for v in recent]
     return render_template('dashboard.html', initial_vehicles=initial_vehicles)
+
+
+@main_bp.route('/insurance-dashboard')
+@login_required
+def insurance_dashboard():
+    """Dashboard for insurance accounts to manage their vehicles"""
+    # Check if user is an insurance account
+    if not isinstance(current_user, InsuranceAccount):
+        current_app.logger.warning(f"Non-insurance account tried to access dashboard: {current_user.__class__.__name__} ID={current_user.id}")
+        abort(403)
+    
+    if not current_user.is_active:
+        current_app.logger.warning(f"Inactive insurance account tried to access dashboard: {current_user.username}")
+        abort(403)
+    
+    return render_template('insurance_dashboard.html')
+
+
+@main_bp.route('/insurance-profile')
+@login_required
+def insurance_profile():
+    """Profile page for insurance accounts to update their information"""
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    return render_template('insurance_profile.html')
+
+
+@main_bp.route('/insurance-reports')
+@login_required
+def insurance_reports():
+    """Reports page for insurance accounts to view and print reports"""
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    return render_template('insurance_reports.html')
+
+
+@main_bp.route('/uninsured-vehicles')
+@login_required
+def uninsured_vehicles_page():
+    """Page showing uninsured vehicles (insurance accounts only)"""
+    # Check if user is an insurance account
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    return render_template('uninsured_vehicles.html')
+
+
+@main_bp.route('/add-vehicle-insurance')
+@login_required
+def add_vehicle_insurance_page():
+    """Page for insurance accounts to add new vehicles"""
+    # Check if user is an insurance account
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    return render_template('add_vehicle_insurance.html')
 
 
 @main_bp.route('/vehicles')
@@ -576,6 +639,27 @@ def create_vehicle():
         except Exception:
             pass
     db.session.add(vehicle)
+    db.session.flush()  # Flush to get the vehicle ID before committing
+    
+    # Auto-assign to insurance account if insurance_company is provided
+    if insurance_company and insurance_company.strip() and insurance_company != 'Autre':
+        try:
+            # Find the insurance by company name
+            insurance = Insurance.query.filter_by(company_name=insurance_company).first()
+            if insurance and insurance.accounts:
+                # Use the first account for this insurance
+                account = insurance.accounts[0]
+                assignment = VehicleInsuranceAssignment(
+                    vehicle_id=vehicle.id,
+                    insurance_account_id=account.id,
+                    assigned_by='system',
+                    notes='Auto-assigned on vehicle creation'
+                )
+                db.session.add(assignment)
+        except Exception as e:
+            # Log but don't fail vehicle creation if assignment fails
+            print(f"Warning: Could not auto-assign vehicle to insurance account: {e}")
+    
     db.session.commit()
     return jsonify(vehicle.to_dict()), 201
 @vehicle_bp.route('/<int:vehicle_id>', methods=['GET'])
@@ -1598,11 +1682,17 @@ def update_vehicle(vehicle_id):
     status_changed = False
     
     # Mettre à jour les champs autorisés
+    date_fields = ['registration_expiry', 'insurance_expiry']
     for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry']:
         if field in data and data.get(field) is not None:
             if field == 'status' and data.get(field) != old_status:
                 status_changed = True
-            setattr(vehicle, field, data.get(field))
+            # Handle empty strings for date fields - set to None instead
+            if field in date_fields and data.get(field) == '':
+                setattr(vehicle, field, None)
+            else:
+                setattr(vehicle, field, data.get(field))
+    
     # parse registration_expiry if present
     if 'registration_expiry' in data and data.get('registration_expiry'):
         try:
@@ -1642,6 +1732,30 @@ def update_vehicle(vehicle_id):
             notes=f"Statut modifié de '{old_status_label}' à '{new_status_label}'"
         )
         db.session.add(hist)
+    
+    # Auto-assign/reassign to insurance account if insurance_company changed
+    if 'insurance_company' in data:
+        insurance_company = data.get('insurance_company')
+        if insurance_company and insurance_company.strip() and insurance_company != 'Autre':
+            try:
+                # Remove old assignments for this vehicle
+                VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle.id).delete()
+                
+                # Find the insurance by company name
+                insurance = Insurance.query.filter_by(company_name=insurance_company).first()
+                if insurance and insurance.accounts:
+                    # Use the first account for this insurance
+                    account = insurance.accounts[0]
+                    assignment = VehicleInsuranceAssignment(
+                        vehicle_id=vehicle.id,
+                        insurance_account_id=account.id,
+                        assigned_by='system',
+                        notes='Auto-assigned on vehicle update'
+                    )
+                    db.session.add(assignment)
+            except Exception as e:
+                # Log but don't fail vehicle update if assignment fails
+                print(f"Warning: Could not auto-assign vehicle to insurance account: {e}")
     
     db.session.commit()
     return jsonify(vehicle.to_dict())
@@ -1780,6 +1894,765 @@ def phone_history_page(phone_id):
 def photo_submissions_page():
     """Display photo submissions page"""
     return render_template('photo_submissions.html')
+
+
+# Insurance Management Routes
+@vehicle_bp.route('/insurances', methods=['GET'])
+@login_required
+def get_insurances():
+    """Get all insurance companies
+    - Administrateur: voit toutes les compagnies
+    - Judiciaire/Policier: voit seulement les compagnies de leur pays
+    """
+    query = Insurance.query
+    
+    # Apply island filter for judiciaire and policier users
+    if current_user.role in ['judiciaire', 'policier'] and current_user.country:
+        query = query.filter(
+            (Insurance.island == current_user.country) | (Insurance.island == '') | (Insurance.island == None)
+        )
+    
+    insurances = query.order_by(Insurance.company_name).all()
+    return jsonify({
+        "insurances": [ins.to_dict() for ins in insurances]
+    })
+
+
+@vehicle_bp.route('/insurances', methods=['POST'])
+@login_required
+def create_insurance():
+    """Create a new insurance company
+    - Administrateur: can add for any island
+    - Judiciaire/Policier: can add only for their country
+    """
+    data = request.get_json() or {}
+    company_name = data.get('company_name', '').strip()
+    
+    if not company_name:
+        return jsonify({"error": "Company name is required"}), 400
+    
+    # Check if already exists
+    existing = Insurance.query.filter_by(company_name=company_name).first()
+    if existing:
+        return jsonify({"error": "This insurance company already exists"}), 400
+    
+    # For judiciaire/policier, force island to their country
+    island = data.get('island', '')
+    if current_user.role in ['judiciaire', 'policier']:
+        if not current_user.country:
+            return jsonify({"error": "Your country must be set"}), 400
+        island = current_user.country
+    
+    insurance = Insurance(
+        company_name=company_name,
+        phone=data.get('phone', '').strip(),
+        island=island,
+        address=data.get('address', '').strip()
+    )
+    
+    db.session.add(insurance)
+    db.session.commit()
+    
+    return jsonify(insurance.to_dict()), 201
+
+
+@vehicle_bp.route('/insurances/<int:insurance_id>', methods=['PUT'])
+@login_required
+def update_insurance(insurance_id):
+    """Update an insurance company
+    - Administrateur: can update any insurance
+    - Judiciaire/Policier: can update only insurances for their country
+    """
+    insurance = Insurance.query.get_or_404(insurance_id)
+    
+    # Check permissions for judiciaire/policier
+    if current_user.role in ['judiciaire', 'policier']:
+        if insurance.island != current_user.country:
+            return jsonify({"error": "Forbidden"}), 403
+    
+    data = request.get_json() or {}
+    
+    if 'company_name' in data:
+        new_name = data.get('company_name', '').strip()
+        # Check if new name conflicts with another insurance
+        existing = Insurance.query.filter_by(company_name=new_name).first()
+        if existing and existing.id != insurance_id:
+            return jsonify({"error": "This insurance company name already exists"}), 400
+        insurance.company_name = new_name
+    
+    if 'phone' in data:
+        insurance.phone = data.get('phone', '').strip()
+    
+    # Island can only be changed by admin
+    if 'island' in data and current_user.role == 'administrateur':
+        insurance.island = data.get('island', '')
+    
+    if 'address' in data:
+        insurance.address = data.get('address', '').strip()
+    
+    db.session.commit()
+    return jsonify(insurance.to_dict())
+
+
+@vehicle_bp.route('/insurances/<int:insurance_id>', methods=['DELETE'])
+@login_required
+def delete_insurance(insurance_id):
+    """Delete an insurance company
+    - Administrateur: can delete any insurance
+    - Judiciaire/Policier: can delete only insurances for their country
+    """
+    insurance = Insurance.query.get_or_404(insurance_id)
+    
+    # Check permissions for judiciaire/policier
+    if current_user.role in ['judiciaire', 'policier']:
+        if insurance.island != current_user.country:
+            return jsonify({"error": "Forbidden"}), 403
+    
+    db.session.delete(insurance)
+    db.session.commit()
+    
+    return jsonify({"message": "Insurance deleted successfully"})
+
+
+# ==================== INSURANCE ACCOUNT MANAGEMENT ====================
+
+@vehicle_bp.route('/insurance-accounts', methods=['GET'])
+@login_required
+def get_insurance_accounts():
+    """Get all insurance accounts (admin only)"""
+    # Check if user is an admin (regular User)
+    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+        return jsonify({"error": "Forbidden"}), 403
+    
+    accounts = InsuranceAccount.query.order_by(InsuranceAccount.created_at.desc()).all()
+    return jsonify({
+        "accounts": [acc.to_dict() for acc in accounts]
+    })
+
+
+@vehicle_bp.route('/insurance-accounts', methods=['POST'])
+@login_required
+def create_insurance_account():
+    """Create a new insurance account (admin only)"""
+    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+        return jsonify({"error": "Forbidden"}), 403
+    
+    data = request.get_json() or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    insurance_id = data.get('insurance_id')
+    
+    if not username or not password or not insurance_id:
+        return jsonify({"error": "Username, password, and insurance_id are required"}), 400
+    
+    # Check if username already exists
+    existing = InsuranceAccount.query.filter_by(username=username).first()
+    if existing:
+        return jsonify({"error": "Username already exists"}), 400
+    
+    # Verify insurance exists
+    insurance = Insurance.query.get(insurance_id)
+    if not insurance:
+        return jsonify({"error": "Insurance company not found"}), 404
+    
+    account = InsuranceAccount(
+        insurance_id=insurance_id,
+        username=username,
+        contact_person=data.get('contact_person', '').strip(),
+        contact_email=data.get('contact_email', '').strip(),
+        contact_phone=data.get('contact_phone', '').strip(),
+        is_active=data.get('is_active', True)
+    )
+    account.set_password(password)
+    
+    db.session.add(account)
+    db.session.commit()
+    
+    return jsonify(account.to_dict()), 201
+
+
+@vehicle_bp.route('/insurance-accounts/<int:account_id>', methods=['PUT'])
+@login_required
+def update_insurance_account(account_id):
+    """Update an insurance account (admin only)"""
+    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+        return jsonify({"error": "Forbidden"}), 403
+    
+    account = InsuranceAccount.query.get_or_404(account_id)
+    data = request.get_json() or {}
+
+    if 'username' in data:
+        new_username = data.get('username', '').strip()
+        if not new_username:
+            return jsonify({"error": "Username is required"}), 400
+        existing = InsuranceAccount.query.filter_by(username=new_username).first()
+        if existing and existing.id != account_id:
+            return jsonify({"error": "Username already exists"}), 400
+        account.username = new_username
+
+    if 'insurance_id' in data:
+        insurance_id = data.get('insurance_id')
+        insurance = Insurance.query.get(insurance_id)
+        if not insurance:
+            return jsonify({"error": "Insurance company not found"}), 404
+        account.insurance_id = insurance_id
+    
+    if 'contact_person' in data:
+        account.contact_person = data.get('contact_person', '').strip()
+    if 'contact_email' in data:
+        account.contact_email = data.get('contact_email', '').strip()
+    if 'contact_phone' in data:
+        account.contact_phone = data.get('contact_phone', '').strip()
+    if 'is_active' in data:
+        account.is_active = data.get('is_active')
+    if 'password' in data and data.get('password'):
+        account.set_password(data.get('password'))
+    
+    db.session.commit()
+    return jsonify(account.to_dict())
+
+
+@vehicle_bp.route('/insurance-accounts/<int:account_id>', methods=['DELETE'])
+@login_required
+def delete_insurance_account(account_id):
+    """Delete an insurance account (admin only)"""
+    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+        return jsonify({"error": "Forbidden"}), 403
+    
+    account = InsuranceAccount.query.get_or_404(account_id)
+    
+    # Delete associated assignments
+    VehicleInsuranceAssignment.query.filter_by(insurance_account_id=account_id).delete()
+    
+    db.session.delete(account)
+    db.session.commit()
+    
+    return jsonify({"message": "Insurance account deleted successfully"})
+
+
+# ==================== INSURANCE DASHBOARD ====================
+
+@vehicle_bp.route('/insurance-accounts/me', methods=['GET'])
+@login_required
+def get_current_insurance_account():
+    """Get current insurance account info (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    return jsonify(current_user.to_dict())
+
+
+@vehicle_bp.route('/insurance-accounts/me', methods=['PUT'])
+@login_required
+def update_insurance_account_profile():
+    """Update insurance account profile (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    data = request.get_json()
+    
+    # Update allowed fields
+    if 'contact_person' in data:
+        current_user.contact_person = data['contact_person']
+    if 'contact_email' in data:
+        current_user.contact_email = data['contact_email']
+    if 'contact_phone' in data:
+        current_user.contact_phone = data['contact_phone']
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            "message": "Profile updated successfully",
+            "account": current_user.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
+
+
+@vehicle_bp.route('/insurance-accounts/me/password', methods=['PUT'])
+@login_required
+def update_insurance_account_password():
+    """Update insurance account password (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    data = request.get_json()
+    
+    if not data.get('current_password'):
+        return jsonify({"error": "Current password is required"}), 400
+    
+    if not data.get('new_password'):
+        return jsonify({"error": "New password is required"}), 400
+    
+    # Verify current password
+    if not current_user.check_password(data['current_password']):
+        return jsonify({"error": "Current password is incorrect"}), 400
+    
+    # Check password length
+    if len(data['new_password']) < 6:
+        return jsonify({"error": "New password must be at least 6 characters"}), 400
+    
+    # Set new password
+    current_user.set_password(data['new_password'])
+    
+    try:
+        db.session.commit()
+        return jsonify({"message": "Password updated successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
+
+
+@vehicle_bp.route('/insurance-vehicles', methods=['GET'])
+@login_required
+def get_insurance_vehicles():
+    """Get vehicles assigned to current insurance account (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    # Get the insurance company name for this account
+    insurance_company_name = current_user.insurance.company_name if current_user.insurance else None
+    
+    vehicles = []
+    
+    # Method 1: Get assignments for this account (new vehicles)
+    assignments = VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    vehicle_ids = [a.vehicle_id for a in assignments]
+    
+    if vehicle_ids:
+        assigned_vehicles = Vehicle.query.filter(Vehicle.id.in_(vehicle_ids)).order_by(Vehicle.license_plate).all()
+        vehicles.extend(assigned_vehicles)
+    
+    # Method 2: Also get vehicles that have this insurance company in insurance_company field (for backward compatibility)
+    # This handles existing vehicles that haven't been formally assigned yet
+    if insurance_company_name:
+        legacy_vehicles = Vehicle.query.filter_by(insurance_company=insurance_company_name).order_by(Vehicle.license_plate).all()
+        # Avoid duplicates
+        existing_ids = set(v.id for v in vehicles)
+        for v in legacy_vehicles:
+            if v.id not in existing_ids:
+                vehicles.append(v)
+    
+    return jsonify({
+        "vehicles": [v.to_dict() for v in vehicles]
+    })
+
+
+
+
+@vehicle_bp.route('/search-by-license-plate', methods=['GET'])
+@login_required
+def search_vehicle_by_license_plate():
+    """Search for a vehicle by license plate"""
+    license_plate = request.args.get('license_plate', '').strip()
+    
+    if not license_plate:
+        return jsonify({"error": "license_plate required"}), 400
+    
+    vehicle = Vehicle.query.filter_by(license_plate=license_plate).first()
+    
+    if not vehicle:
+        return jsonify({"error": "Vehicle not found"}), 404
+    
+    # For insurance accounts, only return if vehicle is from their island
+    if isinstance(current_user, InsuranceAccount):
+        if vehicle.owner_island != current_user.insurance.island:
+            return jsonify({"error": "Vehicle is not from your insurance island"}), 403
+
+    # Determine if this vehicle currently has an active insurance.
+    now_dt = now_comoros()
+    now_dt_naive = now_dt.replace(tzinfo=None) if getattr(now_dt, 'tzinfo', None) else now_dt
+    has_insurance_company = bool(vehicle.insurance_company and vehicle.insurance_company.strip())
+    expiry_dt = vehicle.insurance_expiry
+    expiry_dt_naive = expiry_dt.replace(tzinfo=None) if (expiry_dt and getattr(expiry_dt, 'tzinfo', None)) else expiry_dt
+    has_active_insurance = has_insurance_company and (expiry_dt_naive is None or expiry_dt_naive >= now_dt_naive)
+
+    message = ""
+    if has_active_insurance:
+        if vehicle.insurance_company:
+            message = f"Ce véhicule a déjà une assurance active ({vehicle.insurance_company})."
+        else:
+            message = "Ce véhicule a déjà une assurance active."
+    
+    return jsonify({
+        "vehicle": vehicle.to_dict(),
+        "has_active_insurance": has_active_insurance,
+        "can_add_to_insurance": not has_active_insurance,
+        "active_insurance_company": vehicle.insurance_company if has_active_insurance else None,
+        "message": message
+    }), 200
+
+
+
+
+@vehicle_bp.route('/reports/expired', methods=['GET'])
+@login_required
+def get_expired_insurance_report():
+    """Get report of vehicles with expired insurance (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    from datetime import datetime
+    now_dt = now_comoros()
+    today = now_dt.date() if hasattr(now_dt, 'date') else now_dt.replace(tzinfo=None).date()
+    
+    # Get vehicles with expired insurance assigned to this account
+    vehicles = Vehicle.query.filter(
+        Vehicle.insurance_company == current_user.insurance.company_name,
+        Vehicle.owner_island == current_user.insurance.island,
+        Vehicle.insurance_expiry < today
+    ).all()
+    
+    result = {
+        "report_type": "Assurances Expirées",
+        "generated_at": datetime.now().isoformat(),
+        "insurance_company": current_user.insurance.company_name,
+        "count": len(vehicles),
+        "vehicles": [v.to_dict() for v in vehicles]
+    }
+    
+    return jsonify(result), 200
+
+
+@vehicle_bp.route('/reports/expiring-soon', methods=['GET'])
+@login_required
+def get_expiring_soon_report():
+    """Get report of vehicles with insurance expiring in 30 days (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    from datetime import datetime, timedelta
+    now_dt = now_comoros()
+    today = now_dt.date() if hasattr(now_dt, 'date') else now_dt.replace(tzinfo=None).date()
+    thirty_days = today + timedelta(days=30)
+    
+    # Get vehicles with insurance expiring in next 30 days
+    vehicles = Vehicle.query.filter(
+        Vehicle.insurance_company == current_user.insurance.company_name,
+        Vehicle.owner_island == current_user.insurance.island,
+        Vehicle.insurance_expiry >= today,
+        Vehicle.insurance_expiry <= thirty_days
+    ).order_by(Vehicle.insurance_expiry).all()
+    
+    result = {
+        "report_type": "Assurances Expirant Bientôt (30 jours)",
+        "generated_at": datetime.now().isoformat(),
+        "insurance_company": current_user.insurance.company_name,
+        "count": len(vehicles),
+        "vehicles": [v.to_dict() for v in vehicles]
+    }
+    
+    return jsonify(result), 200
+
+
+@vehicle_bp.route('/reports/all-vehicles', methods=['GET'])
+@login_required
+def get_all_vehicles_report():
+    """Get comprehensive report of all vehicles (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    # Get all vehicles assigned to this account
+    vehicles = Vehicle.query.filter(
+        Vehicle.insurance_company == current_user.insurance.company_name,
+        Vehicle.owner_island == current_user.insurance.island
+    ).order_by(Vehicle.license_plate).all()
+    
+    result = {
+        "report_type": "Tous les Véhicules",
+        "generated_at": datetime.now().isoformat(),
+        "insurance_company": current_user.insurance.company_name,
+        "count": len(vehicles),
+        "vehicles": [v.to_dict() for v in vehicles]
+    }
+    
+    return jsonify(result), 200
+
+
+@vehicle_bp.route('/reports/activity', methods=['GET'])
+@login_required
+def get_activity_report():
+    """Get activity report for a date range (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    from datetime import datetime
+    
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    if not start_date or not end_date:
+        return jsonify({"error": "start_date and end_date are required"}), 400
+    
+    try:
+        start = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end = datetime.strptime(end_date, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    # Get vehicles added/modified in this date range
+    assignments = VehicleInsuranceAssignment.query.filter(
+        VehicleInsuranceAssignment.insurance_account_id == current_user.id,
+        VehicleInsuranceAssignment.assigned_at >= start,
+        VehicleInsuranceAssignment.assigned_at <= end
+    ).order_by(VehicleInsuranceAssignment.assigned_at.desc()).all()
+    
+    vehicles_data = []
+    for assignment in assignments:
+        vehicle = Vehicle.query.get(assignment.vehicle_id)
+        if vehicle:
+            v_dict = vehicle.to_dict()
+            v_dict['assigned_at'] = assignment.assigned_at.isoformat()
+            v_dict['assigned_by'] = assignment.assigned_by
+            vehicles_data.append(v_dict)
+    
+    result = {
+        "report_type": "Rapport d'Activité",
+        "generated_at": datetime.now().isoformat(),
+        "insurance_company": current_user.insurance.company_name,
+        "start_date": start_date,
+        "end_date": end_date,
+        "count": len(vehicles_data),
+        "vehicles": vehicles_data
+    }
+    
+    return jsonify(result), 200
+
+
+@vehicle_bp.route('/reports/statistics', methods=['GET'])
+@login_required
+def get_statistics_report():
+    """Get statistics report (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    from datetime import datetime, timedelta
+    today = datetime.now().date()
+    
+    # Total vehicles
+    total = Vehicle.query.filter(
+        Vehicle.insurance_company == current_user.insurance.company_name,
+        Vehicle.owner_island == current_user.insurance.island
+    ).count()
+    
+    # Expired
+    expired = Vehicle.query.filter(
+        Vehicle.insurance_company == current_user.insurance.company_name,
+        Vehicle.owner_island == current_user.insurance.island,
+        Vehicle.insurance_expiry < today
+    ).count()
+    
+    # Expiring in 30 days
+    thirty_days = today + timedelta(days=30)
+    expiring_soon = Vehicle.query.filter(
+        Vehicle.insurance_company == current_user.insurance.company_name,
+        Vehicle.owner_island == current_user.insurance.island,
+        Vehicle.insurance_expiry >= today,
+        Vehicle.insurance_expiry <= thirty_days
+    ).count()
+    
+    # Active (not expired and not expiring soon)
+    active = Vehicle.query.filter(
+        Vehicle.insurance_company == current_user.insurance.company_name,
+        Vehicle.owner_island == current_user.insurance.island,
+        Vehicle.insurance_expiry > thirty_days
+    ).count()
+    
+    # By vehicle type
+    by_type = {}
+    types = Vehicle.query.filter(
+        Vehicle.insurance_company == current_user.insurance.company_name,
+        Vehicle.owner_island == current_user.insurance.island
+    ).with_entities(Vehicle.vehicle_type).distinct().all()
+    
+    for (vtype,) in types:
+        count = Vehicle.query.filter(
+            Vehicle.insurance_company == current_user.insurance.company_name,
+            Vehicle.owner_island == current_user.insurance.island,
+            Vehicle.vehicle_type == vtype
+        ).count()
+        by_type[vtype] = count
+    
+    result = {
+        "report_type": "Statistiques",
+        "generated_at": datetime.now().isoformat(),
+        "insurance_company": current_user.insurance.company_name,
+        "statistics": {
+            "total_vehicles": total,
+            "expired": expired,
+            "expiring_soon": expiring_soon,
+            "active": active,
+            "by_type": by_type
+        }
+    }
+    
+    return jsonify(result), 200
+
+
+@vehicle_bp.route('/uninsured', methods=['GET'])
+@login_required
+def get_uninsured_vehicles():
+    """Get all vehicles without insurance or with expired insurance on the same island (insurance accounts only)"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    # Get the island from the insurance company
+    insurance_island = current_user.insurance.island
+    now_dt = now_comoros()
+    now_dt_naive = now_dt.replace(tzinfo=None) if getattr(now_dt, 'tzinfo', None) else now_dt
+    
+    # Get all vehicles with NO insurance company OR expired insurance on the same island
+    uninsured = Vehicle.query.filter(
+        ((Vehicle.insurance_company == None) | (Vehicle.insurance_company == '') | (Vehicle.insurance_expiry < now_dt_naive)) &
+        (Vehicle.owner_island == insurance_island)
+    ).order_by(Vehicle.license_plate).all()
+    
+    return jsonify({
+        "vehicles": [v.to_dict() for v in uninsured]
+    })
+
+
+@vehicle_bp.route('/assign-to-insurance', methods=['POST'])
+@login_required
+def assign_vehicle_to_insurance():
+    """Assign an uninsured vehicle to the current insurance account"""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    
+    data = request.get_json()
+    vehicle_id = data.get('vehicle_id')
+    insurance_expiry = data.get('insurance_expiry')
+    
+    if not vehicle_id:
+        return jsonify({"error": "vehicle_id required"}), 400
+    
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    
+    # Check if vehicle is on the same island as insurance company
+    if vehicle.owner_island != current_user.insurance.island:
+        return jsonify({"error": "Vehicle must be on the same island as your insurance company"}), 400
+    
+    # Allow reassignment when existing insurance is expired.
+    now_dt = now_comoros()
+    now_dt_naive = now_dt.replace(tzinfo=None) if getattr(now_dt, 'tzinfo', None) else now_dt
+    has_insurance_company = bool(vehicle.insurance_company and vehicle.insurance_company.strip())
+    expiry_dt = vehicle.insurance_expiry
+    expiry_dt_naive = expiry_dt.replace(tzinfo=None) if (expiry_dt and getattr(expiry_dt, 'tzinfo', None)) else expiry_dt
+    insurance_is_expired = bool(expiry_dt_naive and expiry_dt_naive < now_dt_naive)
+    if has_insurance_company and not insurance_is_expired:
+        return jsonify({"error": "Vehicle already has an active insurance assigned"}), 400
+    
+    try:
+        # Update vehicle with insurance company name
+        vehicle.insurance_company = current_user.insurance.company_name
+        
+        # Update insurance expiry if provided
+        if insurance_expiry:
+            try:
+                from datetime import datetime
+                vehicle.insurance_expiry = datetime.fromisoformat(insurance_expiry)
+            except Exception:
+                pass
+        
+        # Transfer ownership to the current insurance account.
+        VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle.id).delete()
+        assignment = VehicleInsuranceAssignment(
+            vehicle_id=vehicle.id,
+            insurance_account_id=current_user.id,
+            assigned_by=current_user.username,
+            notes='Assigned by insurance account'
+        )
+        db.session.add(assignment)
+        
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": "Vehicle assigned successfully",
+            "vehicle": vehicle.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+# ==================== VEHICLE INSURANCE ASSIGNMENT ====================
+
+@vehicle_bp.route('/assignments', methods=['GET'])
+@login_required
+def get_vehicle_assignments():
+    """Get vehicle assignments
+    - Administrateur: see all assignments
+    - Insurance accounts: see only their assignments
+    """
+    if hasattr(current_user, 'role') and current_user.role == 'administrateur':
+        assignments = VehicleInsuranceAssignment.query.order_by(VehicleInsuranceAssignment.assigned_at.desc()).all()
+    elif isinstance(current_user, InsuranceAccount):
+        assignments = VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    else:
+        return jsonify({"error": "Forbidden"}), 403
+    
+    return jsonify({
+        "assignments": [a.to_dict() for a in assignments]
+    })
+
+
+@vehicle_bp.route('/assignments', methods=['POST'])
+@login_required
+def create_vehicle_assignment():
+    """Assign a vehicle to an insurance account (admin only)"""
+    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+        return jsonify({"error": "Forbidden"}), 403
+    
+    data = request.get_json() or {}
+    vehicle_id = data.get('vehicle_id')
+    insurance_account_id = data.get('insurance_account_id')
+    
+    if not vehicle_id or not insurance_account_id:
+        return jsonify({"error": "vehicle_id and insurance_account_id are required"}), 400
+    
+    # Verify vehicle exists
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    
+    # Verify account exists
+    account = InsuranceAccount.query.get_or_404(insurance_account_id)
+    
+    # Check if assignment already exists
+    existing = VehicleInsuranceAssignment.query.filter_by(
+        vehicle_id=vehicle_id,
+        insurance_account_id=insurance_account_id
+    ).first()
+    if existing:
+        return jsonify({"error": "This assignment already exists"}), 400
+    
+    assignment = VehicleInsuranceAssignment(
+        vehicle_id=vehicle_id,
+        insurance_account_id=insurance_account_id,
+        assigned_by=current_user.username,
+        notes=data.get('notes', '')
+    )
+    
+    db.session.add(assignment)
+    db.session.commit()
+    
+    return jsonify(assignment.to_dict()), 201
+
+
+@vehicle_bp.route('/assignments/<int:assignment_id>', methods=['DELETE'])
+@login_required
+def delete_vehicle_assignment(assignment_id):
+    """Delete a vehicle assignment (admin only)"""
+    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+        return jsonify({"error": "Forbidden"}), 403
+    
+    assignment = VehicleInsuranceAssignment.query.get_or_404(assignment_id)
+    db.session.delete(assignment)
+    db.session.commit()
+    
+    return jsonify({"message": "Assignment deleted successfully"})
+
+
 
 
 

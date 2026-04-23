@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, Fine, FineType, Phone, PhoneUsage, PhotoSubmission
+from app.models import User, Vehicle, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -54,8 +54,18 @@ def apply_island_filter(query, island_field, force_country=None):
 
 def check_island_access(island):
     """Check if current user has access to data from a specific island.
-    Raises 403 Forbidden if judiciaire user doesn't have access."""
-    if current_user.role == 'judiciaire' and current_user.country:
+    Raises 403 Forbidden if judiciaire user doesn't have access.
+    Insurance accounts can only access their own island."""
+    from app.models import InsuranceAccount
+    
+    # Insurance accounts can only access their own island
+    if isinstance(current_user, InsuranceAccount):
+        if island != current_user.insurance.island:
+            return jsonify({"error": "Forbidden"}), 403
+        return None
+    
+    # Regular users (judiciaire) can only access their country's data
+    if hasattr(current_user, 'role') and current_user.role == 'judiciaire' and hasattr(current_user, 'country'):
         if island != current_user.country:
             return jsonify({"error": "Forbidden"}), 403
     return None
@@ -150,6 +160,95 @@ def api_fine_types_list():
             "default_amount": float(ft.amount)
         } for ft in fine_types]
     })
+
+
+# Insurance Management Routes
+@api_bp.route('/insurances', methods=['GET'])
+@jwt_required(optional=True)
+def api_insurances_list():
+    insurances = Insurance.query.order_by(Insurance.company_name).all()
+    return jsonify({
+        "insurances": [ins.to_dict() for ins in insurances]
+    })
+
+
+@api_bp.route('/insurances', methods=['POST'])
+@jwt_required()
+def api_insurances_create():
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+    
+    data = request.get_json() or {}
+    company_name = data.get('company_name', '').strip()
+    
+    if not company_name:
+        return jsonify({"error": "Company name is required"}), 400
+    
+    # Check if already exists
+    existing = Insurance.query.filter_by(company_name=company_name).first()
+    if existing:
+        return jsonify({"error": "This insurance company already exists"}), 400
+    
+    insurance = Insurance(
+        company_name=company_name,
+        phone=data.get('phone', '').strip(),
+        island=data.get('island', ''),
+        address=data.get('address', '').strip()
+    )
+    
+    db.session.add(insurance)
+    db.session.commit()
+    
+    return jsonify(insurance.to_dict()), 201
+
+
+@api_bp.route('/insurances/<int:insurance_id>', methods=['PUT'])
+@jwt_required()
+def api_insurances_update(insurance_id):
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+    
+    insurance = Insurance.query.get_or_404(insurance_id)
+    data = request.get_json() or {}
+    
+    if 'company_name' in data:
+        new_name = data.get('company_name', '').strip()
+        # Check if new name conflicts with another insurance
+        existing = Insurance.query.filter_by(company_name=new_name).first()
+        if existing and existing.id != insurance_id:
+            return jsonify({"error": "This insurance company name already exists"}), 400
+        insurance.company_name = new_name
+    
+    if 'phone' in data:
+        insurance.phone = data.get('phone', '').strip()
+    
+    if 'island' in data:
+        insurance.island = data.get('island', '')
+    
+    if 'address' in data:
+        insurance.address = data.get('address', '').strip()
+    
+    db.session.commit()
+    return jsonify(insurance.to_dict())
+
+
+@api_bp.route('/insurances/<int:insurance_id>', methods=['DELETE'])
+@jwt_required()
+def api_insurances_delete(insurance_id):
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+    
+    insurance = Insurance.query.get_or_404(insurance_id)
+    db.session.delete(insurance)
+    db.session.commit()
+    
+    return jsonify({"message": "Insurance deleted successfully"})
 
 
 @api_bp.route('/vehicles/search', methods=['GET'])

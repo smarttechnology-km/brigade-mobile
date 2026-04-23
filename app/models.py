@@ -28,6 +28,14 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+    def get_id(self):
+        """Return a typed session ID to avoid collisions with insurance accounts."""
+        return f'user:{self.id}'
+
+    @property
+    def is_insurance_account(self):
+        return False
+
     def __repr__(self):
         return f'<User {self.username}>'
 
@@ -232,6 +240,108 @@ class FineType(db.Model):
             'label': self.label,
             'amount': float(self.amount),
             'created_at': self.created_at.isoformat()
+        }
+
+
+class Insurance(db.Model):
+    __tablename__ = 'insurances'
+    id = db.Column(db.Integer, primary_key=True)
+    company_name = db.Column(db.String(150), nullable=False, unique=True)
+    phone = db.Column(db.String(30), nullable=True)
+    island = db.Column(db.String(50), nullable=True)  # Grande Comores, Anjouan, Moheli
+    address = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+
+    def __repr__(self):
+        return f'<Insurance {self.company_name}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'company_name': self.company_name,
+            'phone': self.phone,
+            'island': self.island,
+            'address': self.address,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class InsuranceAccount(db.Model, UserMixin):
+    """Represents an insurance company account with login credentials"""
+    __tablename__ = 'insurance_accounts'
+    id = db.Column(db.Integer, primary_key=True)
+    insurance_id = db.Column(db.Integer, db.ForeignKey('insurances.id'), nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    contact_person = db.Column(db.String(150), nullable=True)
+    contact_email = db.Column(db.String(150), nullable=True)
+    contact_phone = db.Column(db.String(30), nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+    
+    insurance = db.relationship('Insurance', backref=db.backref('accounts', lazy=True))
+    
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def get_id(self):
+        """Return a typed session ID to avoid collisions with regular users."""
+        return f'insurance:{self.id}'
+    
+    def __repr__(self):
+        return f'<InsuranceAccount {self.username}>'
+    
+    @property
+    def is_insurance_account(self):
+        """Property to easily check if user is an insurance account"""
+        return True
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'insurance_id': self.insurance_id,
+            'insurance_name': self.insurance.company_name if self.insurance else None,
+            'username': self.username,
+            'contact_person': self.contact_person,
+            'contact_email': self.contact_email,
+            'contact_phone': self.contact_phone,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class VehicleInsuranceAssignment(db.Model):
+    """Links vehicles to insurance accounts for management"""
+    __tablename__ = 'vehicle_insurance_assignments'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    insurance_account_id = db.Column(db.Integer, db.ForeignKey('insurance_accounts.id'), nullable=False)
+    assigned_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    assigned_by = db.Column(db.String(100), nullable=True)  # Username who assigned it
+    notes = db.Column(db.Text)
+    
+    vehicle = db.relationship('Vehicle', backref=db.backref('insurance_assignments', lazy=True))
+    insurance_account = db.relationship('InsuranceAccount', backref=db.backref('vehicle_assignments', lazy=True))
+    
+    __table_args__ = (db.UniqueConstraint('vehicle_id', 'insurance_account_id', name='unique_vehicle_insurance'),)
+    
+    def __repr__(self):
+        return f'<VehicleInsuranceAssignment {self.vehicle_id} -> {self.insurance_account_id}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'insurance_account_id': self.insurance_account_id,
+            'assigned_at': self.assigned_at.isoformat() if self.assigned_at else None,
+            'assigned_by': self.assigned_by,
+            'notes': self.notes
         }
 
 
