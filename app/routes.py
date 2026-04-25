@@ -4,7 +4,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
 from sqlalchemy import func
 from app import db
-from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment
+from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine
 from decimal import Decimal
 import qrcode
 import io
@@ -59,6 +59,57 @@ def check_island_access(island):
         if island != current_user.country:
             abort(403)
     return True
+
+
+def vehicle_has_unpaid_fines(vehicle_id):
+    return Fine.query.filter_by(vehicle_id=vehicle_id, paid=False).first() is not None
+
+
+def get_first_unpaid_fine(vehicle_id):
+    return Fine.query.filter_by(vehicle_id=vehicle_id, paid=False).order_by(Fine.issued_at.desc()).first()
+
+
+def format_kmf_amount(amount):
+    return int(round(float(amount))) if amount is not None else None
+
+
+def get_vehicle_block_reason_for_insurance(vehicle):
+    unpaid_fine = get_first_unpaid_fine(vehicle.id)
+    if unpaid_fine:
+        fine_label = f"Amende #{unpaid_fine.id}"
+        if unpaid_fine.reason:
+            fine_label += f" - {unpaid_fine.reason}"
+        if unpaid_fine.amount is not None:
+                fine_label += f" ({format_kmf_amount(unpaid_fine.amount)} KMF)"
+        return f"{fine_label}. Vous devez d'abord la régler avant d'ajouter ou de modifier l'assurance."
+
+    now_dt = now_comoros()
+    now_dt_naive = now_dt.replace(tzinfo=None) if getattr(now_dt, 'tzinfo', None) else now_dt
+    has_insurance_company = bool(vehicle.insurance_company and vehicle.insurance_company.strip())
+    expiry_dt = vehicle.insurance_expiry
+    expiry_dt_naive = expiry_dt.replace(tzinfo=None) if (expiry_dt and getattr(expiry_dt, 'tzinfo', None)) else expiry_dt
+    has_active_insurance = has_insurance_company and (expiry_dt_naive is None or expiry_dt_naive >= now_dt_naive)
+
+    if has_active_insurance:
+        if vehicle.insurance_company:
+            return f"Ce véhicule a déjà une assurance active ({vehicle.insurance_company})."
+        return "Ce véhicule a déjà une assurance active."
+
+    return None
+
+
+def fine_to_block_payload(fine):
+    if not fine:
+        return None
+    return {
+        'id': fine.id,
+        'reason': fine.reason,
+        'amount': float(fine.amount) if fine.amount is not None else None,
+        'officer': fine.officer,
+        'issued_at': fine.issued_at.isoformat() if fine.issued_at else None,
+        'issued_at_str': fine.issued_at.strftime('%d/%m/%Y %H:%M') if fine.issued_at else None,
+        'receipt_number': fine.receipt_number,
+    }
 
 def _build_pdf_table(buffer, title_text, headers, rows, landscape_mode=False):
     """Helper function to build a professional PDF table with header/footer."""
@@ -986,7 +1037,7 @@ def pay_fine(fine_id):
     db.session.add(fine)
 
     # add history entry
-    hist = VehicleHistory(vehicle_id=fine.vehicle_id, action=f"Amande payée ({fine.receipt_number}) - {float(fine.amount)} MAD", officer=paid_by, notes=(payment_method or ''))
+    hist = VehicleHistory(vehicle_id=fine.vehicle_id, action=f"Amande payée ({fine.receipt_number}) - {format_kmf_amount(fine.amount)} KMF", officer=paid_by, notes=(payment_method or ''))
     db.session.add(hist)
     db.session.commit()
 
@@ -1676,17 +1727,23 @@ def update_vehicle(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
     data = request.get_json() or request.form
-    
-    # Track status change for history
-    old_status = vehicle.status
-    status_changed = False
+
+    tracked_fields = [
+        'license_plate', 'owner_name', 'owner_phone', 'owner_island',
+        'vehicle_type', 'usage_type', 'color', 'status', 'make', 'model',
+        'year', 'vin', 'owner_address', 'registration_expiry',
+        'insurance_company', 'insurance_expiry', 'notes'
+    ]
+    old_values = {field: getattr(vehicle, field) for field in tracked_fields}
+
+    insurance_fields_requested = any(field in data for field in ['insurance_company', 'insurance_expiry'])
+    if isinstance(current_user, InsuranceAccount) and insurance_fields_requested and vehicle_has_unpaid_fines(vehicle.id):
+        return jsonify({'error': "Ce véhicule a une amende non payée. Vous devez d'abord la régler avant de modifier l'assurance."}), 400
     
     # Mettre à jour les champs autorisés
     date_fields = ['registration_expiry', 'insurance_expiry']
-    for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry']:
+    for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry', 'notes']:
         if field in data and data.get(field) is not None:
-            if field == 'status' and data.get(field) != old_status:
-                status_changed = True
             # Handle empty strings for date fields - set to None instead
             if field in date_fields and data.get(field) == '':
                 setattr(vehicle, field, None)
@@ -1708,28 +1765,58 @@ def update_vehicle(vehicle_id):
         except Exception:
             pass
     
-    # Add history entry if status changed
-    if status_changed:
-        new_status = vehicle.status
-        status_labels = {
-            'active': 'Actif',
-            'inactive': 'Inactif',
-            'suspended': 'Suspendu'
-        }
-        old_status_label = status_labels.get(old_status, old_status)
-        new_status_label = status_labels.get(new_status, new_status)
-        
-        try:
-            from flask_login import current_user
-            officer = current_user.username if (current_user and getattr(current_user, 'is_authenticated', False)) else 'Système'
-        except Exception:
-            officer = 'Système'
-        
+    def _normalize_for_compare(value):
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=None)
+        return value
+
+    def _display_value(field_name, value):
+        if value is None or value == '':
+            return '—'
+        if field_name in ['registration_expiry', 'insurance_expiry'] and isinstance(value, datetime):
+            return value.strftime('%d/%m/%Y')
+        if field_name == 'status':
+            status_labels = {'active': 'Actif', 'inactive': 'Inactif', 'suspended': 'Suspendu'}
+            return status_labels.get(value, value)
+        return str(value)
+
+    field_labels = {
+        'license_plate': 'Immatriculation',
+        'owner_name': 'Propriétaire',
+        'owner_phone': 'Téléphone propriétaire',
+        'owner_island': 'Île',
+        'vehicle_type': 'Type de véhicule',
+        'usage_type': 'Type d\'usage',
+        'color': 'Couleur',
+        'status': 'Statut',
+        'make': 'Marque',
+        'model': 'Modèle',
+        'year': 'Année',
+        'vin': 'VIN',
+        'owner_address': 'Adresse propriétaire',
+        'registration_expiry': 'Expiration vignette',
+        'insurance_company': 'Compagnie d\'assurance',
+        'insurance_expiry': 'Expiration assurance',
+        'notes': 'Notes'
+    }
+
+    try:
+        officer = current_user.username if (current_user and getattr(current_user, 'is_authenticated', False)) else 'Système'
+    except Exception:
+        officer = 'Système'
+
+    for field in tracked_fields:
+        old_value = old_values.get(field)
+        new_value = getattr(vehicle, field)
+        if _normalize_for_compare(old_value) == _normalize_for_compare(new_value):
+            continue
+
+        label = field_labels.get(field, field)
         hist = VehicleHistory(
             vehicle_id=vehicle.id,
-            action=f"Changement de statut: {old_status_label} → {new_status_label}",
+            action=f"Mise à jour: {label}",
             officer=officer,
-            notes=f"Statut modifié de '{old_status_label}' à '{new_status_label}'"
+            notes=f"Ancien: {_display_value(field, old_value)} → Nouveau: {_display_value(field, new_value)}"
         )
         db.session.add(hist)
     
@@ -2233,9 +2320,17 @@ def get_insurance_vehicles():
         for v in legacy_vehicles:
             if v.id not in existing_ids:
                 vehicles.append(v)
-    
+
+    vehicles_payload = []
+    for vehicle in vehicles:
+        vehicle_data = vehicle.to_dict()
+        vehicle_data['has_unpaid_fines'] = vehicle_has_unpaid_fines(vehicle.id)
+        vehicle_data['block_reason'] = get_vehicle_block_reason_for_insurance(vehicle)
+        vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
+        vehicles_payload.append(vehicle_data)
+
     return jsonify({
-        "vehicles": [v.to_dict() for v in vehicles]
+        "vehicles": vehicles_payload
     })
 
 
@@ -2260,27 +2355,20 @@ def search_vehicle_by_license_plate():
         if vehicle.owner_island != current_user.insurance.island:
             return jsonify({"error": "Vehicle is not from your insurance island"}), 403
 
-    # Determine if this vehicle currently has an active insurance.
-    now_dt = now_comoros()
-    now_dt_naive = now_dt.replace(tzinfo=None) if getattr(now_dt, 'tzinfo', None) else now_dt
-    has_insurance_company = bool(vehicle.insurance_company and vehicle.insurance_company.strip())
-    expiry_dt = vehicle.insurance_expiry
-    expiry_dt_naive = expiry_dt.replace(tzinfo=None) if (expiry_dt and getattr(expiry_dt, 'tzinfo', None)) else expiry_dt
-    has_active_insurance = has_insurance_company and (expiry_dt_naive is None or expiry_dt_naive >= now_dt_naive)
-
-    message = ""
-    if has_active_insurance:
-        if vehicle.insurance_company:
-            message = f"Ce véhicule a déjà une assurance active ({vehicle.insurance_company})."
-        else:
-            message = "Ce véhicule a déjà une assurance active."
+    has_unpaid_fines = vehicle_has_unpaid_fines(vehicle.id)
+    block_reason = get_vehicle_block_reason_for_insurance(vehicle)
+    has_active_insurance = bool(block_reason and not has_unpaid_fines and vehicle.insurance_company)
+    unpaid_fine = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
     
     return jsonify({
         "vehicle": vehicle.to_dict(),
         "has_active_insurance": has_active_insurance,
-        "can_add_to_insurance": not has_active_insurance,
+        "has_unpaid_fines": has_unpaid_fines,
+        "can_add_to_insurance": block_reason is None,
         "active_insurance_company": vehicle.insurance_company if has_active_insurance else None,
-        "message": message
+        "block_reason": block_reason,
+        "unpaid_fine": unpaid_fine,
+        "message": block_reason or ""
     }), 200
 
 
@@ -2508,8 +2596,16 @@ def get_uninsured_vehicles():
         (Vehicle.owner_island == insurance_island)
     ).order_by(Vehicle.license_plate).all()
     
+    uninsured_payload = []
+    for vehicle in uninsured:
+        vehicle_data = vehicle.to_dict()
+        vehicle_data['has_unpaid_fines'] = vehicle_has_unpaid_fines(vehicle.id)
+        vehicle_data['block_reason'] = get_vehicle_block_reason_for_insurance(vehicle)
+        vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
+        uninsured_payload.append(vehicle_data)
+
     return jsonify({
-        "vehicles": [v.to_dict() for v in uninsured]
+        "vehicles": uninsured_payload
     })
 
 
