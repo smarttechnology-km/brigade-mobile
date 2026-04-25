@@ -397,9 +397,6 @@ function displayVehiclesList(vehicles) {
                 <button class="btn btn-sm btn-outline-primary" title="Détails" onclick="viewVehicle('${vehicle.track_token}')">
                     <i class="fas fa-eye"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-warning" title="Éditer" onclick="editVehicleFromDashboard(${vehicle.id})">
-                    <i class="fas fa-edit"></i>
-                </button>
                 <!-- Fine action removed from dashboard; use /fines page -->
                 <button class="btn btn-sm btn-outline-danger" title="Supprimer" onclick="deleteVehicleFromDashboard(${vehicle.id})">
                     <i class="fas fa-trash"></i>
