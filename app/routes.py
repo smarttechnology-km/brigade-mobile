@@ -1753,14 +1753,12 @@ def update_vehicle(vehicle_id):
     # parse registration_expiry if present
     if 'registration_expiry' in data and data.get('registration_expiry'):
         try:
-            from datetime import datetime
             vehicle.registration_expiry = datetime.fromisoformat(data.get('registration_expiry'))
         except Exception:
             pass
     # parse insurance_expiry if present
     if 'insurance_expiry' in data and data.get('insurance_expiry'):
         try:
-            from datetime import datetime
             vehicle.insurance_expiry = datetime.fromisoformat(data.get('insurance_expiry'))
         except Exception:
             pass
