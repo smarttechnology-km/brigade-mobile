@@ -135,6 +135,14 @@ function renderVehiclesTable() {
             }
         }
         
+        const actionButton = vehicle.has_unpaid_fines
+            ? `<button class="btn btn-sm btn-outline-secondary" type="button" onclick="showFineDetails(${vehicle.id})" title="Cliquer pour voir le type d'amende">
+                    <i class="fas fa-lock"></i>
+                </button>`
+            : `<button class="btn btn-sm btn-outline-primary" onclick="openEditDatesModal(${vehicle.id})" title="Modifier les dates">
+                    <i class="fas fa-edit"></i>
+                </button>`;
+
         return `
             <tr>
                 <td><strong>${vehicle.license_plate}</strong></td>
@@ -145,9 +153,7 @@ function renderVehiclesTable() {
                 <td>${vehicle.usage_type || '-'}</td>
                 <td>${insuranceBadge}</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-primary" onclick="openEditDatesModal(${vehicle.id})" title="Modifier les dates">
-                        <i class="fas fa-edit"></i>
-                    </button>
+                    ${actionButton}
                 </td>
             </tr>
         `;
@@ -191,6 +197,11 @@ function filterVehicles() {
 function openEditDatesModal(vehicleId) {
     const vehicle = vehiclesCache.find(v => v.id === vehicleId);
     if (!vehicle) return;
+
+    if (vehicle.has_unpaid_fines) {
+        alert(vehicle.block_reason || 'Ce véhicule a une amende non payée.');
+        return;
+    }
     
     currentEditVehicle = vehicle;
     
@@ -205,6 +216,56 @@ function openEditDatesModal(vehicleId) {
     
     const modal = new bootstrap.Modal(document.getElementById('editDatesModal'));
     modal.show();
+}
+
+function showFineDetails(vehicleId) {
+    const vehicle = vehiclesCache.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+
+    const fine = vehicle.unpaid_fine;
+    if (!fine) {
+        const modal = document.getElementById('fineDetailsModal');
+        const licensePlate = document.getElementById('fine-modal-license-plate');
+        const reason = document.getElementById('fine-modal-reason');
+        const fineAmount = document.getElementById('fine-modal-amount');
+        const fineDate = document.getElementById('fine-modal-date');
+        const fineReference = document.getElementById('fine-modal-reference');
+        const message = document.getElementById('fine-modal-message');
+        if (modal && message && licensePlate && reason && fineAmount && fineDate && fineReference) {
+            licensePlate.value = vehicle.license_plate || '-';
+            reason.value = '-';
+            fineAmount.value = '-';
+            fineDate.value = '-';
+            fineReference.value = '-';
+            message.textContent = vehicle.block_reason || 'Ce véhicule est bloqué.';
+            new bootstrap.Modal(modal).show();
+            return;
+        }
+        alert(vehicle.block_reason || 'Ce véhicule est bloqué.');
+        return;
+    }
+
+    const details = `Amende #${fine.id} - ${fine.reason || 'Type inconnu'}${fine.amount !== null && fine.amount !== undefined ? ` (${Math.round(Number(fine.amount))} KMF)` : ''}. Vous devez d'abord la régler avant d'ajouter ou de modifier l'assurance.`;
+    const modal = document.getElementById('fineDetailsModal');
+    const licensePlate = document.getElementById('fine-modal-license-plate');
+    const reason = document.getElementById('fine-modal-reason');
+    const fineAmount = document.getElementById('fine-modal-amount');
+    const fineDate = document.getElementById('fine-modal-date');
+    const fineReference = document.getElementById('fine-modal-reference');
+    const fineMessage = document.getElementById('fine-modal-message');
+
+    if (modal && licensePlate && reason && fineAmount && fineDate && fineReference && fineMessage) {
+        licensePlate.value = vehicle.license_plate || '-';
+        reason.value = fine.reason || '-';
+        fineAmount.value = fine.amount !== null && fine.amount !== undefined ? `${Math.round(Number(fine.amount))} KMF` : '-';
+        fineDate.value = fine.issued_at_str || '-';
+        fineReference.value = fine.receipt_number || '-';
+        fineMessage.textContent = details;
+        new bootstrap.Modal(modal).show();
+        return;
+    }
+
+    alert(details);
 }
 
 function saveVehicleDates() {
