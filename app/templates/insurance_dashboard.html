@@ -178,5 +178,55 @@
     </div>
 </div>
 
+<!-- Fine Details Modal -->
+<div class="modal fade" id="fineDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-lock me-2"></i>
+                    <span>Détails de l'amende</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"><i class="fas fa-id-card text-muted me-1"></i>Immatriculation</label>
+                        <input type="text" class="form-control" id="fine-modal-license-plate" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"><i class="fas fa-exclamation-triangle text-muted me-1"></i>Type d'amende</label>
+                        <input type="text" class="form-control" id="fine-modal-reason" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold"><i class="fas fa-coins text-muted me-1"></i>Montant</label>
+                        <input type="text" class="form-control" id="fine-modal-amount" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold"><i class="fas fa-calendar text-muted me-1"></i>Date</label>
+                        <input type="text" class="form-control" id="fine-modal-date" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold"><i class="fas fa-hashtag text-muted me-1"></i>Référence</label>
+                        <input type="text" class="form-control" id="fine-modal-reference" readonly />
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-warning mb-0">
+                            <strong>Message:</strong>
+                            <div id="fine-modal-message" class="mt-1"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="{{ url_for('static', filename='js/insurance-dashboard.js') }}"></script>
 {% endblock %}

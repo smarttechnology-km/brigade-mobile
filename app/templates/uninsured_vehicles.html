@@ -61,7 +61,6 @@
                 </tbody>
             </table>
         </div>
-    </div>
 
     <!-- No results message -->
     <div id="no-results-alert" class="alert alert-info mt-4" style="display: none;">
@@ -83,7 +82,7 @@
             </div>
             <div class="modal-body p-4">
                 <input type="hidden" id="modal-vehicle-id" />
-                
+
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold"><i class="fas fa-id-card text-muted me-1"></i>Immatriculation</label>
@@ -152,6 +151,56 @@
                 </button>
                 <button type="button" class="btn btn-success" onclick="confirmAddVehicle()">
                     <i class="fas fa-check me-1"></i>Ajouter
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Fine Details Modal -->
+<div class="modal fade" id="fineDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-lock me-2"></i>
+                    <span>Détails de l'amende</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"><i class="fas fa-id-card text-muted me-1"></i>Immatriculation</label>
+                        <input type="text" class="form-control" id="fine-modal-license-plate" readonly />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"><i class="fas fa-exclamation-triangle text-muted me-1"></i>Type d'amende</label>
+                        <input type="text" class="form-control" id="fine-modal-reason" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold"><i class="fas fa-coins text-muted me-1"></i>Montant</label>
+                        <input type="text" class="form-control" id="fine-modal-amount" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold"><i class="fas fa-calendar text-muted me-1"></i>Date</label>
+                        <input type="text" class="form-control" id="fine-modal-date" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold"><i class="fas fa-hashtag text-muted me-1"></i>Référence</label>
+                        <input type="text" class="form-control" id="fine-modal-reference" readonly />
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-warning mb-0">
+                            <strong>Message:</strong>
+                            <div id="fine-modal-message" class="mt-1"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Fermer
                 </button>
             </div>
         </div>
@@ -234,9 +283,15 @@ function renderVehiclesTable(vehicles) {
                 <span class="badge bg-info">${v.owner_island || 'N/A'}</span>
             </td>
             <td style="text-align: center;">
-                <button class="btn btn-sm btn-outline-success" onclick="addVehicleToInsurance(${v.id}, '${v.license_plate}')" title="Ajouter ce véhicule">
-                    <i class="fas fa-plus"></i> Ajouter
-                </button>
+                ${v.has_unpaid_fines ? `
+                    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="showFineDetails(${v.id})" title="Cliquer pour voir le type d'amende">
+                        <i class="fas fa-lock"></i> Bloqué
+                    </button>
+                ` : `
+                    <button class="btn btn-sm btn-outline-success" onclick="addVehicleToInsurance(${v.id}, '${v.license_plate}')" title="Ajouter ce véhicule">
+                        <i class="fas fa-plus"></i> Ajouter
+                    </button>
+                `}
             </td>
         </tr>
     `).join('');
@@ -284,6 +339,54 @@ function addVehicleToInsurance(vehicleId, licensePlate) {
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('addVehicleModal'));
     modal.show();
+}
+
+function showFineDetails(vehicleId) {
+    const vehicle = vehiclesCache.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+
+    const fine = vehicle.unpaid_fine;
+    if (!fine) {
+        const modal = document.getElementById('fineDetailsModal');
+        const message = document.getElementById('fine-modal-message');
+        if (modal && message) {
+            message.textContent = vehicle.block_reason || 'Ce véhicule est bloqué.';
+            new bootstrap.Modal(modal).show();
+            return;
+        }
+        alert(vehicle.block_reason || 'Ce véhicule est bloqué.');
+        return;
+    }
+
+    const parts = [
+        `Immatriculation: ${vehicle.license_plate || '-'}`,
+        `Type d'amende: ${fine.reason || '-'}`,
+        fine.amount !== null && fine.amount !== undefined ? `Montant: ${Math.round(Number(fine.amount))} KMF` : null,
+        fine.issued_at_str ? `Date: ${fine.issued_at_str}` : null,
+        fine.receipt_number ? `Référence: ${fine.receipt_number}` : null
+    ].filter(Boolean);
+
+    const details = `Amende #${fine.id} - ${fine.reason || 'Type inconnu'}${fine.amount !== null && fine.amount !== undefined ? ` (${Math.round(Number(fine.amount))} KMF)` : ''}. Vous devez d'abord la régler avant d'ajouter ou de modifier l'assurance.`;
+    const modal = document.getElementById('fineDetailsModal');
+    const licensePlate = document.getElementById('fine-modal-license-plate');
+    const reason = document.getElementById('fine-modal-reason');
+    const fineAmount = document.getElementById('fine-modal-amount');
+    const fineDate = document.getElementById('fine-modal-date');
+    const fineReference = document.getElementById('fine-modal-reference');
+    const fineMessage = document.getElementById('fine-modal-message');
+
+    if (modal && licensePlate && reason && fineAmount && fineDate && fineReference && fineMessage) {
+        licensePlate.value = vehicle.license_plate || '-';
+        reason.value = fine.reason || '-';
+        fineAmount.value = fine.amount !== null && fine.amount !== undefined ? `${Math.round(Number(fine.amount))} KMF` : '-';
+        fineDate.value = fine.issued_at_str || '-';
+        fineReference.value = fine.receipt_number || '-';
+        fineMessage.textContent = details;
+        new bootstrap.Modal(modal).show();
+        return;
+    }
+
+    alert(details);
 }
 
 function confirmAddVehicle() {

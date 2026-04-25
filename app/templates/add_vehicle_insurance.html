@@ -122,11 +122,18 @@
         <i class="fas fa-exclamation-circle me-2"></i>
         <strong>Erreur!</strong> <span id="error-message"></span>
     </div>
+
+    <!-- Block Reason Message -->
+    <div id="block-reason-alert" class="alert alert-warning mt-4" style="display: none;">
+        <i class="fas fa-lock me-2"></i>
+        <strong>Véhicule bloqué :</strong> <span id="block-reason-message"></span>
+    </div>
 </div>
 
 <script>
 let loadedVehicle = null;
 let vehicleHasActiveInsurance = false;
+let vehicleHasUnpaidFines = false;
 
 function setAddFormAvailability(canAdd) {
     const submitBtn = document.querySelector('#vehicle-form button[type="submit"]');
@@ -145,9 +152,12 @@ document.getElementById('license_plate').addEventListener('change', async functi
     }
     
     const searchStatus = document.getElementById('search-status');
+    const blockReasonAlert = document.getElementById('block-reason-alert');
+    const blockReasonMessage = document.getElementById('block-reason-message');
     searchStatus.style.display = 'block';
     searchStatus.textContent = 'Recherche du véhicule...';
     searchStatus.className = 'text-info';
+    if (blockReasonAlert) blockReasonAlert.style.display = 'none';
     
     try {
         const response = await fetch(`/api/vehicles/search-by-license-plate?license_plate=${encodeURIComponent(licensePlate)}`, {
@@ -161,6 +171,7 @@ document.getElementById('license_plate').addEventListener('change', async functi
         const data = await response.json();
         loadedVehicle = data.vehicle;
         vehicleHasActiveInsurance = !!data.has_active_insurance;
+        vehicleHasUnpaidFines = !!data.has_unpaid_fines;
         
         // Populate all fields
         document.getElementById('make').value = loadedVehicle.make || '-';
@@ -172,19 +183,29 @@ document.getElementById('license_plate').addEventListener('change', async functi
         document.getElementById('owner_island').value = loadedVehicle.owner_island || '-';
         document.getElementById('usage_type').value = loadedVehicle.usage_type || '-';
         
-        if (vehicleHasActiveInsurance) {
+        if (vehicleHasUnpaidFines) {
+            searchStatus.textContent = data.block_reason || '✗ Véhicule avec amende non payée';
+            searchStatus.className = 'text-danger';
+            setAddFormAvailability(false);
+            if (blockReasonAlert && blockReasonMessage) {
+                blockReasonMessage.textContent = data.block_reason || 'Véhicule bloqué';
+                blockReasonAlert.style.display = 'block';
+            }
+        } else if (vehicleHasActiveInsurance) {
             const insurer = data.active_insurance_company ? ` (${data.active_insurance_company})` : '';
             searchStatus.textContent = `✗ Véhicule déjà assuré activement${insurer}`;
             searchStatus.className = 'text-danger';
             setAddFormAvailability(false);
+            if (blockReasonAlert) blockReasonAlert.style.display = 'none';
         } else {
             searchStatus.textContent = '✓ Véhicule trouvé';
             searchStatus.className = 'text-success';
             setAddFormAvailability(true);
+            if (blockReasonAlert) blockReasonAlert.style.display = 'none';
         }
         
         // Focus on insurance expiry field
-        if (!vehicleHasActiveInsurance) {
+        if (!vehicleHasActiveInsurance && !vehicleHasUnpaidFines) {
             setTimeout(() => {
                 document.getElementById('insurance_expiry').focus();
             }, 500);
@@ -197,7 +218,9 @@ document.getElementById('license_plate').addEventListener('change', async functi
         searchStatus.className = 'text-danger';
         loadedVehicle = null;
         vehicleHasActiveInsurance = false;
+        vehicleHasUnpaidFines = false;
         setAddFormAvailability(false);
+        if (blockReasonAlert) blockReasonAlert.style.display = 'none';
     }
 });
 
@@ -213,7 +236,10 @@ function clearVehicleFields() {
     document.getElementById('insurance_expiry').value = '';
     loadedVehicle = null;
     vehicleHasActiveInsurance = false;
+    vehicleHasUnpaidFines = false;
     setAddFormAvailability(false);
+    const blockReasonAlert = document.getElementById('block-reason-alert');
+    if (blockReasonAlert) blockReasonAlert.style.display = 'none';
 }
 
 setAddFormAvailability(false);
@@ -228,6 +254,11 @@ document.getElementById('vehicle-form').addEventListener('submit', async functio
 
     if (vehicleHasActiveInsurance) {
         alert('Ce véhicule a déjà une assurance active. Vous ne pouvez pas l\'ajouter.');
+        return;
+    }
+
+    if (vehicleHasUnpaidFines) {
+        alert('Ce véhicule a une amende non payée. Vous devez la régler avant de l\'ajouter à l\'assurance.');
         return;
     }
     
