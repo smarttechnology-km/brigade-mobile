@@ -1702,6 +1702,8 @@ def review_photo_submission(submission_id):
     submission.reviewed_by = user.id
     submission.reviewed_at = now_comoros()
     submission.review_notes = review_notes
+    submitter = submission.submitter
+    vehicle_plate = submission.license_plate or (submission.vehicle.license_plate if submission.vehicle else None)
     
     # Delete photo file if status is 'resolved' to save disk space
     if status == 'resolved' and submission.photo_path and os.path.exists(submission.photo_path):
@@ -1712,6 +1714,20 @@ def review_photo_submission(submission_id):
             print(f"Error deleting photo file: {e}")
     
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Photo traitée',
+        f"Photo #{submission.id} traitée pour {vehicle_plate or 'véhicule non précisé'} - statut: {status}"
+        + (f" - Notes: {review_notes}" if review_notes else '')
+    )
+
+    if submitter and submitter.id != user.id:
+        log_user_history(
+            submitter,
+            'Photo traitée',
+            f"Votre photo #{submission.id} pour {vehicle_plate or 'véhicule non précisé'} a été traitée par {user.username}"
+        )
     
     return jsonify({
         "message": "Submission reviewed",
@@ -1730,6 +1746,9 @@ def delete_photo_submission(submission_id):
     submission = PhotoSubmission.query.get(submission_id)
     if not submission:
         return jsonify({"error": "Submission not found"}), 404
+
+    submitter = submission.submitter
+    vehicle_plate = submission.license_plate or (submission.vehicle.license_plate if submission.vehicle else None)
     
     if submission.vehicle_id:
         vehicle = Vehicle.query.get(submission.vehicle_id)
@@ -1749,6 +1768,19 @@ def delete_photo_submission(submission_id):
     # Delete from database
     db.session.delete(submission)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Photo supprimée',
+        f"Photo #{submission_id} supprimée pour {vehicle_plate or 'véhicule non précisé'}"
+    )
+
+    if submitter and submitter.id != user.id:
+        log_user_history(
+            submitter,
+            'Photo supprimée',
+            f"Votre photo #{submission_id} pour {vehicle_plate or 'véhicule non précisé'} a été supprimée par {user.username}"
+        )
     
     return jsonify({
         "message": "Submission deleted successfully"
