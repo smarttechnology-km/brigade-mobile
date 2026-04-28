@@ -40,6 +40,26 @@ class User(UserMixin, db.Model):
         return f'<User {self.username}>'
 
 
+class UserHistory(db.Model):
+    __tablename__ = 'user_history'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    action = db.Column(db.String(200), nullable=False)
+    details = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    user = db.relationship('User', backref=db.backref('history', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'action': self.action,
+            'details': self.details,
+            'created_at': self.created_at.strftime('%d/%m/%Y à %H:%M:%S') if self.created_at else None
+        }
+
+
 class Vehicle(db.Model):
     __tablename__ = 'vehicles'
     

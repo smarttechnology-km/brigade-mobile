@@ -57,6 +57,21 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
             login_user(user)
+            
+            # Log user login
+            try:
+                from app.models import UserHistory
+                from app.timezone_utils import now_comoros
+                history = UserHistory(
+                    user_id=user.id,
+                    action='Connexion',
+                    details='Connexion réussie à l\'application'
+                )
+                db.session.add(history)
+                db.session.commit()
+            except Exception as e:
+                print(f'Error logging user login: {e}')
+            
             next_page = request.args.get('next')
             return redirect(next_page or url_for('main.index'))
         
@@ -68,6 +83,19 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    # Log user logout before ending the session so the actor is still available
+    try:
+        from app.models import UserHistory
+        history = UserHistory(
+            user_id=current_user.id,
+            action='Déconnexion',
+            details='Déconnexion de l\'application'
+        )
+        db.session.add(history)
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging user logout: {e}')
+
     logout_user()
     flash('Vous êtes déconnecté', 'success')
     return redirect(url_for('auth.login'))

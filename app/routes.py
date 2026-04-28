@@ -111,6 +111,30 @@ def fine_to_block_payload(fine):
         'receipt_number': fine.receipt_number,
     }
 
+
+def _is_noop_vehicle_update_history(action, notes):
+    """Return True for old vehicle update history rows that only captured unchanged values."""
+    action_text = (action or '').strip().lower()
+    if not action_text.startswith('mise à jour:'):
+        return False
+
+    notes_text = (notes or '').strip()
+    if 'ancien:' not in notes_text.lower() or '→ nouveau:' not in notes_text.lower():
+        return False
+
+    try:
+        old_part = notes_text.split('Ancien:', 1)[1].split('→ Nouveau:', 1)[0].strip()
+        new_part = notes_text.split('→ Nouveau:', 1)[1].strip()
+    except Exception:
+        return False
+
+    def _normalize(value):
+        return (value or '').strip().strip('—').strip()
+
+    old_value = _normalize(old_part)
+    new_value = _normalize(new_part)
+    return old_value == new_value or (old_value == '' and new_value == '')
+
 def _build_pdf_table(buffer, title_text, headers, rows, landscape_mode=False):
     """Helper function to build a professional PDF table with header/footer."""
     if not REPORTLAB_AVAILABLE:
@@ -718,6 +742,20 @@ def create_vehicle():
             print(f"Warning: Could not auto-assign vehicle to insurance account: {e}")
     
     db.session.commit()
+    
+    # Log action in user history
+    try:
+        from app.models import UserHistory
+        user_history = UserHistory(
+            user_id=current_user.id,
+            action='Véhicule créé',
+            details=f'Véhicule {vehicle.license_plate} - {owner_name} ({vehicle_type})'
+        )
+        db.session.add(user_history)
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging vehicle creation: {e}')
+    
     return jsonify(vehicle.to_dict()), 201
 @vehicle_bp.route('/<int:vehicle_id>', methods=['GET'])
 @login_required
@@ -792,6 +830,19 @@ def create_fine(vehicle_id):
     hist = VehicleHistory(vehicle_id=vehicle.id, action=action_text, officer=officer, notes=notes)
     db.session.add(hist)
     db.session.commit()
+    
+    # Log action in user history
+    try:
+        from app.models import UserHistory
+        user_history = UserHistory(
+            user_id=current_user.id,
+            action='Amende émise',
+            details=f'Amende #{fine.id} pour {vehicle.license_plate}: {reason} ({amount} KMF)'
+        )
+        db.session.add(user_history)
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging fine creation: {e}')
     
     # Send SMS notification to vehicle owner
     try:
@@ -1046,6 +1097,19 @@ def pay_fine(fine_id):
     hist = VehicleHistory(vehicle_id=fine.vehicle_id, action=f"Amande payée ({fine.receipt_number}) - {format_kmf_amount(fine.amount)} KMF", officer=paid_by, notes=(payment_method or ''))
     db.session.add(hist)
     db.session.commit()
+    
+    # Log action in user history
+    try:
+        from app.models import UserHistory
+        user_history = UserHistory(
+            user_id=current_user.id,
+            action='Amende payée',
+            details=f'Amende #{fine.id} ({fine.receipt_number}): {fine.vehicle.license_plate} - {format_kmf_amount(fine.amount)} KMF'
+        )
+        db.session.add(user_history)
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging fine payment: {e}')
 
     # return updated fine and history
     resp = {'fine': fine.to_dict(), 'history': hist.to_dict()}
@@ -1330,6 +1394,9 @@ def public_track(token):
             # Skip exoneration history entries
             if 'exonération' in h.action.lower() or 'exonération' in (h.notes or '').lower():
                 continue
+            # Skip legacy no-op update rows where nothing actually changed
+            if _is_noop_vehicle_update_history(h.action, h.notes):
+                continue
             history_items.append({
                 'type': 'history',
                 'created_at': h.created_at.isoformat(),
@@ -1503,6 +1570,32 @@ def api_users_delete(user_id):
     db.session.delete(u)
     db.session.commit()
     return jsonify({'ok': True})
+
+
+@main_bp.route('/api/users/<int:user_id>/history')
+@roles_required('administrateur')
+def api_users_history(user_id):
+    """Get action history for a specific user (excluding administrators)"""
+    u = User.query.get_or_404(user_id)
+    
+    # Don't show history for administrators (security)
+    if u.role == 'administrateur':
+        return jsonify({'error': 'Cannot view history for administrators'}), 403
+    
+    # Get user history, ordered by most recent first
+    from app.models import UserHistory
+    history_query = UserHistory.query.filter_by(user_id=user_id)
+
+    day = request.args.get('day', type=str)
+    if day:
+        try:
+            history_query = history_query.filter(func.date(UserHistory.created_at) == day)
+        except Exception:
+            return jsonify({'error': 'Invalid day format, expected YYYY-MM-DD'}), 400
+
+    history = history_query.order_by(UserHistory.created_at.desc()).all()
+    
+    return jsonify([h.to_dict() for h in history])
 
 
 @main_bp.route('/profile')
@@ -1772,7 +1865,12 @@ def update_vehicle(vehicle_id):
     def _normalize_for_compare(value):
         if isinstance(value, datetime):
             return value.replace(tzinfo=None)
+        if isinstance(value, str):
+            return value.strip()
         return value
+
+    def _is_blank(value):
+        return value is None or (isinstance(value, str) and value.strip() == '')
 
     def _display_value(field_name, value):
         if value is None or value == '':
@@ -1812,6 +1910,8 @@ def update_vehicle(vehicle_id):
     for field in tracked_fields:
         old_value = old_values.get(field)
         new_value = getattr(vehicle, field)
+        if _is_blank(old_value) and _is_blank(new_value):
+            continue
         if _normalize_for_compare(old_value) == _normalize_for_compare(new_value):
             continue
 
@@ -1849,6 +1949,30 @@ def update_vehicle(vehicle_id):
                 print(f"Warning: Could not auto-assign vehicle to insurance account: {e}")
     
     db.session.commit()
+    
+    # Log action in user history
+    try:
+        from app.models import UserHistory
+        # Build a summary of changes
+        changes = []
+        for field in tracked_fields:
+            old_value = old_values.get(field)
+            new_value = getattr(vehicle, field)
+            if _normalize_for_compare(old_value) != _normalize_for_compare(new_value):
+                label = field_labels.get(field, field)
+                changes.append(label)
+        
+        if changes:
+            user_history = UserHistory(
+                user_id=current_user.id,
+                action='Véhicule modifié',
+                details=f'Véhicule {vehicle.license_plate}: {" | ".join(changes[:3])}' + (f' + {len(changes)-3} autres' if len(changes) > 3 else '')
+            )
+            db.session.add(user_history)
+            db.session.commit()
+    except Exception as e:
+        print(f'Error logging vehicle update: {e}')
+    
     return jsonify(vehicle.to_dict())
 
 
@@ -1856,8 +1980,25 @@ def update_vehicle(vehicle_id):
 @login_required
 def delete_vehicle(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
+    license_plate = vehicle.license_plate
+    owner_name = vehicle.owner_name
+    
     db.session.delete(vehicle)
     db.session.commit()
+    
+    # Log action in user history
+    try:
+        from app.models import UserHistory
+        user_history = UserHistory(
+            user_id=current_user.id,
+            action='Véhicule supprimé',
+            details=f'Véhicule {license_plate} - {owner_name}'
+        )
+        db.session.add(user_history)
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging vehicle deletion: {e}')
+    
     return jsonify({'message': 'Véhicule supprimé'})
 
 
