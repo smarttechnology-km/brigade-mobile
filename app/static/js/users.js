@@ -2,6 +2,9 @@ document.addEventListener('DOMContentLoaded', function(){
     loadUsers();
     const btnNew = document.getElementById('btn-new-user'); if(btnNew) btnNew.addEventListener('click', openNewUserModal);
     const saveBtn = document.getElementById('save-user-btn'); if(saveBtn) saveBtn.addEventListener('click', saveUser);
+    const historyFilterBtn = document.getElementById('user-history-filter-btn'); if(historyFilterBtn) historyFilterBtn.addEventListener('click', applyUserHistoryFilter);
+    const historyResetBtn = document.getElementById('user-history-reset-btn'); if(historyResetBtn) historyResetBtn.addEventListener('click', resetUserHistoryFilter);
+    const historyDayFilter = document.getElementById('user-history-day-filter'); if(historyDayFilter) historyDayFilter.addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ applyUserHistoryFilter(); } });
     
     // Role change listener to show/hide country/region fields
     const roleSelect = document.getElementById('u-role');
@@ -189,8 +192,73 @@ function openEditUser(id){
     if(pwdReq) pwdReq.style.display = 'none';
     if(pwdConfReq) pwdConfReq.style.display = 'none';
     
+    // Show/hide history tab based on role (only for non-administrators)
+    const historyTabContainer = document.getElementById('user-history-tab-container');
+    const historyDayFilter = document.getElementById('user-history-day-filter');
+    const historyFilterLabel = document.getElementById('user-history-filter-label');
+    if(historyTabContainer){
+        if(u.role === 'administrateur'){
+            historyTabContainer.style.display = 'none';
+        } else {
+            historyTabContainer.style.display = '';
+            if(historyDayFilter) historyDayFilter.value = '';
+            if(historyFilterLabel) historyFilterLabel.textContent = 'Aucun filtre appliqué';
+            // Load user history
+            loadUserHistory(u.id);
+        }
+    }
+    
     const modal = new bootstrap.Modal(document.getElementById('userModal'));
     modal.show();
+}
+
+function loadUserHistory(userId, day=''){
+    const tbody = document.getElementById('user-history-tbody');
+    const historyFilterLabel = document.getElementById('user-history-filter-label');
+    if(!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Chargement...</td></tr>';
+    if(historyFilterLabel){
+        historyFilterLabel.textContent = day ? `Filtre actif : ${day}` : 'Aucun filtre appliqué';
+    }
+    const url = day ? `/api/users/${userId}/history?day=${encodeURIComponent(day)}` : `/api/users/${userId}/history`;
+    
+    fetch(url)
+        .then(r=>{
+            if(!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(history=>{
+            if(!history || history.length === 0){
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aucun historique</td></tr>';
+                return;
+            }
+            tbody.innerHTML = history.map(h=>`<tr>
+                <td><small>${escapeHtml(h.created_at)}</small></td>
+                <td><strong>${escapeHtml(h.action)}</strong></td>
+                <td><small>${escapeHtml(h.details || '-')}</small></td>
+            </tr>`).join('');
+        })
+        .catch(err=>{
+            console.error('Failed to load user history:', err);
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Erreur chargement historique</td></tr>';
+        });
+}
+
+function applyUserHistoryFilter(){
+    const userId = document.getElementById('u-id').value;
+    if(!userId) return;
+    const dayFilter = document.getElementById('user-history-day-filter');
+    const day = dayFilter ? dayFilter.value.trim() : '';
+    loadUserHistory(userId, day);
+}
+
+function resetUserHistoryFilter(){
+    const userId = document.getElementById('u-id').value;
+    if(!userId) return;
+    const dayFilter = document.getElementById('user-history-day-filter');
+    if(dayFilter) dayFilter.value = '';
+    loadUserHistory(userId);
 }
 
 function saveUser(){
