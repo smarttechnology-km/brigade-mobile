@@ -305,6 +305,12 @@ def index():
     # Require login before showing the public index/welcome page
     if not current_user.is_authenticated:
         return redirect(url_for('auth.login', next=url_for('main.index')))
+    
+    # Redirect insurance accounts to their dashboard
+    from app.models import InsuranceAccount
+    if isinstance(current_user, InsuranceAccount):
+        return redirect(url_for('main.insurance_dashboard'))
+    
     return render_template('index.html')
 
 
