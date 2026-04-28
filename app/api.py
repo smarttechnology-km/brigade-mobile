@@ -90,6 +90,18 @@ def get_current_user():
     return None
 
 
+def log_user_history(user, action, details):
+    """Write a best-effort entry to UserHistory without breaking the main request."""
+    if not user:
+        return
+    try:
+        from app.models import UserHistory
+        db.session.add(UserHistory(user_id=user.id, action=action, details=details))
+        db.session.commit()
+    except Exception as e:
+        print(f'[UserHistory] {action} logging failed for {getattr(user, "username", user)}: {e}')
+
+
 @api_bp.route('/health', methods=['GET'])
 def api_health():
     """Health check endpoint - lightweight, no auth required"""
@@ -117,6 +129,7 @@ def api_login():
         return jsonify({"error": "Unauthorized role"}), 403
     
     access = create_access_token(identity=str(user.id), expires_delta=timedelta(hours=8))
+    log_user_history(user, 'Connexion mobile', 'Connexion réussie depuis l\'application mobile')
     return jsonify({"access_token": access, "username": user.username, "role": user.role})
 
 
@@ -347,6 +360,12 @@ def api_vehicles_create():
     
     db.session.add(vehicle)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Véhicule créé (mobile)',
+        f"Véhicule {vehicle.license_plate} - {vehicle.owner_name} ({vehicle.vehicle_type})"
+    )
     
     return jsonify({
         "message": "Vehicle created successfully",
@@ -446,6 +465,24 @@ def api_vehicles_update(vehicle_id):
     
     vehicle.updated_at = now_comoros()
     db.session.commit()
+
+    changed_fields = []
+    for field in [
+        'license_plate', 'owner_name', 'owner_phone', 'owner_island',
+        'vehicle_type', 'usage_type', 'color', 'make', 'model', 'year',
+        'owner_address', 'vin', 'status', 'insurance_company', 'notes',
+        'registration_date', 'registration_expiry', 'insurance_expiry',
+        'vignette_expiry', 'last_inspection_date'
+    ]:
+        if field in data:
+            changed_fields.append(field.replace('_', ' '))
+
+    if changed_fields:
+        log_user_history(
+            user,
+            'Véhicule modifié (mobile)',
+            f"Véhicule {vehicle.license_plate}: {', '.join(changed_fields)}"
+        )
     
     return jsonify({
         "message": "Vehicle updated successfully",
@@ -484,6 +521,12 @@ def api_fines_create():
     
     db.session.add(fine)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Amende créée (mobile)',
+        f"Amende pour {vehicle.license_plate}: {reason} ({amount})"
+    )
     
     return jsonify({
         "message": "Fine created successfully",
@@ -529,6 +572,12 @@ def api_profile_update():
         user.phone = data['phone']
     
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Profil modifié (mobile)',
+        'Modification du profil depuis l\'application mobile'
+    )
     
     return jsonify({
         "message": "Profile updated successfully",
@@ -566,6 +615,12 @@ def api_profile_change_password():
     
     user.set_password(new_password)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Mot de passe modifié (mobile)',
+        'Changement du mot de passe depuis l\'application mobile'
+    )
     
     return jsonify({"message": "Password changed successfully"})
 
@@ -819,6 +874,12 @@ def api_phone_create():
     db.session.flush()  # Generate ID
     phone.phone_code = f"TP{phone.id:05d}"  # Generate compact code like TP00001
     db.session.commit()
+
+    log_user_history(
+        current_user,
+        'Téléphone créé (mobile)',
+        f"Téléphone {phone.phone_code} - {phone.brand} {phone.model}"
+    )
     
     return jsonify(phone.to_dict()), 201
 
@@ -868,6 +929,12 @@ def api_phone_update(phone_id):
         phone.notes = data['notes'].strip() if data['notes'] else None
     
     db.session.commit()
+
+    log_user_history(
+        current_user,
+        'Téléphone modifié (mobile)',
+        f"Téléphone {phone.phone_code} mis à jour"
+    )
     
     return jsonify(phone.to_dict())
 
@@ -879,9 +946,17 @@ def api_phone_delete(phone_id):
     phone = Phone.query.get(phone_id)
     if not phone:
         return jsonify({'error': 'Phone not found'}), 404
+
+    phone_code = phone.phone_code
     
     db.session.delete(phone)
     db.session.commit()
+
+    log_user_history(
+        current_user,
+        'Téléphone supprimé (mobile)',
+        f"Téléphone {phone_code} supprimé"
+    )
     
     return jsonify({'ok': True})
 
@@ -996,6 +1071,13 @@ def api_checkout_phone():
     
     db.session.add(usage)
     db.session.commit()
+
+    lender_name = getattr(current_user, 'username', 'system') if current_user else 'system'
+    log_user_history(
+        user,
+        'Téléphone emprunté',
+        f"Téléphone {phone.phone_code} emprunté à {lender_name}" + (f" - Notes: {notes}" if notes else '')
+    )
     
     return jsonify(usage.to_dict()), 201
 
@@ -1013,6 +1095,12 @@ def api_checkin_phone(usage_id):
     
     usage.checkin_at = now_comoros()
     db.session.commit()
+
+    log_user_history(
+        usage.user,
+        'Téléphone retourné',
+        f"Téléphone {usage.phone.phone_code if usage.phone else usage.phone_id} retourné"
+    )
     
     return jsonify(usage.to_dict())
 
@@ -1248,6 +1336,12 @@ def api_scan_phone_qr():
         # Check in the phone
         active_usage.checkin_at = now_comoros()
         db.session.commit()
+
+        log_user_history(
+            user,
+            'Téléphone retourné (mobile)',
+            f"Téléphone {phone.phone_code} retourné via scan QR"
+        )
         
         return jsonify({
             'action': 'checkin',
@@ -1263,6 +1357,12 @@ def api_scan_phone_qr():
         )
         db.session.add(usage)
         db.session.commit()
+
+        log_user_history(
+            user,
+            'Téléphone attribué (mobile)',
+            f"Téléphone {phone.phone_code} attribué via scan QR"
+        )
         
         return jsonify({
             'action': 'checkout',
@@ -1353,6 +1453,18 @@ def api_manual_checkout_debug():
     )
     db.session.add(usage)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Téléphone emprunté',
+        f"Téléphone {phone.phone_code} attribué par {admin.username}"
+    )
+
+    log_user_history(
+        admin,
+        'Téléphone attribué manuellement (mobile)',
+        f"Téléphone {phone.phone_code} attribué à {user.username}"
+    )
     
     print(f"[MANUAL CHECKOUT] Phone {phone_code} checked out to {user.username}")
     
@@ -1496,6 +1608,12 @@ def upload_photo_submission():
     )
     db.session.add(submission)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Photo soumise (mobile)',
+        f"Photo soumise pour {license_plate or 'véhicule non précisé'}"
+    )
     
     return jsonify({
         "message": "Photo submitted successfully",
@@ -1699,6 +1817,12 @@ def renew_vehicle_qrcode_by_token(token):
         db.session.add(history)
         
         db.session.commit()
+
+        log_user_history(
+            current_user,
+            'QR Code renouvelé (mobile)',
+            f"Véhicule {vehicle.license_plate}: QR code renouvelé et véhicule réactivé"
+        )
         
         return jsonify({
             "success": True,
