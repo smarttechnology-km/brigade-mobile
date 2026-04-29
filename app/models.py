@@ -69,6 +69,7 @@ class Vehicle(db.Model):
     owner_phone = db.Column(db.String(15))
     owner_island = db.Column(db.String(50))  # Grande Comores, Anjouan, Moheli
     vehicle_type = db.Column(db.String(50), nullable=False)  # voiture, moto, camion, etc.
+    fuel_type = db.Column(db.String(50))  # Essence, Gazoil, Electric, autre
     usage_type = db.Column(db.String(50), default='Personnelle')  # Personnelle, Taxi, Transport public, other
     color = db.Column(db.String(50))
     status = db.Column(db.String(20), default='active')  # active, inactive, suspended
@@ -131,6 +132,7 @@ class Vehicle(db.Model):
             'owner_island': self.owner_island,
             'owner_address': self.owner_address,
             'vehicle_type': self.vehicle_type,
+            'fuel_type': self.fuel_type,
             'usage_type': self.usage_type,
             'status': self.status,
             'make': self.make,

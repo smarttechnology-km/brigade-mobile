@@ -638,13 +638,14 @@ def export_vehicles_csv():
     si = io.StringIO()
     writer = csv.writer(si)
     # header
-    writer.writerow(['id','license_plate','owner_name','vehicle_type','status','make','model','year','vin','color','owner_phone','owner_address','Expiration Vignette','created_at'])
+    writer.writerow(['id','license_plate','owner_name','vehicle_type','fuel_type','status','make','model','year','vin','color','owner_phone','owner_address','Expiration Vignette','created_at'])
     for v in vehicles:
         writer.writerow([
             v.id,
             v.license_plate,
             v.owner_name,
             v.vehicle_type,
+            v.fuel_type or '',
             v.status,
             v.make or '',
             v.model or '',
@@ -677,6 +678,7 @@ def create_vehicle():
     model = data.get('model')
     year = data.get('year')
     vin = data.get('vin')
+    fuel_type = data.get('fuel_type')
     owner_address = data.get('owner_address')
     registration_expiry = data.get('registration_expiry')
     insurance_company = data.get('insurance_company')
@@ -695,6 +697,7 @@ def create_vehicle():
         owner_phone=data.get('owner_phone'),
         owner_island=data.get('owner_island'),
         vehicle_type=vehicle_type,
+        fuel_type=fuel_type,
         usage_type=usage_type,
         color=data.get('color'),
         status=data.get('status') or 'active',
@@ -1829,7 +1832,7 @@ def update_vehicle(vehicle_id):
 
     tracked_fields = [
         'license_plate', 'owner_name', 'owner_phone', 'owner_island',
-        'vehicle_type', 'usage_type', 'color', 'status', 'make', 'model',
+        'vehicle_type', 'fuel_type', 'usage_type', 'color', 'status', 'make', 'model',
         'year', 'vin', 'owner_address', 'registration_expiry',
         'insurance_company', 'insurance_expiry', 'notes'
     ]
@@ -1841,7 +1844,7 @@ def update_vehicle(vehicle_id):
     
     # Mettre à jour les champs autorisés
     date_fields = ['registration_expiry', 'insurance_expiry']
-    for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry', 'notes']:
+    for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'fuel_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry', 'notes']:
         if field in data and data.get(field) is not None:
             # Handle empty strings for date fields - set to None instead
             if field in date_fields and data.get(field) == '':
@@ -1888,6 +1891,7 @@ def update_vehicle(vehicle_id):
         'owner_phone': 'Téléphone propriétaire',
         'owner_island': 'Île',
         'vehicle_type': 'Type de véhicule',
+        'fuel_type': 'Carburant',
         'usage_type': 'Type d\'usage',
         'color': 'Couleur',
         'status': 'Statut',
