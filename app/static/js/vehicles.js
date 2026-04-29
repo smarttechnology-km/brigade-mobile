@@ -6,6 +6,8 @@ var searchDebounceTimer = window.searchDebounceTimer || null;
 window.searchDebounceTimer = searchDebounceTimer;
 var KNOWN_VEHICLE_TYPES = window.KNOWN_VEHICLE_TYPES || ['voiture','taxi','moto','camion','minibus','ambulance','suv'];
 window.KNOWN_VEHICLE_TYPES = KNOWN_VEHICLE_TYPES;
+var KNOWN_FUEL_TYPES = window.KNOWN_FUEL_TYPES || ['Essence','Gazoil','Electric'];
+window.KNOWN_FUEL_TYPES = KNOWN_FUEL_TYPES;
 var KNOWN_USAGE_TYPES = window.KNOWN_USAGE_TYPES || ['Personnelle','Taxi','Transport public'];
 window.KNOWN_USAGE_TYPES = KNOWN_USAGE_TYPES.concat(['Location','Véhicule de service','Véhicule utilitaire','Transport scolaire','Transport touristique','Auto-école']);
 
@@ -71,6 +73,35 @@ function setupUsageTypeToggle(){
     if(otherEl){
         otherEl.addEventListener('input', function(){
             if(selectEl.value === 'autre' && hiddenEl){ hiddenEl.value = otherEl.value.trim(); }
+        });
+    }
+}
+
+function setupFuelTypeToggle(){
+    const selectEl = document.getElementById('fuel_type_select');
+    const otherEl = document.getElementById('fuel_type_other');
+    const hiddenEl = document.getElementById('fuel_type');
+    if(!selectEl) return;
+
+    if(selectEl.value === 'other'){
+        if(otherEl) otherEl.classList.remove('d-none');
+    } else {
+        if(otherEl) otherEl.classList.add('d-none');
+    }
+
+    selectEl.addEventListener('change', function(){
+        if(selectEl.value === 'other'){
+            if(otherEl){ otherEl.classList.remove('d-none'); otherEl.required = true; }
+            if(hiddenEl) hiddenEl.value = otherEl ? otherEl.value.trim() : '';
+        } else {
+            if(otherEl){ otherEl.classList.add('d-none'); otherEl.required = false; otherEl.value = ''; }
+            if(hiddenEl) hiddenEl.value = selectEl.value;
+        }
+    });
+
+    if(otherEl){
+        otherEl.addEventListener('input', function(){
+            if(selectEl.value === 'other' && hiddenEl){ hiddenEl.value = otherEl.value.trim(); }
         });
     }
 }
@@ -179,6 +210,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // always wire the vehicle-type select toggle if present (works on dashboard and vehicles pages)
     setupVehicleTypeToggle();
+
+    // always wire the fuel-type select toggle if present (works on dashboard and vehicles pages)
+    setupFuelTypeToggle();
 
     // always wire the usage-type select toggle if present (works on dashboard and vehicles pages)
     setupUsageTypeToggle();
@@ -424,6 +458,14 @@ function openVehicleModal(vehicle) {
     if(otherEl){ otherEl.classList.add('d-none'); otherEl.value = ''; otherEl.required = false; }
     if(hiddenEl){ hiddenEl.value = ''; }
 
+    // ensure fuel type controls are in known default state
+    const fuelSelectEl = document.getElementById('fuel_type_select');
+    const fuelOtherEl = document.getElementById('fuel_type_other');
+    const fuelHiddenEl = document.getElementById('fuel_type');
+    if(fuelSelectEl){ fuelSelectEl.value = KNOWN_FUEL_TYPES[0]; }
+    if(fuelOtherEl){ fuelOtherEl.classList.add('d-none'); fuelOtherEl.value = ''; fuelOtherEl.required = false; }
+    if(fuelHiddenEl){ fuelHiddenEl.value = ''; }
+
     // ensure usage type controls are in known default state
     const usageSelectEl = document.getElementById('usage_type_select');
     const usageOtherEl = document.getElementById('usage_type_other');
@@ -498,6 +540,29 @@ function openVehicleModal(vehicle) {
         } else {
             if(usageHiddenEl) usageHiddenEl.value = vehicle.usage_type || '';
         }
+
+            // populate fuel type: if it's a known type use select, otherwise set 'other' and fill the free-text
+            const fuelSelectEl = document.getElementById('fuel_type_select');
+            const fuelOtherEl = document.getElementById('fuel_type_other');
+            const fuelHiddenEl = document.getElementById('fuel_type');
+            if(fuelSelectEl){
+                const ft = (vehicle.fuel_type || '').toString().trim();
+                if(ft === '') {
+                    fuelSelectEl.value = KNOWN_FUEL_TYPES[0];
+                    if(fuelOtherEl){ fuelOtherEl.classList.add('d-none'); fuelOtherEl.value = ''; fuelOtherEl.required = false; }
+                    if(fuelHiddenEl) fuelHiddenEl.value = KNOWN_FUEL_TYPES[0];
+                } else if(KNOWN_FUEL_TYPES.includes(ft)){
+                    fuelSelectEl.value = ft;
+                    if(fuelOtherEl){ fuelOtherEl.classList.add('d-none'); fuelOtherEl.value = ''; fuelOtherEl.required = false; }
+                    if(fuelHiddenEl) fuelHiddenEl.value = ft;
+                } else {
+                    fuelSelectEl.value = 'other';
+                    if(fuelOtherEl){ fuelOtherEl.classList.remove('d-none'); fuelOtherEl.value = ft; fuelOtherEl.required = true; }
+                    if(fuelHiddenEl) fuelHiddenEl.value = ft;
+                }
+            } else if(fuelHiddenEl){
+                fuelHiddenEl.value = vehicle.fuel_type || '';
+            }
         // populate insurance company: if it's a known company use select, otherwise set 'Autre' and fill the free-text
         if(insuranceSelectEl){
             const ic = (vehicle.insurance_company || '').toString().trim();
@@ -577,6 +642,16 @@ function saveVehicle() {
         year: document.getElementById('year') ? document.getElementById('year').value.trim() : '',
         vin: document.getElementById('vin') ? document.getElementById('vin').value.trim() : '',
         vehicle_type: vehicleTypeValue,
+        fuel_type: (function(){
+            const fuelSelectEl = document.getElementById('fuel_type_select');
+            const fuelOtherEl = document.getElementById('fuel_type_other');
+            const fuelHiddenEl = document.getElementById('fuel_type');
+            if(fuelSelectEl){
+                if(fuelSelectEl.value === 'other') return fuelOtherEl ? fuelOtherEl.value.trim() : (fuelHiddenEl ? fuelHiddenEl.value.trim() : '');
+                return fuelSelectEl.value;
+            }
+            return fuelHiddenEl ? fuelHiddenEl.value.trim() : '';
+        })(),
         usage_type: usageTypeValue,
         color: document.getElementById('color').value.trim(),
         status: document.getElementById('status').value,
