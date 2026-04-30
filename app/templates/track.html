@@ -153,8 +153,8 @@
                     {% if days_qr < 0 %}
                       <span class="badge bg-danger ms-1">Expiré</span>
                       <div class="mt-2">
-                        <button type="button" class="btn btn-sm btn-warning" onclick="regenerateQRCode('{{ vehicle.track_token }}')">
-                          <i class="fas fa-sync-alt me-1"></i>Régénérer QR Code
+                        <button type="button" class="btn btn-sm btn-warning" onclick="renewQRCode('{{ vehicle.track_token }}')">
+                          <i class="fas fa-sync-alt me-1"></i>Renouveler QR Code
                         </button>
                       </div>
                     {% elif days_qr <= 30 %}
@@ -388,9 +388,9 @@
     }
     applyFilter();
 
-    // Function to regenerate QR code
-    window.regenerateQRCode = function(trackToken) {
-      if (!confirm('Êtes-vous sûr de vouloir régénérer le code QR? Le véhicule sera réactivé et le token changera.')) {
+    // Function to renew QR code without changing the token
+    window.renewQRCode = function(trackToken) {
+      if (!confirm('Êtes-vous sûr de vouloir renouveler le code QR? Le véhicule sera réactivé et le token restera identique.')) {
         return;
       }
 
@@ -408,23 +408,23 @@
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          const message = `Code QR régénéré et véhicule réactivé!\n\nNouvel expiry: ${data.new_expiry}\nNouveau token: ${data.new_token}`;
+          const message = `Code QR renouvelé et véhicule réactivé!\n\nNouvelle expiry: ${data.new_expiry}\nToken conservé: ${data.track_token}`;
           showNotification('success', 'Succès', message);
-          // Redirect to new track token URL after 2 seconds
+          // Refresh the page to show the updated status and expiry
           setTimeout(() => {
-            window.location.href = `/track/${data.new_token}`;
+            window.location.reload();
           }, 2000);
         } else {
-          showNotification('error', 'Erreur', data.error || 'Erreur lors de la régénération');
+          showNotification('error', 'Erreur', data.error || 'Erreur lors du renouvellement');
           button.disabled = false;
-          button.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Régénérer QR Code';
+          button.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Renouveler QR Code';
         }
       })
       .catch(error => {
         console.error('Erreur:', error);
         showNotification('error', 'Erreur', 'Erreur lors de la communication');
         button.disabled = false;
-        button.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Régénérer QR Code';
+        button.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Renouveler QR Code';
       });
     };
 
