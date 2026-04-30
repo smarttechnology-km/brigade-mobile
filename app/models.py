@@ -85,8 +85,8 @@ class Vehicle(db.Model):
     insurance_company = db.Column(db.String(100))
     insurance_expiry = db.Column(db.DateTime)
     vignette_expiry = db.Column(db.DateTime)
-    qr_code_generated_at = db.Column(db.DateTime, nullable=True)  # When QR code was generated
-    qr_code_expiry = db.Column(db.DateTime, nullable=True)  # When QR code expires (2 years after generation)
+    qr_code_generated_at = db.Column(db.DateTime, nullable=True)  # When QR code was generated or renewed
+    qr_code_expiry = db.Column(db.DateTime, nullable=True)  # When QR code expires (1 year after generation)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
@@ -96,9 +96,8 @@ class Vehicle(db.Model):
     
     def generate_qr_code_with_expiry(self):
         """
-        Generate a new QR code token for this vehicle with 2-year expiry.
-        Expiry date = Today + 2 years (730 days)
-        Also generates a new unique track_token for security.
+        Renew the QR code expiry for this vehicle without changing its track token.
+        Expiry date = Today + 1 year (365 days)
         """
         from app.timezone_utils import now_comoros
         from datetime import timedelta
@@ -107,12 +106,9 @@ class Vehicle(db.Model):
         current_time = now_comoros()
         self.qr_code_generated_at = current_time
         
-        # Set expiry to 2 years (730 days) from today
-        TWO_YEARS_IN_DAYS = 730
-        self.qr_code_expiry = current_time + timedelta(days=TWO_YEARS_IN_DAYS)
-        
-        # Generate a new unique track_token for security
-        self.track_token = str(uuid.uuid4())
+        # Set expiry to 1 year (365 days) from today
+        ONE_YEAR_IN_DAYS = 365
+        self.qr_code_expiry = current_time + timedelta(days=ONE_YEAR_IN_DAYS)
         
         return self.qr_code_expiry
     

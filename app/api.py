@@ -1828,23 +1828,21 @@ def renew_vehicle_qrcode_by_token(token):
         
         # Store old values for logging
         old_expiry = vehicle.qr_code_expiry.strftime('%Y-%m-%d') if vehicle.qr_code_expiry else 'Non défini'
-        old_token = vehicle.track_token
         old_status = vehicle.status
         
-        # Generate new QR code with expiry (2 years) - also generates new token
+        # Renew QR code expiry without changing the token
         vehicle.generate_qr_code_with_expiry()
-        new_token = vehicle.track_token
         
         # Reactivate vehicle
         vehicle.status = 'active'
         
-        # Log the action in vehicle history with old and new tokens
+        # Log the action in vehicle history while preserving the token
         from app.models import VehicleHistory
         history = VehicleHistory(
             vehicle_id=vehicle.id,
-            action=f"QR Code renouvelé - Ancien token remplacé",
+            action=f"QR Code renouvelé - Token conservé",
             officer=current_user.username,
-            notes=f"Ancien token: {old_token}\nNouveau token: {new_token}\nAncien expiry: {old_expiry}\nNouveau expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
+            notes=f"Token conservé: {vehicle.track_token}\nAncien expiry: {old_expiry}\nNouvelle expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
         )
         db.session.add(history)
         
@@ -1861,8 +1859,8 @@ def renew_vehicle_qrcode_by_token(token):
             "message": f"Code QR renouvelé et véhicule réactivé",
             "old_status": old_status,
             "new_status": vehicle.status,
-            "old_token": old_token,
-            "new_token": new_token,
+            "track_token": vehicle.track_token,
+            "token_unchanged": True,
             "old_expiry": old_expiry,
             "new_expiry": vehicle.qr_code_expiry.strftime('%Y-%m-%d'),
             "generated_at": vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S')

@@ -1336,18 +1336,16 @@ def get_vehicle_qrcode_pdf(vehicle_id):
 @vehicle_bp.route('/<int:vehicle_id>/qrcode/renew', methods=['POST'])
 @login_required
 def renew_vehicle_qrcode(vehicle_id):
-    """Renouvelle le QR code d'un véhicule avec une nouvelle date d'expiration de 2 ans et génère un nouveau token"""
+    """Renouvelle le QR code d'un véhicule avec une nouvelle date d'expiration de 1 an sans changer le token"""
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
     
     try:
-        old_token = vehicle.track_token
         old_expiry = vehicle.qr_code_expiry.strftime('%Y-%m-%d') if vehicle.qr_code_expiry else 'Non défini'
         old_status = vehicle.status
         
-        # Générer un nouveau QR code avec expiration ET nouveau token
+        # Renouveler uniquement l'expiration du QR code
         vehicle.generate_qr_code_with_expiry()
-        new_token = vehicle.track_token
         
         # Réactiver le véhicule s'il était inactif
         if vehicle.status == 'inactive':
@@ -1357,9 +1355,9 @@ def renew_vehicle_qrcode(vehicle_id):
         from app.models import VehicleHistory
         history = VehicleHistory(
             vehicle_id=vehicle.id,
-            action=f"QR Code renouvelé - Token changé",
+            action=f"QR Code renouvelé - Token conservé",
             officer=current_user.username,
-            notes=f"Ancien token: {old_token}\nNouveau token: {new_token}\nAncien expiry: {old_expiry}\nNouveau expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
+            notes=f"Token conservé: {vehicle.track_token}\nAncien expiry: {old_expiry}\nNouvelle expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
         )
         db.session.add(history)
         db.session.commit()
@@ -1367,8 +1365,8 @@ def renew_vehicle_qrcode(vehicle_id):
         return jsonify({
             'success': True,
             'message': f'Code QR renouvelé pour {vehicle.license_plate}',
-            'old_token': old_token,
-            'new_token': new_token,
+            'track_token': vehicle.track_token,
+            'token_unchanged': True,
             'old_expiry': old_expiry,
             'new_expiry': vehicle.qr_code_expiry.strftime('%Y-%m-%d'),
             'old_status': old_status,
