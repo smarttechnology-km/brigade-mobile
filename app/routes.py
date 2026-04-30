@@ -1245,7 +1245,7 @@ def get_vehicle_qrcode(vehicle_id):
 @vehicle_bp.route('/<int:vehicle_id>/qrcode/pdf', methods=['GET'])
 @login_required
 def get_vehicle_qrcode_pdf(vehicle_id):
-    """Retourne un PDF avec QR code + numéro d'immatriculation + date d'expiration"""
+    """Retourne un PDF avec QR code + numéro d'immatriculation + texte descriptif"""
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
     
@@ -1280,7 +1280,7 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         # Générer le PDF avec format petit (carte autocollante 10x10cm)
         pdf_buf = io.BytesIO()
         card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise
-        doc = SimpleDocTemplate(pdf_buf, pagesize=card_size, topMargin=0.3*cm, bottomMargin=0.3*cm, leftMargin=0.3*cm, rightMargin=0.3*cm)
+        doc = SimpleDocTemplate(pdf_buf, pagesize=card_size, topMargin=0.2*cm, bottomMargin=0.2*cm, leftMargin=0.2*cm, rightMargin=0.2*cm)
         styles = getSampleStyleSheet()
         elems = []
         
@@ -1301,28 +1301,27 @@ def get_vehicle_qrcode_pdf(vehicle_id):
             'LicensePlate',
             parent=styles['Normal'],
             fontSize=14,
-            textColor=colors.HexColor('#000000'),
+            textColor=colors.HexColor('#003366'),
             alignment=TA_CENTER,
             fontName='Helvetica-Bold',
             spaceAfter=0.15*cm
         )
         elems.append(Paragraph(f'<b>{vehicle.license_plate}</b>', license_plate_style))
         
-        # Espace supplémentaire avant la date
-        elems.append(Spacer(1, 0.1*cm))
+        # Espace supplémentaire avant le texte descriptif
+        elems.append(Spacer(1, 0.05*cm))
         
-        # Date d'expiration du QR code
-        expiry_style = ParagraphStyle(
-            'Expiry',
+        # Texte descriptif "votre identifiant numérique"
+        subtitle_style = ParagraphStyle(
+            'Subtitle',
             parent=styles['Normal'],
-            fontSize=11,
-            textColor=colors.HexColor('#666666'),
+            fontSize=9,
+            textColor=colors.HexColor('#0066CC'),
             alignment=TA_CENTER,
-            fontName='Helvetica',
+            fontName='Helvetica-Oblique',
             spaceAfter=0
         )
-        expiry_date_str = vehicle.qr_code_expiry.strftime('%d/%m/%Y') if vehicle.qr_code_expiry else 'N/A'
-        elems.append(Paragraph(f'Expires: {expiry_date_str}', expiry_style))
+        elems.append(Paragraph('Votre identifiant numérique', subtitle_style))
         
         # Créer le PDF
         doc.build(elems)
@@ -1730,7 +1729,7 @@ def public_track_qrcode(token):
 
 @main_bp.route('/track/<token>/qrcode/pdf')
 def public_track_qrcode_pdf(token):
-    """Télécharger QR code en PDF avec numéro d'immatriculation et date d'expiration"""
+    """Télécharger QR code en PDF avec numéro d'immatriculation et texte descriptif"""
     if not current_user.is_authenticated:
         abort(403)
     
@@ -1767,7 +1766,7 @@ def public_track_qrcode_pdf(token):
         # Générer le PDF avec format petit (carte autocollante 10x10cm)
         pdf_buf = io.BytesIO()
         card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise
-        doc = SimpleDocTemplate(pdf_buf, pagesize=card_size, topMargin=0.3*cm, bottomMargin=0.3*cm, leftMargin=0.3*cm, rightMargin=0.3*cm)
+        doc = SimpleDocTemplate(pdf_buf, pagesize=card_size, topMargin=0.2*cm, bottomMargin=0.2*cm, leftMargin=0.2*cm, rightMargin=0.2*cm)
         styles = getSampleStyleSheet()
         elems = []
         
@@ -1788,28 +1787,27 @@ def public_track_qrcode_pdf(token):
             'LicensePlate',
             parent=styles['Normal'],
             fontSize=14,
-            textColor=colors.HexColor('#000000'),
+            textColor=colors.HexColor('#003366'),
             alignment=TA_CENTER,
             fontName='Helvetica-Bold',
             spaceAfter=0.15*cm
         )
         elems.append(Paragraph(f'<b>{vehicle.license_plate}</b>', license_plate_style))
         
-        # Espace supplémentaire avant la date
-        elems.append(Spacer(1, 0.1*cm))
+        # Espace supplémentaire avant le texte descriptif
+        elems.append(Spacer(1, 0.05*cm))
         
-        # Date d'expiration du QR code
-        expiry_style = ParagraphStyle(
-            'Expiry',
+        # Texte descriptif "votre identifiant numérique"
+        subtitle_style = ParagraphStyle(
+            'Subtitle',
             parent=styles['Normal'],
-            fontSize=11,
-            textColor=colors.HexColor('#666666'),
+            fontSize=9,
+            textColor=colors.HexColor('#0066CC'),
             alignment=TA_CENTER,
-            fontName='Helvetica',
+            fontName='Helvetica-Oblique',
             spaceAfter=0
         )
-        expiry_date_str = vehicle.qr_code_expiry.strftime('%d/%m/%Y') if vehicle.qr_code_expiry else 'N/A'
-        elems.append(Paragraph(f'Expires: {expiry_date_str}', expiry_style))
+        elems.append(Paragraph('Votre identifiant numérique', subtitle_style))
         
         # Créer le PDF
         doc.build(elems)
