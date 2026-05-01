@@ -20,6 +20,7 @@ class User(UserMixin, db.Model):
     country = db.Column(db.String(50), nullable=True)  # Grand Comores, Anjouan, Moheli
     region = db.Column(db.String(100), nullable=True)  # Region based on country
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    session_version = db.Column(db.Integer, nullable=False, default=0)  # Incremented on each login to invalidate old tokens
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
     def set_password(self, password):

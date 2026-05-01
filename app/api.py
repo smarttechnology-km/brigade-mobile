@@ -128,14 +128,31 @@ def api_login():
     if user.role not in ['policier', 'administrateur']:
         return jsonify({"error": "Unauthorized role"}), 403
     
-    access = create_access_token(identity=str(user.id), expires_delta=timedelta(hours=8))
-    log_user_history(user, 'Connexion mobile', 'Connexion réussie depuis l\'application mobile')
+    # Invalidate all previous sessions by incrementing session_version
+    # This ensures only the current device stays logged in
+    user.session_version += 1
+    db.session.commit()
+    
+    # Create JWT token with the current session_version
+    # This version will be validated on every protected request
+    access = create_access_token(
+        identity=str(user.id), 
+        expires_delta=timedelta(hours=8),
+        additional_claims={'session_version': user.session_version}
+    )
+    log_user_history(user, 'Connexion mobile', f'Connexion réussie depuis l\'application mobile (Session v{user.session_version})')
     return jsonify({"access_token": access, "username": user.username, "role": user.role})
+
 
 
 @api_bp.route('/track/<token>', methods=['GET'])
 @jwt_required()
 def api_track(token):
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
     # Verify caller is a policier or administrateur
     uid = get_jwt_identity()
     user = User.query.get(int(uid))
@@ -160,6 +177,11 @@ def api_track(token):
 @api_bp.route('/fine-types/list', methods=['GET'])
 @jwt_required()
 def api_fine_types_list():
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
     uid = get_jwt_identity()
     user = User.query.get(int(uid))
     if not user or user.role not in ['policier', 'administrateur']:
@@ -188,6 +210,11 @@ def api_insurances_list():
 @api_bp.route('/insurances', methods=['POST'])
 @jwt_required()
 def api_insurances_create():
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
     uid = get_jwt_identity()
     user = User.query.get(int(uid))
     if not user or user.role not in ['administrateur']:
@@ -220,6 +247,11 @@ def api_insurances_create():
 @api_bp.route('/insurances/<int:insurance_id>', methods=['PUT'])
 @jwt_required()
 def api_insurances_update(insurance_id):
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
     uid = get_jwt_identity()
     user = User.query.get(int(uid))
     if not user or user.role not in ['administrateur']:
@@ -252,6 +284,11 @@ def api_insurances_update(insurance_id):
 @api_bp.route('/insurances/<int:insurance_id>', methods=['DELETE'])
 @jwt_required()
 def api_insurances_delete(insurance_id):
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
     uid = get_jwt_identity()
     user = User.query.get(int(uid))
     if not user or user.role not in ['administrateur']:
