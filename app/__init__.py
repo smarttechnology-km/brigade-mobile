@@ -7,6 +7,7 @@ from flask_migrate import Migrate
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import text
 import os
 import logging
 
@@ -105,6 +106,28 @@ def create_app():
     # Créer les tables et s'assurer que l'admin existe
     with app.app_context():
         db.create_all()
+
+        # SQLite compatibility guard:
+        # `create_all()` does not alter existing tables, so older databases may
+        # miss newly added columns (e.g. users.session_version).
+        try:
+            if str(app.config.get('SQLALCHEMY_DATABASE_URI', '')).startswith('sqlite'):
+                with db.engine.begin() as conn:
+                    users_table_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+                    ).first() is not None
+
+                    if users_table_exists:
+                        existing_columns = {
+                            row[1] for row in conn.execute(text("PRAGMA table_info(users)")).fetchall()
+                        }
+                        if 'session_version' not in existing_columns:
+                            conn.execute(
+                                text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
+                            )
+                            logger.info("Added missing users.session_version column for SQLite compatibility")
+        except Exception as e:
+            logger.warning(f"Could not auto-fix SQLite schema: {e}")
         
         # Initialize QR codes for all phones that don't have one
         from app.models import Phone, User
