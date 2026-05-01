@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_jwt_extended import JWTManager
@@ -57,6 +57,45 @@ def create_app():
     jwt = JWTManager()
     jwt.init_app(app)
 
+    @jwt.token_in_blocklist_loader
+    def is_token_revoked(jwt_header, jwt_payload):
+        """Revoke tokens whose session_version no longer matches the user record."""
+        try:
+            uid = jwt_payload.get('sub')
+            if not uid:
+                return True
+
+            from app.models import User
+            user = User.query.get(int(uid))
+            if not user or not user.is_active:
+                return True
+
+            token_session_version = jwt_payload.get('session_version')
+            if token_session_version is None:
+                # Old tokens without session_version are considered invalid.
+                return True
+
+            return int(token_session_version) != int(getattr(user, 'session_version', 0))
+        except Exception as e:
+            logger.warning(f"JWT revocation check failed: {e}")
+            return True
+
+    @jwt.revoked_token_loader
+    def revoked_token_callback(jwt_header, jwt_payload):
+        return jsonify({'error': 'Session expired. Please login again.'}), 401
+
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return jsonify({'error': 'Session expired. Please login again.'}), 401
+
+    @jwt.invalid_token_loader
+    def invalid_token_callback(reason):
+        return jsonify({'error': 'Invalid token'}), 401
+
+    @jwt.unauthorized_loader
+    def missing_token_callback(reason):
+        return jsonify({'error': 'Missing token'}), 401
+
     # Error handlers
     @app.errorhandler(403)
     def forbidden(error):
@@ -68,40 +107,44 @@ def create_app():
         from flask import render_template
         return render_template('unauthorized.html'), 401
 
-    # Initialize scheduler
-    scheduler.start()
+    # Skip scheduler initialization during Flask CLI invocations (e.g. flask db)
+    # to avoid side effects while migration commands load the app multiple times.
+    if not os.environ.get('FLASK_RUN_FROM_CLI'):
+        # Initialize scheduler only once.
+        if not scheduler.running:
+            scheduler.start()
 
-    # Set app instance for background tasks
-    from app.tasks import set_app as tasks_set_app
-    tasks_set_app(app)
+        # Set app instance for background tasks
+        from app.tasks import set_app as tasks_set_app
+        tasks_set_app(app)
 
-    # Add the exoneration task to run every hour
-    from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry
-    scheduler.add_job(
-        func=process_exonerated_fines,
-        trigger=IntervalTrigger(hours=1),
-        id='process_exonerated_fines',
-        name='Process exonerated fines after 24 hours',
-        replace_existing=True
-    )
+        # Add the exoneration task to run every hour
+        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry
+        scheduler.add_job(
+            func=process_exonerated_fines,
+            trigger=IntervalTrigger(hours=1),
+            id='process_exonerated_fines',
+            name='Process exonerated fines after 24 hours',
+            replace_existing=True
+        )
 
-    # Add the phone QR code regeneration task to run daily at 01:00 AM
-    scheduler.add_job(
-        func=regenerate_phone_qr_codes,
-        trigger=CronTrigger(hour=1, minute=0),
-        id='regenerate_phone_qr_codes',
-        name='Regenerate phone QR codes daily at 01:00 AM',
-        replace_existing=True
-    )
+        # Add the phone QR code regeneration task to run daily at 01:00 AM
+        scheduler.add_job(
+            func=regenerate_phone_qr_codes,
+            trigger=CronTrigger(hour=1, minute=0),
+            id='regenerate_phone_qr_codes',
+            name='Regenerate phone QR codes daily at 01:00 AM',
+            replace_existing=True
+        )
 
-    # Add the vehicle QR code expiry check task to run daily at 02:00 AM
-    scheduler.add_job(
-        func=check_vehicle_qr_code_expiry,
-        trigger=CronTrigger(hour=2, minute=0),
-        id='check_vehicle_qr_code_expiry',
-        name='Check vehicle QR code expiry and mark as inactive daily at 02:00 AM',
-        replace_existing=True
-    )
+        # Add the vehicle QR code expiry check task to run daily at 02:00 AM
+        scheduler.add_job(
+            func=check_vehicle_qr_code_expiry,
+            trigger=CronTrigger(hour=2, minute=0),
+            id='check_vehicle_qr_code_expiry',
+            name='Check vehicle QR code expiry and mark as inactive daily at 02:00 AM',
+            replace_existing=True
+        )
 
     # Créer les tables et s'assurer que l'admin existe
     with app.app_context():
