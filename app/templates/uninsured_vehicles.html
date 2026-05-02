@@ -141,6 +141,10 @@
                         <label class="form-label fw-semibold">
                             <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
                         </label>
+                        <div id="modal-warning-alert" class="alert alert-warning" style="display:none;">
+                            <strong>Attention:</strong>
+                            <span id="modal-warning-text"></span>
+                        </div>
                         <input type="date" id="modal-insurance-expiry" class="form-control" />
                     </div>
                 </div>
@@ -149,7 +153,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="fas fa-times me-1"></i>Annuler
                 </button>
-                <button type="button" class="btn btn-success" onclick="confirmAddVehicle()">
+                <button type="button" id="confirm-add-vehicle-btn" class="btn btn-success" onclick="confirmAddVehicle()">
                     <i class="fas fa-check me-1"></i>Ajouter
                 </button>
             </div>
@@ -260,6 +264,31 @@ function filterVehicles() {
     renderVehiclesTable(filtered);
 }
 
+function isVehicleInactive(vehicle) {
+    try {
+        const now = new Date();
+        const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
+        return (vehicle.status && vehicle.status !== 'active') || (qrExpiry && qrExpiry < now);
+    } catch (e) {
+        return false;
+    }
+}
+
+function getInactiveReason(vehicle) {
+    const reasons = [];
+    try {
+        const now = new Date();
+        const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
+        if (vehicle.status && vehicle.status !== 'active') {
+            reasons.push('statut: ' + vehicle.status);
+        }
+        if (qrExpiry && qrExpiry < now) {
+            reasons.push('QR code expiré le ' + qrExpiry.toLocaleDateString());
+        }
+    } catch (e) {}
+    return reasons.join(' — ');
+}
+
 function renderVehiclesTable(vehicles) {
     const tbody = document.getElementById('vehicles-tbody');
     const noResults = document.getElementById('no-results-alert');
@@ -286,6 +315,10 @@ function renderVehiclesTable(vehicles) {
                 ${v.has_unpaid_fines ? `
                     <button class="btn btn-sm btn-outline-secondary" type="button" onclick="showFineDetails(${v.id})" title="Cliquer pour voir le type d'amende">
                         <i class="fas fa-lock"></i> Bloqué
+                    </button>
+                ` : isVehicleInactive(v) ? `
+                    <button class="btn btn-sm btn-outline-warning" type="button" onclick="addVehicleToInsurance(${v.id}, '${v.license_plate.replace(/'/g, "\\'")}')" title="Véhicule inactif - attention">
+                        <i class="fas fa-exclamation-triangle"></i> Attention
                     </button>
                 ` : `
                     <button class="btn btn-sm btn-outline-success" onclick="addVehicleToInsurance(${v.id}, '${v.license_plate}')" title="Ajouter ce véhicule">
@@ -335,6 +368,26 @@ function addVehicleToInsurance(vehicleId, licensePlate) {
     document.getElementById('modal-owner-island').value = vehicle.owner_island || '-';
     document.getElementById('modal-usage-type').value = vehicle.usage_type || '-';
     document.getElementById('modal-insurance-expiry').value = vehicle.insurance_expiry ? vehicle.insurance_expiry.split('T')[0] : '';
+
+    const warningAlert = document.getElementById('modal-warning-alert');
+    const warningText = document.getElementById('modal-warning-text');
+    const confirmBtn = document.getElementById('confirm-add-vehicle-btn');
+    const inactive = isVehicleInactive(vehicle);
+
+    if (warningAlert && warningText && confirmBtn) {
+        if (inactive) {
+            const reason = getInactiveReason(vehicle) || 'Véhicule inactif.';
+            warningText.textContent = reason;
+            warningAlert.style.display = '';
+            confirmBtn.disabled = true;
+            confirmBtn.title = 'Impossible d\'ajouter un véhicule inactif';
+        } else {
+            warningText.textContent = '';
+            warningAlert.style.display = 'none';
+            confirmBtn.disabled = false;
+            confirmBtn.title = '';
+        }
+    }
     
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('addVehicleModal'));
@@ -392,6 +445,12 @@ function showFineDetails(vehicleId) {
 function confirmAddVehicle() {
     const vehicleId = document.getElementById('modal-vehicle-id').value;
     const insuranceExpiry = document.getElementById('modal-insurance-expiry').value;
+    const vehicle = vehiclesCache.find(v => String(v.id) === String(vehicleId));
+
+    if (vehicle && isVehicleInactive(vehicle)) {
+        alert(getInactiveReason(vehicle) || 'Véhicule inactif.');
+        return;
+    }
     
     // Call the API to assign the vehicle to the insurance account
     fetch('/api/vehicles/assign-to-insurance', {
