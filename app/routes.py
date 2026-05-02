@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from app import db
 from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine
 from decimal import Decimal
@@ -1982,9 +1983,20 @@ def delete_vehicle(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     license_plate = vehicle.license_plate
     owner_name = vehicle.owner_name
+
+    # Prevent deletion when a vehicle has history rows that require vehicle_id.
+    if vehicle.history.count() > 0:
+        return jsonify({'error': 'Cette voiture ne peut pas etre supprimee car elle a un historique.'}), 400
     
-    db.session.delete(vehicle)
-    db.session.commit()
+    try:
+        db.session.delete(vehicle)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Cette voiture ne peut pas etre supprimee car elle a un historique.'}), 400
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Erreur serveur lors de la suppression du vehicule.'}), 500
     
     # Log action in user history
     try:

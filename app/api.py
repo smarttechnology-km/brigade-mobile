@@ -1692,8 +1692,11 @@ def list_photo_submissions():
     # - Administrators can filter by country parameter, or see all if no country specified
     # - Policiers and Judiciaires see submissions for vehicles in their country OR submissions by officers in their country
     if user.role == 'administrateur' and country:
-        # Admin with country filter
-        query = query.filter(Vehicle.owner_island == country)
+        # Admin with country filter: show submissions for vehicles in that country
+        # OR submissions submitted by officers in that country (some submissions may not be linked to a vehicle)
+        query = query.filter(
+            (Vehicle.owner_island == country) | (User.country == country)
+        )
     elif user.role in ['policier', 'judiciaire'] and user.country:
         # Non-admin: filter by their country
         query = query.filter(
