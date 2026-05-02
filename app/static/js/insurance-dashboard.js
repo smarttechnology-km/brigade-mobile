@@ -135,13 +135,29 @@ function renderVehiclesTable() {
             }
         }
         
+        // Determine if vehicle is inactive (status != active) or QR code expired
+        let isInactive = false;
+        try {
+            const now = new Date();
+            const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
+            if (vehicle.status && vehicle.status !== 'active') isInactive = true;
+            if (qrExpiry && qrExpiry < now) isInactive = true;
+        } catch (e) {
+            isInactive = false;
+        }
+
         const actionButton = vehicle.has_unpaid_fines
             ? `<button class="btn btn-sm btn-outline-secondary" type="button" onclick="showFineDetails(${vehicle.id})" title="Cliquer pour voir le type d'amende">
                     <i class="fas fa-lock"></i>
                 </button>`
-            : `<button class="btn btn-sm btn-outline-primary" onclick="openEditDatesModal(${vehicle.id})" title="Modifier les dates">
-                    <i class="fas fa-edit"></i>
-                </button>`;
+            : (isInactive
+                ? `<button class="btn btn-sm btn-outline-warning" onclick="openEditDatesModal(${vehicle.id})" title="Véhicule inactif - attention">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </button>`
+                : `<button class="btn btn-sm btn-outline-primary" onclick="openEditDatesModal(${vehicle.id})" title="Modifier les dates">
+                        <i class="fas fa-edit"></i>
+                    </button>`
+              );
 
         return `
             <tr>
@@ -213,7 +229,49 @@ function openEditDatesModal(vehicleId) {
     document.getElementById('edit-owner-phone').value = vehicle.owner_phone || '';
     document.getElementById('edit-usage-type').value = vehicle.usage_type || '';
     document.getElementById('edit-insurance-expiry').value = vehicle.insurance_expiry ? vehicle.insurance_expiry.split('T')[0] : '';
-    
+    // Disable editing of insurance expiry for inactive vehicles or expired QR
+    const insuranceInput = document.getElementById('edit-insurance-expiry');
+    const saveBtn = document.getElementById('save-dates-btn');
+    let isInactive = false;
+    try {
+        const now = new Date();
+        const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
+        if (vehicle.status && vehicle.status !== 'active') isInactive = true;
+        if (qrExpiry && qrExpiry < now) isInactive = true;
+    } catch (e) {
+        isInactive = false;
+    }
+
+    const alertEl = document.getElementById('edit-dates-alert');
+    const alertText = document.getElementById('edit-dates-alert-text');
+    if (isInactive) {
+        if (insuranceInput) insuranceInput.disabled = true;
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.title = 'Impossible de modifier: véhicule inactif ou QR expiré';
+        }
+        if (alertEl && alertText) {
+            let reason = [];
+            try {
+                const now = new Date();
+                const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
+                if (vehicle.status && vehicle.status !== 'active') reason.push('statut: ' + vehicle.status);
+                if (qrExpiry && qrExpiry < now) reason.push('QR code expiré le ' + qrExpiry.toLocaleDateString());
+            } catch (e) {}
+            alertText.textContent = reason.length ? reason.join(' — ') : 'Véhicule inactif.';
+            alertEl.style.display = '';
+        }
+    } else {
+        if (insuranceInput) insuranceInput.disabled = false;
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.title = '';
+        }
+        if (alertEl) {
+            alertEl.style.display = 'none';
+        }
+    }
+
     const modal = new bootstrap.Modal(document.getElementById('editDatesModal'));
     modal.show();
 }
