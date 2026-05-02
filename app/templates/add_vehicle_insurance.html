@@ -134,12 +134,19 @@
 let loadedVehicle = null;
 let vehicleHasActiveInsurance = false;
 let vehicleHasUnpaidFines = false;
+let vehicleIsInactive = false;
+let vehicleBlockReason = '';
 
 function setAddFormAvailability(canAdd) {
     const submitBtn = document.querySelector('#vehicle-form button[type="submit"]');
     const insuranceExpiryInput = document.getElementById('insurance_expiry');
     if (submitBtn) submitBtn.disabled = !canAdd;
     if (insuranceExpiryInput) insuranceExpiryInput.disabled = !canAdd;
+}
+
+function isInactiveBlockReason(reason) {
+    const text = (reason || '').toLowerCase();
+    return text.includes('inactif') || text.includes('qr code expiré') || text.includes('qr code expire');
 }
 
 // Search for vehicle when license plate changes
@@ -158,6 +165,8 @@ document.getElementById('license_plate').addEventListener('change', async functi
     searchStatus.textContent = 'Recherche du véhicule...';
     searchStatus.className = 'text-info';
     if (blockReasonAlert) blockReasonAlert.style.display = 'none';
+    vehicleIsInactive = false;
+    vehicleBlockReason = '';
     
     try {
         const response = await fetch(`/api/vehicles/search-by-license-plate?license_plate=${encodeURIComponent(licensePlate)}`, {
@@ -172,6 +181,8 @@ document.getElementById('license_plate').addEventListener('change', async functi
         loadedVehicle = data.vehicle;
         vehicleHasActiveInsurance = !!data.has_active_insurance;
         vehicleHasUnpaidFines = !!data.has_unpaid_fines;
+        vehicleBlockReason = data.block_reason || '';
+        vehicleIsInactive = isInactiveBlockReason(vehicleBlockReason);
         
         // Populate all fields
         document.getElementById('make').value = loadedVehicle.make || '-';
@@ -191,6 +202,14 @@ document.getElementById('license_plate').addEventListener('change', async functi
                 blockReasonMessage.textContent = data.block_reason || 'Véhicule bloqué';
                 blockReasonAlert.style.display = 'block';
             }
+        } else if (vehicleIsInactive) {
+            searchStatus.textContent = '⚠ Véhicule inactif ou QR expiré';
+            searchStatus.className = 'text-warning';
+            setAddFormAvailability(false);
+            if (blockReasonAlert && blockReasonMessage) {
+                blockReasonMessage.textContent = vehicleBlockReason || 'Véhicule inactif ou QR expiré';
+                blockReasonAlert.style.display = 'block';
+            }
         } else if (vehicleHasActiveInsurance) {
             const insurer = data.active_insurance_company ? ` (${data.active_insurance_company})` : '';
             searchStatus.textContent = `✗ Véhicule déjà assuré activement${insurer}`;
@@ -205,7 +224,7 @@ document.getElementById('license_plate').addEventListener('change', async functi
         }
         
         // Focus on insurance expiry field
-        if (!vehicleHasActiveInsurance && !vehicleHasUnpaidFines) {
+        if (!vehicleHasActiveInsurance && !vehicleHasUnpaidFines && !vehicleIsInactive) {
             setTimeout(() => {
                 document.getElementById('insurance_expiry').focus();
             }, 500);
@@ -219,6 +238,8 @@ document.getElementById('license_plate').addEventListener('change', async functi
         loadedVehicle = null;
         vehicleHasActiveInsurance = false;
         vehicleHasUnpaidFines = false;
+        vehicleIsInactive = false;
+        vehicleBlockReason = '';
         setAddFormAvailability(false);
         if (blockReasonAlert) blockReasonAlert.style.display = 'none';
     }
@@ -237,6 +258,8 @@ function clearVehicleFields() {
     loadedVehicle = null;
     vehicleHasActiveInsurance = false;
     vehicleHasUnpaidFines = false;
+    vehicleIsInactive = false;
+    vehicleBlockReason = '';
     setAddFormAvailability(false);
     const blockReasonAlert = document.getElementById('block-reason-alert');
     if (blockReasonAlert) blockReasonAlert.style.display = 'none';
@@ -259,6 +282,11 @@ document.getElementById('vehicle-form').addEventListener('submit', async functio
 
     if (vehicleHasUnpaidFines) {
         alert('Ce véhicule a une amende non payée. Vous devez la régler avant de l\'ajouter à l\'assurance.');
+        return;
+    }
+
+    if (vehicleIsInactive) {
+        alert(vehicleBlockReason || 'Ce véhicule est inactif ou son QR code est expiré.');
         return;
     }
     

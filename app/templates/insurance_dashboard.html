@@ -162,6 +162,10 @@
                         <label class="form-label fw-semibold">
                             <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
                         </label>
+                        <div id="edit-dates-alert" class="alert alert-warning" style="display:none;">
+                            <strong>Attention:</strong>
+                            <span id="edit-dates-alert-text"></span>
+                        </div>
                         <input type="date" id="edit-insurance-expiry" class="form-control" />
                     </div>
                 </div>
@@ -170,7 +174,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="fas fa-times me-1"></i>Annuler
                 </button>
-                <button type="button" class="btn btn-primary" onclick="saveVehicleDates()">
+                <button type="button" id="save-dates-btn" class="btn btn-primary" onclick="saveVehicleDates()">
                     <i class="fas fa-save me-1"></i>Enregistrer
                 </button>
             </div>
