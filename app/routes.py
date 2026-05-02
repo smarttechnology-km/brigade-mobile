@@ -84,6 +84,20 @@ def get_vehicle_block_reason_for_insurance(vehicle):
                 fine_label += f" ({format_kmf_amount(unpaid_fine.amount)} KMF)"
         return f"{fine_label}. Vous devez d'abord la régler avant d'ajouter ou de modifier l'assurance."
 
+    try:
+        qr_expired = vehicle.is_qr_code_expired()
+    except Exception:
+        qr_expired = False
+
+    inactive_reasons = []
+    if vehicle.status and vehicle.status != 'active':
+        inactive_reasons.append(f"statut: {vehicle.status}")
+    if qr_expired:
+        inactive_reasons.append("QR code expiré")
+
+    if inactive_reasons:
+        return "Ce véhicule est inactif (" + " et ".join(inactive_reasons) + "). Vous ne pouvez pas l'ajouter à l'assurance tant qu'il n'est pas réactivé."
+
     now_dt = now_comoros()
     now_dt_naive = now_dt.replace(tzinfo=None) if getattr(now_dt, 'tzinfo', None) else now_dt
     has_insurance_company = bool(vehicle.insurance_company and vehicle.insurance_company.strip())
@@ -1838,6 +1852,15 @@ def update_vehicle(vehicle_id):
     insurance_fields_requested = any(field in data for field in ['insurance_company', 'insurance_expiry'])
     if isinstance(current_user, InsuranceAccount) and insurance_fields_requested and vehicle_has_unpaid_fines(vehicle.id):
         return jsonify({'error': "Ce véhicule a une amende non payée. Vous devez d'abord la régler avant de modifier l'assurance."}), 400
+
+    # Prevent insurance accounts from modifying insurance dates when vehicle is inactive or QR code expired
+    if isinstance(current_user, InsuranceAccount) and insurance_fields_requested:
+        try:
+            qr_expired = vehicle.is_qr_code_expired()
+        except Exception:
+            qr_expired = False
+        if vehicle.status != 'active' or qr_expired:
+            return jsonify({'error': "Impossible de modifier l'assurance: le véhicule est inactif ou le QR code est expiré."}), 400
     
     # Mettre à jour les champs autorisés
     date_fields = ['registration_expiry', 'insurance_expiry']
@@ -2785,6 +2808,13 @@ def assign_vehicle_to_insurance():
     # Check if vehicle is on the same island as insurance company
     if vehicle.owner_island != current_user.insurance.island:
         return jsonify({"error": "Vehicle must be on the same island as your insurance company"}), 400
+
+    try:
+        qr_expired = vehicle.is_qr_code_expired()
+    except Exception:
+        qr_expired = False
+    if vehicle.status != 'active' or qr_expired:
+        return jsonify({"error": "Impossible d'ajouter ce véhicule: il est inactif ou son QR code est expiré."}), 400
     
     # Allow reassignment when existing insurance is expired.
     now_dt = now_comoros()
