@@ -870,9 +870,18 @@ function viewVehicle(trackToken){
 function removeVehicle(id) {
     if (!confirm('Confirmer la suppression de ce véhicule ?')) return;
     fetch(`/api/vehicles/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
+        .then(async r => {
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                throw new Error(data.error || 'Impossible de supprimer le véhicule');
+            }
+            return data;
+        })
         .then(() => loadVehicles())
-        .catch(err => console.error('Erreur suppression:', err));
+        .catch(err => {
+            console.error('Erreur suppression:', err);
+            alert(err.message || 'Impossible de supprimer le véhicule');
+        });
 }
 
 function capitalizeFirst(s){ if(!s) return ''; return s.charAt(0).toUpperCase()+s.slice(1);} 

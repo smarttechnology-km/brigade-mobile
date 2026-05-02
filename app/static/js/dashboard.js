@@ -448,9 +448,10 @@ function deleteVehicleFromDashboard(id){
     if(!id) return;
     if(!confirm('Confirmer la suppression de ce véhicule ?')) return;
     fetch(`/api/vehicles/${id}`, { method: 'DELETE' })
-        .then(resp => {
-            if(!resp.ok) throw new Error('Erreur suppression');
-            return resp.json();
+        .then(async resp => {
+            const data = await resp.json().catch(() => ({}));
+            if(!resp.ok) throw new Error(data.error || 'Impossible de supprimer le véhicule');
+            return data;
         })
         .then(() => {
             // raffraîchir stats et liste
@@ -458,7 +459,7 @@ function deleteVehicleFromDashboard(id){
         })
         .catch(err => {
             console.error('Erreur suppression:', err);
-            alert('Impossible de supprimer le véhicule');
+            alert(err.message || 'Impossible de supprimer le véhicule');
         });
 }
 
