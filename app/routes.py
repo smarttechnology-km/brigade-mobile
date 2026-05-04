@@ -448,7 +448,7 @@ def fines_stats_page():
 
 
 @main_bp.route('/exoneration')
-@roles_required('administrateur','judiciaire')
+@roles_required('administrateur')
 def exoneration_page():
     """Page de gestion des véhicules exonérés"""
     return render_template('exoneration.html')
