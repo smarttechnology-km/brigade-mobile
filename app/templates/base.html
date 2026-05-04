@@ -124,6 +124,7 @@
 
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
             <a class="nav-link text-white {% if request.path.startswith('/payments') or request.path.startswith('/fines/receipt') %}active{% endif %}" href="/payments"><i class="fas fa-credit-card me-2"></i> Paiements</a>
+            <a class="nav-link text-white {% if request.path.startswith('/reports') %}active{% endif %}" href="/reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'policier') %}
