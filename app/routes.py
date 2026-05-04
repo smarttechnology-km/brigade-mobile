@@ -354,7 +354,7 @@ def index():
 
 
 @main_bp.route('/dashboard')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','judiciaire')
 def dashboard():
     """Page du dashboard avec statistiques des véhicules (protected)"""
     query = Vehicle.query
@@ -420,35 +420,35 @@ def add_vehicle_insurance_page():
 
 
 @main_bp.route('/vehicles')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','judiciaire')
 def vehicles_page():
     """Page de gestion des véhicules"""
     return render_template('vehicles.html')
 
 
 @main_bp.route('/reports')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','judiciaire')
 def reports_page():
     """Page de rapports (placeholder)"""
     return render_template('reports.html')
 
 
 @main_bp.route('/fines')
-@roles_required('policier','judiciaire')
+@roles_required('administrateur','policier','judiciaire')
 def fines_page():
     """Page d'administration des amandes/fines"""
     return render_template('fines.html')
 
 
 @main_bp.route('/fines/stats')
-@roles_required('policier','judiciaire')
+@roles_required('judiciaire')
 def fines_stats_page():
     """Page de statistiques des amandes"""
     return render_template('fines_stats.html')
 
 
 @main_bp.route('/exoneration')
-@roles_required('administrateur','policier')
+@roles_required('administrateur','judiciaire')
 def exoneration_page():
     """Page de gestion des véhicules exonérés"""
     return render_template('exoneration.html')
@@ -1452,7 +1452,7 @@ def public_track(token):
 
 @main_bp.route('/payments')
 @main_bp.route('/payments')
-@roles_required('judiciaire')
+@roles_required('judiciaire', 'policier')
 def payments_page():
     """Page de gestion des paiements des amandes"""
     return render_template('payments.html')
@@ -2157,7 +2157,7 @@ def phone_history_page(phone_id):
 
 
 @main_bp.route('/photo-submissions')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','judiciaire')
 def photo_submissions_page():
     """Display photo submissions page"""
     return render_template('photo_submissions.html')
