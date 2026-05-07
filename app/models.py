@@ -88,6 +88,8 @@ class Vehicle(db.Model):
     vignette_expiry = db.Column(db.DateTime)
     qr_code_generated_at = db.Column(db.DateTime, nullable=True)  # When QR code was generated or renewed
     qr_code_expiry = db.Column(db.DateTime, nullable=True)  # When QR code expires (1 year after generation)
+    fiscal_class = db.Column(db.String(10))  # A, B, C, D
+    cv_class = db.Column(db.String(20))  # 0-5 CV, 6-9 CV, 10-12 CV, 12 CV et +
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
@@ -137,6 +139,8 @@ class Vehicle(db.Model):
             'year': self.year,
             'color': self.color,
             'vin': self.vin,
+            'fiscal_class': self.fiscal_class,
+            'cv_class': self.cv_class,
             'registration_expiry': self.registration_expiry.strftime('%Y-%m-%d') if self.registration_expiry else None,
             'insurance_company': self.insurance_company,
             'insurance_expiry': self.insurance_expiry.strftime('%Y-%m-%d') if self.insurance_expiry else None,
@@ -146,6 +150,7 @@ class Vehicle(db.Model):
             'track_token': self.track_token,
             'registration_date': self.registration_date.strftime('%Y-%m-%d'),
             'created_at': self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None,
             'notes': self.notes,
         }
 
@@ -501,4 +506,77 @@ class PhotoSubmission(db.Model):
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
             'reviewed_at_str': self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else None,
             'review_notes': self.review_notes,
+        }
+
+
+class VignetteRate(db.Model):
+    """Vignette pricing rules based on fiscal class, CV class, fuel, and age"""
+    __tablename__ = 'vignette_rates'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    fiscal_class = db.Column(db.String(10), nullable=True)  # A, B, C, D or NULL for all
+    cv_class = db.Column(db.String(20), nullable=True)  # 0-5 CV, 6-9 CV, 10-12 CV, 12 CV et + or NULL for all
+    fuel_type = db.Column(db.String(50), nullable=True)  # Essence, Gazoil, Electric or NULL for all
+    vehicle_age_min = db.Column(db.Integer, nullable=True, default=0)  # Min age in years
+    vehicle_age_max = db.Column(db.Integer, nullable=True)  # Max age in years (NULL for unlimited)
+    price_kmf = db.Column(db.Numeric(10, 2), nullable=False)  # Price in KMF
+    annual_ds = db.Column(db.Numeric(10, 2), nullable=True, default=1000)  # Annual DS (Droits de Stationnement) in KMF
+    description = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+    
+    def __repr__(self):
+        return f'<VignetteRate {self.fiscal_class}/{self.cv_class}/{self.fuel_type}>'
+    
+    def to_dict(self):
+        price = float(self.price_kmf) if self.price_kmf else 0.0
+        annual_ds = float(self.annual_ds) if self.annual_ds else 1000.0
+        return {
+            'id': self.id,
+            'fiscal_class': self.fiscal_class,
+            'cv_class': self.cv_class,
+            'fuel_type': self.fuel_type,
+            'vehicle_age_min': self.vehicle_age_min,
+            'vehicle_age_max': self.vehicle_age_max,
+            'price_kmf': price,
+            'annual_ds': annual_ds,
+            'total_price_kmf': price + annual_ds,
+            'description': self.description,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PenaltyRate(db.Model):
+    """Penalty pricing based on days late for vignette renewal"""
+    __tablename__ = 'penalty_rates'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    days_late_min = db.Column(db.Integer, nullable=False)  # Minimum days late
+    days_late_max = db.Column(db.Integer, nullable=False)  # Maximum days late
+    penalty_per_day = db.Column(db.Numeric(10, 2), nullable=False)  # Penalty amount per day in KMF
+    description = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+    
+    __table_args__ = (
+        db.UniqueConstraint('days_late_min', 'days_late_max', name='unique_penalty_range'),
+    )
+    
+    def __repr__(self):
+        return f'<PenaltyRate {self.days_late_min}-{self.days_late_max} days>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'days_late_min': self.days_late_min,
+            'days_late_max': self.days_late_max,
+            'penalty_per_day': float(self.penalty_per_day),
+            'description': self.description,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

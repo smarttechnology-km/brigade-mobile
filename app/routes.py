@@ -5,7 +5,7 @@ from functools import wraps
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from app import db
-from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine
+from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine, VehicleHistory
 from decimal import Decimal
 import qrcode
 import io
@@ -72,6 +72,163 @@ def get_first_unpaid_fine(vehicle_id):
 
 def format_kmf_amount(amount):
     return int(round(float(amount))) if amount is not None else None
+
+
+def calculate_penalty_amount(days_late):
+    """
+    Calculate penalty amount based on days late using configured penalty rates.
+    
+    Args:
+        days_late (int): Number of days past vignette expiry date
+        
+    Returns:
+        float: Penalty amount in KMF. Returns 0 if no penalty applies or days_late is 0 or negative.
+        
+    Example:
+        - 0-10 days late: 0 KMF (no penalty)
+        - 11-20 days late: (days - 10) × penalty_per_day KMF
+        - 21-30 days late: (days - 20) × penalty_per_day KMF (if configured)
+    """
+    if not days_late or days_late <= 0:
+        return 0.0
+    
+    try:
+        from app.models import PenaltyRate
+        
+        # Find applicable penalty rate for these days
+        penalty_rate = PenaltyRate.query.filter(
+            PenaltyRate.is_active == True,
+            PenaltyRate.days_late_min <= days_late,
+            PenaltyRate.days_late_max >= days_late
+        ).first()
+        
+        if not penalty_rate:
+            # No configured penalty for these days
+            return 0.0
+        
+        # Calculate: (days_late - previous_max_days) × penalty_per_day
+        # Get all penalty rates to find the previous max
+        previous_max = 0
+        prev_rates = PenaltyRate.query.filter(
+            PenaltyRate.is_active == True,
+            PenaltyRate.days_late_max < penalty_rate.days_late_min
+        ).order_by(PenaltyRate.days_late_max.desc()).first()
+        
+        if prev_rates:
+            previous_max = prev_rates.days_late_max
+        
+        # Penalty = (days in this bracket) × penalty_per_day
+        days_in_bracket = days_late - previous_max
+        penalty = float(days_in_bracket) * float(penalty_rate.penalty_per_day)
+        
+        return penalty
+        
+    except Exception as e:
+        # If there's any error, return 0
+        return 0.0
+
+
+def calculate_vignette_price(vehicle):
+    """
+    Calculate vignette price based on vehicle attributes using configured rates.
+    
+    Priority matching based on:
+    1. Fiscal class
+    2. CV class
+    3. Fuel type
+    4. Vehicle age
+    
+    Args:
+        vehicle (Vehicle): Vehicle object with fiscal_class, cv_class, fuel_type, etc.
+        
+    Returns:
+        float: Total price in KMF (vignette base + annual DS). Returns 0.0 if no applicable rate found.
+    """
+    if not vehicle:
+        return 0.0
+    
+    try:
+        from app.models import VignetteRate
+        from datetime import datetime
+        
+        # Get vehicle age
+        vehicle_age = None
+        if vehicle.year:
+            try:
+                current_year = datetime.utcnow().year
+                vehicle_age = current_year - int(vehicle.year)
+            except:
+                vehicle_age = None
+        
+        # Query for applicable rates, ordered by specificity (most specific first)
+        query = VignetteRate.query.filter(VignetteRate.is_active == True)
+        
+        # Match fiscal_class.
+        # If vehicle value is missing, only generic (NULL) rates can apply.
+        if vehicle.fiscal_class:
+            query = query.filter((VignetteRate.fiscal_class == vehicle.fiscal_class) | (VignetteRate.fiscal_class.is_(None)))
+        else:
+            query = query.filter(VignetteRate.fiscal_class.is_(None))
+        
+        # Match cv_class.
+        # If vehicle value is missing, only generic (NULL) rates can apply.
+        if vehicle.cv_class:
+            query = query.filter((VignetteRate.cv_class == vehicle.cv_class) | (VignetteRate.cv_class.is_(None)))
+        else:
+            query = query.filter(VignetteRate.cv_class.is_(None))
+        
+        # Match fuel_type.
+        # If vehicle value is missing, only generic (NULL) rates can apply.
+        if vehicle.fuel_type:
+            query = query.filter((VignetteRate.fuel_type == vehicle.fuel_type) | (VignetteRate.fuel_type.is_(None)))
+        else:
+            query = query.filter(VignetteRate.fuel_type.is_(None))
+        
+        # Match age range.
+        # If age can't be computed, only generic age rates (both NULL) can apply.
+        if vehicle_age is not None:
+            query = query.filter(
+                (VignetteRate.vehicle_age_min.is_(None) | (VignetteRate.vehicle_age_min <= vehicle_age)) &
+                (VignetteRate.vehicle_age_max.is_(None) | (VignetteRate.vehicle_age_max >= vehicle_age))
+            )
+        else:
+            query = query.filter(VignetteRate.vehicle_age_min.is_(None), VignetteRate.vehicle_age_max.is_(None))
+        
+        # Order by specificity (most specific first)
+        # Count non-null criteria for each rate
+        rates = query.all()
+        
+        if not rates:
+            return 0.0
+        
+        # Find the most specific match (most non-null fields)
+        def specificity_score(rate):
+            score = 0
+            if rate.fiscal_class is not None:
+                score += 10
+            if rate.cv_class is not None:
+                score += 10
+            if rate.fuel_type is not None:
+                score += 10
+            if rate.vehicle_age_min is not None or rate.vehicle_age_max is not None:
+                score += 5
+            return score
+        
+        # Sort by specificity (highest first)
+        rates.sort(key=specificity_score, reverse=True)
+        
+        if rates:
+            best_rate = rates[0]
+            base_price = float(best_rate.price_kmf) if best_rate.price_kmf else 0.0
+            annual_ds = float(best_rate.annual_ds) if getattr(best_rate, 'annual_ds', None) else 1000.0
+            return base_price + annual_ds
+        
+        return 0.0
+        
+    except Exception as e:
+        # If there's any error, return 0
+        return 0.0
+
 
 
 def get_vehicle_block_reason_for_insurance(vehicle):
@@ -350,6 +507,10 @@ def index():
     if isinstance(current_user, InsuranceAccount):
         return redirect(url_for('main.insurance_dashboard'))
     
+    # Redirect agent_impot to vignette dashboard
+    if getattr(current_user, 'role', None) == 'agent_impot':
+        return redirect(url_for('main.vignette_dashboard'))
+    
     return render_template('index.html')
 
 
@@ -379,6 +540,20 @@ def insurance_dashboard():
         abort(403)
     
     return render_template('insurance_dashboard.html')
+
+
+@main_bp.route('/vignette-dashboard')
+@roles_required('agent_impot')
+def vignette_dashboard():
+    """Dashboard for tax agents to monitor vehicle vignettes"""
+    return render_template('vignette_dashboard.html')
+
+
+@main_bp.route('/vignette-without')
+@roles_required('agent_impot')
+def vignette_without_dashboard():
+    """Dashboard for tax agents to monitor vehicles without vignette"""
+    return render_template('vignette_without_dashboard.html')
 
 
 @main_bp.route('/insurance-profile')
@@ -696,8 +871,11 @@ def create_vehicle():
     fuel_type = data.get('fuel_type')
     owner_address = data.get('owner_address')
     registration_expiry = data.get('registration_expiry')
+    vignette_expiry = data.get('vignette_expiry')
     insurance_company = data.get('insurance_company')
     insurance_expiry = data.get('insurance_expiry')
+    fiscal_class = data.get('fiscal_class')
+    cv_class = data.get('cv_class')
 
     if not license_plate or not owner_name or not vehicle_type:
         return jsonify({'error': 'license_plate, owner_name et vehicle_type requis'}), 400
@@ -721,13 +899,25 @@ def create_vehicle():
         year=year,
         vin=vin,
         owner_address=owner_address,
-        insurance_company=insurance_company
+        insurance_company=insurance_company,
+        fiscal_class=fiscal_class,
+        cv_class=cv_class
     )
+    # Use vignette_expiry as the source of truth for vignette management.
+    # Keep compatibility with older clients that may still send registration_expiry.
+    if not vignette_expiry and registration_expiry:
+        vignette_expiry = registration_expiry
     # parse registration_expiry if provided
     if registration_expiry:
         try:
             from datetime import datetime
             vehicle.registration_expiry = datetime.fromisoformat(registration_expiry)
+        except Exception:
+            pass
+    if vignette_expiry:
+        try:
+            from datetime import datetime
+            vehicle.vignette_expiry = datetime.fromisoformat(vignette_expiry)
         except Exception:
             pass
     # parse insurance_expiry if provided
@@ -1090,10 +1280,27 @@ def fine_type_detail(type_id):
 
 
 # Mark a fine as paid and create a receipt + history entry
+def _apply_fine_payment(fine, paid_by, payment_method=''):
+    fine.paid = True
+    fine.paid_at = now_comoros()
+    fine.paid_by = paid_by
+    fine.receipt_number = f"REC-{fine.id}-{int(fine.paid_at.timestamp())}"
+    db.session.add(fine)
+
+    hist = VehicleHistory(
+        vehicle_id=fine.vehicle_id,
+        action=f"Amande payée ({fine.receipt_number}) - {format_kmf_amount(fine.amount)} KMF",
+        officer=paid_by,
+        notes=(payment_method or '')
+    )
+    db.session.add(hist)
+    return hist
+
+
 @vehicle_bp.route('/fines/<int:fine_id>/pay', methods=['POST'])
 @login_required
 def pay_fine(fine_id):
-    from app.models import Fine, VehicleHistory
+    from app.models import Fine
     fine = Fine.query.get_or_404(fine_id)
     if fine.paid:
         return jsonify({'error': 'Amande déjà payée'}), 400
@@ -1103,17 +1310,7 @@ def pay_fine(fine_id):
     paid_by = data.get('paid_by') or current_user.username if current_user and current_user.is_authenticated else None
 
     # mark paid
-    from datetime import datetime
-    fine.paid = True
-    fine.paid_at = now_comoros()
-    fine.paid_by = paid_by  # Store the agent who marked as paid
-    # generate a simple receipt number
-    fine.receipt_number = f"REC-{fine.id}-{int(fine.paid_at.timestamp())}"
-    db.session.add(fine)
-
-    # add history entry
-    hist = VehicleHistory(vehicle_id=fine.vehicle_id, action=f"Amande payée ({fine.receipt_number}) - {format_kmf_amount(fine.amount)} KMF", officer=paid_by, notes=(payment_method or ''))
-    db.session.add(hist)
+    hist = _apply_fine_payment(fine, paid_by, payment_method)
     db.session.commit()
     
     # Log action in user history
@@ -1483,7 +1680,31 @@ def users_page():
 @main_bp.route('/api/users/list')
 @roles_required('administrateur')
 def api_users_list():
-    users = User.query.order_by(User.created_at.desc()).all()
+    # Determine which users to show based on current user's role
+    current_role = getattr(current_user, 'role', None)
+    current_country = getattr(current_user, 'country', None)
+    
+    # Super admin (administrateur, no country restriction) → sees ALL users (all roles)
+    # Admin with country → sees judiciaire + policier + agent_impot
+    # Judiciaire → sees policier + agent_impot
+    # Agent_impot → sees other agent_impot only (if needed)
+    
+    if current_role == 'administrateur':
+        if not current_country:
+            # Super admin: show all users (all roles)
+            target_roles = ['administrateur', 'judiciaire', 'policier', 'agent_impot']
+        else:
+            # Regular admin: show judiciaire + policier + agent_impot users
+            target_roles = ['judiciaire', 'policier', 'agent_impot']
+    elif current_role == 'judiciaire':
+        # Judiciaire: show policier + agent_impot users
+        target_roles = ['policier', 'agent_impot']
+    else:
+        # Other roles cannot access this page (already filtered by roles_required)
+        return jsonify([])
+    
+    # Query users with target roles
+    users = User.query.filter(User.role.in_(target_roles)).order_by(User.created_at.desc()).all()
     out = []
     for u in users:
         out.append({
@@ -1845,7 +2066,7 @@ def update_vehicle(vehicle_id):
         'license_plate', 'owner_name', 'owner_phone', 'owner_island',
         'vehicle_type', 'fuel_type', 'usage_type', 'color', 'status', 'make', 'model',
         'year', 'vin', 'owner_address', 'registration_expiry',
-        'insurance_company', 'insurance_expiry', 'notes'
+        'insurance_company', 'insurance_expiry', 'vignette_expiry', 'fiscal_class', 'cv_class', 'notes'
     ]
     old_values = {field: getattr(vehicle, field) for field in tracked_fields}
 
@@ -1861,10 +2082,20 @@ def update_vehicle(vehicle_id):
             qr_expired = False
         if vehicle.status != 'active' or qr_expired:
             return jsonify({'error': "Impossible de modifier l'assurance: le véhicule est inactif ou le QR code est expiré."}), 400
+
+    # Tax agents can renew vignette only when vehicle QR code is active.
+    vignette_update_requested = 'vignette_expiry' in data
+    if getattr(current_user, 'role', None) == 'agent_impot' and vignette_update_requested:
+        try:
+            qr_expired = vehicle.is_qr_code_expired()
+        except Exception:
+            qr_expired = False
+        if qr_expired:
+            return jsonify({'error': 'Impossible de renouveler la vignette: le QR code du véhicule est expiré. Activez d\'abord le QR code.'}), 400
     
     # Mettre à jour les champs autorisés
-    date_fields = ['registration_expiry', 'insurance_expiry']
-    for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'fuel_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry', 'notes']:
+    date_fields = ['registration_expiry', 'insurance_expiry', 'vignette_expiry']
+    for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'fuel_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry', 'vignette_expiry', 'fiscal_class', 'cv_class', 'notes']:
         if field in data and data.get(field) is not None:
             # Handle empty strings for date fields - set to None instead
             if field in date_fields and data.get(field) == '':
@@ -1884,6 +2115,29 @@ def update_vehicle(vehicle_id):
             vehicle.insurance_expiry = datetime.fromisoformat(data.get('insurance_expiry'))
         except Exception:
             pass
+    # parse vignette_expiry if present
+    if 'vignette_expiry' in data and data.get('vignette_expiry'):
+        try:
+            vehicle.vignette_expiry = datetime.fromisoformat(data.get('vignette_expiry'))
+        except Exception:
+            pass
+
+    auto_paid_fines = []
+    if getattr(current_user, 'role', None) == 'agent_impot' and vignette_update_requested:
+        old_vignette_expiry = old_values.get('vignette_expiry')
+        old_vignette_expiry_cmp = old_vignette_expiry.replace(tzinfo=None) if isinstance(old_vignette_expiry, datetime) else None
+        now_cmp = now_comoros().replace(tzinfo=None)
+        was_vignette_expired = bool(old_vignette_expiry_cmp and old_vignette_expiry_cmp < now_cmp)
+        if was_vignette_expired:
+            payer_name = current_user.username if (current_user and getattr(current_user, 'is_authenticated', False)) else 'agent_impot'
+            unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).order_by(Fine.issued_at.asc()).all()
+            for fine in unpaid_fines:
+                _apply_fine_payment(
+                    fine,
+                    payer_name,
+                    'Paiement automatique lors du renouvellement de vignette par agent d\'impôt'
+                )
+                auto_paid_fines.append(fine)
     
     def _normalize_for_compare(value):
         if isinstance(value, datetime):
@@ -1898,7 +2152,7 @@ def update_vehicle(vehicle_id):
     def _display_value(field_name, value):
         if value is None or value == '':
             return '—'
-        if field_name in ['registration_expiry', 'insurance_expiry'] and isinstance(value, datetime):
+        if field_name in ['registration_expiry', 'insurance_expiry', 'vignette_expiry'] and isinstance(value, datetime):
             return value.strftime('%d/%m/%Y')
         if field_name == 'status':
             status_labels = {'active': 'Actif', 'inactive': 'Inactif', 'suspended': 'Suspendu'}
@@ -1923,6 +2177,7 @@ def update_vehicle(vehicle_id):
         'registration_expiry': 'Expiration vignette',
         'insurance_company': 'Compagnie d\'assurance',
         'insurance_expiry': 'Expiration assurance',
+        'vignette_expiry': 'Expiration vignette automobile',
         'notes': 'Notes'
     }
 
@@ -1990,7 +2245,7 @@ def update_vehicle(vehicle_id):
             user_history = UserHistory(
                 user_id=current_user.id,
                 action='Véhicule modifié',
-                details=f'Véhicule {vehicle.license_plate}: {" | ".join(changes[:3])}' + (f' + {len(changes)-3} autres' if len(changes) > 3 else '')
+                details=f'Véhicule {vehicle.license_plate}: {" | ".join(changes[:3])}' + (f' + {len(changes)-3} autres' if len(changes) > 3 else '') + (f' | {len(auto_paid_fines)} amende(s) payée(s) automatiquement' if auto_paid_fines else '')
             )
             db.session.add(user_history)
             db.session.commit()
@@ -2516,6 +2771,454 @@ def get_insurance_vehicles():
 
 
 
+@vehicle_bp.route('/vignette-vehicles', methods=['GET'])
+@login_required
+@roles_required('agent_impot')
+def get_vignette_vehicles():
+    """Get vehicles with vignettes for tax agents"""
+    # Get country/region filter from current user
+    user_country = getattr(current_user, 'country', None)
+    
+    # Base query: vehicles with vignette_expiry set (not null)
+    query = Vehicle.query.filter(Vehicle.vignette_expiry.isnot(None))
+    
+    # Filter by user's country if set (regional agent)
+    # Super admin agents without country see all vignettes
+    if user_country:
+        query = query.filter(Vehicle.owner_island == user_country)
+    
+    vehicles = query.order_by(Vehicle.license_plate).all()
+    
+    vehicles_payload = []
+    now = datetime.utcnow()
+    
+    for vehicle in vehicles:
+        vehicle_data = vehicle.to_dict()
+        
+        # Calculate vignette status
+        vignette_expiry = vehicle.vignette_expiry
+        if vignette_expiry:
+            # Handle both datetime and string formats
+            if isinstance(vignette_expiry, str):
+                try:
+                    vignette_expiry = datetime.fromisoformat(vignette_expiry)
+                except:
+                    vignette_expiry = None
+            
+            if vignette_expiry:
+                if vignette_expiry < now:
+                    vignette_status = 'expired'
+                elif vignette_expiry < now + timedelta(days=30):
+                    vignette_status = 'expiring'
+                else:
+                    vignette_status = 'active'
+            else:
+                vignette_status = 'no_vignette'
+        else:
+            vignette_status = 'no_vignette'
+        
+        vehicle_data['vignette_status'] = vignette_status
+        
+        # Calculate vignette price based on vehicle attributes
+        vignette_price = calculate_vignette_price(vehicle)
+        vehicle_data['vignette_price'] = vignette_price
+        
+        # Calculate penalty amount based on days late
+        if vignette_expiry and vignette_expiry < now:
+            days_late = (now - vignette_expiry).days
+            penalty_amount = calculate_penalty_amount(days_late)
+            vehicle_data['penalty_amount'] = penalty_amount
+        else:
+            vehicle_data['penalty_amount'] = 0.0
+        
+        # Add unpaid fines amount
+        unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
+        total_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
+        vehicle_data['unpaid_fines_amount'] = total_fines_amount
+        vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
+        
+        vehicles_payload.append(vehicle_data)
+    
+    return jsonify({
+        "vehicles": vehicles_payload,
+        "total": len(vehicles_payload)
+    })
+
+
+@vehicle_bp.route('/vignette-vehicles-without', methods=['GET'])
+@login_required
+@roles_required('agent_impot')
+def get_vignette_vehicles_without():
+    """Get vehicles without vignette for tax agents"""
+    user_country = getattr(current_user, 'country', None)
+
+    query = Vehicle.query.filter(Vehicle.vignette_expiry.is_(None))
+
+    if user_country:
+        query = query.filter(Vehicle.owner_island == user_country)
+
+    vehicles = query.order_by(Vehicle.license_plate).all()
+    vehicles_payload = []
+    
+    for vehicle in vehicles:
+        vehicle_data = vehicle.to_dict()
+        
+        # Calculate vignette price based on vehicle attributes
+        vignette_price = calculate_vignette_price(vehicle)
+        vehicle_data['vignette_price'] = vignette_price
+        
+        # Add unpaid fines amount
+        unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
+        total_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
+        vehicle_data['unpaid_fines_amount'] = total_fines_amount
+        vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
+        
+        vehicles_payload.append(vehicle_data)
+
+    return jsonify({
+        "vehicles": vehicles_payload,
+        "total": len(vehicles_payload)
+    })
+
+
+@vehicle_bp.route('/vignette-finance-stats', methods=['GET'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def get_vignette_finance_stats():
+    """Get finance statistics for vignettes"""
+    # Get date range from query parameters
+    start_date_str = request.args.get('start_date', '')
+    end_date_str = request.args.get('end_date', '')
+    
+    now = datetime.utcnow()
+    
+    # Default to last 30 days if no dates provided
+    if not start_date_str:
+        start_date = now - timedelta(days=30)
+    else:
+        try:
+            start_date = datetime.fromisoformat(start_date_str)
+        except:
+            start_date = now - timedelta(days=30)
+    
+    if not end_date_str:
+        end_date = now
+    else:
+        try:
+            end_date = datetime.fromisoformat(end_date_str)
+        except:
+            end_date = now
+    
+    # Adjust end_date to include the entire day
+    end_date = end_date.replace(hour=23, minute=59, second=59)
+    
+    # Get user country filter
+    user_country = getattr(current_user, 'country', None)
+    
+    # Count total active vignettes
+    query_active = Vehicle.query.filter(Vehicle.vignette_expiry.isnot(None))
+    if user_country:
+        query_active = query_active.filter(Vehicle.owner_island == user_country)
+    total_active_vignettes = query_active.count()
+    
+    # Count recently updated vignettes (renewed)
+    query_renewed = Vehicle.query.filter(
+        Vehicle.vignette_expiry.isnot(None),
+        Vehicle.updated_at >= start_date,
+        Vehicle.updated_at <= end_date
+    )
+    if user_country:
+        query_renewed = query_renewed.filter(Vehicle.owner_island == user_country)
+    renewed_count = query_renewed.count()
+    
+    # Get all vehicles with vignettes in date range to calculate revenue
+    query_vehicles = Vehicle.query.filter(Vehicle.vignette_expiry.isnot(None))
+    if user_country:
+        query_vehicles = query_vehicles.filter(Vehicle.owner_island == user_country)
+    vehicles = query_vehicles.all()
+    
+    # Calculate total penalties in date range
+    total_penalties = 0.0
+    total_vignette_revenue = 0.0
+    
+    for vehicle in vehicles:
+        vignette_expiry = vehicle.vignette_expiry
+        paid_in_range = vehicle.updated_at >= start_date and vehicle.updated_at <= end_date
+
+        # Only count financial amounts for records in the selected period
+        if paid_in_range:
+            vignette_price = calculate_vignette_price(vehicle)
+            total_vignette_revenue += vignette_price
+
+            # Penalty applies only when this renewal/payment is in the filtered range
+            if vignette_expiry and vignette_expiry < now:
+                days_late = (now - vignette_expiry).days
+                penalty = calculate_penalty_amount(days_late)
+                total_penalties += penalty
+    
+    # Get total unpaid fines in date range
+    fines_query = Fine.query.filter(
+        Fine.paid == False,
+        Fine.issued_at >= start_date,
+        Fine.issued_at <= end_date
+    )
+    if user_country:
+        # Join with Vehicle to filter by island
+        fines_query = fines_query.join(Vehicle).filter(Vehicle.owner_island == user_country)
+    
+    total_fines = sum(float(f.amount) if f.amount else 0 for f in fines_query.all())
+    
+    # Calculate total revenue
+    total_revenue = total_vignette_revenue + total_penalties + total_fines
+    
+    return jsonify({
+        'total_active_vignettes': total_active_vignettes,
+        'renewed_vignettes': renewed_count,
+        'total_penalties': round(total_penalties, 2),
+        'total_vignette_revenue': round(total_vignette_revenue, 2),
+        'total_fines': round(total_fines, 2),
+        'total_revenue': round(total_revenue, 2),
+        'date_range': {
+            'start': start_date.isoformat(),
+            'end': end_date.isoformat()
+        }
+    })
+
+
+@vehicle_bp.route('/vignette-finance-vehicles', methods=['GET'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def get_vignette_finance_vehicles():
+    """Get vehicles with finance details filtered by date range"""
+    # Get date range from query parameters
+    start_date_str = request.args.get('start_date', '')
+    end_date_str = request.args.get('end_date', '')
+    
+    now = datetime.utcnow()
+    
+    # Default to last 30 days if no dates provided
+    if not start_date_str:
+        start_date = now - timedelta(days=30)
+    else:
+        try:
+            start_date = datetime.fromisoformat(start_date_str)
+        except:
+            start_date = now - timedelta(days=30)
+    
+    if not end_date_str:
+        end_date = now
+    else:
+        try:
+            end_date = datetime.fromisoformat(end_date_str)
+        except:
+            end_date = now
+    
+    # Adjust end_date to include the entire day
+    end_date = end_date.replace(hour=23, minute=59, second=59)
+    
+    # Get user country filter
+    user_country = getattr(current_user, 'country', None)
+    
+    # Get all vehicles with vignettes
+    query = Vehicle.query.filter(Vehicle.vignette_expiry.isnot(None))
+    if user_country:
+        query = query.filter(Vehicle.owner_island == user_country)
+    
+    vehicles = query.all()
+    
+    vehicles_data = []
+    
+    for vehicle in vehicles:
+        paid_in_range = vehicle.updated_at >= start_date and vehicle.updated_at <= end_date
+
+        # Calculate vignette price only for renewals/payments in selected period
+        vignette_price = calculate_vignette_price(vehicle) if paid_in_range else 0.0
+
+        # Calculate penalty only for renewals/payments in selected period
+        penalty_amount = 0.0
+        if paid_in_range and vehicle.vignette_expiry and vehicle.vignette_expiry < now:
+            days_late = (now - vehicle.vignette_expiry).days
+            penalty_amount = calculate_penalty_amount(days_late)
+        
+        # Get unpaid fines for this vehicle
+        fines = Fine.query.filter(
+            Fine.vehicle_id == vehicle.id,
+            Fine.paid == False,
+            Fine.issued_at >= start_date,
+            Fine.issued_at <= end_date
+        ).all()
+        fines_amount = sum(float(f.amount) if f.amount else 0 for f in fines)
+        
+        # Get payment date (use updated_at as payment date for renewed vignettes)
+        payment_date = vehicle.updated_at.strftime('%Y-%m-%d') if paid_in_range else None
+        
+        # Calculate total
+        total = vignette_price + penalty_amount + fines_amount
+        
+        # Only include if there was a payment in the date range or has charges
+        if payment_date or fines_amount > 0:
+            vehicles_data.append({
+                'license_plate': vehicle.license_plate,
+                'payment_date': payment_date or '-',
+                'vignette_price': round(vignette_price, 2),
+                'penalty_amount': round(penalty_amount, 2),
+                'fines_amount': round(fines_amount, 2),
+                'total': round(total, 2),
+                'updated_at': vehicle.updated_at.strftime('%Y-%m-%d %H:%M:%S') if vehicle.updated_at else None
+            })
+    
+    return jsonify(vehicles_data)
+
+
+@vehicle_bp.route('/vignette-daily-report', methods=['GET'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def get_vignette_daily_report():
+    """Get daily report for vignettes with printable format"""
+    # Get date from query parameter
+    date_str = request.args.get('date', '')
+    
+    if not date_str:
+        return jsonify({'error': 'Date parameter required'}), 400
+    
+    try:
+        report_date = datetime.fromisoformat(date_str)
+    except:
+        return jsonify({'error': 'Invalid date format'}), 400
+    
+    # Set date range for the entire day
+    start_date = report_date.replace(hour=0, minute=0, second=0)
+    end_date = report_date.replace(hour=23, minute=59, second=59)
+    
+    # Get user country filter
+    user_country = getattr(current_user, 'country', None)
+    
+    # Get all vehicles with vignettes
+    query = Vehicle.query.filter(Vehicle.vignette_expiry.isnot(None))
+    if user_country:
+        query = query.filter(Vehicle.owner_island == user_country)
+    
+    vehicles = query.all()
+    
+    vehicles_data = []
+    total_paid = 0
+    total_revenue = 0.0
+    total_penalties = 0.0
+    total_fines = 0.0
+    
+    now = datetime.utcnow()
+    
+    for vehicle in vehicles:
+        paid_in_range = vehicle.updated_at >= start_date and vehicle.updated_at <= end_date
+
+        # Keep the same finance rule: count vignette/penalty only for payments in selected period
+        vignette_price = calculate_vignette_price(vehicle) if paid_in_range else 0.0
+
+        penalty_amount = 0.0
+        if paid_in_range and vehicle.vignette_expiry and vehicle.vignette_expiry < now:
+            days_late = (now - vehicle.vignette_expiry).days
+            penalty_amount = calculate_penalty_amount(days_late)
+        
+        # Get unpaid fines for this vehicle in the date range
+        fines = Fine.query.filter(
+            Fine.vehicle_id == vehicle.id,
+            Fine.paid == False,
+            Fine.issued_at >= start_date,
+            Fine.issued_at <= end_date
+        ).all()
+        fines_amount = sum(float(f.amount) if f.amount else 0 for f in fines)
+        
+        # Get payment date (use updated_at as payment date for renewed vignettes)
+        payment_date = vehicle.updated_at.strftime('%Y-%m-%d') if paid_in_range else None
+        
+        # Calculate total
+        total = vignette_price + penalty_amount + fines_amount
+        
+        # Only include if there was a payment in the date range or has charges
+        if payment_date or fines_amount > 0:
+            vehicles_data.append({
+                'license_plate': vehicle.license_plate,
+                'payment_date': payment_date or '-',
+                'vignette_price': round(vignette_price, 2),
+                'penalty_amount': round(penalty_amount, 2),
+                'fines_amount': round(fines_amount, 2),
+                'total': round(total, 2),
+                'updated_at': vehicle.updated_at.strftime('%Y-%m-%d %H:%M:%S') if vehicle.updated_at else None
+            })
+            
+            total_paid += 1
+            total_revenue += vignette_price
+            total_penalties += penalty_amount
+            total_fines += fines_amount
+    
+    return jsonify({
+        'date': date_str,
+        'total_paid': total_paid,
+        'total_revenue': round(total_revenue, 2),
+        'total_penalties': round(total_penalties, 2),
+        'total_fines': round(total_fines, 2),
+        'vehicles': vehicles_data
+    })
+
+
+@login_required
+@roles_required('administrateur')
+def init_vignettes():
+    """Initialize vignette expiry dates for vehicles without them"""
+    # List of license plates to initialize
+    license_plates = ['106CA73', '361AA73', '097AC73', '514AC73', '516AC73', '929BA73']
+    
+    # Get all vehicles matching these plates
+    vehicles = Vehicle.query.filter(Vehicle.license_plate.in_(license_plates)).all()
+    
+    updated = 0
+    skipped = 0
+    results = []
+    
+    # Set different expiry dates based on status (some expired, some active, some expiring)
+    from datetime import datetime, timedelta
+    now = datetime.utcnow()
+    
+    # Mix of expired, expiring, and active dates
+    expiry_dates = [
+        now - timedelta(days=60),    # 106CA73 - expired 60 days ago
+        now - timedelta(days=10),    # 361AA73 - expired 10 days ago
+        now + timedelta(days=15),    # 097AC73 - expiring in 15 days
+        now + timedelta(days=25),    # 514AC73 - expiring in 25 days
+        now + timedelta(days=120),   # 516AC73 - active (4 months)
+        now + timedelta(days=200),   # 929BA73 - active (6+ months)
+    ]
+    
+    for i, vehicle in enumerate(vehicles):
+        if vehicle.vignette_expiry is None:
+            vehicle.vignette_expiry = expiry_dates[i]
+            db.session.add(vehicle)
+            updated += 1
+            results.append({
+                'license_plate': vehicle.license_plate,
+                'vignette_expiry': vehicle.vignette_expiry.strftime('%Y-%m-%d'),
+                'status': 'updated'
+            })
+        else:
+            skipped += 1
+            results.append({
+                'license_plate': vehicle.license_plate,
+                'vignette_expiry': vehicle.vignette_expiry.strftime('%Y-%m-%d'),
+                'status': 'already_has_vignette'
+            })
+    
+    # Save changes
+    if updated > 0:
+        db.session.commit()
+    
+    return jsonify({
+        "updated": updated,
+        "skipped": skipped,
+        "total": len(vehicles),
+        "results": results
+    })
+
+
 @vehicle_bp.route('/search-by-license-plate', methods=['GET'])
 @login_required
 def search_vehicle_by_license_plate():
@@ -2934,6 +3637,221 @@ def delete_vehicle_assignment(assignment_id):
     db.session.commit()
     
     return jsonify({"message": "Assignment deleted successfully"})
+
+
+# ============= VIGNETTE SETTINGS ROUTES =============
+
+@main_bp.route('/vignette-settings')
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def vignette_settings():
+    """Page for managing vignette rates and penalties (tax agents only)"""
+    return render_template('vignette_settings.html')
+
+
+@main_bp.route('/vignette-finance')
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def vignette_finance():
+    """Finance page showing vignette statistics"""
+    return render_template('vignette_finance.html')
+
+
+@main_bp.route('/vignette-daily-report')
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def vignette_daily_report():
+    """Daily report page for printable vignette report"""
+    return render_template('vignette_daily_report.html')
+
+
+@main_bp.route('/vignette-daily-report-print')
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def vignette_daily_report_print():
+    """Clean print version of daily report without base.html"""
+    return render_template('vignette_daily_report_print.html')
+
+
+@vehicle_bp.route('/vehicle-options', methods=['GET'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def get_vehicle_options():
+    """Get available vehicle types, usage types, and fuel types"""
+    # Get unique values from vehicles table
+    vehicle_types = db.session.query(Vehicle.vehicle_type).distinct().filter(
+        Vehicle.vehicle_type.isnot(None)
+    ).order_by(Vehicle.vehicle_type).all()
+    
+    usage_types = db.session.query(Vehicle.usage_type).distinct().filter(
+        Vehicle.usage_type.isnot(None)
+    ).order_by(Vehicle.usage_type).all()
+    
+    fuel_types = db.session.query(Vehicle.fuel_type).distinct().filter(
+        Vehicle.fuel_type.isnot(None)
+    ).order_by(Vehicle.fuel_type).all()
+    
+    return jsonify({
+        'vehicle_types': [v[0] for v in vehicle_types],
+        'usage_types': [u[0] for u in usage_types],
+        'fuel_types': [f[0] for f in fuel_types]
+    })
+
+
+@vehicle_bp.route('/vignette-rates', methods=['GET'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def get_vignette_rates():
+    """Get all vignette rates"""
+    from app.models import VignetteRate
+    rates = VignetteRate.query.filter_by(is_active=True).all()
+    return jsonify({
+        'rates': [r.to_dict() for r in rates],
+        'total': len(rates)
+    })
+
+
+@vehicle_bp.route('/vignette-rates', methods=['POST'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def create_vignette_rate():
+    """Create a new vignette rate"""
+    from app.models import VignetteRate
+    data = request.get_json() or {}
+    
+    rate = VignetteRate(
+        fiscal_class=data.get('fiscal_class'),
+        cv_class=data.get('cv_class'),
+        fuel_type=data.get('fuel_type'),
+        vehicle_age_min=data.get('vehicle_age_min', 0),
+        vehicle_age_max=data.get('vehicle_age_max'),
+        price_kmf=data.get('price_kmf'),
+        annual_ds=data.get('annual_ds', 1000),
+        description=data.get('description'),
+        is_active=True
+    )
+    db.session.add(rate)
+    db.session.commit()
+    
+    return jsonify(rate.to_dict()), 201
+
+
+@vehicle_bp.route('/vignette-rates/<int:rate_id>', methods=['PUT'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def update_vignette_rate(rate_id):
+    """Update a vignette rate"""
+    from app.models import VignetteRate
+    rate = VignetteRate.query.get_or_404(rate_id)
+    data = request.get_json() or {}
+    
+    if 'fiscal_class' in data:
+        rate.fiscal_class = data.get('fiscal_class')
+    if 'cv_class' in data:
+        rate.cv_class = data.get('cv_class')
+    if 'fuel_type' in data:
+        rate.fuel_type = data.get('fuel_type')
+    if 'vehicle_age_min' in data:
+        rate.vehicle_age_min = data.get('vehicle_age_min')
+    if 'vehicle_age_max' in data:
+        rate.vehicle_age_max = data.get('vehicle_age_max')
+    if 'price_kmf' in data:
+        rate.price_kmf = data.get('price_kmf')
+    if 'annual_ds' in data:
+        rate.annual_ds = data.get('annual_ds')
+    if 'description' in data:
+        rate.description = data.get('description')
+    if 'is_active' in data:
+        rate.is_active = data.get('is_active')
+    
+    db.session.commit()
+    return jsonify(rate.to_dict())
+
+
+@vehicle_bp.route('/vignette-rates/<int:rate_id>', methods=['DELETE'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def delete_vignette_rate(rate_id):
+    """Delete (deactivate) a vignette rate"""
+    from app.models import VignetteRate
+    rate = VignetteRate.query.get_or_404(rate_id)
+    rate.is_active = False
+    db.session.commit()
+    
+    return jsonify({"message": "Rate deleted successfully"})
+
+
+# Penalty Rates
+
+@vehicle_bp.route('/penalty-rates', methods=['GET'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def get_penalty_rates():
+    """Get all penalty rates"""
+    from app.models import PenaltyRate
+    rates = PenaltyRate.query.filter_by(is_active=True).order_by(PenaltyRate.days_late_min).all()
+    return jsonify({
+        'rates': [r.to_dict() for r in rates],
+        'total': len(rates)
+    })
+
+
+@vehicle_bp.route('/penalty-rates', methods=['POST'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def create_penalty_rate():
+    """Create a new penalty rate"""
+    from app.models import PenaltyRate
+    data = request.get_json() or {}
+    
+    rate = PenaltyRate(
+        days_late_min=data.get('days_late_min'),
+        days_late_max=data.get('days_late_max'),
+        penalty_per_day=data.get('penalty_per_day'),
+        description=data.get('description'),
+        is_active=True
+    )
+    db.session.add(rate)
+    db.session.commit()
+    
+    return jsonify(rate.to_dict()), 201
+
+
+@vehicle_bp.route('/penalty-rates/<int:rate_id>', methods=['PUT'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def update_penalty_rate(rate_id):
+    """Update a penalty rate"""
+    from app.models import PenaltyRate
+    rate = PenaltyRate.query.get_or_404(rate_id)
+    data = request.get_json() or {}
+    
+    if 'days_late_min' in data:
+        rate.days_late_min = data.get('days_late_min')
+    if 'days_late_max' in data:
+        rate.days_late_max = data.get('days_late_max')
+    if 'penalty_per_day' in data:
+        rate.penalty_per_day = data.get('penalty_per_day')
+    if 'description' in data:
+        rate.description = data.get('description')
+    if 'is_active' in data:
+        rate.is_active = data.get('is_active')
+    
+    db.session.commit()
+    return jsonify(rate.to_dict())
+
+
+@vehicle_bp.route('/penalty-rates/<int:rate_id>', methods=['DELETE'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def delete_penalty_rate(rate_id):
+    """Delete (deactivate) a penalty rate"""
+    from app.models import PenaltyRate
+    rate = PenaltyRate.query.get_or_404(rate_id)
+    rate.is_active = False
+    db.session.commit()
+    
+    return jsonify({"message": "Penalty rate deleted successfully"})
 
 
 
