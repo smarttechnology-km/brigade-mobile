@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapport Journalier - Vignettes</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+            line-height: 1.6;
+            background: white;
+            padding: 20px;
+        }
+        
+        @media print {
+            body {
+                padding: 0;
+                margin: 0;
+            }
+        }
+        
+        .print-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+        }
+        
+        /* Header Professionnel */
+        .report-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .report-header h1 {
+            margin: 0;
+            color: #667eea;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .report-header p {
+            margin: 4px 0 0 0;
+            color: #999;
+            font-size: 11px;
+        }
+        
+        /* Info Section */
+        .report-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-size: 11px;
+        }
+        
+        .report-info p {
+            margin: 0;
+        }
+        
+        .report-info p strong {
+            font-weight: bold;
+        }
+        
+        /* KPIs */
+        .kpis-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .kpi-box {
+            border: 2px solid #e8f0f7;
+            border-radius: 8px;
+            padding: 12px;
+            background: #f8fafc;
+        }
+        
+        .kpi-label {
+            margin: 0;
+            color: #666;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        .kpi-value {
+            margin: 5px 0 0 0;
+            color: #667eea;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        /* Table */
+        .report-section h3 {
+            margin: 0 0 12px 0;
+            color: #333;
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-bottom: 20px;
+        }
+        
+        thead tr {
+            background: #667eea;
+            color: white;
+        }
+        
+        th, td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        
+        th {
+            font-weight: bold;
+            background: #667eea;
+            color: white;
+        }
+        
+        tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        .text-right {
+            text-align: right;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+        
+        /* Footer */
+        .report-footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 2px solid #667eea;
+            text-align: center;
+            font-size: 10px;
+            color: #999;
+        }
+        
+        /* Print Button */
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        
+        @media print {
+            .print-button {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-button" onclick="window.print()"><i class="fas fa-print me-2"></i>Imprimer</button>
+    
+    <div class="print-container">
+        <!-- Header Professionnel -->
+        <div class="report-header">
+            <h1>RAPPORT JOURNALIER DE VIGNETTES</h1>
+            <p>Direction Générale des Finances - Service des Vignettes Automobiles</p>
+            <p>Union des Comores</p>
+        </div>
+
+        <!-- Infos Rapport -->
+        <div class="report-info">
+            <div>
+                <p><strong>Date du Rapport :</strong> <span id="report-date-display">-</span></p>
+                <p><strong>Généré le :</strong> <span id="report-generated-date">-</span></p>
+            </div>
+            <div style="text-align: right;">
+                <p><strong>Période :</strong> Jour</p>
+                <p><strong>Statut :</strong> <span style="color: green; font-weight: bold;">✓ Validé</span></p>
+            </div>
+        </div>
+
+        <!-- KPIs Section -->
+        <div class="kpis-grid">
+            <div class="kpi-box">
+                <p class="kpi-label">VIGNETTES PAYÉES</p>
+                <p class="kpi-value" id="kpi-paid">-</p>
+            </div>
+            <div class="kpi-box">
+                <p class="kpi-label">REVENUS VIGNETTES</p>
+                <p class="kpi-value" id="kpi-revenue">-</p>
+            </div>
+            <div class="kpi-box">
+                <p class="kpi-label">PÉNALITÉS</p>
+                <p class="kpi-value" id="kpi-penalties">-</p>
+            </div>
+            <div class="kpi-box">
+                <p class="kpi-label">AMENDES IMPAYÉES</p>
+                <p class="kpi-value" id="kpi-fines">-</p>
+            </div>
+        </div>
+
+        <!-- Tableau Détails -->
+        <div class="report-section">
+            <h3>DÉTAILS DES TRANSACTIONS</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Immatriculation</th>
+                        <th class="text-center">Date de Paiement</th>
+                        <th class="text-right">Prix Vignette</th>
+                        <th class="text-right">Pénalité</th>
+                        <th class="text-right">Amende</th>
+                        <th class="text-right">Montant Total</th>
+                    </tr>
+                </thead>
+                <tbody id="report-table-body">
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: #999;">Chargement...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Résumé Financier -->
+        <div class="report-section">
+            <table style="margin-bottom: 25px;">
+                <tbody>
+                    <tr style="background: #f0f0f0; border-top: 2px solid #667eea;">
+                        <td style="font-weight: bold; font-size: 12px;">MONTANT TOTAL COLLECTÉ</td>
+                        <td style="text-align: right; font-weight: bold; font-size: 12px; color: #667eea;" id="summary-total">-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Parties à Signer -->
+        <div class="report-section">
+            <h3>VALIDATION ET SIGNATURES</h3>
+            <div style="margin-top: 30px; display: flex; justify-content: space-between;">
+                <div style="width: 30%; text-align: center; border-top: 2px solid #333; padding-top: 40px;">
+                    <p style="margin: 0; font-size: 10px; color: #666;">Agent Impôt</p>
+                    <p style="margin: 3px 0 0 0; font-size: 10px; color: #666;">Signature et cachet</p>
+                </div>
+                <div style="width: 30%; text-align: center; border-top: 2px solid #333; padding-top: 40px;">
+                    <p style="margin: 0; font-size: 10px; color: #666;">Chef de Service</p>
+                    <p style="margin: 3px 0 0 0; font-size: 10px; color: #666;">Signature et cachet</p>
+                </div>
+                <div style="width: 30%; text-align: center; border-top: 2px solid #333; padding-top: 40px;">
+                    <p style="margin: 0; font-size: 10px; color: #666;">Trésorier</p>
+                    <p style="margin: 3px 0 0 0; font-size: 10px; color: #666;">Signature et cachet</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="report-footer">
+            <p>Ce rapport a été généré automatiquement par le système de gestion des vignettes.</p>
+            <p style="margin-top: 5px;">Document confidentiel - Réservé à l'administration fiscale</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/vignette-daily-report.js') }}"></script>
+    <script>
+        // Load report data on page load
+        const urlParams = new URLSearchParams(window.location.search);
+        const reportDate = urlParams.get('date');
+        
+        if (reportDate) {
+            document.getElementById('report-date-display').textContent = new Date(reportDate).toLocaleDateString('fr-FR');
+            loadReportData(reportDate);
+        }
+
+        function loadReportData(dateStr) {
+            fetch(`/api/vehicles/vignette-daily-report?date=${dateStr}`, {
+                credentials: 'same-origin'
+            })
+            .then(r => r.json())
+            .then(data => {
+                displayReport(data);
+            })
+            .catch(err => {
+                console.error('Error loading report:', err);
+                document.getElementById('report-table-body').innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Erreur lors du chargement</td></tr>';
+            });
+        }
+
+        function displayReport(data) {
+            // Update KPIs
+            document.getElementById('kpi-paid').textContent = data.total_paid || 0;
+            document.getElementById('kpi-revenue').textContent = formatKMF(data.total_revenue);
+            document.getElementById('kpi-penalties').textContent = formatKMF(data.total_penalties);
+            document.getElementById('kpi-fines').textContent = formatKMF(data.total_fines);
+            document.getElementById('report-generated-date').textContent = new Date().toLocaleDateString('fr-FR');
+
+            // Update Summary Section
+            // Calculate total for summary
+            const totalAmount = (parseFloat(data.total_revenue) || 0) + 
+                               (parseFloat(data.total_penalties) || 0) + 
+                               (parseFloat(data.total_fines) || 0);
+            document.getElementById('summary-total').textContent = formatKMF(totalAmount);
+
+            // Build table
+            const tbody = document.getElementById('report-table-body');
+            if (!data.vehicles || data.vehicles.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">Aucune données pour cette date</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.vehicles.map(v => `
+                <tr>
+                    <td>${v.license_plate}</td>
+                    <td class="text-center">${v.payment_date}</td>
+                    <td class="text-right">${formatNumberKMF(v.vignette_price)}</td>
+                    <td class="text-right">${formatNumberKMF(v.penalty_amount)}</td>
+                    <td class="text-right">${formatNumberKMF(v.fines_amount)}</td>
+                    <td class="text-right" style="font-weight: bold;">${formatNumberKMF(v.total)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function formatKMF(amount) {
+            if (!amount) return '0 KMF';
+            const num = parseFloat(amount);
+            return num.toLocaleString('fr-KM') + ' KMF';
+        }
+
+        function formatNumberKMF(amount) {
+            if (!amount) return '0 KMF';
+            const num = parseFloat(amount);
+            return num.toLocaleString('fr-KM') + ' KMF';
+        }
+    </script>
+</body>
+</html>

@@ -54,7 +54,7 @@
                 <i class="fas fa-bars"></i>
             </button>
             <div class="flex-grow-1 text-center">
-                {% if current_user.is_authenticated and current_user.is_insurance_account %}
+                {% if current_user.is_authenticated and (current_user.is_insurance_account or (current_user.role == 'agent_impot')) %}
                 <span class="text-white fw-bold" style="font-size: 1.1rem;">Police Comores</span>
                 {% else %}
                 <a href="/" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">Police Comores</a>
@@ -70,7 +70,7 @@
     <!-- Left sidebar -->
     <aside class="sidebar bg-dark text-white" id="appSidebar">
         <div class="sidebar-header p-3">
-            {% if current_user.is_authenticated and current_user.is_insurance_account %}
+            {% if current_user.is_authenticated and (current_user.is_insurance_account or (current_user.role == 'agent_impot')) %}
             <span class="navbar-brand text-white d-inline-block">
                 <i class="fas fa-car"></i>
                 <span class="ms-2">Police Comores</span>
@@ -129,6 +129,14 @@
 
             {% if current_user.is_authenticated and (current_user.role == 'policier') %}
             <a class="nav-link text-white {% if request.path.startswith('/payments') or request.path.startswith('/fines/receipt') %}active{% endif %}" href="/payments"><i class="fas fa-credit-card me-2"></i> Paiements</a>
+            {% endif %}
+
+            {% if current_user.is_authenticated and (current_user.role == 'agent_impot') %}
+            <a class="nav-link text-white {% if request.path.startswith('/vignette-dashboard') %}active{% endif %}" href="/vignette-dashboard"><i class="fas fa-ticket-alt me-2"></i> Dashboard Vignettes</a>
+            <a class="nav-link text-white {% if request.path.startswith('/vignette-without') %}active{% endif %}" href="/vignette-without"><i class="fas fa-exclamation-triangle me-2"></i> Sans Vignette</a>
+            <a class="nav-link text-white {% if request.path.startswith('/vignette-settings') %}active{% endif %}" href="/vignette-settings"><i class="fas fa-cog me-2"></i> Paramètres Vignettes</a>
+            <a class="nav-link text-white {% if request.path.startswith('/vignette-finance') %}active{% endif %}" href="/vignette-finance"><i class="fas fa-chart-bar me-2"></i> Finance Vignettes</a>
+            <a class="nav-link text-white {% if request.path.startswith('/vignette-daily-report') %}active{% endif %}" href="/vignette-daily-report"><i class="fas fa-file-alt me-2"></i> Rapport Journalier</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}

@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}Paramètres Vignettes{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-cog me-2"></i>Paramètres des Vignettes</h2>
+            <p class="text-muted mb-0">Gérez les tarifs de vignette et les pénalités de retard</p>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="vignette-rates-tab" data-bs-toggle="tab" data-bs-target="#vignette-rates" type="button" role="tab">
+                <i class="fas fa-ticket-alt me-2"></i>Tarifs de Vignette
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="penalty-rates-tab" data-bs-toggle="tab" data-bs-target="#penalty-rates" type="button" role="tab">
+                <i class="fas fa-exclamation-triangle me-2"></i>Pénalités de Retard
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="settingsTabContent">
+        <!-- Vignette Rates Tab -->
+        <div class="tab-pane fade show active" id="vignette-rates" role="tabpanel">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="fas fa-list me-2"></i>Liste des Tarifs</h6>
+                    <button class="btn btn-sm btn-primary" onclick="openVignetteRateModal()">
+                        <i class="fas fa-plus me-1"></i>Ajouter un Tarif
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="vignette-rates-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Classe Fiscale</th>
+                                    <th>Classe CV</th>
+                                    <th>Carburant</th>
+                                    <th>Âge min (ans)</th>
+                                    <th>Âge max (ans)</th>
+                                    <th>Prix (KMF)</th>
+                                    <th>Description</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vignette-rates-tbody">
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Chargement...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Penalty Rates Tab -->
+        <div class="tab-pane fade" id="penalty-rates" role="tabpanel">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="fas fa-list me-2"></i>Liste des Pénalités</h6>
+                    <button class="btn btn-sm btn-primary" onclick="openPenaltyRateModal()">
+                        <i class="fas fa-plus me-1"></i>Ajouter une Pénalité
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="penalty-rates-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Jours de retard (min)</th>
+                                    <th>Jours de retard (max)</th>
+                                    <th>Montant par jour (KMF)</th>
+                                    <th>Description</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="penalty-rates-tbody">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Chargement...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Vignette Rate Modal -->
+<div class="modal fade" id="vignetteRateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-ticket-alt me-2"></i>
+                    <span id="vignette-rate-modal-title">Ajouter un Tarif</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="vignette-rate-id" />
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Classe Fiscale</label>
+                        <select id="vignette-fiscal-class" class="form-select">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Classe CV</label>
+                        <select id="vignette-cv-class" class="form-select">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="0-5 CV">0-5 CV</option>
+                            <option value="6-9 CV">6-9 CV</option>
+                            <option value="10-12 CV">10-12 CV</option>
+                            <option value="12 CV et +">12 CV et +</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Carburant</label>
+                        <select id="vignette-fuel-type" class="form-select">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="Essence">⛽ Essence</option>
+                            <option value="Gazoil">🛢️ Gazoil</option>
+                            <option value="Electric">🔋 Electric</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Prix (KMF) <span class="text-danger">*</span></label>
+                        <input type="number" id="vignette-price" class="form-control" step="0.01" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">DS Annuelle (KMF)</label>
+                        <input type="number" id="vignette-annual-ds" class="form-control" step="0.01" value="1000" placeholder="1000">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Âge minimum (années)</label>
+                        <input type="number" id="vignette-age-min" class="form-control" min="0" value="0">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Âge maximum (années)</label>
+                        <input type="number" id="vignette-age-max" class="form-control" min="0" placeholder="Laissez vide pour illimité">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Description</label>
+                    <input type="text" id="vignette-description" class="form-control" placeholder="Description optionnelle">
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Annuler
+                </button>
+                <button type="button" id="save-vignette-rate-btn" class="btn btn-primary" onclick="saveVignetteRate()">
+                    <i class="fas fa-save me-1"></i>Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Penalty Rate Modal -->
+<div class="modal fade" id="penaltyRateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span id="penalty-rate-modal-title">Ajouter une Pénalité</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="penalty-rate-id" />
+                
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label fw-semibold">Jours de retard (min) <span class="text-danger">*</span></label>
+                        <input type="number" id="penalty-days-min" class="form-control" min="0" required>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label fw-semibold">Jours de retard (max) <span class="text-danger">*</span></label>
+                        <input type="number" id="penalty-days-max" class="form-control" min="0" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Montant par jour (KMF) <span class="text-danger">*</span></label>
+                    <input type="number" id="penalty-per-day" class="form-control" step="0.01" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Description</label>
+                    <input type="text" id="penalty-description" class="form-control" placeholder="Description optionnelle">
+                </div>
+
+                <div class="alert alert-info" role="alert">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Exemple: 1-10 jours = 0 KMF/jour, 11-20 jours = 100 KMF/jour. Pour 16 jours: (16-10) × 100 = 600 KMF
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Annuler
+                </button>
+                <button type="button" id="save-penalty-rate-btn" class="btn btn-primary" onclick="savePenaltyRate()">
+                    <i class="fas fa-save me-1"></i>Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/vignette-settings.js') }}"></script>
+{% endblock %}

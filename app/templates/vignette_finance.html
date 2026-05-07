@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Finance - Vignettes{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-chart-bar me-2"></i>Finance - Vignettes</h2>
+            <p class="text-muted mb-0">Statistiques financières des vignettes</p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <a href="/vignette-dashboard" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-1"></i>Retour Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filtres</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Date de début</label>
+                            <input type="date" id="finance-start-date" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Date de fin</label>
+                            <input type="date" id="finance-end-date" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Période rapide</label>
+                            <select id="finance-period" class="form-select">
+                                <option value="7">Derniers 7 jours</option>
+                                <option value="30" selected>Derniers 30 jours</option>
+                                <option value="90">Derniers 90 jours</option>
+                                <option value="365">Dernière année</option>
+                                <option value="custom">Personnalisé</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" onclick="loadFinanceStats()">
+                                <i class="fas fa-search me-1"></i>Rechercher
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <!-- Total Active Vignettes -->
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-2 small">
+                                <i class="fas fa-ticket-alt me-1"></i>Vignettes Actives
+                            </p>
+                            <h3 class="mb-0" id="stat-active-vignettes">-</h3>
+                        </div>
+                        <i class="fas fa-check-circle text-success" style="font-size: 2rem; opacity: 0.2;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Renewed Vignettes -->
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-2 small">
+                                <i class="fas fa-sync-alt me-1"></i>Vignettes Renouvelées
+                            </p>
+                            <h3 class="mb-0" id="stat-renewed-vignettes">-</h3>
+                        </div>
+                        <i class="fas fa-sync-alt text-info" style="font-size: 2rem; opacity: 0.2;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Penalties -->
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-2 small">
+                                <i class="fas fa-exclamation-triangle me-1"></i>Pénalités
+                            </p>
+                            <h3 class="mb-0 text-warning" id="stat-penalties">-</h3>
+                        </div>
+                        <i class="fas fa-exclamation-triangle text-warning" style="font-size: 2rem; opacity: 0.2;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Revenue -->
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-2 small">
+                                <i class="fas fa-money-bill me-1"></i>Montant Total
+                            </p>
+                            <h3 class="mb-0 text-success" id="stat-total-revenue">-</h3>
+                        </div>
+                        <i class="fas fa-coins text-success" style="font-size: 2rem; opacity: 0.2;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Breakdown -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0"><i class="fas fa-list me-2"></i>Détail des Revenus</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <tbody id="finance-breakdown">
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Chargement...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vehicles Table -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0"><i class="fas fa-car me-2"></i>Détail par Véhicule</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Immatriculation</th>
+                                    <th>Date de Paiement</th>
+                                    <th class="text-end">Prix Vignette</th>
+                                    <th class="text-end">Pénalité</th>
+                                    <th class="text-end">Amende</th>
+                                    <th class="text-end">Montant Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="finance-vehicles-table">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Chargement...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/vignette-finance.js') }}"></script>
+{% endblock %}

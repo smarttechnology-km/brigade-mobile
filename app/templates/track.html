@@ -126,7 +126,17 @@
                 <i class="fas fa-id-card text-primary me-2 mt-1"></i>
                 <div>
                   <small class="text-muted d-block">Vignette (Carte grise)</small>
-                  {% if vehicle.registration_expiry %}
+                  {% if vehicle.vignette_expiry %}
+                    <strong>{{ vehicle.vignette_expiry.strftime('%d/%m/%Y') }}</strong>
+                    {% set days_vig = (vehicle.vignette_expiry - now()).days %}
+                    {% if days_vig < 0 %}
+                      <span class="badge bg-danger ms-1">Expirée</span>
+                    {% elif days_vig <= 30 %}
+                      <span class="badge bg-warning text-dark ms-1">Expire bientôt</span>
+                    {% else %}
+                      <span class="badge bg-success ms-1">Valide</span>
+                    {% endif %}
+                  {% elif vehicle.registration_expiry %}
                     <strong>{{ vehicle.registration_expiry.strftime('%d/%m/%Y') }}</strong>
                     {% set days_reg = (vehicle.registration_expiry - now()).days %}
                     {% if days_reg < 0 %}

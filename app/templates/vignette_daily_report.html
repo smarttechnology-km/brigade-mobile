@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Rapport Journalier - Vignettes{% endblock %}
+
+{% block content %}
+<div class="print-container">
+    <!-- Screen Only Header -->
+    <div id="screen-header" class="screen-only" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; margin: -12px -12px 20px -12px; border-radius: 0;">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2 style="margin: 0; color: white;"><i class="fas fa-file-pdf me-2"></i>Rapport Journalier - Vignettes</h2>
+                    <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9);">Générer et télécharger le rapport pour envoi au Trésor</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-light me-2" onclick="window.history.back()"><i class="fas fa-arrow-left me-1"></i>Retour</button>
+                    <button class="btn btn-warning" id="print-btn" onclick="printReport()"><i class="fas fa-download me-1"></i>Télécharger PDF</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controls - Screen Only -->
+    <div id="screen-controls" class="screen-only card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Sélectionner la Date</label>
+                    <input type="date" id="report-date" class="form-control" />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" onclick="loadDailyReport()"><i class="fas fa-refresh me-1"></i>Charger</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Content -->
+    <div id="pdf-content" style="background: white; color: #333;">
+        
+        <!-- Header Professionnel -->
+        <div style="text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #667eea;">
+            <h1 style="margin: 0; color: #667eea; font-size: 24px; font-weight: bold;">RAPPORT JOURNALIER DE VIGNETTES</h1>
+            <p style="margin: 8px 0 0 0; color: #666; font-size: 12px;">Direction Générale des Finances - Service des Vignettes Automobiles</p>
+            <p style="margin: 4px 0 0 0; color: #999; font-size: 11px;">Union des Comores</p>
+        </div>
+
+        <!-- Infos Rapport -->
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 11px;">
+            <div>
+                <p style="margin: 0;"><strong>Date du Rapport :</strong> <span id="report-date-display">-</span></p>
+                <p style="margin: 3px 0 0 0;"><strong>Généré le :</strong> <span id="report-generated-date">-</span></p>
+            </div>
+            <div style="text-align: right;">
+                <p style="margin: 0;"><strong>Période :</strong> Jour</p>
+                <p style="margin: 3px 0 0 0;"><strong>Statut :</strong> <span style="color: green; font-weight: bold;">✓ Validé</span></p>
+            </div>
+        </div>
+
+        <!-- KPIs Section -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+            <!-- KPI 1 -->
+            <div style="border: 2px solid #e8f0f7; border-radius: 8px; padding: 12px; background: #f8fafc;">
+                <p style="margin: 0; color: #666; font-size: 11px; font-weight: bold;">VIGNETTES PAYÉES</p>
+                <p style="margin: 5px 0 0 0; color: #667eea; font-size: 20px; font-weight: bold;" id="kpi-paid">-</p>
+            </div>
+
+            <!-- KPI 2 -->
+            <div style="border: 2px solid #e8f7f0; border-radius: 8px; padding: 12px; background: #f8fcfa;">
+                <p style="margin: 0; color: #666; font-size: 11px; font-weight: bold;">REVENUS VIGNETTES</p>
+                <p style="margin: 5px 0 0 0; color: #27ae60; font-size: 20px; font-weight: bold;" id="kpi-revenue">-</p>
+            </div>
+
+            <!-- KPI 3 -->
+            <div style="border: 2px solid #fff8e8; border-radius: 8px; padding: 12px; background: #fffbf0;">
+                <p style="margin: 0; color: #666; font-size: 11px; font-weight: bold;">PÉNALITÉS</p>
+                <p style="margin: 5px 0 0 0; color: #f39c12; font-size: 20px; font-weight: bold;" id="kpi-penalties">-</p>
+            </div>
+
+            <!-- KPI 4 -->
+            <div style="border: 2px solid #f8e8e8; border-radius: 8px; padding: 12px; background: #fcf8f8;">
+                <p style="margin: 0; color: #666; font-size: 11px; font-weight: bold;">AMENDES IMPAYÉES</p>
+                <p style="margin: 5px 0 0 0; color: #e74c3c; font-size: 20px; font-weight: bold;" id="kpi-fines">-</p>
+            </div>
+        </div>
+
+        <!-- Tableau Détails -->
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0 0 12px 0; color: #333; font-size: 14px; font-weight: bold; border-bottom: 2px solid #667eea; padding-bottom: 8px;">DÉTAILS DES TRANSACTIONS</h3>
+            
+            <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                <thead>
+                    <tr style="background: #667eea; color: white;">
+                        <th style="padding: 8px; text-align: left; border: 1px solid #667eea; font-weight: bold;">Immatriculation</th>
+                        <th style="padding: 8px; text-align: center; border: 1px solid #667eea; font-weight: bold;">Date de Paiement</th>
+                        <th style="padding: 8px; text-align: right; border: 1px solid #667eea; font-weight: bold;">Prix Vignette</th>
+                        <th style="padding: 8px; text-align: right; border: 1px solid #667eea; font-weight: bold;">Pénalité</th>
+                        <th style="padding: 8px; text-align: right; border: 1px solid #667eea; font-weight: bold;">Amende</th>
+                        <th style="padding: 8px; text-align: right; border: 1px solid #667eea; font-weight: bold;">Montant Total</th>
+                    </tr>
+                </thead>
+                <tbody id="report-vehicles-body">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 20px; color: #999;">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Chargement des données...
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot id="report-vehicles-footer">
+                    <tr style="background: #f0f4ff; font-weight: bold;">
+                        <td colspan="2" style="padding: 10px 8px; border: 1px solid #667eea; text-align: left;">TOTAL GÉNÉRAL</td>
+                        <td style="padding: 10px 8px; border: 1px solid #667eea; text-align: right;" id="footer-revenue">0 KMF</td>
+                        <td style="padding: 10px 8px; border: 1px solid #667eea; text-align: right;" id="footer-penalties">0 KMF</td>
+                        <td style="padding: 10px 8px; border: 1px solid #667eea; text-align: right;" id="footer-fines">0 KMF</td>
+                        <td style="padding: 10px 8px; border: 2px solid #667eea; text-align: right; color: #27ae60; font-size: 11px;" id="footer-total">0 KMF</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <!-- Résumé Financier -->
+        <div style="margin-bottom: 20px; padding: 12px; background: #f8fafc; border-left: 4px solid #667eea; border-radius: 4px;">
+            <h4 style="margin: 0 0 8px 0; color: #333; font-size: 12px; font-weight: bold;">RÉSUMÉ FINANCIER</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 11px;">
+                <div>
+                    <p style="margin: 0;"><strong>Revenus Vignettes :</strong> <span id="summary-revenue" style="float: right;">0 KMF</span></p>
+                    <p style="margin: 5px 0 0 0;"><strong>Pénalités :</strong> <span id="summary-penalties" style="float: right;">0 KMF</span></p>
+                </div>
+                <div>
+                    <p style="margin: 0;"><strong>Amendes :</strong> <span id="summary-fines" style="float: right;">0 KMF</span></p>
+                    <p style="margin: 5px 0 0 0; border-top: 1px solid #ddd; padding-top: 5px;"><strong style="color: #27ae60;">TOTAL :</strong> <span id="summary-total" style="float: right; color: #27ae60; font-weight: bold;">0 KMF</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0; font-size: 10px; color: #666;">
+            <div style="display: flex; justify-content: space-around; margin-bottom: 15px;">
+                <div style="text-align: center; width: 30%;">
+                    <p style="margin: 0 0 20px 0;">_________________________</p>
+                    <p style="margin: 0; font-weight: bold;">Agent Impôt</p>
+                </div>
+                <div style="text-align: center; width: 30%;">
+                    <p style="margin: 0 0 20px 0;">_________________________</p>
+                    <p style="margin: 0; font-weight: bold;">Contrôleur</p>
+                </div>
+                <div style="text-align: center; width: 30%;">
+                    <p style="margin: 0 0 20px 0;">_________________________</p>
+                    <p style="margin: 0; font-weight: bold;">Directeur</p>
+                </div>
+            </div>
+            <p style="text-align: center; margin: 10px 0 0 0; color: #999;">
+                Généré automatiquement le <span id="footer-date">-</span> | Système de Gestion des Vignettes v1.0
+            </p>
+        </div>
+
+    </div>
+
+</div>
+
+<style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #333;
+    background: #f5f5f5;
+}
+
+.print-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.screen-only {
+    display: block;
+}
+
+#pdf-content {
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+/* Print Styles */
+@media print {
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    html, body {
+        background: white;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+    }
+
+    .screen-only {
+        display: none !important;
+    }
+
+    #pdf-content {
+        max-width: 100%;
+        padding: 15mm 12mm;
+        box-shadow: none;
+        margin: 0;
+        border-radius: 0;
+        background: white;
+    }
+
+    /* Page Setup */
+    @page {
+        size: A4;
+        margin: 10mm;
+    }
+
+    /* Prevent page breaks inside elements */
+    h1, h3, h4, table, .grid {
+        page-break-inside: avoid;
+    }
+
+    table {
+        page-break-inside: avoid;
+        width: 100%;
+    }
+
+    thead {
+        display: table-header-group;
+    }
+
+    tfoot {
+        display: table-footer-group;
+    }
+
+    /* Colors in Print (for better PDF rendering) */
+    tr {
+        page-break-inside: avoid;
+    }
+
+    /* Ensure readability */
+    body {
+        font-size: 10pt;
+        line-height: 1.3;
+    }
+}
+
+/* Utilities */
+@media screen {
+    #pdf-content {
+        border: 1px solid #ddd;
+    }
+}
+</style>
+
+<script src="{{ url_for('static', filename='js/vignette-daily-report.js') }}"></script>
+{% endblock %}

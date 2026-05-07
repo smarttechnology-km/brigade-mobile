@@ -25,6 +25,39 @@
     </div>
   </div>
 
+  <!-- Role Filter Tabs -->
+  <div class="row mb-3">
+    <div class="col-12">
+      <ul class="nav nav-tabs" id="roleFilterTabs">
+        <li class="nav-item">
+          <button class="nav-link active" id="tab-all" data-role="all" type="button">
+            <i class="fas fa-list me-1"></i> Tous les utilisateurs
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="tab-administrateur" data-role="administrateur" type="button">
+            <i class="fas fa-user-shield me-1"></i> Administrateurs <span class="badge bg-info ms-1" id="count-admin">0</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="tab-judiciaire" data-role="judiciaire" type="button">
+            <i class="fas fa-balance-scale me-1"></i> Judiciaires <span class="badge bg-info ms-1" id="count-judge">0</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="tab-policier" data-role="policier" type="button">
+            <i class="fas fa-car me-1"></i> Policiers <span class="badge bg-info ms-1" id="count-police">0</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="tab-agent_impot" data-role="agent_impot" type="button">
+            <i class="fas fa-file-invoice-dollar me-1"></i> Agents Impôt <span class="badge bg-info ms-1" id="count-agent">0</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+  </div>
+
   <div class="row">
     <div class="col-12">
       <div class="card shadow-sm">
@@ -136,6 +169,7 @@
               <option value="administrateur">👤 Administrateur - Accès complet au système</option>
               <option value="policier" selected>🚔 Policier - Gestion des véhicules et amendes</option>
               <option value="judiciaire">⚖️ Judiciaire - Validation des paiements</option>
+              <option value="agent_impot">💰 Agent Impôt - Gestion des impôts et revenus</option>
             </select>
           </div>
           <div class="col-md-4 mb-3 d-flex align-items-end">
