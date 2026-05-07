@@ -588,8 +588,10 @@ function openVehicleModal(vehicle) {
         if(document.getElementById('year')) document.getElementById('year').value = vehicle.year || '';
         if(document.getElementById('vin')) document.getElementById('vin').value = vehicle.vin || '';
         if(document.getElementById('owner_address')) document.getElementById('owner_address').value = vehicle.owner_address || '';
-        if(document.getElementById('registration_expiry')) document.getElementById('registration_expiry').value = vehicle.registration_expiry || '';
+        if(document.getElementById('vignette_expiry')) document.getElementById('vignette_expiry').value = vehicle.vignette_expiry || vehicle.registration_expiry || '';
         if(document.getElementById('insurance_expiry')) document.getElementById('insurance_expiry').value = vehicle.insurance_expiry || '';
+        if(document.getElementById('fiscal_class')) document.getElementById('fiscal_class').value = vehicle.fiscal_class || '';
+        if(document.getElementById('cv_class')) document.getElementById('cv_class').value = vehicle.cv_class || '';
     }
 
     // initialize and show modal (store instance globally)
@@ -657,8 +659,10 @@ function saveVehicle() {
         status: document.getElementById('status').value,
         notes: document.getElementById('notes').value.trim(),
         owner_address: document.getElementById('owner_address') ? document.getElementById('owner_address').value.trim() : '',
-        registration_expiry: document.getElementById('registration_expiry') ? document.getElementById('registration_expiry').value : '',
-        insurance_company: insuranceCompanyValue
+        vignette_expiry: document.getElementById('vignette_expiry') ? document.getElementById('vignette_expiry').value : '',
+        insurance_company: insuranceCompanyValue,
+        fiscal_class: document.getElementById('fiscal_class') ? document.getElementById('fiscal_class').value : '',
+        cv_class: document.getElementById('cv_class') ? document.getElementById('cv_class').value : ''
     };
 
     if(document.getElementById('insurance_expiry')){

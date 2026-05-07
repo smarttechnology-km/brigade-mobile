@@ -74,7 +74,7 @@ function updateUIWithData(data) {
 }
 
 function showLoadingSpinners(show) {
-    const spinners = ['total-fines-spinner', 'paid-fines-spinner', 'unpaid-fines-spinner', 'total-amount-spinner'];
+    const spinners = ['total-fines-spinner', 'paid-fines-spinner', 'unpaid-fines-spinner', 'paid-amount-spinner'];
     spinners.forEach(id => {
         const spinner = document.getElementById(id);
         if (spinner) {
@@ -87,7 +87,8 @@ function updateGeneralStats(general) {
     document.getElementById('total-fines').textContent = general.total_fines;
     document.getElementById('paid-fines').textContent = general.paid_fines;
     document.getElementById('unpaid-fines').textContent = general.unpaid_fines;
-    document.getElementById('total-amount').textContent = formatCurrency(general.total_amount);
+    document.getElementById('paid-amount').textContent = formatCurrency(general.paid_amount);
+    document.getElementById('paid-amount-ratio').textContent = '/ ' + formatCurrency(general.total_amount);
 }
 
 function createMonthlyChart(monthlyData) {

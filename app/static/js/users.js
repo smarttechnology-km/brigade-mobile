@@ -14,6 +14,29 @@ document.addEventListener('DOMContentLoaded', function(){
     const countrySelect = document.getElementById('u-country');
     if(countrySelect) countrySelect.addEventListener('change', updateRegions);
     
+    // Role filter tabs
+    const roleTabs = document.querySelectorAll('#roleFilterTabs button');
+    roleTabs.forEach(tab => {
+        tab.addEventListener('click', function(){
+            // Update active tab
+            roleTabs.forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Get selected role
+            const role = this.dataset.role;
+            selectedRole = role === 'all' ? null : role;
+            
+            // Re-render with selected role filter
+            const roles = [...new Set(usersCache.map(u => u.role))];
+            if(selectedRole) {
+                const filtered = usersCache.filter(u => u.role === selectedRole);
+                renderUsersByRole(filtered, [selectedRole]);
+            } else {
+                renderUsersByRole(usersCache, roles);
+            }
+        });
+    });
+    
     // search input with debounce
     const searchInput = document.getElementById('users-search');
     if(searchInput){
@@ -22,16 +45,33 @@ document.addEventListener('DOMContentLoaded', function(){
             if(t) clearTimeout(t);
             t = setTimeout(()=>{
                 const q = (this.value || '').trim().toLowerCase();
-                if(!q){ renderUsers(usersCache); return; }
-                const filtered = usersCache.filter(u=>{
-                    return (u.username||'').toLowerCase().includes(q)
+                let filtered = usersCache;
+                
+                if(!q){
+                    // No search query, apply role filter
+                    if(selectedRole) {
+                        filtered = usersCache.filter(u => u.role === selectedRole);
+                    }
+                    const roles = [...new Set(filtered.map(u => u.role))];
+                    renderUsersByRole(filtered, roles);
+                    return;
+                }
+                
+                // Apply search and role filter together
+                filtered = usersCache.filter(u=>{
+                    const matchesSearch = (u.username||'').toLowerCase().includes(q)
                         || (u.full_name||'').toLowerCase().includes(q)
                         || (u.email||'').toLowerCase().includes(q)
                         || (u.phone||'').toLowerCase().includes(q)
                         || (u.country||'').toLowerCase().includes(q)
                         || (u.region||'').toLowerCase().includes(q);
+                    
+                    const matchesRole = !selectedRole || u.role === selectedRole;
+                    return matchesSearch && matchesRole;
                 });
-                renderUsers(filtered);
+                
+                const roles = [...new Set(filtered.map(u => u.role))];
+                renderUsersByRole(filtered, roles);
             }, 250);
         });
     }
@@ -57,8 +97,8 @@ function updateCountryRegionVisibility(){
         // Judiciaire: show country only
         countrySection.style.display = '';
         regionSection.style.display = 'none';
-    } else if(role === 'policier'){
-        // Policier: show both country and region
+    } else if(role === 'policier' || role === 'agent_impot'){
+        // Policier & Agent Impot: show both country and region
         countrySection.style.display = '';
         regionSection.style.display = '';
     }
@@ -79,15 +119,39 @@ function updateRegions(){
 }
 
 let usersCache = [];
+let selectedRole = null; // Track selected role filter
 
-function loadUsers(){
-    fetch('/api/users/list').then(r=>{
+function loadUsers(roleFilter = null){
+    let url = '/api/users/list';
+    fetch(url).then(r=>{
         if(!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
     }).then(data=>{
         // API returns array directly
         usersCache = Array.isArray(data) ? data : (data.users || []);
-        renderUsers(usersCache);
+        
+        // Update badge counts
+        const adminCount = usersCache.filter(u => u.role === 'administrateur').length;
+        const judgeCount = usersCache.filter(u => u.role === 'judiciaire').length;
+        const policeCount = usersCache.filter(u => u.role === 'policier').length;
+        const agentCount = usersCache.filter(u => u.role === 'agent_impot').length;
+        
+        document.getElementById('count-admin').textContent = adminCount;
+        document.getElementById('count-judge').textContent = judgeCount;
+        document.getElementById('count-police').textContent = policeCount;
+        document.getElementById('count-agent').textContent = agentCount;
+        
+        // Apply current role filter when re-rendering
+        let filtered = usersCache;
+        if(selectedRole) {
+            filtered = usersCache.filter(u => u.role === selectedRole);
+        }
+        
+        // Get unique roles for section headers
+        const roles = [...new Set(filtered.map(u => u.role))];
+        
+        // Render grouped by role
+        renderUsersByRole(filtered, roles);
     }).catch(err=>{ 
         console.error('load users failed', err); 
         const tbody = document.getElementById('users-tbody'); 
@@ -95,7 +159,7 @@ function loadUsers(){
     });
 }
 
-function renderUsers(list){
+function renderUsersByRole(list, roles){
     const tbody = document.getElementById('users-tbody'); 
     if(!tbody) return;
     
@@ -104,27 +168,71 @@ function renderUsers(list){
         return; 
     }
     
-    tbody.innerHTML = list.map((u,i)=>`<tr>
-            <td>${i+1}</td>
-            <td>${escapeHtml(u.username||'')}</td>
-            <td>${escapeHtml(u.full_name||'')}</td>
-            <td>${escapeHtml(u.email||'')}</td>
-            <td>${escapeHtml(u.phone||'')}</td>
-            <td>${escapeHtml(u.country||'')}</td>
-            <td>${escapeHtml(u.region||'')}</td>
-            <td>${escapeHtml(u.role||'')}</td>
-            <td>${u.is_active ? '<span class="badge bg-success">Actif</span>' : '<span class="badge bg-secondary">Inactif</span>'}</td>
-            <td>${escapeHtml(u.created_at||'')}</td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary me-1" data-edit="${u.id}" title="Éditer">
-                <i class="fas fa-edit"></i>
-              </button>
-              <button class="btn btn-sm btn-outline-danger" data-uid="${u.id}" title="Supprimer">
-                <i class="fas fa-trash"></i>
-              </button>
-            </td>
-        </tr>`).join('');
+    let html = '';
+    let rowIndex = 0;
     
+    // Sort roles for consistent display
+    const roleOrder = ['administrateur', 'judiciaire', 'policier', 'agent_impot'];
+    const sortedRoles = roles.sort((a, b) => {
+        const aIdx = roleOrder.indexOf(a);
+        const bIdx = roleOrder.indexOf(b);
+        return (aIdx >= 0 ? aIdx : 999) - (bIdx >= 0 ? bIdx : 999);
+    });
+    
+    // Role labels in French with icons
+    const roleLabels = {
+        'administrateur': '👤 Administrateurs',
+        'judiciaire': '⚖️ Judiciaires',
+        'policier': '🚔 Policiers',
+        'agent_impot': '💰 Agents Impôt'
+    };
+    
+    // Show section headers only if viewing multiple roles
+    const showSectionHeaders = sortedRoles.length > 1;
+    
+    // Render each role section
+    sortedRoles.forEach(role => {
+        const usersInRole = list.filter(u => u.role === role);
+        if(usersInRole.length === 0) return;
+        
+        // Section header row (only if multiple roles)
+        if(showSectionHeaders) {
+            html += `<tr class="table-active" style="background-color: #f0f0f0;">
+                <td colspan="11">
+                    <strong style="font-size: 1.1em;">${roleLabels[role] || role}</strong>
+                    <span class="badge bg-info ms-2">${usersInRole.length}</span>
+                </td>
+            </tr>`;
+        }
+        
+        // User rows for this role
+        usersInRole.forEach((u, idx) => {
+            html += `<tr>
+                <td>${++rowIndex}</td>
+                <td>${escapeHtml(u.username||'')}</td>
+                <td>${escapeHtml(u.full_name||'')}</td>
+                <td>${escapeHtml(u.email||'')}</td>
+                <td>${escapeHtml(u.phone||'')}</td>
+                <td>${escapeHtml(u.country||'')}</td>
+                <td>${escapeHtml(u.region||'')}</td>
+                <td><span class="badge bg-secondary">${escapeHtml(u.role||'')}</span></td>
+                <td>${u.is_active ? '<span class="badge bg-success">Actif</span>' : '<span class="badge bg-secondary">Inactif</span>'}</td>
+                <td>${escapeHtml(u.created_at||'')}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary me-1" data-edit="${u.id}" title="Éditer">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" data-uid="${u.id}" title="Supprimer">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </td>
+            </tr>`;
+        });
+    });
+    
+    tbody.innerHTML = html;
+    
+    // Re-attach event listeners
     tbody.querySelectorAll('button[data-uid]').forEach(b=>b.addEventListener('click', deleteUser));
     tbody.querySelectorAll('button[data-edit]').forEach(b=>b.addEventListener('click', function(){ openEditUser(this.dataset.edit); }));
 }
@@ -280,7 +388,7 @@ function saveUser(){
         const payload = { username, role, full_name, email, phone, is_active };
         
         // Add country/region based on role
-        if(role === 'policier'){
+        if(role === 'policier' || role === 'agent_impot'){
             payload.country = country;
             payload.region = region;
         } else if(role === 'judiciaire'){
