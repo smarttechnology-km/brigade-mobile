@@ -169,6 +169,33 @@ def create_app():
                                 text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
                             )
                             logger.info("Added missing users.session_version column for SQLite compatibility")
+
+                    vehicles_table_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicles'")
+                    ).first() is not None
+
+                    if vehicles_table_exists:
+                        vehicle_columns = {
+                            row[1] for row in conn.execute(text("PRAGMA table_info(vehicles)" )).fetchall()
+                        }
+                        vehicle_column_definitions = {
+                            'vignette_payment_approved': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved BOOLEAN NOT NULL DEFAULT 0",
+                            'vignette_payment_approved_at': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved_at DATETIME",
+                            'vignette_payment_approved_by': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved_by VARCHAR(80)",
+                            'vignette_payment_method': "ALTER TABLE vehicles ADD COLUMN vignette_payment_method VARCHAR(50)",
+                            'vignette_payment_requested_at': "ALTER TABLE vehicles ADD COLUMN vignette_payment_requested_at DATETIME",
+                            'vignette_payment_requested_by': "ALTER TABLE vehicles ADD COLUMN vignette_payment_requested_by VARCHAR(80)",
+                            'vignette_payment_requested_expiry': "ALTER TABLE vehicles ADD COLUMN vignette_payment_requested_expiry DATETIME",
+                            'vignette_last_paid_at': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_at DATETIME",
+                            'vignette_last_paid_vignette_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_vignette_amount FLOAT NOT NULL DEFAULT 0.0",
+                            'vignette_last_paid_penalty_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_penalty_amount FLOAT NOT NULL DEFAULT 0.0",
+                            'vignette_last_paid_fines_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_fines_amount FLOAT NOT NULL DEFAULT 0.0",
+                            'vignette_last_paid_total_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_total_amount FLOAT NOT NULL DEFAULT 0.0",
+                        }
+                        for column_name, alter_sql in vehicle_column_definitions.items():
+                            if column_name not in vehicle_columns:
+                                conn.execute(text(alter_sql))
+                                logger.info(f"Added missing vehicles.{column_name} column for SQLite compatibility")
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
         

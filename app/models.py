@@ -86,6 +86,18 @@ class Vehicle(db.Model):
     insurance_company = db.Column(db.String(100))
     insurance_expiry = db.Column(db.DateTime)
     vignette_expiry = db.Column(db.DateTime)
+    vignette_payment_approved = db.Column(db.Boolean, nullable=False, default=False)
+    vignette_payment_approved_at = db.Column(db.DateTime, nullable=True)
+    vignette_payment_approved_by = db.Column(db.String(80), nullable=True)
+    vignette_payment_method = db.Column(db.String(50), nullable=True)
+    vignette_payment_requested_at = db.Column(db.DateTime, nullable=True)
+    vignette_payment_requested_by = db.Column(db.String(80), nullable=True)
+    vignette_payment_requested_expiry = db.Column(db.DateTime, nullable=True)
+    vignette_last_paid_at = db.Column(db.DateTime, nullable=True)
+    vignette_last_paid_vignette_amount = db.Column(db.Float, nullable=False, default=0.0)
+    vignette_last_paid_penalty_amount = db.Column(db.Float, nullable=False, default=0.0)
+    vignette_last_paid_fines_amount = db.Column(db.Float, nullable=False, default=0.0)
+    vignette_last_paid_total_amount = db.Column(db.Float, nullable=False, default=0.0)
     qr_code_generated_at = db.Column(db.DateTime, nullable=True)  # When QR code was generated or renewed
     qr_code_expiry = db.Column(db.DateTime, nullable=True)  # When QR code expires (1 year after generation)
     fiscal_class = db.Column(db.String(10))  # A, B, C, D
@@ -145,6 +157,18 @@ class Vehicle(db.Model):
             'insurance_company': self.insurance_company,
             'insurance_expiry': self.insurance_expiry.strftime('%Y-%m-%d') if self.insurance_expiry else None,
             'vignette_expiry': self.vignette_expiry.strftime('%Y-%m-%d') if self.vignette_expiry else None,
+            'vignette_payment_approved': bool(self.vignette_payment_approved),
+            'vignette_payment_approved_at': self.vignette_payment_approved_at.isoformat() if self.vignette_payment_approved_at else None,
+            'vignette_payment_approved_by': self.vignette_payment_approved_by,
+            'vignette_payment_method': self.vignette_payment_method,
+            'vignette_payment_requested_at': self.vignette_payment_requested_at.isoformat() if self.vignette_payment_requested_at else None,
+            'vignette_payment_requested_by': self.vignette_payment_requested_by,
+            'vignette_payment_requested_expiry': self.vignette_payment_requested_expiry.isoformat() if self.vignette_payment_requested_expiry else None,
+            'vignette_last_paid_at': self.vignette_last_paid_at.isoformat() if self.vignette_last_paid_at else None,
+            'vignette_last_paid_vignette_amount': float(self.vignette_last_paid_vignette_amount or 0),
+            'vignette_last_paid_penalty_amount': float(self.vignette_last_paid_penalty_amount or 0),
+            'vignette_last_paid_fines_amount': float(self.vignette_last_paid_fines_amount or 0),
+            'vignette_last_paid_total_amount': float(self.vignette_last_paid_total_amount or 0),
             'qr_code_generated_at': self.qr_code_generated_at.strftime('%Y-%m-%d') if self.qr_code_generated_at else None,
             'qr_code_expiry': self.qr_code_expiry.strftime('%Y-%m-%d') if self.qr_code_expiry else None,
             'track_token': self.track_token,

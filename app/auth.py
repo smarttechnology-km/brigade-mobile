@@ -40,6 +40,8 @@ def login():
         # Redirect to appropriate dashboard based on user type
         if isinstance(current_user, InsuranceAccount):
             return redirect(url_for('main.insurance_dashboard'))
+        if getattr(current_user, 'role', None) == 'mobile_money_agent':
+            return redirect(url_for('main.mobile_money_dashboard'))
         return redirect(url_for('main.index'))
 
     if request.method == 'POST':
@@ -56,6 +58,10 @@ def login():
         # Then try as regular user
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
+            if not getattr(user, 'is_active', True):
+                flash('Ce compte est désactivé. Contactez un administrateur.', 'danger')
+                return render_template('login.html')
+
             login_user(user)
             
             # Log user login
@@ -73,6 +79,8 @@ def login():
                 print(f'Error logging user login: {e}')
             
             next_page = request.args.get('next')
+            if getattr(user, 'role', None) == 'mobile_money_agent':
+                return redirect(next_page or url_for('main.mobile_money_dashboard'))
             return redirect(next_page or url_for('main.index'))
         
         flash('Nom d\'utilisateur ou mot de passe incorrect', 'danger')
