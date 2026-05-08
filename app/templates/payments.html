@@ -18,7 +18,10 @@
           <button type="button" class="btn btn-sm btn-outline-secondary" data-view="archive">Archive des factures</button>
         </div>
       </div>
-      <div>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('main.payments_settings_page') }}" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-cog me-1"></i>Paramètre
+        </a>
         <button id="export-archive" class="btn btn-sm btn-outline-secondary" style="display:none;"><i class="fas fa-file-pdf me-1"></i>Exporter PDF</button>
       </div>
     </div>

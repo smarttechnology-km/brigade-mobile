@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Paramètres Paiements{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-4 align-items-center">
+    <div class="col-md-8">
+      <h2><i class="fas fa-cog me-2"></i>Paramètres Paiements</h2>
+      <p class="text-muted mb-0">Créer et gérer les comptes agents Mobile Money.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <a href="{{ url_for('main.payments_page') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Retour à Gestion des Paiements
+      </a>
+    </div>
+  </div>
+
+  {% if status == 'success' %}
+  <div class="alert alert-success" role="alert">
+    {{ message or 'Opération effectuée avec succès.' }}
+  </div>
+  {% elif status == 'error' %}
+  <div class="alert alert-danger" role="alert">
+    {{ message or 'Une erreur est survenue.' }}
+  </div>
+  {% endif %}
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center gap-2">
+          <h6 class="mb-0 flex-grow-1"><i class="fas fa-list me-2"></i>Comptes Agents Mobile Money</h6>
+          <span class="badge bg-secondary">{{ mobile_money_accounts|length }}</span>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            data-bs-toggle="modal"
+            data-bs-target="#createAgentModal">
+            <i class="fas fa-user-plus me-1"></i>Nouveau Compte
+          </button>
+        </div>
+        <div class="card-body border-bottom">
+          <form method="GET" action="{{ url_for('main.payments_settings_page') }}" class="row g-2 align-items-center">
+            <div class="col-md-9">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" name="q" class="form-control" placeholder="Rechercher par utilisateur, nom, téléphone, email, pays..." value="{{ q or '' }}">
+              </div>
+            </div>
+            <div class="col-md-3 d-grid">
+              <button type="submit" class="btn btn-outline-primary">Rechercher</button>
+            </div>
+          </form>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Nom</th>
+                  <th>Téléphone</th>
+                  <th>Pays</th>
+                  <th>Statut</th>
+                  <th>Créé le</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if mobile_money_accounts %}
+                  {% for account in mobile_money_accounts %}
+                  <tr>
+                    <td>{{ account.username }}</td>
+                    <td>{{ account.full_name or '-' }}</td>
+                    <td>{{ account.phone or '-' }}</td>
+                    <td>{{ account.country or '-' }}</td>
+                    <td>
+                      {% if account.is_active %}
+                        <span class="badge bg-success">Actif</span>
+                      {% else %}
+                        <span class="badge bg-secondary">Inactif</span>
+                      {% endif %}
+                    </td>
+                    <td>{{ account.created_at.strftime('%d/%m/%Y %H:%M') if account.created_at else '-' }}</td>
+                    <td>
+                      <div class="d-flex gap-1">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          data-bs-toggle="modal"
+                          data-bs-target="#editAgentModal"
+                          data-id="{{ account.id }}"
+                          data-username="{{ account.username }}"
+                          data-full-name="{{ account.full_name or '' }}"
+                          data-phone="{{ account.phone or '' }}"
+                          data-email="{{ account.email or '' }}"
+                          data-country="{{ account.country or '' }}"
+                          onclick="prefillEditAgentModal(this)">
+                          Modifier
+                        </button>
+
+                        <form method="POST" action="{{ url_for('main.toggle_mobile_money_agent_account', user_id=account.id) }}" onsubmit="return confirm('Confirmer cette action ?');">
+                          <input type="hidden" name="q" value="{{ q or '' }}">
+                          {% if account.is_active %}
+                            <input type="hidden" name="action" value="deactivate">
+                            <button type="submit" class="btn btn-sm btn-outline-warning">Désactiver</button>
+                          {% else %}
+                            <input type="hidden" name="action" value="activate">
+                            <button type="submit" class="btn btn-sm btn-outline-success">Activer</button>
+                          {% endif %}
+                        </form>
+
+                        <form method="POST" action="{{ url_for('main.delete_mobile_money_agent_account', user_id=account.id) }}" onsubmit="return confirm('Supprimer ce compte définitivement ?');">
+                          <input type="hidden" name="q" value="{{ q or '' }}">
+                          <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr>
+                    <td colspan="7" class="text-center text-muted py-4">Aucun compte agent Mobile Money pour le moment.</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Create Agent Account -->
+<div class="modal fade" id="createAgentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>Nouveau Compte Agent Mobile Money</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('main.create_mobile_money_agent_account') }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="username" class="form-label">Nom utilisateur <span class="text-danger">*</span></label>
+            <input type="text" id="username" name="username" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label">Mot de passe <span class="text-danger">*</span></label>
+            <input type="password" id="password" name="password" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="full_name" class="form-label">Nom complet</label>
+            <input type="text" id="full_name" name="full_name" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label for="phone" class="form-label">Téléphone</label>
+            <input type="text" id="phone" name="phone" class="form-control" placeholder="Ex: 3123456">
+          </div>
+          <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" id="email" name="email" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label for="country" class="form-label">Pays <span class="text-danger">*</span></label>
+            <select id="country" name="country" class="form-select" required>
+              <option value="">-- Sélectionner --</option>
+              <option value="Grande Comores" {% if current_user.country == 'Grande Comores' %}selected{% endif %}>Grande Comores</option>
+              <option value="Anjouan" {% if current_user.country == 'Anjouan' %}selected{% endif %}>Anjouan</option>
+              <option value="Moheli" {% if current_user.country == 'Moheli' %}selected{% endif %}>Moheli</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i>Créer le compte
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Edit Agent Account -->
+<div class="modal fade" id="editAgentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-user-edit me-2"></i>Modifier Compte Agent</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" id="edit-agent-form">
+        <div class="modal-body">
+          <input type="hidden" name="q" value="{{ q or '' }}">
+          <div class="mb-3">
+            <label for="edit-username" class="form-label">Nom utilisateur <span class="text-danger">*</span></label>
+            <input type="text" id="edit-username" name="username" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="edit-full-name" class="form-label">Nom complet</label>
+            <input type="text" id="edit-full-name" name="full_name" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label for="edit-phone" class="form-label">Téléphone</label>
+            <input type="text" id="edit-phone" name="phone" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label for="edit-email" class="form-label">Email</label>
+            <input type="email" id="edit-email" name="email" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label for="edit-country" class="form-label">Pays <span class="text-danger">*</span></label>
+            <select id="edit-country" name="country" class="form-select" required>
+              <option value="">-- Sélectionner --</option>
+              <option value="Grande Comores">Grande Comores</option>
+              <option value="Anjouan">Anjouan</option>
+              <option value="Moheli">Moheli</option>
+            </select>
+          </div>
+          <div class="mb-0">
+            <label for="edit-password" class="form-label">Nouveau mot de passe <span class="text-muted">(optionnel)</span></label>
+            <input type="password" id="edit-password" name="password" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function prefillEditAgentModal(button) {
+    const id = button.getAttribute('data-id');
+    const username = button.getAttribute('data-username') || '';
+    const fullName = button.getAttribute('data-full-name') || '';
+    const phone = button.getAttribute('data-phone') || '';
+    const email = button.getAttribute('data-email') || '';
+    const country = button.getAttribute('data-country') || '';
+
+    const form = document.getElementById('edit-agent-form');
+    form.setAttribute('action', '/api/payments/mobile-money-agents/' + id + '/update');
+
+    document.getElementById('edit-username').value = username;
+    document.getElementById('edit-full-name').value = fullName;
+    document.getElementById('edit-phone').value = phone;
+    document.getElementById('edit-email').value = email;
+    document.getElementById('edit-country').value = country;
+    document.getElementById('edit-password').value = '';
+  }
+</script>
+{% endblock %}

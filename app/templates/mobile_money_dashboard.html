@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Mobile Money{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+      <h2><i class="fas fa-wallet me-2"></i>Dashboard Agent Mobile Money</h2>
+      <p class="text-muted mb-0">Véhicules avec amendes impayées, détails par infraction et confirmation des paiements groupés.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+        <a href="/mobile-money-archive" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-archive me-1"></i>Archive
+        </a>
+        <span class="badge bg-warning text-dark align-self-center" id="mm-unpaid-count">0 véhicule(s) à traiter</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-2">
+        <div class="col-md-10">
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="mm-search" class="form-control" placeholder="Rechercher par immatriculation, n° reçu ou date...">
+          </div>
+        </div>
+        <div class="col-md-2 d-grid">
+          <button class="btn btn-outline-primary" id="mm-refresh-btn">
+            <i class="fas fa-rotate me-1"></i>Actualiser
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="mm-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Immatriculation</th>
+              <th>Infractions</th>
+              <th>Total</th>
+              <th>Dernière infraction</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="mm-tbody">
+            <tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="mmDetailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-list-ul me-2"></i>Détails des Infractions</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="fw-semibold" id="mm-details-title">Véhicule</div>
+          <div class="text-muted small" id="mm-details-subtitle"></div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Motif</th>
+                <th>Montant</th>
+                <th>Émis le</th>
+              </tr>
+            </thead>
+            <tbody id="mm-details-tbody">
+              <tr><td colspan="4" class="text-center text-muted">Aucune donnée</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="mm-open-pay-modal-btn">Confirmer le paiement groupé</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="mmPayModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-circle-check me-2"></i>Confirmer Paiement Groupé</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3" id="mm-pay-text">Confirmer le paiement groupé de ce véhicule ?</p>
+        <div class="mb-2">
+          <label class="form-label small">Mode de paiement</label>
+          <select id="mm-pay-method" class="form-select">
+            <option value="mobile_money_manual">Mobile Money (manuel)</option>
+            <option value="cash_manual">Espèces (manuel)</option>
+            <option value="bank_manual">Virement (manuel)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="mm-confirm-pay-btn">Confirmer le paiement groupé</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/mobile_money_dashboard.js') }}"></script>
+{% endblock %}

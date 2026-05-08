@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Archive Paiements - Mobile Money{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+      <h2><i class="fas fa-archive me-2"></i>Archive Paiements</h2>
+      <p class="text-muted mb-0">Historique des amendes payées et des vignettes payées. Les amendes incluses dans une vignette restent archivées dans la section vignette.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+        <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
+          <i class="fas fa-wallet me-1"></i>Dashboard
+        </a>
+        <a href="/mobile-money-vignettes" class="btn btn-outline-success btn-sm">
+          <i class="fas fa-ticket-alt me-1"></i>Vignettes
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold">Date de début</label>
+          <input type="date" id="archive-start-date" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold">Date de fin</label>
+          <input type="date" id="archive-end-date" class="form-control">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold">Recherche</label>
+          <input type="text" id="archive-search" class="form-control" placeholder="Immatriculation, propriétaire, reçu...">
+        </div>
+        <div class="col-md-2 d-grid">
+          <button class="btn btn-outline-primary" id="archive-refresh-btn">
+            <i class="fas fa-rotate me-1"></i>Actualiser
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Amendes directes</div>
+          <div class="fs-4 fw-bold" id="archive-direct-count">0</div>
+          <div class="small text-muted" id="archive-direct-total">0 KMF</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Vignettes payées</div>
+          <div class="fs-4 fw-bold" id="archive-vignette-count">0</div>
+          <div class="small text-muted" id="archive-vignette-total">0 KMF</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Pénalités vignette</div>
+          <div class="fs-4 fw-bold text-warning" id="archive-penalty-total">0 KMF</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Amendes incluses</div>
+          <div class="fs-4 fw-bold text-danger" id="archive-included-fines-total">0 KMF</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs mb-0" id="archiveTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="fines-tab" data-bs-toggle="tab" data-bs-target="#fines-pane" type="button" role="tab" aria-controls="fines-pane" aria-selected="true">
+        <i class="fas fa-gavel me-2 text-danger"></i>Amendes payées directement
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="vignettes-tab" data-bs-toggle="tab" data-bs-target="#vignettes-pane" type="button" role="tab" aria-controls="vignettes-pane" aria-selected="false">
+        <i class="fas fa-ticket-alt me-2 text-success"></i>Vignettes payées
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content border border-top-0 rounded-bottom shadow-sm bg-white" id="archiveTabsContent">
+    <div class="tab-pane fade show active" id="fines-pane" role="tabpanel" aria-labelledby="fines-tab" tabindex="0">
+      <div class="card border-0 rounded-0">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>#</th>
+                  <th>Immatriculation</th>
+                  <th>Propriétaire</th>
+                  <th>Motif</th>
+                  <th>Reçu</th>
+                  <th>Date de paiement</th>
+                  <th class="text-end">Montant</th>
+                  <th>Payé par</th>
+                </tr>
+              </thead>
+              <tbody id="archive-fines-tbody">
+                <tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="vignettes-pane" role="tabpanel" aria-labelledby="vignettes-tab" tabindex="0">
+      <div class="card border-0 rounded-0">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>#</th>
+                  <th>Immatriculation</th>
+                  <th>Propriétaire</th>
+                  <th>Date de paiement</th>
+                  <th class="text-end">Prix vignette</th>
+                  <th class="text-end">Pénalité</th>
+                  <th class="text-end">Amendes incluses</th>
+                  <th class="text-end">Total</th>
+                  <th>Payé par</th>
+                </tr>
+              </thead>
+              <tbody id="archive-vignettes-tbody">
+                <tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/mobile_money_archive.js') }}"></script>
+{% endblock %}

@@ -139,6 +139,12 @@
             <a class="nav-link text-white {% if request.path.startswith('/vignette-daily-report') %}active{% endif %}" href="/vignette-daily-report"><i class="fas fa-file-alt me-2"></i> Rapport Journalier</a>
             {% endif %}
 
+            {% if current_user.is_authenticated and (current_user.role == 'mobile_money_agent') %}
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-dashboard') %}active{% endif %}" href="/mobile-money-dashboard"><i class="fas fa-wallet me-2"></i> Dashboard Mobile Money</a>
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-vignettes') %}active{% endif %}" href="/mobile-money-vignettes"><i class="fas fa-ticket-alt me-2"></i> Paiement Vignettes</a>
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-archive') %}active{% endif %}" href="/mobile-money-archive"><i class="fas fa-archive me-2"></i> Archive Paiements</a>
+            {% endif %}
+
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}
             <a class="nav-link text-white {% if request.path.startswith('/phones') and not request.path.startswith('/phone-') %}active{% endif %}" href="/phones"><i class="fas fa-mobile-alt me-2"></i> Téléphones</a>
             <a class="nav-link text-white {% if request.path.startswith('/phone-usage') %}active{% endif %}" href="/phone-usage"><i class="fas fa-history me-2"></i> Historique Téléphones</a>
