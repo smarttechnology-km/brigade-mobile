@@ -166,6 +166,7 @@ function renderNoVignetteVehicles(sourceVehicles = noVignetteVehiclesCache) {
 
     tbody.innerHTML = paginatedVehicles.map(vehicle => {
         const qrExpired = isQrCodeExpired(vehicle);
+        const paymentPending = !!vehicle.vignette_payment_request_pending;
         const qrStatus = qrExpired
             ? '<span class="badge bg-danger">QR expiré</span>'
             : '<span class="badge bg-success">QR actif</span>';
@@ -173,6 +174,10 @@ function renderNoVignetteVehicles(sourceVehicles = noVignetteVehiclesCache) {
         const actionButton = qrExpired
             ? `<button class="btn btn-sm btn-secondary" disabled title="QR expiré: activez le QR avant d'ajouter une vignette">
                     <i class="fas fa-ban"></i> Ajouter
+               </button>`
+            : paymentPending
+            ? `<button class="btn btn-sm btn-warning" disabled title="Demande de paiement déjà envoyée à Mobile Money">
+                    <i class="fas fa-clock me-1"></i>En attente
                </button>`
             : `<button class="btn btn-sm btn-success" onclick="openAddVignetteModal(${vehicle.id})">
                     <i class="fas fa-plus"></i> Ajouter
@@ -202,6 +207,11 @@ function openAddVignetteModal(vehicleId) {
 
     if (isQrCodeExpired(vehicle)) {
         alert('Impossible d\'ajouter une vignette: le QR code du véhicule est expiré.');
+        return;
+    }
+
+    if (vehicle.vignette_payment_request_pending) {
+        alert('Une demande de paiement est déjà en attente de confirmation Mobile Money.');
         return;
     }
 
@@ -329,8 +339,8 @@ function saveNoVignetteDate(vehicleId) {
         saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Enregistrement...';
     }
 
-    fetch(`/api/vehicles/${vehicleId}`, {
-        method: 'PUT',
+    fetch(`/api/vehicles/${vehicleId}/vignette/payment-request`, {
+        method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
@@ -351,15 +361,18 @@ function saveNoVignetteDate(vehicleId) {
             return r.json();
         })
         .then(() => {
-            noVignetteVehiclesCache = noVignetteVehiclesCache.filter(v => v.id !== vehicleId);
-            filteredNoVignetteVehiclesCache = filteredNoVignetteVehiclesCache.filter(v => v.id !== vehicleId);
+            const idx = noVignetteVehiclesCache.findIndex(v => v.id === vehicleId);
+            if (idx >= 0) {
+                noVignetteVehiclesCache[idx].vignette_payment_request_pending = true;
+                noVignetteVehiclesCache[idx].vignette_payment_requested_expiry = vignetteExpiry;
+            }
             filterNoVignetteVehicles();
 
             const modalEl = document.getElementById('noVignetteAddModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
 
-            alert('Vignette ajoutée avec succès.');
+            alert('Demande de paiement envoyée à Mobile Money. La vignette sera mise à jour après confirmation.');
         })
         .catch(err => {
             if (errorEl) errorEl.textContent = err.message;

@@ -226,7 +226,7 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
             statusText = 'Active';
         }
         
-        let actionButtons = `
+        let actionButtonsContent = `
             <button class="btn btn-sm btn-info" onclick="openViewVehicleModal(${vehicle.id})">
                 <i class="fas fa-eye"></i> Voir
             </button>
@@ -234,19 +234,27 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
         
         if (isExpired) {
             if (isQrCodeExpired(vehicle)) {
-                actionButtons += `
+                actionButtonsContent += `
                 <button class="btn btn-sm btn-secondary ms-1" disabled title="QR code expiré: activez le QR avant de renouveler la vignette">
                     <i class="fas fa-ban"></i> QR expiré
                 </button>
                 `;
-            } else {
-                actionButtons += `
+            } else if (vehicle.vignette_payment_approved) {
+                actionButtonsContent += `
                 <button class="btn btn-sm btn-success ms-1" onclick="renewVignette(${vehicle.id})">
-                    <i class="fas fa-sync-alt"></i> Renew
+                    <i class="fas fa-sync-alt"></i> 
+                </button>
+                `;
+            } else {
+                actionButtonsContent += `
+                <button class="btn btn-sm btn-outline-warning ms-1" disabled title="Paiement Mobile Money requis avant renouvellement">
+                    <i class="fas fa-clock"></i> 
                 </button>
                 `;
             }
         }
+        
+        const actionButtons = `<div class="d-flex gap-2 flex-nowrap">${actionButtonsContent}</div>`;
         
         // Get penalty amount from API response
         const penaltyAmount = vehicle.penalty_amount || 0;
