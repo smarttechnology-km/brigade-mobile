@@ -281,6 +281,20 @@ function openAddVignetteModal(vehicleId) {
         </div>
     `;
 
+    const tariffMissing = vignettePrice <= 0;
+    const saveButtonDisabledAttr = tariffMissing ? 'disabled' : '';
+    const saveButtonTitle = tariffMissing
+        ? 'Impossible d\'enregistrer: aucun tarif disponible pour cette combinaison fiscal/CV.'
+        : '';
+    const tariffWarning = tariffMissing
+        ? `
+            <div class="alert alert-danger" role="alert">
+                <strong><i class="fas fa-ban me-2"></i>Tarif indisponible</strong>
+                <div class="mt-2">Aucune grille de prix n\'est disponible pour cette combinaison de classe fiscale et classe CV. Le bouton Enregistrer est désactivé.</div>
+            </div>
+        `
+        : '';
+
     const modalContent = `
         <div class="modal fade" id="noVignetteAddModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
@@ -296,6 +310,7 @@ function openAddVignetteModal(vehicleId) {
                         
                         <h6 class="mb-3"><i class="fas fa-money-bill me-2"></i>Résumé des frais</h6>
                         ${priceSummary}
+                        ${tariffWarning}
                         
                         <hr class="my-3"/>
                         
@@ -304,7 +319,7 @@ function openAddVignetteModal(vehicleId) {
                         <div id="add-vignette-error" class="text-danger mt-2 small"></div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-success" id="save-add-vignette-btn" onclick="saveNoVignetteDate(${vehicle.id})">
+                        <button type="button" class="btn btn-success" id="save-add-vignette-btn" onclick="saveNoVignetteDate(${vehicle.id})" ${saveButtonDisabledAttr} title="${saveButtonTitle}">
                             <i class="fas fa-save me-1"></i>Enregistrer
                         </button>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
@@ -331,6 +346,13 @@ function saveNoVignetteDate(vehicleId) {
     const vignetteExpiry = dateInput ? dateInput.value : '';
     if (!vignetteExpiry) {
         if (errorEl) errorEl.textContent = 'Veuillez sélectionner une date d\'expiration.';
+        return;
+    }
+
+    const vehicle = noVignetteVehiclesCache.find(v => v.id === vehicleId);
+    const vignettePrice = Number(vehicle && vehicle.vignette_price ? vehicle.vignette_price : 0);
+    if (vignettePrice <= 0) {
+        if (errorEl) errorEl.textContent = 'Impossible d\'enregistrer: aucun tarif disponible pour cette combinaison fiscal/CV.';
         return;
     }
 
