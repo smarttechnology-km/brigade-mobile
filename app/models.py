@@ -135,6 +135,16 @@ class Vehicle(db.Model):
         return now_comoros() > self.qr_code_expiry
     
     def to_dict(self):
+        def format_date(value, date_format='%Y-%m-%d'):
+            if not value:
+                return None
+            if isinstance(value, str):
+                try:
+                    value = datetime.fromisoformat(value)
+                except Exception:
+                    return value
+            return value.strftime(date_format)
+
         return {
             'id': self.id,
             'license_plate': self.license_plate,
@@ -153,10 +163,10 @@ class Vehicle(db.Model):
             'vin': self.vin,
             'fiscal_class': self.fiscal_class,
             'cv_class': self.cv_class,
-            'registration_expiry': self.registration_expiry.strftime('%Y-%m-%d') if self.registration_expiry else None,
+            'registration_expiry': format_date(self.registration_expiry),
             'insurance_company': self.insurance_company,
-            'insurance_expiry': self.insurance_expiry.strftime('%Y-%m-%d') if self.insurance_expiry else None,
-            'vignette_expiry': self.vignette_expiry.strftime('%Y-%m-%d') if self.vignette_expiry else None,
+            'insurance_expiry': format_date(self.insurance_expiry),
+            'vignette_expiry': format_date(self.vignette_expiry),
             'vignette_payment_approved': bool(self.vignette_payment_approved),
             'vignette_payment_approved_at': self.vignette_payment_approved_at.isoformat() if self.vignette_payment_approved_at else None,
             'vignette_payment_approved_by': self.vignette_payment_approved_by,
@@ -169,12 +179,12 @@ class Vehicle(db.Model):
             'vignette_last_paid_penalty_amount': float(self.vignette_last_paid_penalty_amount or 0),
             'vignette_last_paid_fines_amount': float(self.vignette_last_paid_fines_amount or 0),
             'vignette_last_paid_total_amount': float(self.vignette_last_paid_total_amount or 0),
-            'qr_code_generated_at': self.qr_code_generated_at.strftime('%Y-%m-%d') if self.qr_code_generated_at else None,
-            'qr_code_expiry': self.qr_code_expiry.strftime('%Y-%m-%d') if self.qr_code_expiry else None,
+            'qr_code_generated_at': format_date(self.qr_code_generated_at),
+            'qr_code_expiry': format_date(self.qr_code_expiry),
             'track_token': self.track_token,
-            'registration_date': self.registration_date.strftime('%Y-%m-%d'),
-            'created_at': self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
-            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None,
+            'registration_date': format_date(self.registration_date),
+            'created_at': format_date(self.created_at),
+            'updated_at': format_date(self.updated_at, '%Y-%m-%d %H:%M:%S'),
             'notes': self.notes,
         }
 

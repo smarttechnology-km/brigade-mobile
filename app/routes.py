@@ -2020,6 +2020,15 @@ def fine_receipt(fine_id):
     from app.models import Fine, Vehicle
     fine = Fine.query.get_or_404(fine_id)
     vehicle = Vehicle.query.get(fine.vehicle_id)
+    payment_notes = (fine.notes or '').lower()
+    is_app_mobile_payment = (
+        request.args.get('source') == 'app_mobile'
+        or (fine.paid_by or '').strip().lower() == 'app mobile'
+        or 'app mobile' in payment_notes
+        or 'mobile citizen' in payment_notes
+        or 'mobile_citizen' in payment_notes
+    )
+    signature_text = 'App Mobile' if is_app_mobile_payment else (fine.paid_by or '—')
     # receipts are part of payments area: show but ensure access control
     # allow admin, judiciaire and policier to view receipt
     role = getattr(current_user, 'role', None)
@@ -2027,7 +2036,12 @@ def fine_receipt(fine_id):
         role = 'administrateur'
     if role not in ('administrateur','judiciaire','policier'):
         abort(403)
-    return render_template('receipt.html', fine=fine, vehicle=vehicle)
+    return render_template(
+        'receipt.html',
+        fine=fine,
+        vehicle=vehicle,
+        signature_text=signature_text,
+    )
 
 
 @main_bp.route('/users')
@@ -3367,6 +3381,12 @@ def request_vignette_payment(vehicle_id):
     if vehicle.vignette_expiry:
         return jsonify({'error': 'Ce véhicule a déjà une vignette. Utilisez le renouvellement.'}), 400
 
+    vignette_price = float(calculate_vignette_price(vehicle) or 0.0)
+    if vignette_price <= 0:
+        return jsonify({
+            'error': 'Impossible d’ajouter une vignette: aucun tarif n’est disponible pour cette combinaison de classe fiscale et classe CV.'
+        }), 400
+
     now_time = now_comoros()
     vehicle.vignette_payment_requested_at = now_time
     vehicle.vignette_payment_requested_by = current_user.username if getattr(current_user, 'is_authenticated', False) else 'agent_impot'
@@ -3393,10 +3413,10 @@ def request_vignette_payment(vehicle_id):
             'type': 'vignette_request',
             'vehicle_id': vehicle.id,
             'requested_expiry': requested_expiry.isoformat(),
-            'vignette_price': float(calculate_vignette_price(vehicle) or 0.0)
+            'vignette_price': vignette_price
         }
         db.session.add(Payment(
-            amount=float(calculate_vignette_price(vehicle) or 0.0),
+            amount=vignette_price,
             currency='KMF',
             status='pending',
             license_plate=vehicle.license_plate,
