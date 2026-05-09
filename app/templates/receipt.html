@@ -64,7 +64,7 @@
         <div class="d-flex justify-content-between align-items-center mt-4">
           <div>
             <div class="small text-muted">Signature de l'agent</div>
-            <div class="mt-2 mb-2 fw-semibold">{{ fine.paid_by or '—' }}</div>
+            <div class="mt-2 mb-2 fw-semibold">{{ signature_text or fine.paid_by or '—' }}</div>
             <div class="mt-2" style="height:60px; width:220px; border-bottom:1px solid #000"></div>
           </div>
           <div class="text-end">
@@ -87,6 +87,10 @@
     .receipt, .receipt * { visibility: visible; }
     .receipt { position: absolute; left: 0; top: 0; width: 100%; }
     .btn, a { display: none !important; }
+    .row { display: flex; flex-wrap: wrap; width: 100%; }
+    .col-md-6 { flex: 0 0 50%; max-width: 50%; width: 50%; page-break-inside: avoid; }
+    .container { margin: 0; padding: 0; }
+    .col-lg-8 { max-width: 100%; flex: 0 0 100%; }
   }
 </style>
 {% endblock %}
