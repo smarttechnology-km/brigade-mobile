@@ -43,11 +43,13 @@ def create_app():
     from app.routes import main_bp, vehicle_bp
     from app.api import api_bp
     from app.auth import auth_bp
+    from app.citizen_auth import citizen_auth_bp
     from app.mobile_pay import mobile_pay_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(vehicle_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(citizen_auth_bp)
     app.register_blueprint(mobile_pay_bp)
 
     # Enable CORS for API endpoints during development (restrict in production)
@@ -59,25 +61,51 @@ def create_app():
 
     @jwt.token_in_blocklist_loader
     def is_token_revoked(jwt_header, jwt_payload):
-        """Revoke tokens whose session_version no longer matches the user record."""
+        """Revoke tokens whose session_version no longer matches the user record.
+        Mobile tokens (with vehicle_id) bypass this check."""
         try:
+            # Check if this is a mobile/citizen token
+            # Can be in jwt_payload directly or inside 'sub'
+            vehicle_id = jwt_payload.get('vehicle_id')
+            if not vehicle_id and isinstance(jwt_payload.get('sub'), dict):
+                vehicle_id = jwt_payload.get('sub', {}).get('vehicle_id')
+            
+            if vehicle_id:
+                # This is a mobile/citizen token - don't revoke it based on session_version
+                print(f"✅ Mobile token detected (vehicle_id={vehicle_id}), allowing access")
+                return False
+            
+            # This is a web/user token
             uid = jwt_payload.get('sub')
+            
+            # If 'sub' is a dict (old format), extract uid from it
+            if isinstance(uid, dict):
+                uid = uid.get('id') or uid.get('user_id')
+            
             if not uid:
+                print(f"⚠️  No uid or vehicle_id in token")
                 return True
 
             from app.models import User
             user = User.query.get(int(uid))
             if not user or not user.is_active:
+                print(f"⚠️  User not found or inactive for uid={uid}")
                 return True
 
             token_session_version = jwt_payload.get('session_version')
             if token_session_version is None:
                 # Old tokens without session_version are considered invalid.
+                print(f"⚠️  No session_version in token for uid={uid}")
                 return True
 
-            return int(token_session_version) != int(getattr(user, 'session_version', 0))
+            result = int(token_session_version) != int(getattr(user, 'session_version', 0))
+            if result:
+                print(f"⚠️  Session version mismatch for uid={uid}")
+            return result
         except Exception as e:
-            logger.warning(f"JWT revocation check failed: {e}")
+            print(f"❌ JWT revocation check failed: {e}")
+            import traceback
+            traceback.print_exc()
             return True
 
     @jwt.revoked_token_loader
@@ -90,10 +118,12 @@ def create_app():
 
     @jwt.invalid_token_loader
     def invalid_token_callback(reason):
+        print(f"❌ JWT Invalid token: {reason}")
         return jsonify({'error': 'Invalid token'}), 401
 
     @jwt.unauthorized_loader
     def missing_token_callback(reason):
+        print(f"❌ JWT Missing token: {reason}")
         return jsonify({'error': 'Missing token'}), 401
 
     # Error handlers

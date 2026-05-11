@@ -183,6 +183,7 @@ class Vehicle(db.Model):
             'qr_code_expiry': format_date(self.qr_code_expiry),
             'track_token': self.track_token,
             'registration_date': format_date(self.registration_date),
+            'last_inspection_date': format_date(self.last_inspection_date),
             'created_at': format_date(self.created_at),
             'updated_at': format_date(self.updated_at, '%Y-%m-%d %H:%M:%S'),
             'notes': self.notes,
@@ -243,6 +244,35 @@ class VehicleHistory(db.Model):
             'officer': self.officer,
             'notes': self.notes,
             'created_at': self.created_at.isoformat()
+        }
+
+
+class VehicleOwner(db.Model):
+    """Mobile app owner authentication and registration"""
+    __tablename__ = 'vehicle_owners'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, unique=True)
+    owner_name = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(15), nullable=False, unique=True)
+    is_verified = db.Column(db.Boolean, default=False)
+    verified_at = db.Column(db.DateTime)
+    last_login = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+    
+    vehicle = db.relationship('Vehicle', backref=db.backref('owner_account', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'owner_name': self.owner_name,
+            'phone': self.phone,
+            'is_verified': self.is_verified,
+            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
+            'last_login': self.last_login.isoformat() if self.last_login else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 
