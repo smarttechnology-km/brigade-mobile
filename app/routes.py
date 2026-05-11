@@ -1034,6 +1034,7 @@ def get_vehicle_history(vehicle_id):
 def create_fine(vehicle_id):
     from app.models import Fine, VehicleHistory, ExoneratedVehicle
     from app.sms_service import sms_service
+    from app.push_notifications import send_fine_push_notification
     
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
@@ -1096,13 +1097,23 @@ def create_fine(vehicle_id):
     except Exception as e:
         print(f"❌ SMS Notification Error: {str(e)}")
         sms_result = {'success': False, 'message': str(e)}
+
+    # Send push notification to the current citizen device, if registered
+    try:
+        push_result = send_fine_push_notification(vehicle, fine)
+        print(f"📲 Push Notification Result: {push_result}")
+    except Exception as e:
+        print(f"❌ Push Notification Error: {str(e)}")
+        push_result = {'success': False, 'message': str(e)}
     
     return jsonify({
         'fine': fine.to_dict(), 
         'history': hist.to_dict(),
         'is_exonerated': is_exonerated,
         'sms_sent': sms_result.get('success', False),
-        'sms_message': sms_result.get('message', '')
+        'sms_message': sms_result.get('message', ''),
+        'push_sent': push_result.get('success', False),
+        'push_message': push_result.get('message', '')
     }), 201
 
 @vehicle_bp.route('/<int:vehicle_id>/fines', methods=['GET'])

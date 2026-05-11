@@ -256,6 +256,9 @@ class VehicleOwner(db.Model):
     owner_name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(15), nullable=False, unique=True)
     is_verified = db.Column(db.Boolean, default=False)
+    session_version = db.Column(db.Integer, nullable=False, default=0)
+    current_device_id = db.Column(db.String(128), nullable=True)
+    expo_push_token = db.Column(db.String(255), nullable=True)
     verified_at = db.Column(db.DateTime)
     last_login = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
@@ -270,6 +273,9 @@ class VehicleOwner(db.Model):
             'owner_name': self.owner_name,
             'phone': self.phone,
             'is_verified': self.is_verified,
+            'session_version': self.session_version,
+            'current_device_id': self.current_device_id,
+            'expo_push_token': self.expo_push_token,
             'verified_at': self.verified_at.isoformat() if self.verified_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,

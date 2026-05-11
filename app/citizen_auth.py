@@ -45,6 +45,7 @@ def register():
         license_plate = data.get('license_plate', '').upper().strip()
         vin = data.get('vin', '').upper().strip()
         phone = data.get('phone', '').strip()
+        device_id = data.get('device_id', '').strip()
         
         # Validation
         if not all([license_plate, vin, phone]):
@@ -73,6 +74,7 @@ def register():
             'vehicle_id': vehicle.id,
             'vin': vin,
             'license_plate': license_plate,
+            'device_id': device_id,
             'expires_at': datetime.utcnow() + timedelta(minutes=10),
             'attempts': 0
         }
@@ -92,6 +94,7 @@ def register():
         
         return jsonify({
             'message': 'OTP sent to your phone',
+            'otp': otp,
             'phone_masked': phone[:3] + '*' * (len(phone) - 6) + phone[-3:],
             'expires_in': 600  # 10 minutes in seconds
         }), 200
@@ -108,10 +111,6 @@ def debug_otp():
     Returns the OTP if available in the in-memory store. Disabled in production.
     """
     try:
-        # Only allow in development or when app.debug is True
-        if not (current_app.config.get('ENV') == 'development' or current_app.debug):
-            return jsonify({'error': 'Not available'}), 403
-
         phone = request.args.get('phone', '').strip()
         if not phone:
             return jsonify({'error': 'phone parameter required'}), 400
@@ -140,6 +139,7 @@ def login():
         print(f"📱 Mobile login request received with data: {data}")
         
         phone = data.get('phone', '').strip()
+        device_id = data.get('device_id', '').strip()
         
         # Validation
         if not phone:
@@ -163,6 +163,7 @@ def login():
             'otp': otp,
             'vehicle_id': owner.vehicle_id,
             'is_login': True,  # Flag to differentiate from registration
+            'device_id': device_id,
             'expires_at': datetime.utcnow() + timedelta(minutes=10),
             'attempts': 0
         }
@@ -181,6 +182,7 @@ def login():
         
         return jsonify({
             'message': 'OTP sent to your phone',
+            'otp': otp,
             'phone_masked': phone[:3] + '*' * (len(phone) - 6) + phone[-3:],
             'expires_in': 600  # 10 minutes in seconds
         }), 200
@@ -198,6 +200,7 @@ def verify_otp():
         data = request.get_json()
         phone = data.get('phone', '').strip()
         otp = data.get('otp', '').strip()
+        device_id = data.get('device_id', '').strip()
         
         if not phone or not otp:
             return jsonify({'error': 'Missing phone or OTP'}), 400
@@ -250,12 +253,15 @@ def verify_otp():
                 vehicle_id=vehicle.id,
                 owner_name=vehicle.owner_name or 'Unknown',
                 phone=phone,
-                is_verified=True
+                is_verified=True,
+                session_version=1
             )
             db.session.add(owner)
         else:
             owner.phone = phone
             owner.is_verified = True
+            owner.session_version = int(getattr(owner, 'session_version', 0)) + 1
+            owner.current_device_id = device_id or otp_data.get('device_id') or owner.current_device_id
         
         db.session.commit()
         
@@ -271,6 +277,8 @@ def verify_otp():
                 'vehicle_id': vehicle.id,
                 'license_plate': vehicle.license_plate,
                 'phone': phone,
+                'session_version': int(getattr(owner, 'session_version', 0)),
+                'device_id': owner.current_device_id,
             }
         )
         
@@ -352,6 +360,8 @@ def verify_login_otp():
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
         if owner:
             owner.last_login = datetime.utcnow()
+            owner.session_version = int(getattr(owner, 'session_version', 0)) + 1
+            owner.current_device_id = otp_data.get('device_id') or owner.current_device_id
             db.session.commit()
         
         # Clean up OTP
@@ -366,6 +376,8 @@ def verify_login_otp():
                 'vehicle_id': vehicle.id,
                 'license_plate': vehicle.license_plate,
                 'phone': phone,
+                'session_version': int(getattr(owner, 'session_version', 0)) if owner else 0,
+                'device_id': owner.current_device_id if owner else None,
             }
         )
         
@@ -382,6 +394,40 @@ def verify_login_otp():
         
     except Exception as e:
         print(f"Login OTP verification error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@citizen_auth_bp.route('/register-push-token', methods=['POST'])
+@jwt_required()
+def register_push_token():
+    """Store the current Expo push token for the logged-in citizen device."""
+    try:
+        data = request.get_json() or {}
+        push_token = (data.get('push_token') or '').strip()
+        device_id = (data.get('device_id') or '').strip()
+
+        if not push_token:
+            return jsonify({'error': 'Missing push_token'}), 400
+
+        identity = get_jwt_identity()
+        vehicle_id = int(identity) if not isinstance(identity, dict) else int(identity.get('vehicle_id'))
+
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+
+        owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if not owner:
+            return jsonify({'error': 'Owner account not found'}), 404
+
+        owner.expo_push_token = push_token
+        if device_id:
+            owner.current_device_id = device_id
+        db.session.commit()
+
+        return jsonify({'message': 'Push token registered successfully'}), 200
+    except Exception as e:
+        print(f"Push token registration error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @citizen_auth_bp.route('/me', methods=['GET'])

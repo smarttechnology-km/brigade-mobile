@@ -430,7 +430,17 @@ def webhook():
     if not local_payment_id:
         return jsonify({'error': 'Missing local_payment_id'}), 400
 
-    payment = Payment.query.get(int(local_payment_id))
+    # Try to parse local_payment_id as integer (normal Payment ID)
+    try:
+        payment_id_int = int(local_payment_id)
+        payment = Payment.query.get(payment_id_int)
+    except (ValueError, TypeError):
+        # local_payment_id is not a valid integer (e.g., 'VIGN_64_1778518673141')
+        # For vignette payments created client-side, reject with helpful error
+        return jsonify({
+            'error': 'Invalid payment ID format. Vignette payments must be created via /pay/create endpoint first.'
+        }), 400
+
     if not payment:
         return jsonify({'error': 'Payment not found'}), 404
 

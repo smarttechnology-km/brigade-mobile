@@ -62,18 +62,41 @@ def create_app():
     @jwt.token_in_blocklist_loader
     def is_token_revoked(jwt_header, jwt_payload):
         """Revoke tokens whose session_version no longer matches the user record.
-        Mobile tokens (with vehicle_id) bypass this check."""
+        Mobile tokens are validated against the VehicleOwner session_version so a
+        new login on another phone invalidates the previous one."""
         try:
-            # Check if this is a mobile/citizen token
+            # Check if this is a mobile/citizen token.
             # Can be in jwt_payload directly or inside 'sub'
             vehicle_id = jwt_payload.get('vehicle_id')
             if not vehicle_id and isinstance(jwt_payload.get('sub'), dict):
                 vehicle_id = jwt_payload.get('sub', {}).get('vehicle_id')
             
             if vehicle_id:
-                # This is a mobile/citizen token - don't revoke it based on session_version
-                print(f"✅ Mobile token detected (vehicle_id={vehicle_id}), allowing access")
-                return False
+                from app.models import VehicleOwner
+
+                owner = VehicleOwner.query.filter_by(vehicle_id=int(vehicle_id)).first()
+                if not owner or not owner.is_verified:
+                    print(f"⚠️  Mobile token rejected: owner missing or unverified for vehicle_id={vehicle_id}")
+                    return True
+
+                token_session_version = jwt_payload.get('session_version')
+                token_device_id = jwt_payload.get('device_id')
+                if token_session_version is None:
+                    print(f"⚠️  No session_version in mobile token for vehicle_id={vehicle_id}")
+                    return True
+
+                if not token_device_id:
+                    print(f"⚠️  No device_id in mobile token for vehicle_id={vehicle_id}")
+                    return True
+
+                if owner.current_device_id and str(owner.current_device_id) != str(token_device_id):
+                    print(f"⚠️  Mobile device mismatch for vehicle_id={vehicle_id}")
+                    return True
+
+                result = int(token_session_version) != int(getattr(owner, 'session_version', 0))
+                if result:
+                    print(f"⚠️  Mobile session version mismatch for vehicle_id={vehicle_id}")
+                return result
             
             # This is a web/user token
             uid = jwt_payload.get('sub')
@@ -199,6 +222,30 @@ def create_app():
                                 text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
                             )
                             logger.info("Added missing users.session_version column for SQLite compatibility")
+
+                    vehicle_owners_table_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicle_owners'")
+                    ).first() is not None
+
+                    if vehicle_owners_table_exists:
+                        vehicle_owner_columns = {
+                            row[1] for row in conn.execute(text("PRAGMA table_info(vehicle_owners)")).fetchall()
+                        }
+                        if 'session_version' not in vehicle_owner_columns:
+                            conn.execute(
+                                text("ALTER TABLE vehicle_owners ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
+                            )
+                            logger.info("Added missing vehicle_owners.session_version column for SQLite compatibility")
+                        if 'current_device_id' not in vehicle_owner_columns:
+                            conn.execute(
+                                text("ALTER TABLE vehicle_owners ADD COLUMN current_device_id VARCHAR(128)")
+                            )
+                            logger.info("Added missing vehicle_owners.current_device_id column for SQLite compatibility")
+                        if 'expo_push_token' not in vehicle_owner_columns:
+                            conn.execute(
+                                text("ALTER TABLE vehicle_owners ADD COLUMN expo_push_token VARCHAR(255)")
+                            )
+                            logger.info("Added missing vehicle_owners.expo_push_token column for SQLite compatibility")
 
                     vehicles_table_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicles'")
