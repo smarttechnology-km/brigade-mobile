@@ -427,6 +427,8 @@ def api_vehicles_update(vehicle_id):
             return jsonify({"error": "Forbidden"}), 403
     
     data = request.get_json() or {}
+    # preserve old owner phone to detect changes
+    old_owner_phone = vehicle.owner_phone
     
     # Update string fields
     if 'license_plate' in data:
@@ -502,6 +504,43 @@ def api_vehicles_update(vehicle_id):
     
     vehicle.updated_at = now_comoros()
     db.session.commit()
+
+    # If owner_phone changed, ensure VehicleOwner linkage is synced so
+    # mobile 'my-vehicles' and 'changer d\'immatriculation' reflect the change.
+    try:
+        if 'owner_phone' in data:
+            new_phone = (data.get('owner_phone') or '').strip()
+            if new_phone and new_phone != (old_owner_phone or '').strip():
+                from app.models import VehicleOwner
+                from datetime import datetime as _dt
+                now = _dt.utcnow()
+
+                vo = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+                if vo:
+                    vo.phone = new_phone
+                    vo.updated_at = now
+                    db.session.commit()
+                else:
+                    # Create a new owner link if missing (idempotent check)
+                    exists = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+                    if not exists:
+                        new_vo = VehicleOwner(
+                            vehicle_id=vehicle.id,
+                            owner_name=vehicle.owner_name or 'Proprietaire',
+                            phone=new_phone,
+                            is_verified=True,
+                            session_version=0,
+                            verified_at=now,
+                            last_login=None,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                        db.session.add(new_vo)
+                        db.session.commit()
+    except Exception:
+        # Don't fail the update if syncing linkage fails; log for ops.
+        import traceback
+        traceback.print_exc()
 
     changed_fields = []
     for field in [
