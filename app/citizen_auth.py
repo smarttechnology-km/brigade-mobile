@@ -542,7 +542,7 @@ def get_my_vehicles():
     """Return all verified vehicles linked to the current phone number."""
     try:
         claims = get_jwt()
-        phone = claims.get('phone')
+        phone = (claims.get('phone') or '').strip()
         current_vehicle_id = claims.get('vehicle_id')
 
         if not phone:
@@ -554,6 +554,44 @@ def get_my_vehicles():
             .order_by(VehicleOwner.last_login.desc(), VehicleOwner.verified_at.desc(), VehicleOwner.id.desc())
             .all()
         )
+
+        # Backward compatibility: old accounts may have vehicles.owner_phone set
+        # but no corresponding row yet in vehicle_owners.
+        owner_vehicle_ids = {o.vehicle_id for o in owners}
+        legacy_vehicles = Vehicle.query.filter_by(owner_phone=phone).all()
+        created_links = False
+        now = datetime.utcnow()
+
+        for legacy_vehicle in legacy_vehicles:
+            if legacy_vehicle.id in owner_vehicle_ids:
+                continue
+
+            # Do not auto-link if this vehicle is already linked to another phone.
+            existing_owner = VehicleOwner.query.filter_by(vehicle_id=legacy_vehicle.id).first()
+            if existing_owner:
+                continue
+
+            db.session.add(VehicleOwner(
+                vehicle_id=legacy_vehicle.id,
+                owner_name=legacy_vehicle.owner_name or 'Proprietaire',
+                phone=phone,
+                is_verified=True,
+                session_version=0,
+                verified_at=now,
+                last_login=None,
+                created_at=now,
+                updated_at=now,
+            ))
+            created_links = True
+
+        if created_links:
+            db.session.commit()
+            owners = (
+                VehicleOwner.query
+                .filter_by(phone=phone, is_verified=True)
+                .order_by(VehicleOwner.last_login.desc(), VehicleOwner.verified_at.desc(), VehicleOwner.id.desc())
+                .all()
+            )
 
         vehicles = []
         for owner in owners:
@@ -600,7 +638,7 @@ def switch_vehicle():
             return jsonify({'error': 'Invalid vehicle_id'}), 400
 
         claims = get_jwt()
-        phone = claims.get('phone')
+        phone = (claims.get('phone') or '').strip()
         device_id = claims.get('device_id')
 
         if not phone:
@@ -611,6 +649,28 @@ def switch_vehicle():
             .filter_by(phone=phone, vehicle_id=target_vehicle_id, is_verified=True)
             .first()
         )
+
+        # Backward compatibility for legacy rows missing in vehicle_owners.
+        if not owner:
+            legacy_vehicle = Vehicle.query.filter_by(id=target_vehicle_id, owner_phone=phone).first()
+            if legacy_vehicle:
+                existing_owner = VehicleOwner.query.filter_by(vehicle_id=legacy_vehicle.id).first()
+                if not existing_owner:
+                    now = datetime.utcnow()
+                    owner = VehicleOwner(
+                        vehicle_id=legacy_vehicle.id,
+                        owner_name=legacy_vehicle.owner_name or 'Proprietaire',
+                        phone=phone,
+                        is_verified=True,
+                        session_version=0,
+                        verified_at=now,
+                        last_login=None,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    db.session.add(owner)
+                    db.session.commit()
+
         if not owner:
             return jsonify({'error': 'This vehicle is not linked to your phone number'}), 403
 
