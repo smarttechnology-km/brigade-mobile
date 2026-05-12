@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -100,6 +100,42 @@ def log_user_history(user, action, details):
         db.session.commit()
     except Exception as e:
         print(f'[UserHistory] {action} logging failed for {getattr(user, "username", user)}: {e}')
+
+
+def _sync_vehicle_owner_link(vehicle):
+    """Best-effort sync between vehicles.owner_phone and vehicle_owners.phone."""
+    phone = (vehicle.owner_phone or '').strip()
+    if not phone:
+        return
+
+    owner_name = (vehicle.owner_name or 'Proprietaire').strip() or 'Proprietaire'
+    now = now_comoros()
+
+    try:
+        vo = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if vo:
+            vo.phone = phone
+            vo.owner_name = owner_name
+            vo.updated_at = now
+            if not vo.verified_at:
+                vo.verified_at = now
+            vo.is_verified = True
+        else:
+            db.session.add(VehicleOwner(
+                vehicle_id=vehicle.id,
+                owner_name=owner_name,
+                phone=phone,
+                is_verified=True,
+                session_version=0,
+                verified_at=now,
+                last_login=None,
+                created_at=now,
+                updated_at=now,
+            ))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[VehicleOwner] sync failed for vehicle {vehicle.id}: {e}")
 
 
 @api_bp.route('/health', methods=['GET'])
@@ -398,6 +434,9 @@ def api_vehicles_create():
     db.session.add(vehicle)
     db.session.commit()
 
+    if vehicle.owner_phone:
+        _sync_vehicle_owner_link(vehicle)
+
     log_user_history(
         user,
         'Véhicule créé (mobile)',
@@ -427,8 +466,6 @@ def api_vehicles_update(vehicle_id):
             return jsonify({"error": "Forbidden"}), 403
     
     data = request.get_json() or {}
-    # preserve old owner phone to detect changes
-    old_owner_phone = vehicle.owner_phone
     
     # Update string fields
     if 'license_plate' in data:
@@ -505,42 +542,8 @@ def api_vehicles_update(vehicle_id):
     vehicle.updated_at = now_comoros()
     db.session.commit()
 
-    # If owner_phone changed, ensure VehicleOwner linkage is synced so
-    # mobile 'my-vehicles' and 'changer d\'immatriculation' reflect the change.
-    try:
-        if 'owner_phone' in data:
-            new_phone = (data.get('owner_phone') or '').strip()
-            if new_phone and new_phone != (old_owner_phone or '').strip():
-                from app.models import VehicleOwner
-                from datetime import datetime as _dt
-                now = _dt.utcnow()
-
-                vo = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
-                if vo:
-                    vo.phone = new_phone
-                    vo.updated_at = now
-                    db.session.commit()
-                else:
-                    # Create a new owner link if missing (idempotent check)
-                    exists = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
-                    if not exists:
-                        new_vo = VehicleOwner(
-                            vehicle_id=vehicle.id,
-                            owner_name=vehicle.owner_name or 'Proprietaire',
-                            phone=new_phone,
-                            is_verified=True,
-                            session_version=0,
-                            verified_at=now,
-                            last_login=None,
-                            created_at=now,
-                            updated_at=now,
-                        )
-                        db.session.add(new_vo)
-                        db.session.commit()
-    except Exception:
-        # Don't fail the update if syncing linkage fails; log for ops.
-        import traceback
-        traceback.print_exc()
+    if 'owner_phone' in data or 'owner_name' in data:
+        _sync_vehicle_owner_link(vehicle)
 
     changed_fields = []
     for field in [

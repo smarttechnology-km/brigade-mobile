@@ -5,7 +5,7 @@ from functools import wraps
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from app import db
-from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine, VehicleHistory
+from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine, VehicleHistory, VehicleOwner
 from decimal import Decimal
 import qrcode
 import io
@@ -95,6 +95,42 @@ def check_island_access(island):
 
 def vehicle_has_unpaid_fines(vehicle_id):
     return Fine.query.filter_by(vehicle_id=vehicle_id, paid=False).first() is not None
+
+
+def _sync_vehicle_owner_link(vehicle):
+    """Best-effort sync between vehicles.owner_phone and vehicle_owners.phone."""
+    phone = (vehicle.owner_phone or '').strip()
+    if not phone:
+        return
+
+    owner_name = (vehicle.owner_name or 'Proprietaire').strip() or 'Proprietaire'
+    now = now_comoros()
+
+    try:
+        vo = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if vo:
+            vo.phone = phone
+            vo.owner_name = owner_name
+            vo.updated_at = now
+            if not vo.verified_at:
+                vo.verified_at = now
+            vo.is_verified = True
+        else:
+            db.session.add(VehicleOwner(
+                vehicle_id=vehicle.id,
+                owner_name=owner_name,
+                phone=phone,
+                is_verified=True,
+                session_version=0,
+                verified_at=now,
+                last_login=None,
+                created_at=now,
+                updated_at=now,
+            ))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[VehicleOwner] sync failed for vehicle {vehicle.id}: {e}")
 
 
 def get_first_unpaid_fine(vehicle_id):
@@ -1018,6 +1054,9 @@ def create_vehicle():
             print(f"Warning: Could not auto-assign vehicle to insurance account: {e}")
     
     db.session.commit()
+
+    if vehicle.owner_phone:
+        _sync_vehicle_owner_link(vehicle)
     
     # Log action in user history
     try:
@@ -2660,6 +2699,9 @@ def update_vehicle(vehicle_id):
                 print(f"Warning: Could not auto-assign vehicle to insurance account: {e}")
     
     db.session.commit()
+
+    if 'owner_phone' in data or 'owner_name' in data:
+        _sync_vehicle_owner_link(vehicle)
     
     # Log action in user history
     try:
