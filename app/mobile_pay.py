@@ -193,10 +193,14 @@ def lookup():
     if not q:
         return jsonify({'error': 'Missing query parameter q'}), 400
 
+    q_normalized = q.upper().strip()
+
     # Try track_token first
     vehicle = Vehicle.query.filter_by(track_token=q).first()
     if not vehicle:
-        vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{q}%')).first()
+        vehicle = Vehicle.query.filter_by(license_plate=q_normalized).first()
+    if not vehicle:
+        vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{q_normalized}%')).first()
 
     if not vehicle:
         return jsonify({'fines': [], 'vehicle': None})
