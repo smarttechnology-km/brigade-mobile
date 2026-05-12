@@ -471,7 +471,23 @@ def register_push_token():
         owner.expo_push_token = push_token
         if device_id:
             owner.current_device_id = device_id
-        db.session.commit()
+
+        # Also propagate this push token to any other VehicleOwner rows with the same phone
+        try:
+            same_phone = (VehicleOwner.query
+                          .filter_by(phone=owner.phone)
+                          .all())
+            for o in same_phone:
+                # update token for all linked accounts (same phone)
+                o.expo_push_token = push_token
+            db.session.commit()
+        except Exception:
+            # Fallback: ensure at least the primary owner was saved
+            db.session.rollback()
+            owner.expo_push_token = push_token
+            if device_id:
+                owner.current_device_id = device_id
+            db.session.commit()
 
         print(f"✅ Push token registered successfully for vehicle {vehicle.license_plate}")
         print(f"   Device ID: {device_id}")

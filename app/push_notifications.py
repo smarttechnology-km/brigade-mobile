@@ -74,21 +74,31 @@ def send_fine_push_notification(vehicle, fine):
     try:
         from app.models import VehicleOwner
 
-        owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
-        if not owner:
-            print(f"❌ No owner found for vehicle {vehicle.license_plate}")
-            return {
-                'success': False,
-                'message': 'No owner account found for vehicle',
-            }
-        
-        if not owner.expo_push_token:
-            print(f"⚠️ No Expo push token registered for vehicle {vehicle.license_plate}")
-            print(f"   Owner must open the app and grant notification permissions first")
-            return {
-                'success': False,
-                'message': 'No Expo push token registered - owner must open app first',
-            }
+        # Collect all expo push tokens relevant to this vehicle.
+        # Include owner record for this vehicle and any VehicleOwner rows that share the same phone.
+        tokens = set()
+        try:
+            owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+            if owner and owner.expo_push_token:
+                tokens.add(owner.expo_push_token)
+
+            # if vehicle.owner_phone exists, include tokens registered on other vehicle_owner rows with same phone
+            phone = (vehicle.owner_phone or (owner.phone if owner else None))
+            if phone:
+                other_owners = VehicleOwner.query.filter_by(phone=phone).all()
+                for o in other_owners:
+                    if o.expo_push_token:
+                        tokens.add(o.expo_push_token)
+
+            if not tokens:
+                print(f"⚠️ No Expo push token registered for vehicle {vehicle.license_plate} or linked phone")
+                return {
+                    'success': False,
+                    'message': 'No Expo push token registered - owner must open app first',
+                }
+        except Exception as e:
+            print(f"❌ Error collecting tokens for vehicle {vehicle.license_plate}: {e}")
+            return {'success': False, 'message': str(e)}
 
         amount = float(fine.amount or 0)
         amount_text = f"{amount:,.0f} KMF"
@@ -108,19 +118,23 @@ def send_fine_push_notification(vehicle, fine):
             'body': body,
         }
 
-        print(f"📲 Sending push notification to vehicle {vehicle.license_plate}")
-        print(f"   Token: {owner.expo_push_token[:30]}...")
-        print(f"   Title: {title}")
-        print(f"   Body: {body[:100]}...")
-        
-        result = send_expo_push_notification(owner.expo_push_token, title, body, data)
-        
-        if result.get('success'):
-            print(f"✅ Push notification sent successfully to {vehicle.license_plate}")
-        else:
-            print(f"❌ Push notification failed: {result.get('message')}")
-        
-        return result
+        print(f"📲 Sending push notification for vehicle {vehicle.license_plate} to {len(tokens)} token(s)")
+        results = []
+        for t in tokens:
+            try:
+                print(f"   Token: {t[:30]}...")
+                r = send_expo_push_notification(t, title, body, data)
+                results.append(r)
+                if r.get('success'):
+                    print(f"✅ Push notification sent successfully to token {t[:20]}")
+                else:
+                    print(f"❌ Push notification failed for token {t[:20]}: {r.get('message')}")
+            except Exception as e:
+                print(f"❌ Exception sending to token {t[:20]}: {e}")
+
+        # Aggregate result: success if any token succeeded
+        any_success = any(r.get('success') for r in results)
+        return {'success': any_success, 'results': results}
     except Exception as error:
         print(f"❌ Exception in send_fine_push_notification: {error}")
         import traceback
