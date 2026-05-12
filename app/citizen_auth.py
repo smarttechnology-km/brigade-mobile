@@ -310,6 +310,13 @@ def verify_otp():
         
         # Find or create VehicleOwner
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        resolved_device_id = (
+            device_id
+            or otp_data.get('device_id')
+            or getattr(owner, 'current_device_id', None)
+            or f'device_{vehicle.id}_{int(datetime.utcnow().timestamp())}'
+        )
+
         if not owner:
             owner = VehicleOwner(
                 vehicle_id=vehicle.id,
@@ -323,7 +330,7 @@ def verify_otp():
             owner.phone = phone
             owner.is_verified = True
             owner.session_version = int(getattr(owner, 'session_version', 0)) + 1
-            owner.current_device_id = device_id or otp_data.get('device_id') or owner.current_device_id
+        owner.current_device_id = resolved_device_id
         
         db.session.commit()
         
@@ -406,7 +413,11 @@ def verify_login_otp():
         if owner:
             owner.last_login = datetime.utcnow()
             owner.session_version = int(getattr(owner, 'session_version', 0)) + 1
-            owner.current_device_id = otp_data.get('device_id') or owner.current_device_id
+            owner.current_device_id = (
+                otp_data.get('device_id')
+                or owner.current_device_id
+                or f'device_{vehicle.id}_{int(datetime.utcnow().timestamp())}'
+            )
             db.session.commit()
         
         # Clean up OTP
