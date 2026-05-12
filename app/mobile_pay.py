@@ -587,6 +587,7 @@ def get_receipt(payment_id):
     payment_type = 'fine'
     vehicle = None
     vignette_quote = None
+    fines_details = []
     try:
         payload = json.loads(p.fines or '[]')
         if isinstance(payload, dict) and payload.get('type') == 'vignette_request':
@@ -600,6 +601,28 @@ def get_receipt(payment_id):
                 'total_amount': float(payload.get('total_amount') or p.amount or 0.0),
                 'requested_expiry': payload.get('requested_expiry'),
             }
+            fine_ids = payload.get('fine_ids') or []
+        else:
+            fine_ids = payload if isinstance(payload, list) else []
+
+        if fine_ids:
+            parsed_fine_ids = []
+            for fid in fine_ids:
+                try:
+                    parsed_fine_ids.append(int(fid))
+                except Exception:
+                    continue
+
+            if parsed_fine_ids:
+                fines = Fine.query.filter(Fine.id.in_(parsed_fine_ids)).all()
+                fines_by_id = {fine.id: fine for fine in fines}
+                for fid in parsed_fine_ids:
+                    fine = fines_by_id.get(fid)
+                    if fine:
+                        fines_details.append(fine.to_dict())
+
+                if payment_type == 'fine' and fines:
+                    vehicle = fines[0].vehicle
     except Exception:
         payload = []
 
@@ -622,6 +645,8 @@ def get_receipt(payment_id):
         'payer_name': p.payer_name,
         'payer_email': p.payer_email,
         'vehicle': vehicle.to_dict() if vehicle else None,
+        'fines_count': len(fines_details),
+        'fines_details': fines_details,
         'vignette_quote': vignette_quote,
     })
 
@@ -803,20 +828,41 @@ def download_receipt_pdf(payment_id):
         # Get fine information from payment
         import json as json_lib
         fine = None
+        fines = []
         vehicle = None
         receipt_number = None
+        payment_kind = 'fine'
         
         try:
-            fine_ids = json_lib.loads(payment.fines) if payment.fines else []
-            if fine_ids and len(fine_ids) > 0:
+            raw_payload = json_lib.loads(payment.fines) if payment.fines else []
+            fine_ids = []
+
+            if isinstance(raw_payload, dict) and raw_payload.get('type') == 'vignette_request':
+                payment_kind = 'vignette'
+                vehicle_id = raw_payload.get('vehicle_id')
+                if vehicle_id:
+                    vehicle = Vehicle.query.get(int(vehicle_id))
+                fine_ids = raw_payload.get('fine_ids') or []
+            elif isinstance(raw_payload, list):
+                fine_ids = raw_payload
+
+            parsed_fine_ids = []
+            for fid in fine_ids:
                 try:
-                    fine_id = int(fine_ids[0])
-                    fine = Fine.query.get(fine_id)
-                    if fine:
+                    parsed_fine_ids.append(int(fid))
+                except (ValueError, TypeError):
+                    continue
+
+            if parsed_fine_ids:
+                fines = Fine.query.filter(Fine.id.in_(parsed_fine_ids)).all()
+                fines_by_id = {f.id: f for f in fines}
+                fines = [fines_by_id[fid] for fid in parsed_fine_ids if fid in fines_by_id]
+
+                if fines:
+                    fine = fines[0]
+                    if not vehicle:
                         vehicle = Vehicle.query.get(fine.vehicle_id)
-                        receipt_number = fine.receipt_number or f"REC-{fine.id}"
-                except (ValueError, TypeError, IndexError) as e:
-                    print(f"Error parsing fine_ids: {e}, fine_ids={fine_ids}")
+                    receipt_number = fine.receipt_number or f"REC-{fine.id}"
         except Exception as e:
             print(f"Error loading fines data: {e}")
         
@@ -844,7 +890,7 @@ def download_receipt_pdf(payment_id):
         elements.append(Spacer(1, 0.12*inch))
         
         # TWO COLUMN SECTION - Vehicle info (left) and Payment details (right)
-        if fine and vehicle:
+        if vehicle:
             col1_items = []
             col1_items.append(Paragraph("<b>Informations Vehicule / Proprietaire</b>", heading_style))
             col1_items.append(Paragraph(f"<b>Immatriculation:</b> {vehicle.license_plate or '—'}", normal_style))
@@ -854,9 +900,11 @@ def download_receipt_pdf(payment_id):
             
             col2_items = []
             col2_items.append(Paragraph("<b>Details du paiement</b>", heading_style))
-            col2_items.append(Paragraph(f"<b>Motif:</b> {fine.reason or '—'}", normal_style))
-            col2_items.append(Paragraph(f"<b>Agent:</b> {fine.paid_by or fine.officer or '—'}", normal_style))
-            col2_items.append(Paragraph(f"<b>Montant paye:</b> <b>{fine.amount} KMF</b>", normal_style))
+            if payment_kind == 'vignette':
+                col2_items.append(Paragraph("<b>Type:</b> Paiement vignette", normal_style))
+            else:
+                col2_items.append(Paragraph(f"<b>Type:</b> Paiement amendes ({len(fines)} selectionnee(s))", normal_style))
+            col2_items.append(Paragraph(f"<b>Montant total paye:</b> <b>{round(float(payment.amount or 0.0), 2)} KMF</b>", normal_style))
             col2_items.append(Paragraph(f"<b>Reference recu:</b> {receipt_number or '—'}", normal_style))
             
             # Create nested tables for each column
@@ -890,6 +938,49 @@ def download_receipt_pdf(payment_id):
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
             ]))
             elements.append(main_table)
+
+        if fines:
+            elements.append(Spacer(1, 0.12 * inch))
+            elements.append(Paragraph(f"<b>Amendes reglees ({len(fines)})</b>", heading_style))
+
+            fines_table_data = [[
+                Paragraph('<b>#</b>', normal_style),
+                Paragraph('<b>Motif</b>', normal_style),
+                Paragraph('<b>Montant (KMF)</b>', normal_style),
+                Paragraph('<b>Date paiement</b>', normal_style),
+            ]]
+
+            total_fines_amount = 0.0
+            for index, paid_fine in enumerate(fines, start=1):
+                total_fines_amount += float(paid_fine.amount or 0.0)
+                paid_at_str = paid_fine.paid_at.strftime('%d/%m/%Y %H:%M') if paid_fine.paid_at else '—'
+                fines_table_data.append([
+                    str(index),
+                    paid_fine.reason or '—',
+                    f"{round(float(paid_fine.amount or 0.0), 2)}",
+                    paid_at_str,
+                ])
+
+            fines_table_data.append([
+                '',
+                Paragraph('<b>Total amendes</b>', normal_style),
+                Paragraph(f"<b>{round(total_fines_amount, 2)}</b>", normal_style),
+                '',
+            ])
+
+            fines_table = Table(fines_table_data, colWidths=[0.4 * inch, 2.8 * inch, 1.1 * inch, 1.4 * inch])
+            fines_table.setStyle(TableStyle([
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+                ('ALIGN', (3, 1), (3, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.append(fines_table)
         
         elements.append(Spacer(1, 0.15*inch))
         
@@ -898,6 +989,10 @@ def download_receipt_pdf(payment_id):
         notes_items.append(Paragraph("<b>Notes</b>", small_style))
         if fine and fine.notes:
             notes_items.append(Paragraph(fine.notes, normal_style))
+        elif payment_kind == 'vignette':
+            notes_items.append(Paragraph("Paiement vignette effectue depuis l'application mobile citoyen.", normal_style))
+        elif fines and len(fines) > 1:
+            notes_items.append(Paragraph("Ce recu couvre plusieurs amendes reglees dans une seule transaction.", normal_style))
         else:
             notes_items.append(Paragraph("—", normal_style))
         

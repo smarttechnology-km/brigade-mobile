@@ -254,7 +254,7 @@ class VehicleOwner(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, unique=True)
     owner_name = db.Column(db.String(100), nullable=False)
-    phone = db.Column(db.String(15), nullable=False, unique=True)
+    phone = db.Column(db.String(15), nullable=False)
     is_verified = db.Column(db.Boolean, default=False)
     session_version = db.Column(db.Integer, nullable=False, default=0)
     current_device_id = db.Column(db.String(128), nullable=True)

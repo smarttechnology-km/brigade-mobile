@@ -10,7 +10,7 @@ import string
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from app.models import db, Vehicle, User, VehicleOwner
 from app.sms_service import SMSService
 from app.push_notifications import send_expo_push_notification
@@ -19,6 +19,38 @@ citizen_auth_bp = Blueprint('citizen_auth', __name__, url_prefix='/api/auth')
 
 # OTP storage (in production, use Redis or database)
 _otp_store = {}
+
+
+def build_vehicle_auth_payload(vehicle, owner, phone):
+    """Build a consistent JWT payload and response body for citizen auth flows."""
+    session_version = int(getattr(owner, 'session_version', 0)) if owner else 0
+    device_id = owner.current_device_id if owner else None
+
+    return {
+        'access_token': create_access_token(
+            identity=str(vehicle.id),
+            additional_claims={
+                'vehicle_id': vehicle.id,
+                'license_plate': vehicle.license_plate,
+                'phone': phone,
+                'session_version': session_version,
+                'device_id': device_id,
+            }
+        ),
+        'vehicle': {
+            'id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name,
+            'vehicle_type': vehicle.vehicle_type,
+        },
+        'claims': {
+            'vehicle_id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'phone': phone,
+            'session_version': session_version,
+            'device_id': device_id,
+        }
+    }
 
 def generate_otp(length=6):
     """Generate a random OTP"""
@@ -172,8 +204,14 @@ def login():
         
         print(f"📱 Looking up VehicleOwner for phone: {phone}")
         
-        # Find VehicleOwner by phone
-        owner = VehicleOwner.query.filter_by(phone=phone, is_verified=True).first()
+        # Find the most recently used verified VehicleOwner for this phone.
+        # If the phone is linked to multiple vehicles, default to the most recent one.
+        owner = (
+            VehicleOwner.query
+            .filter_by(phone=phone, is_verified=True)
+            .order_by(VehicleOwner.last_login.desc(), VehicleOwner.verified_at.desc(), VehicleOwner.id.desc())
+            .first()
+        )
         
         if not owner:
             print(f"⚠️  Login failed: No verified account found for {phone}")
@@ -292,29 +330,12 @@ def verify_otp():
         # Clean up OTP
         del _otp_store[phone]
         
-        # Create JWT token
-        # Use a string identity (vehicle id) to avoid JWT 'sub' type issues;
-        # include extra info in additional claims for convenience in dev clients.
-        access_token = create_access_token(
-            identity=str(vehicle.id),
-            additional_claims={
-                'vehicle_id': vehicle.id,
-                'license_plate': vehicle.license_plate,
-                'phone': phone,
-                'session_version': int(getattr(owner, 'session_version', 0)),
-                'device_id': owner.current_device_id,
-            }
-        )
+        auth_payload = build_vehicle_auth_payload(vehicle, owner, phone)
         
         return jsonify({
             'message': 'Successfully registered',
-            'access_token': access_token,
-            'vehicle': {
-                'id': vehicle.id,
-                'license_plate': vehicle.license_plate,
-                'owner_name': vehicle.owner_name,
-                'vehicle_type': vehicle.vehicle_type
-            }
+            'access_token': auth_payload['access_token'],
+            'vehicle': auth_payload['vehicle']
         }), 200
         
     except Exception as e:
@@ -391,29 +412,12 @@ def verify_login_otp():
         # Clean up OTP
         del _otp_store[phone]
         
-        # Create JWT token
-        # Use string identity and put details into additional claims to satisfy
-        # JWT libraries that expect a string 'sub' claim.
-        access_token = create_access_token(
-            identity=str(vehicle.id),
-            additional_claims={
-                'vehicle_id': vehicle.id,
-                'license_plate': vehicle.license_plate,
-                'phone': phone,
-                'session_version': int(getattr(owner, 'session_version', 0)) if owner else 0,
-                'device_id': owner.current_device_id if owner else None,
-            }
-        )
+        auth_payload = build_vehicle_auth_payload(vehicle, owner, phone)
         
         return jsonify({
             'message': 'Successfully logged in',
-            'access_token': access_token,
-            'vehicle': {
-                'id': vehicle.id,
-                'license_plate': vehicle.license_plate,
-                'owner_name': vehicle.owner_name,
-                'vehicle_type': vehicle.vehicle_type
-            }
+            'access_token': auth_payload['access_token'],
+            'vehicle': auth_payload['vehicle']
         }), 200
         
     except Exception as e:
@@ -424,7 +428,12 @@ def verify_login_otp():
 @citizen_auth_bp.route('/register-push-token', methods=['POST'])
 @jwt_required()
 def register_push_token():
-    """Store the current Expo push token for the logged-in citizen device."""
+    """Store the current Expo push token for the logged-in citizen device.
+    
+    This enables background push notifications via Expo push service.
+    The token is registered per device so that when a new fine is issued,
+    the owner receives a notification even if the app is closed.
+    """
     try:
         data = request.get_json() or {}
         push_token = (data.get('push_token') or '').strip()
@@ -438,20 +447,34 @@ def register_push_token():
 
         vehicle = Vehicle.query.get(vehicle_id)
         if not vehicle:
+            print(f"❌ Push token registration: Vehicle {vehicle_id} not found")
             return jsonify({'error': 'Vehicle not found'}), 404
 
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
         if not owner:
+            print(f"❌ Push token registration: Owner not found for vehicle {vehicle_id}")
             return jsonify({'error': 'Owner account not found'}), 404
 
+        # Save the push token for background notifications
+        old_token = owner.expo_push_token
         owner.expo_push_token = push_token
         if device_id:
             owner.current_device_id = device_id
         db.session.commit()
 
-        return jsonify({'message': 'Push token registered successfully'}), 200
+        print(f"✅ Push token registered successfully for vehicle {vehicle.license_plate}")
+        print(f"   Device ID: {device_id}")
+        print(f"   Token: {push_token[:30]}...")
+        
+        return jsonify({
+            'message': 'Push token registered successfully',
+            'vehicle': vehicle.license_plate,
+            'device_id': device_id,
+        }), 200
     except Exception as e:
-        print(f"Push token registration error: {e}")
+        print(f"❌ Push token registration error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @citizen_auth_bp.route('/me', methods=['GET'])
@@ -512,6 +535,108 @@ def logout():
     """Logout user (token cleanup happens on client side)"""
     return jsonify({'message': 'Logged out successfully'}), 200
 
+
+@citizen_auth_bp.route('/my-vehicles', methods=['GET'])
+@jwt_required()
+def get_my_vehicles():
+    """Return all verified vehicles linked to the current phone number."""
+    try:
+        claims = get_jwt()
+        phone = claims.get('phone')
+        current_vehicle_id = claims.get('vehicle_id')
+
+        if not phone:
+            return jsonify({'error': 'Missing phone in token'}), 401
+
+        owners = (
+            VehicleOwner.query
+            .filter_by(phone=phone, is_verified=True)
+            .order_by(VehicleOwner.last_login.desc(), VehicleOwner.verified_at.desc(), VehicleOwner.id.desc())
+            .all()
+        )
+
+        vehicles = []
+        for owner in owners:
+            vehicle = owner.vehicle
+            if not vehicle:
+                continue
+            vehicles.append({
+                'id': vehicle.id,
+                'license_plate': vehicle.license_plate,
+                'owner_name': vehicle.owner_name,
+                'vehicle_type': vehicle.vehicle_type,
+                'vin': vehicle.vin,
+                'is_current': vehicle.id == int(current_vehicle_id) if current_vehicle_id else False,
+                'last_login': owner.last_login.isoformat() if owner.last_login else None,
+                'verified_at': owner.verified_at.isoformat() if owner.verified_at else None,
+            })
+
+        return jsonify({
+            'phone': phone,
+            'vehicles': vehicles,
+            'current_vehicle_id': current_vehicle_id,
+        }), 200
+    except Exception as e:
+        print(f"❌ Get my vehicles error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@citizen_auth_bp.route('/switch-vehicle', methods=['POST'])
+@jwt_required()
+def switch_vehicle():
+    """Switch the active vehicle for the currently authenticated phone number."""
+    try:
+        data = request.get_json() or {}
+        target_vehicle_id = data.get('vehicle_id')
+
+        if not target_vehicle_id:
+            return jsonify({'error': 'Missing vehicle_id'}), 400
+
+        try:
+            target_vehicle_id = int(target_vehicle_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid vehicle_id'}), 400
+
+        claims = get_jwt()
+        phone = claims.get('phone')
+        device_id = claims.get('device_id')
+
+        if not phone:
+            return jsonify({'error': 'Missing phone in token'}), 401
+
+        owner = (
+            VehicleOwner.query
+            .filter_by(phone=phone, vehicle_id=target_vehicle_id, is_verified=True)
+            .first()
+        )
+        if not owner:
+            return jsonify({'error': 'This vehicle is not linked to your phone number'}), 403
+
+        vehicle = owner.vehicle
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+
+        owner.last_login = datetime.utcnow()
+        owner.session_version = int(getattr(owner, 'session_version', 0)) + 1
+        if device_id:
+            owner.current_device_id = device_id
+        db.session.commit()
+
+        auth_payload = build_vehicle_auth_payload(vehicle, owner, phone)
+
+        return jsonify({
+            'message': 'Vehicle switched successfully',
+            'access_token': auth_payload['access_token'],
+            'vehicle': auth_payload['vehicle'],
+        }), 200
+    except Exception as e:
+        print(f"❌ Switch vehicle error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @citizen_auth_bp.route('/check-document-expirations', methods=['POST'])
 @jwt_required()
 def check_document_expirations():
@@ -521,8 +646,9 @@ def check_document_expirations():
     Called by mobile app on launch and when returning to foreground.
     """
     try:
-        current_user_id = get_jwt_identity()
-        owner = VehicleOwner.query.filter_by(id=current_user_id).first()
+        identity = get_jwt_identity()
+        vehicle_id = int(identity) if not isinstance(identity, dict) else int(identity.get('vehicle_id'))
+        owner = VehicleOwner.query.filter_by(vehicle_id=vehicle_id).first()
         
         if not owner or not owner.vehicle:
             return jsonify({'notifications_sent': []}), 200
