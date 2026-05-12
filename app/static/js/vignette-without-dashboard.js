@@ -26,6 +26,12 @@ function loadNoVignetteVehicles() {
         })
         .then(data => {
             noVignetteVehiclesCache = data.vehicles || [];
+            // Show most recently created vehicles first (e.g., vehicles added from vehicle.html)
+            noVignetteVehiclesCache.sort((a, b) => {
+                const da = a.created_at ? new Date(a.created_at) : new Date(0);
+                const db = b.created_at ? new Date(b.created_at) : new Date(0);
+                return db - da;
+            });
             filteredNoVignetteVehiclesCache = [...noVignetteVehiclesCache];
             noVignetteCurrentPage = 1;
             renderNoVignetteVehicles(filteredNoVignetteVehiclesCache);
@@ -167,11 +173,16 @@ function renderNoVignetteVehicles(sourceVehicles = noVignetteVehiclesCache) {
     tbody.innerHTML = paginatedVehicles.map(vehicle => {
         const qrExpired = isQrCodeExpired(vehicle);
         const paymentPending = !!vehicle.vignette_payment_request_pending;
+       const vinMissing = !vehicle.vin || !vehicle.vin.toString().trim();
         const qrStatus = qrExpired
             ? '<span class="badge bg-danger">QR expiré</span>'
             : '<span class="badge bg-success">QR actif</span>';
 
-        const actionButton = qrExpired
+       const actionButton = vinMissing
+           ? `<button class="btn btn-sm btn-danger" disabled title="VIN manquant: enregistrez le VIN avant d'ajouter une vignette">
+                   <i class="fas fa-exclamation"></i> VIN requis
+              </button>`
+           : qrExpired
             ? `<button class="btn btn-sm btn-secondary" disabled title="QR expiré: activez le QR avant d'ajouter une vignette">
                     <i class="fas fa-ban"></i> Ajouter
                </button>`
@@ -215,10 +226,18 @@ function openAddVignetteModal(vehicleId) {
         return;
     }
 
+    // Validation: VIN is required to add a vignette
+    if (!vehicle.vin || !vehicle.vin.trim()) {
+        alert('Impossible d\'ajouter une vignette: le véhicule n\'a pas de VIN (Numéro de série) enregistré. Veuillez d\'abord ajouter le VIN du véhicule.');
+        return;
+    }
+
     const qrExpiry = vehicle.qr_code_expiry ? formatDate(vehicle.qr_code_expiry) : 'Non défini';
-    const defaultExpiry = new Date();
-    defaultExpiry.setFullYear(defaultExpiry.getFullYear() + 1);
-    const defaultExpiryValue = defaultExpiry.toISOString().split('T')[0];
+    // Default expiry: 31 March of next year
+    const nowDate = new Date();
+    const nextYear = nowDate.getFullYear() + 1;
+    const march31 = new Date(nextYear, 2, 31);
+    const defaultExpiryValue = march31.toISOString().split('T')[0];
     
     // Get pricing information
     const vignettePrice = vehicle.vignette_price || 0;
