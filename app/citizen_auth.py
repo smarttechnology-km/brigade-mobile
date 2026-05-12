@@ -536,6 +536,109 @@ def logout():
     return jsonify({'message': 'Logged out successfully'}), 200
 
 
+@citizen_auth_bp.route('/delete-account/request-otp', methods=['POST'])
+@jwt_required()
+def request_delete_account_otp():
+    """Send an OTP to confirm citizen account deletion."""
+    try:
+        identity = get_jwt_identity()
+        vehicle_id = int(identity) if not isinstance(identity, dict) else int(identity.get('vehicle_id'))
+        vehicle = Vehicle.query.get(vehicle_id)
+
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+
+        owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if not owner or not owner.phone:
+            return jsonify({'error': 'Owner account not found'}), 404
+
+        phone = owner.phone.strip()
+        otp = generate_otp(6)
+
+        _otp_store[phone] = {
+            'otp': otp,
+            'vehicle_id': vehicle.id,
+            'phone': phone,
+            'is_delete_account': True,
+            'expires_at': datetime.utcnow() + timedelta(minutes=10),
+            'attempts': 0,
+        }
+
+        print(f"\n{'='*60}")
+        print(f"🗑️  ACCOUNT DELETE OTP GENERATED")
+        print(f"Phone: {phone}")
+        print(f"OTP Code: {otp}")
+        print(f"Expires in: 10 minutes")
+        print(f"{'='*60}\n")
+
+        if not send_otp_via_sms(phone, otp):
+            return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
+
+        return jsonify({
+            'message': 'OTP sent to confirm account deletion',
+            'phone_masked': phone[:3] + '*' * (len(phone) - 6) + phone[-3:],
+            'expires_in': 600,
+        }), 200
+    except Exception as e:
+        print(f"Delete account OTP request error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@citizen_auth_bp.route('/delete-account/confirm-otp', methods=['POST'])
+@jwt_required()
+def confirm_delete_account_otp():
+    """Verify OTP and permanently delete the citizen account link."""
+    try:
+        data = request.get_json() or {}
+        otp = (data.get('otp') or '').strip()
+
+        if not otp:
+            return jsonify({'error': 'Missing OTP'}), 400
+
+        identity = get_jwt_identity()
+        vehicle_id = int(identity) if not isinstance(identity, dict) else int(identity.get('vehicle_id'))
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+
+        owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if not owner or not owner.phone:
+            return jsonify({'error': 'Owner account not found'}), 404
+
+        phone = owner.phone.strip()
+        otp_data = _otp_store.get(phone)
+
+        if not otp_data or not otp_data.get('is_delete_account'):
+            return jsonify({'error': 'No deletion OTP found. Please request a new one.'}), 404
+
+        if datetime.utcnow() > otp_data['expires_at']:
+            del _otp_store[phone]
+            return jsonify({'error': 'OTP expired. Please try again.'}), 400
+
+        if otp_data['attempts'] >= 3:
+            del _otp_store[phone]
+            return jsonify({'error': 'Too many failed attempts. Please request a new OTP.'}), 429
+
+        if otp != otp_data['otp']:
+            otp_data['attempts'] += 1
+            return jsonify({'error': 'Invalid OTP'}), 401
+
+        # Clear the link between the phone and the vehicle, then delete the owner row.
+        vehicle.owner_phone = None
+        db.session.delete(owner)
+        db.session.commit()
+
+        del _otp_store[phone]
+
+        return jsonify({
+            'message': 'Account deleted successfully',
+        }), 200
+    except Exception as e:
+        print(f"Delete account confirmation error: {e}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @citizen_auth_bp.route('/my-vehicles', methods=['GET'])
 @jwt_required()
 def get_my_vehicles():
