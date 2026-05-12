@@ -13,6 +13,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from app.models import db, Vehicle, User, VehicleOwner
 from app.sms_service import SMSService
+from app.push_notifications import send_expo_push_notification
 
 citizen_auth_bp = Blueprint('citizen_auth', __name__, url_prefix='/api/auth')
 
@@ -33,6 +34,29 @@ def send_otp_via_sms(phone: str, otp: str):
     except Exception as e:
         print(f"Error sending OTP: {e}")
         return False
+
+def check_days_until_expiry(expiry_date_str):
+    """Calculate days until expiry. Returns None if no expiry or if expired."""
+    if not expiry_date_str:
+        return None
+    
+    try:
+        if isinstance(expiry_date_str, str):
+            # Parse ISO format date
+            if 'T' in expiry_date_str:
+                expiry = datetime.fromisoformat(expiry_date_str.replace('Z', '+00:00'))
+            else:
+                expiry = datetime.strptime(expiry_date_str, '%Y-%m-%d')
+        else:
+            expiry = expiry_date_str
+        
+        now = datetime.utcnow()
+        days_diff = (expiry.replace(hour=0, minute=0, second=0, microsecond=0) - now.replace(hour=0, minute=0, second=0, microsecond=0)).days
+        
+        return days_diff if days_diff > 0 else None
+    except Exception as e:
+        print(f"Error parsing expiry date: {e}")
+        return None
 
 @citizen_auth_bp.route('/register', methods=['POST'])
 def register():
@@ -487,3 +511,75 @@ def get_current_user():
 def logout():
     """Logout user (token cleanup happens on client side)"""
     return jsonify({'message': 'Logged out successfully'}), 200
+
+@citizen_auth_bp.route('/check-document-expirations', methods=['POST'])
+@jwt_required()
+def check_document_expirations():
+    """
+    Check for upcoming document expirations (insurance, vignette, QR code)
+    and send push notifications if they expire in 1, 7, or 30 days.
+    Called by mobile app on launch and when returning to foreground.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        owner = VehicleOwner.query.filter_by(id=current_user_id).first()
+        
+        if not owner or not owner.vehicle:
+            return jsonify({'notifications_sent': []}), 200
+        
+        vehicle = owner.vehicle
+        notifications_sent = []
+        
+        # Check insurance expiry
+        if vehicle.insurance_expiry:
+            days_left = check_days_until_expiry(vehicle.insurance_expiry)
+            if days_left and days_left in [1, 7, 30]:
+                if owner.expo_push_token:
+                    titles_map = {1: 'Assurance expire demain!', 7: 'Assurance expire dans 7 jours', 30: 'Assurance expire dans 30 jours'}
+                    result = send_expo_push_notification(
+                        owner.expo_push_token,
+                        f'🛡️ Rappel Assurance',
+                        titles_map.get(days_left, f'Assurance expire dans {days_left} jours'),
+                        {'type': 'insurance', 'licensePlate': vehicle.license_plate, 'daysRemaining': days_left}
+                    )
+                    if result.get('success'):
+                        notifications_sent.append('insurance')
+                        print(f'✅ Insurance notification sent for {vehicle.license_plate}')
+        
+        # Check vignette expiry
+        if vehicle.vignette_expiry:
+            days_left = check_days_until_expiry(vehicle.vignette_expiry)
+            if days_left and days_left in [1, 7, 30]:
+                if owner.expo_push_token:
+                    titles_map = {1: 'Vignette expire demain!', 7: 'Vignette expire dans 7 jours', 30: 'Vignette expire dans 30 jours'}
+                    result = send_expo_push_notification(
+                        owner.expo_push_token,
+                        f'🚘 Rappel Vignette',
+                        titles_map.get(days_left, f'Vignette expire dans {days_left} jours'),
+                        {'type': 'vignette', 'licensePlate': vehicle.license_plate, 'daysRemaining': days_left}
+                    )
+                    if result.get('success'):
+                        notifications_sent.append('vignette')
+                        print(f'✅ Vignette notification sent for {vehicle.license_plate}')
+        
+        # Check QR code expiry
+        if vehicle.qr_code_expiry:
+            days_left = check_days_until_expiry(vehicle.qr_code_expiry)
+            if days_left and days_left in [1, 7, 30]:
+                if owner.expo_push_token:
+                    titles_map = {1: 'Code QR expire demain!', 7: 'Code QR expire dans 7 jours', 30: 'Code QR expire dans 30 jours'}
+                    result = send_expo_push_notification(
+                        owner.expo_push_token,
+                        f'📱 Rappel Code QR',
+                        titles_map.get(days_left, f'Code QR expire dans {days_left} jours'),
+                        {'type': 'qrcode', 'licensePlate': vehicle.license_plate, 'daysRemaining': days_left}
+                    )
+                    if result.get('success'):
+                        notifications_sent.append('qrcode')
+                        print(f'✅ QR code notification sent for {vehicle.license_plate}')
+        
+        return jsonify({'notifications_sent': notifications_sent}), 200
+        
+    except Exception as e:
+        print(f"Error checking document expirations: {e}")
+        return jsonify({'error': str(e), 'notifications_sent': []}), 500

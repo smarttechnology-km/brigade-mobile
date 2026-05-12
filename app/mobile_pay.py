@@ -106,8 +106,19 @@ def _get_vignette_rate_breakdown(vehicle):
 
 
 def _calculate_penalty_amount(days_late):
-    if not days_late or days_late <= 0:
-        return 0.0
+    """
+    Calculate penalty amount based on days late using configured penalty rates.
+    
+    Penalties apply to vehicles that have not renewed their vignette after March 31st (expiration date).
+    Aux Comores, les vignettes expirent le 31 mars. Les pénalités ne s'appliquent que si le véhicule 
+    ne renouvelle pas sa vignette après cette date.
+    
+    Args:
+        days_late (int): Number of days past vignette expiry date (March 31st)
+        
+    Returns:
+        float: Penalty amount in KMF. Returns 0 if no penalty applies or days_late is 0 or negative.
+    """
 
     try:
         from app.models import PenaltyRate
@@ -143,6 +154,36 @@ def _calculate_vignette_price(vehicle):
     return float(breakdown['total_amount']) if breakdown else 0.0
 
 
+def get_vignette_expiry_date(reference_date=None):
+    """
+    Calculate vignette expiry date: March 31st of the current or next year.
+    
+    Aux Comores, les vignettes expirent le 31 mars de chaque année.
+    - Si la date de référence est avant ou égale au 31 mars, la vignette expire le 31 mars de l'année courante
+    - Si la date de référence est après le 31 mars, la vignette expire le 31 mars de l'année prochaine
+    
+    Args:
+        reference_date: Date de référence (par défaut: maintenant en heure Comores)
+    
+    Returns:
+        datetime: Date d'expiration le 31 mars (23:59:59)
+    """
+    if reference_date is None:
+        reference_date = now_comoros()
+    else:
+        reference_date = ensure_comoros(reference_date)
+    
+    current_year = reference_date.year
+    march_31_current_year = ensure_comoros(datetime(current_year, 3, 31, 23, 59, 59))
+    
+    # Si nous sommes avant ou le 31 mars, expiration le 31 mars de cette année
+    if reference_date.date() <= march_31_current_year.date():
+        return march_31_current_year
+    else:
+        # Sinon, expiration le 31 mars de l'année prochaine
+        return ensure_comoros(datetime(current_year + 1, 3, 31, 23, 59, 59))
+
+
 @mobile_pay_bp.route('/lookup', methods=['GET'])
 def lookup():
     """Public lookup endpoint: ?q=<track_token_or_plate>
@@ -172,6 +213,8 @@ def lookup():
     if vignette_expiry:
         if vignette_expiry < now:
             vignette_status = 'expired'
+            # Penalties apply ONLY when vignette has expired (after March 31st)
+            # Aux Comores: Les pénalités s'appliquent uniquement après le 31 mars (expiration)
             penalty_amount = float(_calculate_penalty_amount((now - vignette_expiry).days) or 0.0)
         elif vignette_expiry < now + timedelta(days=30):
             vignette_status = 'expiring'
@@ -182,7 +225,7 @@ def lookup():
     vignette_price = float(vignette_breakdown['base_amount']) if vignette_breakdown else 0.0
     annual_ds_amount = float(vignette_breakdown['annual_ds_amount']) if vignette_breakdown else 0.0
     vignette_total = float(vignette_breakdown['total_amount']) if vignette_breakdown else 0.0
-    requested_expiry = vignette_expiry + timedelta(days=365) if vignette_expiry and vignette_expiry > now else now + timedelta(days=365)
+    requested_expiry = get_vignette_expiry_date(now)
     renewal_allowed = not (vignette_expiry and vignette_expiry > now)
 
     return jsonify({
@@ -208,15 +251,12 @@ def _build_vignette_payment_payload(vehicle, requested_expiry=None):
     current_expiry = _parse_vignette_datetime(vehicle.vignette_expiry)
 
     if not requested_expiry:
-        if current_expiry and current_expiry > now:
-            requested_expiry = current_expiry + timedelta(days=365)
-        else:
-            requested_expiry = now + timedelta(days=365)
+        requested_expiry = get_vignette_expiry_date(now)
     elif isinstance(requested_expiry, str):
         try:
             requested_expiry = ensure_comoros(datetime.fromisoformat(requested_expiry))
         except Exception:
-            requested_expiry = now + timedelta(days=365)
+            requested_expiry = get_vignette_expiry_date(now)
 
     vignette_breakdown = _get_vignette_rate_breakdown(vehicle)
     vignette_price = float(vignette_breakdown['base_amount']) if vignette_breakdown else 0.0
@@ -224,6 +264,8 @@ def _build_vignette_payment_payload(vehicle, requested_expiry=None):
     if vignette_price <= 0:
         raise ValueError('Impossible de calculer le montant de la vignette pour ce véhicule.')
 
+    # Calculate penalty amount if vignette has expired (after March 31st)
+    # Aux Comores: Les pénalités s'appliquent uniquement après le 31 mars (expiration)
     penalty_amount = 0.0
     if current_expiry and current_expiry < now:
         penalty_amount = float(_calculate_penalty_amount((now - current_expiry).days) or 0.0)
@@ -468,7 +510,7 @@ def webhook():
                     requested_expiry = None
 
                 if not requested_expiry:
-                    requested_expiry = payment_time + timedelta(days=365)
+                    requested_expiry = get_vignette_expiry_date(payment_time)
 
                 vehicle.vignette_payment_requested_at = payment_time
                 vehicle.vignette_payment_requested_by = payment.payer_name or 'App Mobile'

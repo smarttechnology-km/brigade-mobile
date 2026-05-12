@@ -12,7 +12,7 @@ import io
 import csv
 from datetime import datetime, timedelta
 import os
-from app.timezone_utils import now_comoros
+from app.timezone_utils import now_comoros, ensure_comoros
 import json
 try:
     from reportlab.lib.pagesizes import A4
@@ -31,6 +31,36 @@ vehicle_bp = Blueprint('vehicles', __name__, url_prefix='/api/vehicles')
 
 # Logo path (optional) - used in PDF exports
 logo_path = os.path.join(os.path.dirname(__file__), 'static', 'img', 'logo.png')
+
+# Helper function: Calculate vignette expiry date (March 31st)
+def get_vignette_expiry_date(reference_date=None):
+    """
+    Calculate vignette expiry date: March 31st of the current or next year.
+    
+    Aux Comores, les vignettes expirent le 31 mars de chaque année.
+    - Si la date de référence est avant ou égale au 31 mars, la vignette expire le 31 mars de l'année courante
+    - Si la date de référence est après le 31 mars, la vignette expire le 31 mars de l'année prochaine
+    
+    Args:
+        reference_date: Date de référence (par défaut: maintenant en heure Comores)
+    
+    Returns:
+        datetime: Date d'expiration le 31 mars (23:59:59)
+    """
+    if reference_date is None:
+        reference_date = now_comoros()
+    else:
+        reference_date = ensure_comoros(reference_date)
+    
+    current_year = reference_date.year
+    march_31_current_year = ensure_comoros(datetime(current_year, 3, 31, 23, 59, 59))
+    
+    # Si nous sommes avant ou le 31 mars, expiration le 31 mars de cette année
+    if reference_date.date() <= march_31_current_year.date():
+        return march_31_current_year
+    else:
+        # Sinon, expiration le 31 mars de l'année prochaine
+        return ensure_comoros(datetime(current_year + 1, 3, 31, 23, 59, 59))
 
 # Helper function to apply island filter for judiciaire and policier users
 def apply_island_filter(query, island_field, force_country=None):
@@ -79,13 +109,17 @@ def calculate_penalty_amount(days_late):
     """
     Calculate penalty amount based on days late using configured penalty rates.
     
+    Penalties apply to vehicles that have not renewed their vignette after March 31st (expiration date).
+    Aux Comores, les vignettes expirent le 31 mars. Les pénalités ne s'appliquent que si le véhicule 
+    ne renouvelle pas sa vignette après cette date.
+    
     Args:
-        days_late (int): Number of days past vignette expiry date
+        days_late (int): Number of days past vignette expiry date (March 31st)
         
     Returns:
         float: Penalty amount in KMF. Returns 0 if no penalty applies or days_late is 0 or negative.
         
-    Example:
+    Example (with penalties configured):
         - 0-10 days late: 0 KMF (no penalty)
         - 11-20 days late: (days - 10) × penalty_per_day KMF
         - 21-30 days late: (days - 20) × penalty_per_day KMF (if configured)
@@ -952,11 +986,8 @@ def create_vehicle():
         except Exception:
             pass
     if vignette_expiry:
-        try:
-            from datetime import datetime
-            vehicle.vignette_expiry = datetime.fromisoformat(vignette_expiry)
-        except Exception:
-            pass
+        # Force vignette expiry to March 31st (Comores regulation)
+        vehicle.vignette_expiry = get_vignette_expiry_date(now_comoros())
     # parse insurance_expiry if provided
     if insurance_expiry:
         try:
@@ -1039,11 +1070,6 @@ def create_fine(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
     data = request.get_json() or request.form
-    try:
-        amount = float(data.get('amount'))
-    except Exception:
-        return jsonify({'error':'Montant invalide'}), 400
-    reason = data.get('reason')
     # Use the authenticated user's username as the officer to prevent spoofing
     try:
         from flask_login import current_user
@@ -1051,6 +1077,13 @@ def create_fine(vehicle_id):
     except Exception:
         officer = data.get('officer')
     notes = data.get('notes')
+    # Parse amount and reason
+    amount = data.get('amount')
+    try:
+        amount = float(amount)
+    except Exception:
+        amount = 0.0
+    reason = data.get('reason')
     if not reason or amount <= 0:
         return jsonify({'error':'reason et amount requis'}), 400
     
@@ -1236,23 +1269,15 @@ def list_all_fines():
                 paid_date,
                 d.get('officer') or ''
             ])
-        
-        # Add total row
-        rows.append(['', '', '', '', '', ''])
-        rows.append(['', '', f"TOTAL: {int(total_amount):,} KMF".replace(',', ' '), '', '', ''])
 
-        # Use the same professional PDF builder
-        buffer = io.BytesIO()
-        
-        # Build title with date range if provided
-        title_text = 'Rapport des Amendes Payées'
         if start_date and end_date:
+            buffer = io.BytesIO()
             try:
                 start_formatted = datetime.strptime(start_date, '%Y-%m-%d').strftime('%d/%m/%Y')
                 end_formatted = datetime.strptime(end_date, '%Y-%m-%d').strftime('%d/%m/%Y')
                 title_text = f'Rapport des Amendes Payées<br/><font size="12">Période: {start_formatted} - {end_formatted}</font>'
             except:
-                pass
+                title_text = 'Rapport des Amendes Payées'
         else:
             title_text = 'Rapport Complet des Amendes Payées<br/><font size="12">Toutes les archives</font>'
         
@@ -1712,6 +1737,18 @@ def public_track(token):
     if not current_user.is_authenticated:
         abort(403)
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
+    # Normalize commonly-used datetime fields to Comoros timezone so templates can compare safely
+    datetime_fields = [
+        'vignette_expiry', 'registration_expiry', 'qr_code_expiry', 'insurance_expiry',
+        'last_inspection_date', 'registration_date', 'created_at', 'updated_at'
+    ]
+    for f in datetime_fields:
+        val = getattr(vehicle, f, None)
+        if val:
+            try:
+                setattr(vehicle, f, ensure_comoros(val))
+            except Exception:
+                pass
     # collect history entries and fines
     history_items = []
     unpaid_count = 0
@@ -1759,9 +1796,8 @@ def public_track(token):
     except Exception:
         history_items = []
     
-    # Pass datetime.now for expiry calculations in template
-    from datetime import datetime
-    return render_template('track.html', vehicle=vehicle, history=history_items, unpaid_count=unpaid_count, now=datetime.now)
+    # Pass Comoros-aware now function for expiry calculations in template
+    return render_template('track.html', vehicle=vehicle, history=history_items, unpaid_count=unpaid_count, now=now_comoros)
 
 
 @main_bp.route('/payments')
@@ -2501,12 +2537,18 @@ def update_vehicle(vehicle_id):
             vehicle.insurance_expiry = datetime.fromisoformat(data.get('insurance_expiry'))
         except Exception:
             pass
-    # parse vignette_expiry if present
+    # parse vignette_expiry if present - Force to March 31st (Comores regulation)
     if 'vignette_expiry' in data and data.get('vignette_expiry'):
+        # If client provided a reference date, compute the March 31st expiry for that date's year
         try:
-            vehicle.vignette_expiry = datetime.fromisoformat(data.get('vignette_expiry'))
+            ref_dt = datetime.fromisoformat(data.get('vignette_expiry'))
+            vehicle.vignette_expiry = get_vignette_expiry_date(ref_dt)
         except Exception:
-            pass
+            # Fallback to compute based on now if parsing fails
+            vehicle.vignette_expiry = get_vignette_expiry_date(now_comoros())
+    elif 'vignette_expiry' in data and data.get('vignette_expiry') == '':
+        # Allow clearing vignette_expiry by sending empty string
+        vehicle.vignette_expiry = None
 
     auto_paid_fines = []
     if getattr(current_user, 'role', None) == 'agent_impot' and vignette_update_requested:
@@ -3178,6 +3220,13 @@ def get_vignette_vehicles():
     query = Vehicle.query.filter(
         (Vehicle.vignette_expiry.isnot(None)) | (Vehicle.vignette_payment_requested_at.isnot(None))
     )
+    # Exclude vehicles missing required attributes (treat them as if they don't have a vignette)
+    query = query.filter(
+        Vehicle.fuel_type.isnot(None), Vehicle.fuel_type != '',
+        Vehicle.fiscal_class.isnot(None), Vehicle.fiscal_class != '',
+        Vehicle.cv_class.isnot(None), Vehicle.cv_class != '',
+        Vehicle.vin.isnot(None), Vehicle.vin != ''
+    )
     
     # Filter by user's country if set (regional agent)
     # Super admin agents without country see all vignettes
@@ -3187,7 +3236,7 @@ def get_vignette_vehicles():
     vehicles = query.order_by(Vehicle.license_plate).all()
     
     vehicles_payload = []
-    now = datetime.utcnow()
+    now = now_comoros()
     
     for vehicle in vehicles:
         vehicle_data = vehicle.to_dict()
@@ -3203,6 +3252,12 @@ def get_vignette_vehicles():
                     vignette_expiry = None
             
             if vignette_expiry:
+                # Ensure timezone-aware Comoros datetime for accurate comparisons
+                try:
+                    vignette_expiry = ensure_comoros(vignette_expiry)
+                except Exception:
+                    pass
+
                 if vignette_expiry < now:
                     vignette_status = 'expired'
                 elif vignette_expiry < now + timedelta(days=30):
@@ -3230,13 +3285,19 @@ def get_vignette_vehicles():
 
         # Calculate penalty amount based on days late unless payment has already been approved,
         # in which case we keep the approved amount frozen for display.
+        # 
+        # Penalties apply ONLY when the vignette has expired (March 31st has passed).
+        # Aux Comores: Les pénalités s'appliquent uniquement après le 31 mars (date d'expiration).
+        # Avant le 31 mars, aucune pénalité n'est appliquée, même si un renouvellement est demandé.
         if payment_approved:
             vehicle_data['penalty_amount'] = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         elif vignette_expiry and vignette_expiry < now:
+            # Vignette is expired: calculate penalty based on days since March 31st
             days_late = (now - vignette_expiry).days
             penalty_amount = calculate_penalty_amount(days_late)
             vehicle_data['penalty_amount'] = penalty_amount
         else:
+            # Vignette is still valid (before March 31st) or no vignette: no penalty
             vehicle_data['penalty_amount'] = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         
         # Add unpaid fines amount
@@ -3378,6 +3439,11 @@ def request_vignette_payment(vehicle_id):
     from app.models import VehicleHistory
 
     vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    # Validation: VIN is required to add a vignette
+    if not vehicle.vin or not str(vehicle.vin).strip():
+        return jsonify({'error': 'Impossible d\'ajouter une vignette: le véhicule n\'a pas de VIN (Numéro de série) enregistré. Veuillez d\'abord ajouter le VIN du véhicule.'}), 400
+
     data = request.get_json() or request.form
     requested_expiry_value = data.get('vignette_expiry')
 
@@ -3459,7 +3525,14 @@ def get_vignette_vehicles_without():
     """Get vehicles without vignette for tax agents"""
     user_country = getattr(current_user, 'country', None)
 
-    query = Vehicle.query.filter(Vehicle.vignette_expiry.is_(None))
+    # Include vehicles that either have no vignette expiry OR are missing required fields
+    query = Vehicle.query.filter(or_(
+        Vehicle.vignette_expiry.is_(None),
+        Vehicle.fuel_type.is_(None), Vehicle.fuel_type == '',
+        Vehicle.fiscal_class.is_(None), Vehicle.fiscal_class == '',
+        Vehicle.cv_class.is_(None), Vehicle.cv_class == '',
+        Vehicle.vin.is_(None), Vehicle.vin == ''
+    ))
 
     if user_country:
         query = query.filter(Vehicle.owner_island == user_country)
@@ -3501,7 +3574,7 @@ def get_vignette_finance_stats():
     start_date_str = request.args.get('start_date', '')
     end_date_str = request.args.get('end_date', '')
     
-    now = datetime.utcnow()
+    now = now_comoros()
     
     # Default to last 30 days if no dates provided
     if not start_date_str:
@@ -3511,6 +3584,7 @@ def get_vignette_finance_stats():
             start_date = datetime.fromisoformat(start_date_str)
         except:
             start_date = now - timedelta(days=30)
+    start_date = ensure_comoros(start_date)
     
     if not end_date_str:
         end_date = now
@@ -3519,9 +3593,10 @@ def get_vignette_finance_stats():
             end_date = datetime.fromisoformat(end_date_str)
         except:
             end_date = now
-    
-    # Adjust end_date to include the entire day
+
+    # Adjust end_date to include the entire day and ensure timezone
     end_date = end_date.replace(hour=23, minute=59, second=59)
+    end_date = ensure_comoros(end_date)
     
     # Get user country filter
     user_country = getattr(current_user, 'country', None)
@@ -3557,11 +3632,20 @@ def get_vignette_finance_stats():
     
     for vehicle in vehicles:
         paid_at = getattr(vehicle, 'vignette_last_paid_at', None)
+        if paid_at:
+            try:
+                paid_at = ensure_comoros(paid_at)
+            except Exception:
+                pass
         paid_in_range = bool(paid_at and start_date <= paid_at <= end_date)
 
         # Fallback for legacy rows that don't have last_paid fields populated yet
         if not paid_in_range and not paid_at and vehicle.updated_at:
-            paid_in_range = start_date <= vehicle.updated_at <= end_date
+            try:
+                updated_at = ensure_comoros(vehicle.updated_at)
+            except Exception:
+                updated_at = vehicle.updated_at
+            paid_in_range = start_date <= updated_at <= end_date
 
         if not paid_in_range:
             continue
@@ -3573,9 +3657,18 @@ def get_vignette_finance_stats():
         if stored_vignette == 0.0 and stored_penalty == 0.0 and stored_fines == 0.0:
             # Legacy fallback calculation
             stored_vignette = float(calculate_vignette_price(vehicle) or 0.0)
-            if vehicle.vignette_expiry and vehicle.vignette_expiry < now:
-                days_late = (now - vehicle.vignette_expiry).days
-                stored_penalty = float(calculate_penalty_amount(days_late) or 0.0)
+            if vehicle.vignette_expiry:
+                try:
+                    expiry = ensure_comoros(vehicle.vignette_expiry)
+                except Exception:
+                    expiry = vehicle.vignette_expiry
+                if expiry < now:
+                    days_late = (now - expiry).days
+                    stored_penalty = float(calculate_penalty_amount(days_late) or 0.0)
+                else:
+                    stored_penalty = 0.0
+            else:
+                stored_penalty = 0.0
 
         total_vignette_revenue += stored_vignette
         total_penalties += stored_penalty
@@ -3607,7 +3700,7 @@ def get_vignette_finance_vehicles():
     start_date_str = request.args.get('start_date', '')
     end_date_str = request.args.get('end_date', '')
     
-    now = datetime.utcnow()
+    now = now_comoros()
     
     # Default to last 30 days if no dates provided
     if not start_date_str:
@@ -3617,6 +3710,7 @@ def get_vignette_finance_vehicles():
             start_date = datetime.fromisoformat(start_date_str)
         except:
             start_date = now - timedelta(days=30)
+    start_date = ensure_comoros(start_date)
     
     if not end_date_str:
         end_date = now
@@ -3625,9 +3719,10 @@ def get_vignette_finance_vehicles():
             end_date = datetime.fromisoformat(end_date_str)
         except:
             end_date = now
-    
-    # Adjust end_date to include the entire day
+
+    # Adjust end_date to include the entire day and ensure timezone
     end_date = end_date.replace(hour=23, minute=59, second=59)
+    end_date = ensure_comoros(end_date)
     
     # Get user country filter
     user_country = getattr(current_user, 'country', None)
@@ -3643,11 +3738,20 @@ def get_vignette_finance_vehicles():
     
     for vehicle in vehicles:
         paid_at = getattr(vehicle, 'vignette_last_paid_at', None)
+        if paid_at:
+            try:
+                paid_at = ensure_comoros(paid_at)
+            except Exception:
+                pass
         paid_in_range = bool(paid_at and start_date <= paid_at <= end_date)
 
         # Fallback for legacy rows
         if not paid_in_range and not paid_at and vehicle.updated_at:
-            paid_in_range = start_date <= vehicle.updated_at <= end_date
+            try:
+                updated_at = ensure_comoros(vehicle.updated_at)
+            except Exception:
+                updated_at = vehicle.updated_at
+            paid_in_range = start_date <= updated_at <= end_date
 
         if not paid_in_range:
             continue
@@ -3658,12 +3762,24 @@ def get_vignette_finance_vehicles():
 
         if vignette_price == 0.0 and penalty_amount == 0.0 and fines_amount == 0.0:
             vignette_price = float(calculate_vignette_price(vehicle) or 0.0)
-            if vehicle.vignette_expiry and vehicle.vignette_expiry < now:
-                days_late = (now - vehicle.vignette_expiry).days
-                penalty_amount = float(calculate_penalty_amount(days_late) or 0.0)
+            if vehicle.vignette_expiry:
+                try:
+                    expiry = ensure_comoros(vehicle.vignette_expiry)
+                except Exception:
+                    expiry = vehicle.vignette_expiry
+                if expiry < now:
+                    days_late = (now - expiry).days
+                    penalty_amount = float(calculate_penalty_amount(days_late) or 0.0)
 
         payment_date_dt = paid_at or vehicle.updated_at
-        payment_date = payment_date_dt.strftime('%Y-%m-%d') if payment_date_dt else '-'
+        try:
+            if payment_date_dt:
+                payment_date_dt = ensure_comoros(payment_date_dt)
+                payment_date = payment_date_dt.strftime('%Y-%m-%d')
+            else:
+                payment_date = '-'
+        except Exception:
+            payment_date = payment_date_dt.strftime('%Y-%m-%d') if payment_date_dt else '-'
 
         total = vignette_price + penalty_amount + fines_amount
 
@@ -3695,10 +3811,10 @@ def get_vignette_daily_report():
         report_date = datetime.fromisoformat(date_str)
     except:
         return jsonify({'error': 'Invalid date format'}), 400
-    
-    # Set date range for the entire day
-    start_date = report_date.replace(hour=0, minute=0, second=0)
-    end_date = report_date.replace(hour=23, minute=59, second=59)
+
+    # Set date range for the entire day and ensure Comoros timezone
+    start_date = ensure_comoros(report_date.replace(hour=0, minute=0, second=0))
+    end_date = ensure_comoros(report_date.replace(hour=23, minute=59, second=59))
     
     # Get user country filter
     user_country = getattr(current_user, 'country', None)
@@ -3716,15 +3832,24 @@ def get_vignette_daily_report():
     total_penalties = 0.0
     total_fines = 0.0
     
-    now = datetime.utcnow()
+    now = now_comoros()
     
     for vehicle in vehicles:
         paid_at = getattr(vehicle, 'vignette_last_paid_at', None)
+        if paid_at:
+            try:
+                paid_at = ensure_comoros(paid_at)
+            except Exception:
+                pass
         paid_in_range = bool(paid_at and start_date <= paid_at <= end_date)
 
         # Fallback for legacy rows
         if not paid_in_range and not paid_at and vehicle.updated_at:
-            paid_in_range = start_date <= vehicle.updated_at <= end_date
+            try:
+                updated_at = ensure_comoros(vehicle.updated_at)
+            except Exception:
+                updated_at = vehicle.updated_at
+            paid_in_range = start_date <= updated_at <= end_date
 
         if not paid_in_range:
             continue
@@ -3735,12 +3860,24 @@ def get_vignette_daily_report():
 
         if vignette_price == 0.0 and penalty_amount == 0.0 and fines_amount == 0.0:
             vignette_price = float(calculate_vignette_price(vehicle) or 0.0)
-            if vehicle.vignette_expiry and vehicle.vignette_expiry < now:
-                days_late = (now - vehicle.vignette_expiry).days
-                penalty_amount = float(calculate_penalty_amount(days_late) or 0.0)
+            if vehicle.vignette_expiry:
+                try:
+                    expiry = ensure_comoros(vehicle.vignette_expiry)
+                except Exception:
+                    expiry = vehicle.vignette_expiry
+                if expiry < now:
+                    days_late = (now - expiry).days
+                    penalty_amount = float(calculate_penalty_amount(days_late) or 0.0)
 
         payment_date_dt = paid_at or vehicle.updated_at
-        payment_date = payment_date_dt.strftime('%Y-%m-%d') if payment_date_dt else '-'
+        try:
+            if payment_date_dt:
+                payment_date_dt = ensure_comoros(payment_date_dt)
+                payment_date = payment_date_dt.strftime('%Y-%m-%d')
+            else:
+                payment_date = '-'
+        except Exception:
+            payment_date = payment_date_dt.strftime('%Y-%m-%d') if payment_date_dt else '-'
 
         total = vignette_price + penalty_amount + fines_amount
 
