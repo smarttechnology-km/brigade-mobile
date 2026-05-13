@@ -766,6 +766,7 @@ def get_my_vehicles():
                 'owner_name': vehicle.owner_name,
                 'vehicle_type': vehicle.vehicle_type,
                 'vin': vehicle.vin,
+                'status': vehicle.status,
                 'is_current': vehicle.id == int(current_vehicle_id) if current_vehicle_id else False,
                 'last_login': owner.last_login.isoformat() if owner.last_login else None,
                 'verified_at': owner.verified_at.isoformat() if owner.verified_at else None,
@@ -839,6 +840,9 @@ def switch_vehicle():
         vehicle = owner.vehicle
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
+
+        if vehicle.status and vehicle.status != 'active':
+            return jsonify({'error': 'Ce véhicule est inactif. Vous pouvez le voir, mais vous ne pouvez pas l’activer.'}), 403
 
         owner.last_login = datetime.utcnow()
         owner.session_version = int(getattr(owner, 'session_version', 0)) + 1
