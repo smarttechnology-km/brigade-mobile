@@ -12,6 +12,10 @@ from app.timezone_utils import now_comoros, ensure_comoros
 mobile_pay_bp = Blueprint('mobile_pay', __name__, url_prefix='/pay')
 
 
+def _is_vehicle_active(vehicle):
+    return bool(vehicle and (vehicle.status or 'active') == 'active')
+
+
 def _parse_vignette_datetime(value):
     if not value:
         return None
@@ -318,6 +322,9 @@ def create_payment():
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
 
+        if not _is_vehicle_active(vehicle):
+            return jsonify({'error': 'Ce véhicule est inactif. Activez-le avant de payer la vignette.'}), 400
+
         current_expiry = _parse_vignette_datetime(vehicle.vignette_expiry)
         if current_expiry and current_expiry > now_comoros():
             return jsonify({
@@ -377,6 +384,9 @@ def create_payment():
     vehicle = fines[0].vehicle if fines else None
     if not vehicle:
         return jsonify({'error': 'Vehicle not found for fines'}), 400
+
+    if not _is_vehicle_active(vehicle):
+        return jsonify({'error': 'Ce véhicule est inactif. Activez-le avant de payer les amendes.'}), 400
     
     license_plate = vehicle.license_plate
     owner_name = vehicle.owner_name

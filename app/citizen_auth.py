@@ -21,6 +21,18 @@ citizen_auth_bp = Blueprint('citizen_auth', __name__, url_prefix='/api/auth')
 _otp_store = {}
 
 
+def _normalize_phone(phone):
+    """Normalize phone numbers for strict matching against stored records."""
+    digits = ''.join(ch for ch in str(phone or '').strip() if ch.isdigit())
+    if digits.startswith('00'):
+        digits = digits[2:]
+    return digits
+
+
+def _is_vehicle_active(vehicle):
+    return bool(vehicle and (vehicle.status or 'active') == 'active')
+
+
 def build_vehicle_auth_payload(vehicle, owner, phone):
     """Build a consistent JWT payload and response body for citizen auth flows."""
     session_version = int(getattr(owner, 'session_version', 0)) if owner else 0
@@ -102,6 +114,7 @@ def register():
         vin = data.get('vin', '').upper().strip()
         phone = data.get('phone', '').strip()
         device_id = data.get('device_id', '').strip()
+        normalized_phone = _normalize_phone(phone)
         
         # Validation
         if not all([license_plate, vin, phone]):
@@ -115,9 +128,18 @@ def register():
         
         if not vehicle:
             return jsonify({'error': 'Vehicle not found. Please verify your license plate and VIN.'}), 404
+
+        if not _is_vehicle_active(vehicle):
+            return jsonify({'error': 'This vehicle is inactive. Activation is required before registration.'}), 403
+
+        stored_vehicle_phone = _normalize_phone(vehicle.owner_phone)
+        if stored_vehicle_phone and stored_vehicle_phone != normalized_phone:
+            return jsonify({'error': 'The phone number does not match the vehicle record.'}), 403
         
         # Check if vehicle owner already exists
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if owner and owner.phone and _normalize_phone(owner.phone) != normalized_phone:
+            return jsonify({'error': 'The phone number does not match the vehicle owner record.'}), 403
         if owner and owner.phone and owner.is_verified:
             return jsonify({'error': 'This vehicle is already registered'}), 409
         
@@ -216,6 +238,10 @@ def login():
         if not owner:
             print(f"⚠️  Login failed: No verified account found for {phone}")
             return jsonify({'error': 'No account found with this phone number'}), 404
+
+        vehicle = owner.vehicle
+        if not _is_vehicle_active(vehicle):
+            return jsonify({'error': 'This vehicle is inactive. Activation is required before login.'}), 403
         
         # Generate and send OTP
         otp = generate_otp(6)
@@ -307,6 +333,9 @@ def verify_otp():
         
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
+
+        if not _is_vehicle_active(vehicle):
+            return jsonify({'error': 'This vehicle is inactive. Activation is required before login.'}), 403
         
         # Find or create VehicleOwner
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
@@ -407,6 +436,9 @@ def verify_login_otp():
         
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
+
+        if not _is_vehicle_active(vehicle):
+            return jsonify({'error': 'This vehicle is inactive. Activation is required before login.'}), 403
         
         # Update last login timestamp
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
