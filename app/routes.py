@@ -1268,9 +1268,15 @@ def list_all_fines():
         try:
             d['license_plate'] = f.vehicle.license_plate
             d['track_token'] = f.vehicle.track_token
-        except Exception:
+            # Add QR code expiry information
+            d['qr_code_expiry'] = f.vehicle.qr_code_expiry.isoformat() if f.vehicle.qr_code_expiry else None
+            d['is_qr_expired'] = f.vehicle.is_qr_code_expired()
+        except Exception as e:
+            print(f"[FINES] Error loading vehicle for fine {f.id}: {e}")
             d['license_plate'] = None
             d['track_token'] = None
+            d['qr_code_expiry'] = None
+            d['is_qr_expired'] = False
         result.append(d)
     # support CSV export for paid fines archive
     if export and export.lower() == 'pdf' and REPORTLAB_AVAILABLE:
@@ -1430,6 +1436,12 @@ def pay_fine(fine_id):
     fine = Fine.query.get_or_404(fine_id)
     if fine.paid:
         return jsonify({'error': 'Amande déjà payée'}), 400
+    
+    # Check if vehicle QR code is expired
+    vehicle = fine.vehicle
+    if vehicle and vehicle.is_qr_code_expired():
+        return jsonify({'error': 'Impossible de payer: le code QR du véhicule est expiré. Veuillez renouveler le code QR.'}), 400
+    
     data = request.get_json() or request.form
     # optional: payment_method, paid_by
     payment_method = data.get('payment_method')
@@ -1472,6 +1484,10 @@ def pay_all_fines_for_vehicle(vehicle_id):
         check_island_access(vehicle.owner_island)
     except Exception:
         return jsonify({'error': 'Accès refusé pour ce véhicule'}), 403
+
+    # Check if vehicle QR code is expired
+    if vehicle.is_qr_code_expired():
+        return jsonify({'error': 'Impossible de payer: le code QR du véhicule est expiré. Veuillez renouveler le code QR.'}), 400
 
     unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).order_by(Fine.issued_at.asc()).all()
     if not unpaid_fines:

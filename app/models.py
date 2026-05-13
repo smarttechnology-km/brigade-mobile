@@ -131,8 +131,8 @@ class Vehicle(db.Model):
         """Check if the QR code has expired"""
         if not self.qr_code_expiry:
             return False
-        from app.timezone_utils import now_comoros
-        return now_comoros() > self.qr_code_expiry
+        from app.timezone_utils import now_comoros, ensure_comoros
+        return now_comoros() > ensure_comoros(self.qr_code_expiry)
     
     def to_dict(self):
         def format_date(value, date_format='%Y-%m-%d'):
