@@ -984,8 +984,10 @@ def create_vehicle():
     fiscal_class = data.get('fiscal_class')
     cv_class = data.get('cv_class')
 
-    if not license_plate or not owner_name or not vehicle_type:
-        return jsonify({'error': 'license_plate, owner_name et vehicle_type requis'}), 400
+    owner_phone = (data.get('owner_phone') or '').strip()
+
+    if not license_plate or not owner_name or not owner_phone or not vehicle_type:
+        return jsonify({'error': 'license_plate, owner_name, owner_phone et vehicle_type requis'}), 400
 
     # Vérifier unicité immatriculation
     if Vehicle.query.filter_by(license_plate=license_plate).first():
@@ -2570,6 +2572,10 @@ def update_vehicle(vehicle_id):
         if not getattr(vehicle, 'vignette_payment_approved', False):
             return jsonify({'error': 'Impossible de renouveler la vignette: le paiement Mobile Money doit être approuvé d\'abord.'}), 400
     
+    owner_phone = (data.get('owner_phone') or '').strip()
+    if not owner_phone:
+        return jsonify({'error': 'owner_phone requis'}), 400
+
     # Mettre à jour les champs autorisés
     date_fields = ['registration_expiry', 'insurance_expiry', 'vignette_expiry']
     for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'fuel_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry', 'vignette_expiry', 'fiscal_class', 'cv_class', 'notes']:
