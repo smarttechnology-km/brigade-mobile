@@ -678,12 +678,24 @@ def payment_success(payment_id):
 @mobile_pay_bp.route('/last-receipt', methods=['GET'])
 def last_receipt_by_plate():
     """Get the last receipt for a vehicle by license plate.
-    Query param: plate=<license_plate>
+    Query params: plate=<license_plate>, optional date=YYYY-MM-DD
     Returns the most recent payment OR a generated receipt from paid fines.
     """
     plate = request.args.get('plate', '').strip()
+    date_str = request.args.get('date', '').strip()
     if not plate:
         return jsonify({'error': 'Missing plate parameter'}), 400
+
+    selected_date = None
+    start_dt = None
+    end_dt = None
+    if date_str:
+        try:
+            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            start_dt = ensure_comoros(datetime(selected_date.year, selected_date.month, selected_date.day, 0, 0, 0))
+            end_dt = ensure_comoros(datetime(selected_date.year, selected_date.month, selected_date.day, 23, 59, 59, 999999))
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
     # Find vehicle by license plate
     vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{plate}%')).first()
@@ -692,34 +704,36 @@ def last_receipt_by_plate():
     
     from sqlalchemy import or_, and_
     
-    # First priority: try to get a paid/completed payment for this vehicle
-    last_payment = Payment.query.filter(
-        and_(
-            Payment.license_plate.ilike(f'%{vehicle.license_plate}%'),
-            Payment.status.in_(['paid', 'completed'])
+    payment_query = Payment.query.filter(
+        Payment.license_plate.ilike(f'%{vehicle.license_plate}%')
+    )
+    if start_dt and end_dt:
+        payment_query = payment_query.filter(
+            or_(
+                and_(Payment.paid_at.isnot(None), Payment.paid_at >= start_dt, Payment.paid_at <= end_dt),
+                and_(Payment.created_at.isnot(None), Payment.created_at >= start_dt, Payment.created_at <= end_dt),
+            )
         )
+
+    # First priority: try to get a paid/completed payment for this vehicle
+    last_payment = payment_query.filter(
+        Payment.status.in_(['paid', 'completed'])
     ).order_by(
         Payment.paid_at.desc().nullslast(),
         Payment.created_at.desc()
     ).first()
-    
+
     # Second priority: get the most recent payment of any status
     if not last_payment:
-        last_payment = Payment.query.filter(
-            Payment.license_plate.ilike(f'%{vehicle.license_plate}%')
-        ).order_by(
-            Payment.created_at.desc()
-        ).first()
-    
-    # Third priority: try with the original plate input
-    if not last_payment:
-        last_payment = Payment.query.filter(
-            Payment.license_plate.ilike(f'%{plate}%')
-        ).order_by(
+        last_payment = payment_query.order_by(
             Payment.created_at.desc()
         ).first()
     
     # Fourth priority: Generate receipt from most recent paid fine(s)
+    # For a date-specific lookup, only payment receipts are returned to keep download support consistent.
+    if selected_date and not last_payment:
+        return jsonify({'error': 'Aucun reçu trouvé pour cette date'}), 404
+
     # This handles cases where fines were marked paid but no Payment record exists
     if not last_payment:
         # Get most recent paid fine for this vehicle
