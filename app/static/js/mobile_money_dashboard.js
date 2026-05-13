@@ -85,6 +85,8 @@ function groupFinesByVehicle(fines) {
                 total_amount: 0,
                 count: 0,
                 last_issued_at: null,
+                is_qr_expired: fine.is_qr_expired || false,
+                qr_code_expiry: fine.qr_code_expiry || null,
                 fines: []
             });
         }
@@ -93,6 +95,14 @@ function groupFinesByVehicle(fines) {
         group.total_amount += Number(fine.amount || 0);
         group.count += 1;
         group.fines.push(fine);
+        
+        // Update QR expiry status from any fine in the group (all same vehicle)
+        if (fine.is_qr_expired !== undefined) {
+            group.is_qr_expired = fine.is_qr_expired;
+        }
+        if (fine.qr_code_expiry !== undefined) {
+            group.qr_code_expiry = fine.qr_code_expiry;
+        }
 
         const candidateDate = fine.issued_at ? new Date(fine.issued_at) : null;
         if (candidateDate && (!group.last_issued_at || candidateDate > group.last_issued_at)) {
@@ -158,14 +168,24 @@ function renderTable(items) {
             }
         }
 
+        // Determine status badge
+        let statusBadge = '<span class="badge bg-warning text-dark">Impayée(s)</span>';
+        if (vehicle.is_qr_expired) {
+            statusBadge = '<span class="badge bg-danger">QR Expiré</span>';
+        }
+
+        // Disable pay button if QR is expired
+        const payButtonDisabled = vehicle.is_qr_expired ? ' disabled' : '';
+        const payButtonClass = vehicle.is_qr_expired ? 'btn-secondary' : 'btn-success';
+
         return '<tr>' +
             '<td>' + (idx + 1) + '</td>' +
             '<td>' + (vehicle.license_plate || '') + '</td>' +
             '<td><span class="badge bg-primary">' + vehicle.count + '</span></td>' +
             '<td>' + Math.round(vehicle.total_amount || 0) + ' KMF</td>' +
             '<td>' + (issuedDate || '-') + '</td>' +
-            '<td><span class="badge bg-warning text-dark">Impayée(s)</span></td>' +
-            '<td class="d-flex gap-1 flex-wrap"><button class="btn btn-sm btn-outline-secondary" data-details-id="' + (vehicle.vehicle_id || vehicle.license_plate) + '"><i class="fas fa-eye me-1"></i>Détails</button><button class="btn btn-sm btn-success" data-pay-id="' + (vehicle.vehicle_id || vehicle.license_plate) + '"><i class="fas fa-check me-1"></i>Accepter Paiement</button></td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td class="d-flex gap-1 flex-wrap"><button class="btn btn-sm btn-outline-secondary" data-details-id="' + (vehicle.vehicle_id || vehicle.license_plate) + '"><i class="fas fa-eye me-1"></i>Détails</button><button class="btn btn-sm ' + payButtonClass + '" data-pay-id="' + (vehicle.vehicle_id || vehicle.license_plate) + '"' + payButtonDisabled + ' title="' + (vehicle.is_qr_expired ? 'QR code expiré - paiement impossible' : '') + '"><i class="fas fa-check me-1"></i>Accepter Paiement</button></td>' +
             '</tr>';
     }).join('');
 
@@ -216,6 +236,20 @@ function openDetailsModal(vehicleId) {
         }).join('');
     }
 
+    // Update pay button state based on QR expiry
+    const payBtn = document.getElementById('mm-open-pay-modal-btn');
+    if (payBtn) {
+        if (vehicle.is_qr_expired) {
+            payBtn.disabled = true;
+            payBtn.classList.add('disabled');
+            payBtn.title = 'QR code expiré - paiement impossible';
+        } else {
+            payBtn.disabled = false;
+            payBtn.classList.remove('disabled');
+            payBtn.title = '';
+        }
+    }
+
     const modal = new bootstrap.Modal(document.getElementById('mmDetailsModal'));
     modal.show();
 }
@@ -223,6 +257,13 @@ function openDetailsModal(vehicleId) {
 function openPayModal(vehicleId) {
     selectedVehicleId = vehicleId;
     const vehicle = mmAllVehicles.find(function (item) { return String(item.vehicle_id || item.license_plate) === String(vehicleId); });
+    
+    // Check if QR is expired before opening payment modal
+    if (vehicle && vehicle.is_qr_expired) {
+        alert('Impossible de traiter le paiement : le code QR du véhicule est expiré. Veuillez renouveler le code QR.');
+        return;
+    }
+    
     const text = document.getElementById('mm-pay-text');
     if (text && vehicle) {
         text.textContent = 'Confirmer le paiement groupé de ' + (vehicle.license_plate || '') + ' pour ' + vehicle.count + ' infraction(s) et ' + Math.round(vehicle.total_amount || 0) + ' KMF ?';
@@ -234,6 +275,13 @@ function openPayModal(vehicleId) {
 
 function submitManualPayment() {
     if (!selectedVehicleId) return;
+
+    // Check if vehicle has expired QR code
+    const vehicle = mmAllVehicles.find(function (item) { return String(item.vehicle_id || item.license_plate) === String(selectedVehicleId); });
+    if (vehicle && vehicle.is_qr_expired) {
+        alert('Impossible de traiter le paiement : le code QR du véhicule est expiré. Veuillez renouveler le code QR.');
+        return;
+    }
 
     const method = document.getElementById('mm-pay-method').value || 'mobile_money_manual';
 
