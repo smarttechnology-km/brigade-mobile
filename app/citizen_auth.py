@@ -130,7 +130,7 @@ def register():
             return jsonify({'error': 'Vehicle not found. Please verify your license plate and VIN.'}), 404
 
         if not _is_vehicle_active(vehicle):
-            return jsonify({'error': 'This vehicle is inactive. Activation is required before registration.'}), 403
+            return jsonify({'error': 'Ce véhicule est inactif. Son activation est requise avant l\'enregistrement.'}), 403
 
         stored_vehicle_phone = _normalize_phone(vehicle.owner_phone)
         if stored_vehicle_phone and stored_vehicle_phone != normalized_phone:
@@ -241,7 +241,7 @@ def login():
 
         vehicle = owner.vehicle
         if not _is_vehicle_active(vehicle):
-            return jsonify({'error': 'This vehicle is inactive. Activation is required before login.'}), 403
+            return jsonify({'error': 'Ce véhicule est inactif. Son activation est requise avant la connexion.'}), 403
         
         # Generate and send OTP
         otp = generate_otp(6)
@@ -335,7 +335,7 @@ def verify_otp():
             return jsonify({'error': 'Vehicle not found'}), 404
 
         if not _is_vehicle_active(vehicle):
-            return jsonify({'error': 'This vehicle is inactive. Activation is required before login.'}), 403
+            return jsonify({'error': 'Ce véhicule est inactif. Son activation est requise avant la connexion.'}), 403
         
         # Find or create VehicleOwner
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
@@ -438,7 +438,7 @@ def verify_login_otp():
             return jsonify({'error': 'Vehicle not found'}), 404
 
         if not _is_vehicle_active(vehicle):
-            return jsonify({'error': 'This vehicle is inactive. Activation is required before login.'}), 403
+            return jsonify({'error': 'Ce véhicule est inactif. Son activation est requise avant la connexion.'}), 403
         
         # Update last login timestamp
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
