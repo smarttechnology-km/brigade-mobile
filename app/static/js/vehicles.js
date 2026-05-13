@@ -669,8 +669,8 @@ function saveVehicle() {
         payload.insurance_expiry = document.getElementById('insurance_expiry').value || '';
     }
 
-    if (!payload.license_plate || !payload.owner_name || !payload.vehicle_type) {
-        alert('Veuillez remplir les champs requis');
+    if (!payload.license_plate || !payload.owner_name || !payload.owner_phone || !payload.vehicle_type) {
+        alert('Veuillez remplir les champs requis, y compris le numéro de téléphone');
         return;
     }
 
