@@ -569,6 +569,40 @@ def api_vehicles_update(vehicle_id):
     })
 
 
+@api_bp.route('/vehicles/<int:vehicle_id>/status', methods=['PUT'])
+@jwt_required(optional=True)
+def api_vehicles_update_status(vehicle_id):
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire', 'policier']:
+        return jsonify({"error": "Forbidden"}), 403
+
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+
+    vehicle = Vehicle.query.get(vehicle_id)
+    if not vehicle:
+        return jsonify({"error": "Vehicle not found"}), 404
+
+    if user.role == 'judiciaire' and user.country:
+        if vehicle.owner_island != user.country:
+            return jsonify({"error": "Forbidden"}), 403
+
+    data = request.get_json() or {}
+    status = str(data.get('status', '')).strip().lower()
+    if status not in ['active', 'inactive', 'suspended']:
+        return jsonify({"error": "Invalid status"}), 400
+
+    vehicle.status = status
+    vehicle.updated_at = now_comoros()
+    db.session.commit()
+
+    return jsonify({
+        "message": "Vehicle status updated successfully",
+        "vehicle": vehicle.to_dict()
+    })
+
+
 @api_bp.route('/fines/create', methods=['POST'])
 @jwt_required()
 def api_fines_create():
