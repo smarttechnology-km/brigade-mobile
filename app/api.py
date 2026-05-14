@@ -593,8 +593,22 @@ def api_vehicles_update_status(vehicle_id):
     if status not in ['active', 'inactive', 'suspended']:
         return jsonify({"error": "Invalid status"}), 400
 
+    old_status = vehicle.status
     vehicle.status = status
     vehicle.updated_at = now_comoros()
+
+    from app.models import VehicleHistory
+    status_labels = {
+        'active': 'Actif',
+        'inactive': 'Inactif',
+        'suspended': 'Suspendu',
+    }
+    db.session.add(VehicleHistory(
+        vehicle_id=vehicle.id,
+        action='Statut du véhicule modifié (mobile)',
+        officer=getattr(user, 'username', '') or '',
+        notes=f"Statut changé de {status_labels.get(old_status, old_status or 'Inconnu')} à {status_labels.get(status, status or 'Inconnu')}"
+    ))
     db.session.commit()
 
     return jsonify({
