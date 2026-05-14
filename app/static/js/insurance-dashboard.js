@@ -140,7 +140,7 @@ function renderVehiclesTable() {
         try {
             const now = new Date();
             const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
-            if (vehicle.status && vehicle.status !== 'active') isInactive = true;
+            if (vehicle.status === 'inactive') isInactive = true;
             if (qrExpiry && qrExpiry < now) isInactive = true;
         } catch (e) {
             isInactive = false;
@@ -236,7 +236,7 @@ function openEditDatesModal(vehicleId) {
     try {
         const now = new Date();
         const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
-        if (vehicle.status && vehicle.status !== 'active') isInactive = true;
+        if (vehicle.status === 'inactive') isInactive = true;
         if (qrExpiry && qrExpiry < now) isInactive = true;
     } catch (e) {
         isInactive = false;
@@ -255,7 +255,7 @@ function openEditDatesModal(vehicleId) {
             try {
                 const now = new Date();
                 const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
-                if (vehicle.status && vehicle.status !== 'active') reason.push('statut: ' + vehicle.status);
+                if (vehicle.status === 'inactive') reason.push('statut: ' + vehicle.status);
                 if (qrExpiry && qrExpiry < now) reason.push('QR code expiré le ' + qrExpiry.toLocaleDateString());
             } catch (e) {}
             alertText.textContent = reason.length ? reason.join(' — ') : 'Véhicule inactif.';
