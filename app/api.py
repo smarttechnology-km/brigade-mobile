@@ -453,7 +453,7 @@ def api_vehicles_create():
 @jwt_required(optional=True)
 def api_vehicles_update(vehicle_id):
     user = get_current_user()
-    if not user or user.role not in ['administrateur', 'judiciaire']:
+    if not user or user.role not in ['administrateur', 'judiciaire', 'policier']:
         return jsonify({"error": "Forbidden"}), 403
     
     vehicle = Vehicle.query.get(vehicle_id)

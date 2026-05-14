@@ -329,7 +329,7 @@ def get_vehicle_block_reason_for_insurance(vehicle):
         qr_expired = False
 
     inactive_reasons = []
-    if vehicle.status and vehicle.status != 'active':
+    if vehicle.status == 'inactive':
         inactive_reasons.append(f"statut: {vehicle.status}")
     if qr_expired:
         inactive_reasons.append("QR code expiré")
@@ -2557,7 +2557,7 @@ def update_vehicle(vehicle_id):
             qr_expired = vehicle.is_qr_code_expired()
         except Exception:
             qr_expired = False
-        if vehicle.status != 'active' or qr_expired:
+        if vehicle.status == 'inactive' or qr_expired:
             return jsonify({'error': "Impossible de modifier l'assurance: le véhicule est inactif ou le QR code est expiré."}), 400
 
     # Tax agents can renew vignette only when vehicle QR code is active.
@@ -4444,7 +4444,7 @@ def assign_vehicle_to_insurance():
         qr_expired = vehicle.is_qr_code_expired()
     except Exception:
         qr_expired = False
-    if vehicle.status != 'active' or qr_expired:
+    if vehicle.status == 'inactive' or qr_expired:
         return jsonify({"error": "Impossible d'ajouter ce véhicule: il est inactif ou son QR code est expiré."}), 400
     
     # Allow reassignment when existing insurance is expired.

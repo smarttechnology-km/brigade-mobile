@@ -841,7 +841,7 @@ def switch_vehicle():
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
 
-        if vehicle.status and vehicle.status != 'active':
+        if vehicle.status == 'inactive':
             return jsonify({'error': 'Ce véhicule est inactif. Vous pouvez le voir, mais vous ne pouvez pas l’activer.'}), 403
 
         owner.last_login = datetime.utcnow()
