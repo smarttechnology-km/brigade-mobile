@@ -776,6 +776,64 @@ def last_receipt_by_plate():
     return jsonify({'payment': payment_dict})
 
 
+@mobile_pay_bp.route('/receipts-by-date', methods=['GET'])
+def receipts_by_date():
+    """Get all receipts for a vehicle on a specific date.
+    Query params: plate=<license_plate>, date=YYYY-MM-DD
+    Returns all payments for that date.
+    """
+    plate = request.args.get('plate', '').strip()
+    date_str = request.args.get('date', '').strip()
+    
+    if not plate or not date_str:
+        return jsonify({'error': 'Missing plate or date parameter'}), 400
+
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        start_dt = ensure_comoros(datetime(selected_date.year, selected_date.month, selected_date.day, 0, 0, 0))
+        end_dt = ensure_comoros(datetime(selected_date.year, selected_date.month, selected_date.day, 23, 59, 59, 999999))
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    
+    # Find vehicle by license plate
+    vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{plate}%')).first()
+    if not vehicle:
+        return jsonify({'error': 'Véhicule non trouvé'}), 404
+    
+    from sqlalchemy import or_, and_
+    
+    # Get all payments for this vehicle on the selected date
+    payments = Payment.query.filter(
+        Payment.license_plate.ilike(f'%{vehicle.license_plate}%')
+    ).filter(
+        or_(
+            and_(Payment.paid_at.isnot(None), Payment.paid_at >= start_dt, Payment.paid_at <= end_dt),
+            and_(Payment.created_at.isnot(None), Payment.created_at >= start_dt, Payment.created_at <= end_dt),
+        )
+    ).order_by(
+        Payment.paid_at.desc().nullslast(),
+        Payment.created_at.desc()
+    ).all()
+    
+    if not payments:
+        return jsonify({'error': 'Aucun paiement trouvé pour cette date', 'payments': []}), 200
+    
+    # Return all payments with vehicle info
+    payments_list = []
+    for payment in payments:
+        payment_dict = payment.to_dict()
+        payment_dict['vehicle'] = vehicle.to_dict()
+        payment_dict['_source'] = 'payment'
+        payments_list.append(payment_dict)
+    
+    return jsonify({
+        'date': date_str,
+        'plate': vehicle.license_plate,
+        'payments': payments_list,
+        'count': len(payments_list)
+    }), 200
+
+
 @mobile_pay_bp.route('/receipt/<payment_id>.pdf', methods=['GET'])
 def download_receipt_pdf(payment_id):
     """Generate and download receipt as PDF."""
