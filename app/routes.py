@@ -3302,28 +3302,38 @@ def get_vignette_vehicles():
     vehicles = query.order_by(Vehicle.license_plate).all()
     
     vehicles_payload = []
-    now = now_comoros()
+    now = ensure_comoros(now_comoros())
     
     for vehicle in vehicles:
         vehicle_data = vehicle.to_dict()
         
         # Calculate vignette status
         vignette_expiry = vehicle.vignette_expiry or vehicle.vignette_payment_requested_expiry
+        if isinstance(vignette_expiry, str):
+            try:
+                vignette_expiry = datetime.fromisoformat(vignette_expiry)
+            except Exception:
+                vignette_expiry = None
         if vignette_expiry:
-            # Handle both datetime and string formats
-            if isinstance(vignette_expiry, str):
-                try:
-                    vignette_expiry = datetime.fromisoformat(vignette_expiry)
-                except:
-                    vignette_expiry = None
-            
-            if vignette_expiry:
-                # Ensure timezone-aware Comoros datetime for accurate comparisons
-                try:
-                    vignette_expiry = ensure_comoros(vignette_expiry)
-                except Exception:
-                    pass
+            try:
+                vignette_expiry = ensure_comoros(vignette_expiry)
+            except Exception:
+                vignette_expiry = None
 
+        pending_request_expiry = get_pending_vignette_request_expiry(vehicle)
+        if pending_request_expiry:
+            try:
+                pending_request_expiry = ensure_comoros(pending_request_expiry)
+            except Exception:
+                pass
+        has_pending_vignette_request = bool(
+            pending_request_expiry
+            and not getattr(vehicle, 'vignette_payment_approved', False)
+        )
+        if not vehicle.vignette_expiry and has_pending_vignette_request:
+            vignette_status = 'pending'
+        else:
+            if vignette_expiry:
                 if vignette_expiry < now:
                     vignette_status = 'expired'
                 elif vignette_expiry < now + timedelta(days=30):
@@ -3332,17 +3342,16 @@ def get_vignette_vehicles():
                     vignette_status = 'active'
             else:
                 vignette_status = 'no_vignette'
-        else:
-            vignette_status = 'no_vignette'
         
         vehicle_data['vignette_status'] = vignette_status
-        
-        pending_request_expiry = get_pending_vignette_request_expiry(vehicle)
+
         vehicle_data['vignette_payment_request_pending'] = bool(
             pending_request_expiry
             and not getattr(vehicle, 'vignette_payment_approved', False)
             and vignette_status in ('expired', 'no_vignette')
         )
+        if vignette_status == 'pending':
+            vehicle_data['vignette_payment_request_pending'] = True
         vehicle_data['vignette_requested_expiry'] = pending_request_expiry.isoformat() if pending_request_expiry else None
 
         # Calculate vignette price based on vehicle attributes
@@ -3614,6 +3623,7 @@ def get_vignette_vehicles_without():
         vehicle_data['vignette_payment_request_pending'] = payment_request_pending
         pending_expiry = get_pending_vignette_request_expiry(vehicle)
         vehicle_data['vignette_payment_requested_expiry'] = pending_expiry.isoformat() if pending_expiry else None
+        vehicle_data['vignette_status'] = 'pending' if payment_request_pending and not vehicle.vignette_expiry else 'no_vignette'
         
         # Calculate vignette price based on vehicle attributes
         vignette_price = calculate_vignette_price(vehicle)
