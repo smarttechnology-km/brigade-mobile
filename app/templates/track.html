@@ -106,7 +106,7 @@
             {% endif %}
             <div class="col-6">
               <small class="text-muted d-block">Statut</small>
-              <span class="badge {% if vehicle.status == 'active' %}bg-success{% elif vehicle.status == 'suspended' %}bg-danger{% else %}bg-secondary{% endif %}">
+              <span class="badge {% if vehicle.status == 'active' %}bg-success{% elif vehicle.status == 'suspended' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
                 {% if vehicle.status == 'active' %}Actif{% elif vehicle.status == 'suspended' %}Suspendu{% elif vehicle.status == 'inactive' %}Inactif{% else %}{{ vehicle.status or 'Inconnu' }}{% endif %}
               </span>
             </div>
