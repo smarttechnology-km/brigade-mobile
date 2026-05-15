@@ -106,8 +106,11 @@ function updateStatistics() {
         totalVehicles++;
         
         const vignetteExpiry = vehicle.vignette_expiry ? new Date(vehicle.vignette_expiry) : null;
+        const isPending = vehicle.vignette_status === 'pending' || (vehicle.vignette_payment_request_pending && !vehicle.vignette_expiry);
         
-        if (!vignetteExpiry) {
+        if (isPending) {
+            // Pending requests are not counted as active/expired.
+        } else if (!vignetteExpiry) {
             // No expiry date set
         } else if (vignetteExpiry < today) {
             expiredCount++;
@@ -205,13 +208,18 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
     
     tbody.innerHTML = paginatedVehicles.map(vehicle => {
         const vignetteExpiry = vehicle.vignette_expiry ? new Date(vehicle.vignette_expiry) : null;
+        const requestedExpiry = vehicle.vignette_requested_expiry ? new Date(vehicle.vignette_requested_expiry) : null;
         const today = new Date();
+        const isPending = vehicle.vignette_status === 'pending' || (vehicle.vignette_payment_request_pending && !vehicle.vignette_expiry);
         
         let statusBadge = '';
         let statusText = '';
         let isExpired = false;
         
-        if (!vignetteExpiry) {
+        if (isPending) {
+            statusBadge = 'badge bg-warning text-dark';
+            statusText = 'En attente';
+        } else if (!vignetteExpiry) {
             statusBadge = 'badge bg-secondary';
             statusText = 'Pas de vignette';
         } else if (vignetteExpiry < today) {
@@ -264,6 +272,7 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
         
         // Get vignette price from API response
         const vignettePrice = vehicle.vignette_price || 0;
+        const displayExpiry = vehicle.vignette_expiry || vehicle.vignette_requested_expiry || null;
         
         // Calculate total
         const totalAmount = vignettePrice + penaltyAmount + finesAmount;
@@ -273,7 +282,7 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
                 <td class="fw-semibold">${vehicle.license_plate || '-'}</td>
                 <td>${vehicle.vehicle_type || '-'}</td>
                 <td>${vehicle.usage_type || '-'}</td>
-                <td>${vignetteExpiry ? formatDate(vignetteExpiry) : '-'}</td>
+            <td>${displayExpiry ? formatDate(displayExpiry) : '-'}</td>
                 <td class="text-center">${vignettePrice > 0 ? vignettePrice.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td class="text-center ${penaltyAmount > 0 ? 'text-danger' : ''}">${penaltyAmount > 0 ? penaltyAmount.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td class="text-center ${finesAmount > 0 ? 'text-danger' : ''}">${finesAmount > 0 ? finesAmount.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
@@ -313,8 +322,12 @@ function filterVehicles() {
         const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
         
         filtered = filtered.filter(vehicle => {
+            const isPending = vehicle.vignette_status === 'pending' || (vehicle.vignette_payment_request_pending && !vehicle.vignette_expiry);
             const vignetteExpiry = vehicle.vignette_expiry ? new Date(vehicle.vignette_expiry) : null;
             
+            if (statusFilter === 'pending') {
+                return isPending;
+            }
             if (statusFilter === 'active') {
                 return vignetteExpiry && vignetteExpiry >= thirtyDaysFromNow;
             } else if (statusFilter === 'expiring') {

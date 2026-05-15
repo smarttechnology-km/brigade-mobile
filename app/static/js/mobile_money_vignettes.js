@@ -40,7 +40,7 @@ function loadVignettePayments() {
         .then(function (data) {
             const vehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
             vignetteVehiclesCache = vehicles.filter(function (vehicle) {
-                return vehicle.vignette_status === 'expired' || vehicle.vignette_payment_request_pending;
+                return vehicle.vignette_status === 'expired' || vehicle.vignette_status === 'pending' || vehicle.vignette_payment_request_pending;
             });
 
             vignetteVehiclesCache.sort(function (a, b) {
@@ -112,9 +112,10 @@ function renderVignetteVehicles(items) {
 
         const approved = !!vehicle.vignette_payment_approved;
         const pendingRequest = !!vehicle.vignette_payment_request_pending && !approved;
+        const pendingStatus = vehicle.vignette_status === 'pending' && !approved;
         const statusBadge = approved
             ? '<span class="badge bg-success">Approuvé</span>'
-            : pendingRequest
+            : pendingStatus || pendingRequest
             ? '<span class="badge bg-primary">Demande en attente</span>'
             : '<span class="badge bg-warning text-dark">En attente</span>';
 
