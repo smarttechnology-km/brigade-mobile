@@ -1270,6 +1270,7 @@ def list_all_fines():
         try:
             d['license_plate'] = f.vehicle.license_plate
             d['track_token'] = f.vehicle.track_token
+            d['status'] = f.vehicle.status
             # Add QR code expiry information
             d['qr_code_expiry'] = f.vehicle.qr_code_expiry.isoformat() if f.vehicle.qr_code_expiry else None
             d['is_qr_expired'] = f.vehicle.is_qr_code_expired()
@@ -1277,6 +1278,7 @@ def list_all_fines():
             print(f"[FINES] Error loading vehicle for fine {f.id}: {e}")
             d['license_plate'] = None
             d['track_token'] = None
+            d['status'] = None
             d['qr_code_expiry'] = None
             d['is_qr_expired'] = False
         result.append(d)
@@ -2573,7 +2575,7 @@ def update_vehicle(vehicle_id):
             return jsonify({'error': 'Impossible de renouveler la vignette: le paiement Mobile Money doit être approuvé d\'abord.'}), 400
     
     owner_phone = (data.get('owner_phone') or '').strip()
-    if not owner_phone:
+    if 'owner_phone' in data and not owner_phone:
         return jsonify({'error': 'owner_phone requis'}), 400
 
     # Mettre à jour les champs autorisés
@@ -3337,7 +3339,9 @@ def get_vignette_vehicles():
         
         pending_request_expiry = get_pending_vignette_request_expiry(vehicle)
         vehicle_data['vignette_payment_request_pending'] = bool(
-            pending_request_expiry and not getattr(vehicle, 'vignette_payment_approved', False)
+            pending_request_expiry
+            and not getattr(vehicle, 'vignette_payment_approved', False)
+            and vignette_status in ('expired', 'no_vignette')
         )
         vehicle_data['vignette_requested_expiry'] = pending_request_expiry.isoformat() if pending_request_expiry else None
 

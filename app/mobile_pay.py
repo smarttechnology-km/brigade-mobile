@@ -527,12 +527,12 @@ def webhook():
                     requested_expiry = get_vignette_expiry_date(payment_time)
 
                 vehicle.vignette_payment_requested_at = payment_time
-                vehicle.vignette_payment_requested_by = payment.payer_name or 'App Mobile'
+                vehicle.vignette_payment_requested_by = payment.payer_name or payment.phone_number or 'HuriMoney'
                 vehicle.vignette_payment_requested_expiry = requested_expiry
                 vehicle.vignette_payment_approved = True
                 vehicle.vignette_payment_approved_at = payment_time
-                vehicle.vignette_payment_approved_by = 'App Mobile'
-                vehicle.vignette_payment_method = 'app_mobile'
+                vehicle.vignette_payment_approved_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                vehicle.vignette_payment_method = 'huri_money' if payment.huri_payment_id else 'app_mobile'
                 vehicle.vignette_expiry = requested_expiry
                 vehicle.vignette_last_paid_at = payment_time
                 vehicle.vignette_last_paid_vignette_amount = float(fine_payload.get('vignette_price') or 0.0) + float(fine_payload.get('annual_ds_amount') or 0.0)
@@ -556,7 +556,7 @@ def webhook():
                     if f:
                         f.paid = True
                         f.paid_at = payment_time
-                        f.paid_by = 'App Mobile'
+                        f.paid_by = payment.payer_name or payment.phone_number or 'HuriMoney'
                         f.receipt_number = f'VEN-{f.id}-{int(payment_time.timestamp())}'
 
                 db.session.commit()
@@ -566,7 +566,7 @@ def webhook():
                 if f:
                     f.paid = True
                     f.paid_at = now_comoros()
-                    f.paid_by = 'App Mobile'
+                    f.paid_by = payment.payer_name or payment.phone_number or 'HuriMoney'
                     f.receipt_number = f'REC-{f.id}-{int(f.paid_at.timestamp())}'
             db.session.commit()
 
