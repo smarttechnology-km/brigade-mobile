@@ -82,6 +82,7 @@ function groupFinesByVehicle(fines) {
                 vehicle_id: fine.vehicle_id,
                 license_plate: fine.license_plate || '',
                 owner_name: fine.owner_name || '',
+                status: fine.status || null,
                 total_amount: 0,
                 count: 0,
                 last_issued_at: null,
@@ -95,6 +96,10 @@ function groupFinesByVehicle(fines) {
         group.total_amount += Number(fine.amount || 0);
         group.count += 1;
         group.fines.push(fine);
+        // propagate vehicle status from any fine (all fines for same vehicle should share it)
+        if (fine.status !== undefined && fine.status !== null) {
+            group.status = fine.status;
+        }
         
         // Update QR expiry status from any fine in the group (all same vehicle)
         if (fine.is_qr_expired !== undefined) {
@@ -159,6 +164,7 @@ function renderTable(items) {
 
     tbody.innerHTML = items.map(function (vehicle, idx) {
         const latestFine = vehicle.fines[0] || {};
+        const statusBadge = getVehicleStatusBadge(vehicle.status, vehicle.is_qr_expired);
         let issuedDate = vehicle.last_issued_at ? vehicle.last_issued_at.toLocaleDateString('fr-FR') : '';
         if (!issuedDate && latestFine.issued_at) {
             try {
@@ -166,12 +172,6 @@ function renderTable(items) {
             } catch (e) {
                 issuedDate = latestFine.issued_at;
             }
-        }
-
-        // Determine status badge
-        let statusBadge = '<span class="badge bg-warning text-dark">Impayée(s)</span>';
-        if (vehicle.is_qr_expired) {
-            statusBadge = '<span class="badge bg-danger">QR Expiré</span>';
         }
 
         // Disable pay button if QR is expired
@@ -184,7 +184,7 @@ function renderTable(items) {
             '<td><span class="badge bg-primary">' + vehicle.count + '</span></td>' +
             '<td>' + Math.round(vehicle.total_amount || 0) + ' KMF</td>' +
             '<td>' + (issuedDate || '-') + '</td>' +
-            '<td>' + statusBadge + '</td>' +
+                '<td>' + statusBadge + '</td>' +
             '<td class="d-flex gap-1 flex-wrap"><button class="btn btn-sm btn-outline-secondary" data-details-id="' + (vehicle.vehicle_id || vehicle.license_plate) + '"><i class="fas fa-eye me-1"></i>Détails</button><button class="btn btn-sm ' + payButtonClass + '" data-pay-id="' + (vehicle.vehicle_id || vehicle.license_plate) + '"' + payButtonDisabled + ' title="' + (vehicle.is_qr_expired ? 'QR code expiré - paiement impossible' : '') + '"><i class="fas fa-check me-1"></i>Accepter Paiement</button></td>' +
             '</tr>';
     }).join('');
@@ -202,6 +202,28 @@ function renderTable(items) {
             openPayModal(vehicleId);
         });
     });
+}
+
+function getVehicleStatusBadge(status, isQrExpired) {
+    const normalized = String(status || '').toLowerCase();
+
+    if (normalized === 'active') {
+        return '<span class="badge bg-success">Actif</span>';
+    }
+
+    if (normalized === 'suspended') {
+        return '<span class="badge bg-warning text-dark">Suspendu</span>';
+    }
+
+    if (normalized === 'inactive') {
+        return '<span class="badge bg-danger">Inactif</span>';
+    }
+
+    if (isQrExpired) {
+        return '<span class="badge bg-danger">QR Expiré</span>';
+    }
+
+    return '<span class="badge bg-secondary">' + (status || 'Inconnu') + '</span>';
 }
 
 function openDetailsModal(vehicleId) {

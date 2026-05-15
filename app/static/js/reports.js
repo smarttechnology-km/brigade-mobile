@@ -227,7 +227,7 @@ function renderReportsTable(items) {
         <td><strong>${v.license_plate || ''}</strong></td>
         <td>${v.owner_name || ''}</td>
         <td>${capitalize(v.vehicle_type)}</td>
-        <td>${capitalizeStatus(v.status)}</td>
+        <td>${getStatusBadge(v.status)}</td>
         <td>${v.qr_code_expiry || ''}</td>
         <td>${v.created_at || ''}</td>
       </tr>`).join('');
@@ -238,7 +238,7 @@ function renderReportsTable(items) {
         <td><strong>${v.license_plate || ''}</strong></td>
         <td>${v.owner_name || ''}</td>
         <td>${v.insurance_company || ''}</td>
-        <td>${capitalizeStatus(v.status)}</td>
+        <td>${getStatusBadge(v.status)}</td>
         <td>${v.insurance_expiry || ''}</td>
         <td>${v.created_at || ''}</td>
       </tr>`).join('');
@@ -249,7 +249,7 @@ function renderReportsTable(items) {
         <td><strong>${v.license_plate || ''}</strong></td>
         <td>${v.owner_name || ''}</td>
         <td>${capitalize(v.vehicle_type)}</td>
-        <td>${capitalizeStatus(v.status)}</td>
+        <td>${getStatusBadge(v.status)}</td>
         <td>${v.registration_expiry || ''}</td>
         <td>${v.created_at || ''}</td>
       </tr>`).join('');
@@ -381,4 +381,11 @@ function exportCsv() {
 }
 
 function capitalize(s) { if (!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1); }
+function getStatusBadge(status) {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'active') return '<span class="badge bg-success">Actif</span>';
+  if (normalized === 'suspended') return '<span class="badge bg-warning text-dark">Suspendu</span>';
+  if (normalized === 'inactive') return '<span class="badge bg-danger">Inactif</span>';
+  return `<span class="badge bg-secondary">${status || 'Inconnu'}</span>`;
+}
 function capitalizeStatus(s) { if (s === 'active') return 'Actif'; if (s === 'inactive') return 'Inactif'; if (s === 'suspended') return 'Suspendu'; return s || ''; }

@@ -123,6 +123,7 @@ function renderVehiclesTable() {
         const insuranceExpiry = vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry) : null;
         const vignetteExpiry = vehicle.vignette_expiry ? new Date(vehicle.vignette_expiry) : null;
         const registrationExpiry = vehicle.registration_expiry ? new Date(vehicle.registration_expiry) : null;
+        const statusBadge = getVehicleStatusBadge(vehicle.status);
         
         let insuranceBadge = '-';
         if (insuranceExpiry) {
@@ -167,6 +168,7 @@ function renderVehiclesTable() {
                 <td>${vehicle.owner_island || '-'}</td>
                 <td>${vehicle.owner_phone || '-'}</td>
                 <td>${vehicle.usage_type || '-'}</td>
+                <td>${statusBadge}</td>
                 <td>${insuranceBadge}</td>
                 <td>
                     ${actionButton}
@@ -174,6 +176,24 @@ function renderVehiclesTable() {
             </tr>
         `;
     }).join('');
+}
+
+function getVehicleStatusBadge(status) {
+    const normalized = String(status || '').toLowerCase();
+
+    if (normalized === 'active') {
+        return '<span class="badge bg-success">Actif</span>';
+    }
+
+    if (normalized === 'suspended') {
+        return '<span class="badge bg-warning text-dark">Suspendu</span>';
+    }
+
+    if (normalized === 'inactive') {
+        return '<span class="badge bg-danger">Inactif</span>';
+    }
+
+    return '<span class="badge bg-secondary">' + (status || 'Inconnu') + '</span>';
 }
 
 function filterVehicles() {
