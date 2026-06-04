@@ -2188,6 +2188,54 @@ def create_vehicle_transfer():
         return jsonify({'error': str(e)}), 500
 
 
+
+
+@api_bp.route('/vehicle-transfers/<int:transfer_id>', methods=['PUT'])
+@jwt_required()
+def update_vehicle_transfer(transfer_id):
+    """Update a vehicle transfer request - allows citizens to edit pending transfers"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        
+        if not user or user.role != 'citizen':
+            return {'error': 'Only citizens can edit their transfer requests'}, 403
+        
+        transfer = VehicleTransfer.query.get(transfer_id)
+        if not transfer:
+            return {'error': 'Transfer not found'}, 404
+        
+        # Verify ownership - user must own the vehicle
+        vehicle = Vehicle.query.get(transfer.vehicle_id)
+        if not vehicle or vehicle.owner_phone != user.phone:
+            return {'error': 'You can only edit your own transfer requests'}, 403
+        
+        # Only allow editing if status is pending
+        if transfer.status != 'pending':
+            return {'error': 'Can only edit pending transfer requests'}, 400
+        
+        data = request.get_json()
+        
+        # Update allowed fields
+        if 'new_owner_phone' in data:
+            transfer.new_owner_phone = data['new_owner_phone']
+        if 'new_owner_name' in data:
+            transfer.new_owner_name = data['new_owner_name']
+        if 'transfer_type' in data:
+            if data['transfer_type'] not in ['sale', 'gift', 'inheritance', 'other']:
+                return {'error': 'Invalid transfer type'}, 400
+            transfer.transfer_type = data['transfer_type']
+        if 'reason' in data:
+            transfer.reason = data['reason']
+        
+        db.session.commit()
+        return transfer.to_dict(), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return {'error': f'Error updating transfer: {str(e)}'}, 500
+
+
 @api_bp.route('/vehicle-transfers/<int:transfer_id>/identity-document', methods=['GET'])
 def get_transfer_identity_document(transfer_id):
     """Get identity document for a vehicle transfer (admin only)"""
