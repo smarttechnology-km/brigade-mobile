@@ -5,7 +5,7 @@ from functools import wraps
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from app import db
-from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine, VehicleHistory, VehicleOwner
+from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine, VehicleHistory, VehicleOwner, VehicleTransfer
 from decimal import Decimal
 import qrcode
 import io
@@ -4794,6 +4794,136 @@ def delete_penalty_rate(rate_id):
     db.session.commit()
     
     return jsonify({"message": "Penalty rate deleted successfully"})
+
+
+# Vehicle Transfers - Citizen API
+
+@main_bp.route('/api/vehicle-transfers', methods=['POST'])
+@jwt_required()
+def submit_vehicle_transfer():
+    """Submit a vehicle transfer request (citizen endpoint)"""
+    from app.models import VehicleTransfer
+    import os
+    from werkzeug.utils import secure_filename
+    
+    try:
+        # Get vehicle ID from JWT
+        vehicle_id = get_jwt_identity()
+        if not vehicle_id:
+            return jsonify({'error': 'Invalid token: missing vehicle_id'}), 401
+        
+        # Verify vehicle exists
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        # Get form data
+        transfer_type = (request.form.get('transfer_type') or '').strip()
+        new_owner_phone = (request.form.get('new_owner_phone') or '').strip()
+        new_owner_name = (request.form.get('new_owner_name') or '').strip()
+        transfer_reason = (request.form.get('transfer_reason') or '').strip()
+        
+        # Validate required fields
+        if not transfer_type or not new_owner_phone or not new_owner_name:
+            return jsonify({'error': 'Missing required fields: transfer_type, new_owner_phone, new_owner_name'}), 400
+        
+        # Validate transfer_type
+        if transfer_type not in ['sale', 'gift', 'inheritance', 'other']:
+            return jsonify({'error': 'Invalid transfer_type'}), 400
+        
+        # Validate required reason for 'other' type
+        if transfer_type == 'other' and not transfer_reason:
+            return jsonify({'error': 'Reason required for transfer type "other"'}), 400
+        
+        # Check if file was uploaded
+        if 'identity_document' not in request.files:
+            return jsonify({'error': 'Identity document file is required'}), 400
+        
+        file = request.files['identity_document']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Validate file type (PDF or image)
+        allowed_extensions = {'pdf', 'jpg', 'jpeg', 'png', 'gif'}
+        if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({'error': 'Invalid file type. Allowed: PDF, JPG, PNG, GIF'}), 400
+        
+        # Check for existing pending transfer
+        existing_transfer = VehicleTransfer.query.filter_by(
+            vehicle_id=vehicle_id,
+            status='pending'
+        ).first()
+        
+        if existing_transfer:
+            return jsonify({'error': 'A transfer request is already pending for this vehicle'}), 409
+        
+        # Create uploads directory if needed
+        upload_dir = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'app/static'), 'vehicle_transfers')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Save file with secure name
+        filename = secure_filename(f"{vehicle_id}_{datetime.now().timestamp()}_{file.filename}")
+        filepath = os.path.join(upload_dir, filename)
+        file.save(filepath)
+        
+        # Create transfer record
+        transfer = VehicleTransfer(
+            vehicle_id=vehicle_id,
+            current_owner_phone=vehicle.owner_phone or '',
+            new_owner_phone=new_owner_phone,
+            new_owner_name=new_owner_name,
+            transfer_type=transfer_type,
+            reason=transfer_reason or None,
+            identity_document_path=os.path.join('vehicle_transfers', filename),
+            status='pending',
+            created_at=now_comoros()
+        )
+        
+        db.session.add(transfer)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Transfer request submitted successfully',
+            'transfer_id': transfer.id,
+            'vehicle_plate': vehicle.license_plate
+        }), 201
+        
+    except Exception as e:
+        print(f'Error submitting transfer: {str(e)}')
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@main_bp.route('/api/vehicle-transfers/<int:transfer_id>/identity-document', methods=['GET'])
+@jwt_required()
+def download_transfer_identity_document(transfer_id):
+    """Download identity document from a transfer request (admin only)"""
+    from app.models import VehicleTransfer
+    
+    try:
+        # Verify user is admin or judiciaire
+        jwt_claims = get_jwt()
+        user_role = jwt_claims.get('role', 'citizen')
+        
+        if user_role not in ['administrateur', 'judiciaire']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        transfer = VehicleTransfer.query.get_or_404(transfer_id)
+        
+        if not transfer.identity_document_path:
+            return jsonify({'error': 'No document attached to this transfer'}), 404
+        
+        # Construct full path
+        file_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'app/static'), transfer.identity_document_path)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'Document file not found'}), 404
+        
+        return send_file(file_path, as_attachment=True)
+        
+    except Exception as e:
+        print(f'Error downloading transfer document: {str(e)}')
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 
 
 
