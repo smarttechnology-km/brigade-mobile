@@ -2063,31 +2063,34 @@ def get_vehicle_transfers():
         license_plate = request.args.get('license_plate', '').upper()
         transfer_type = request.args.get('transfer_type', '')
         
-        # Start query
-        query = VehicleTransfer.query
+        # Start query with eager loading of vehicle
+        from sqlalchemy.orm import joinedload
+        query = VehicleTransfer.query.options(joinedload(VehicleTransfer.vehicle))
         
         # Apply filters
         if status:
-            query = query.filter_by(status=status)
+            query = query.filter(VehicleTransfer.status == status)
         if transfer_type:
-            query = query.filter_by(transfer_type=transfer_type)
+            query = query.filter(VehicleTransfer.transfer_type == transfer_type)
         if license_plate:
             query = query.join(Vehicle).filter(Vehicle.license_plate.ilike(f'%{license_plate}%'))
         
         # Sort by created date descending
         transfers = query.order_by(VehicleTransfer.created_at.desc()).all()
         
-        # Return as list of dicts with vehicle info
+        # Build result with proper current_owner_name
         result = []
         for t in transfers:
             transfer_dict = t.to_dict()
-            # Add vehicle info
+            # Override current_owner_name to ensure it's populated
             if t.vehicle:
+                transfer_dict['current_owner_name'] = t.vehicle.owner_name
                 transfer_dict['vehicle'] = {
                     'id': t.vehicle.id,
                     'license_plate': t.vehicle.license_plate,
                     'current_owner': t.vehicle.owner_name
                 }
+            print(f"[DEBUG] Transfer {t.id}: current_owner_name={transfer_dict.get('current_owner_name')}, vehicle={t.vehicle}")
             result.append(transfer_dict)
         
         print(f"✅ Fetched {len(result)} vehicle transfers")
@@ -2095,6 +2098,8 @@ def get_vehicle_transfers():
     
     except Exception as e:
         print(f"❌ Error fetching transfers: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
