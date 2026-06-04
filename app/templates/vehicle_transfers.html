@@ -173,7 +173,7 @@ function renderTransfersTable(transfers) {
           ${getTypeLabel(transfer.transfer_type)}
         </span>
       </td>
-      <td>${transfer.vehicle?.current_owner || 'N/A'}</td>
+      <td>${transfer.current_owner_name || 'N/A'}</td>
       <td>${transfer.new_owner_name || 'N/A'}</td>
       <td>${formatDate(transfer.created_at)}</td>
       <td>
@@ -223,29 +223,29 @@ async function showTransferModal(transferId) {
       <div class="row mb-3">
         <div class="col-md-6">
           <label class="form-label text-muted">Propriétaire actuel</label>
-          <p>${transfer.current_owner_name || 'N/A'}</p>
+          <p class="fw-bold">${transfer.current_owner_name || 'N/A'}</p>
         </div>
         <div class="col-md-6">
           <label class="form-label text-muted">Téléphone actuel</label>
-          <p>${transfer.current_owner_name || 'N/A'}</p>
+          <p class="fw-bold">${transfer.current_owner_phone || 'N/A'}</p>
         </div>
       </div>
 
       <div class="row mb-3">
         <div class="col-md-6">
           <label class="form-label text-muted">Nouveau propriétaire</label>
-          <input type="text" class="form-control form-control-sm transfer-editable" id="modal-new-owner-name" value="${transfer.new_owner_name || ''}" ${transfer.status !== 'pending' ? 'readonly' : ''}>
+          <input type="text" class="form-control form-control-sm" id="modal-new-owner-name" value="${transfer.new_owner_name || ''}" ${transfer.status === 'pending' ? '' : 'readonly'}>
         </div>
         <div class="col-md-6">
           <label class="form-label text-muted">Téléphone nouveau</label>
-          <input type="text" class="form-control form-control-sm transfer-editable" id="modal-new-owner-phone" value="${transfer.new_owner_phone || ''}" ${transfer.status !== 'pending' ? 'readonly' : ''}>
+          <input type="text" class="form-control form-control-sm" id="modal-new-owner-phone" value="${transfer.new_owner_phone || ''}" ${transfer.status === 'pending' ? '' : 'readonly'}>
         </div>
       </div>
 
       <div class="row mb-3">
         <div class="col-12">
           <label class="form-label text-muted">Motif du transfert</label>
-          <textarea class="form-control form-control-sm transfer-editable" id="modal-reason" rows="3" ${transfer.status !== 'pending' ? 'readonly' : ''}>${transfer.reason || 'Aucun détail fourni'}</textarea>
+          <textarea class="form-control form-control-sm" id="modal-reason" rows="3" ${transfer.status === 'pending' ? '' : 'readonly'}>${transfer.reason || 'Aucun détail fourni'}</textarea>
         </div>
       </div>
 
@@ -275,9 +275,9 @@ async function showTransferModal(transferId) {
           <div class="col-12">
             <label class="form-label text-muted">Pièce d'identité</label>
             <div class="alert alert-info">
-              <i class="fas fa-file me-2"></i>
-              <a href="/api/vehicle-transfers/${transfer.id}/identity-document" target="_blank" class="alert-link">
-                Télécharger la pièce d'identité
+              <i class="fas fa-file-pdf me-2"></i>
+              <a href="#" onclick="viewIdentityDocument(${transfer.id}); return false;" class="alert-link">
+                Voir la pièce d'identité
               </a>
             </div>
           </div>
@@ -369,8 +369,7 @@ async function saveTransfer(transferId) {
       method: 'PUT',
       credentials: 'include',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         new_owner_name: newOwnerName,
@@ -392,6 +391,44 @@ async function saveTransfer(transferId) {
   } catch (error) {
     alert('Erreur: ' + error.message);
   }
+}
+
+// View identity document in modal
+function viewIdentityDocument(transferId) {
+  const docUrl = `/api/vehicle-transfers/${transferId}/identity-document`;
+  
+  // Create modal for document preview
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = 'docModal';
+  modal.setAttribute('tabindex', '-1');
+  modal.innerHTML = `
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Pièce d'identité</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <iframe src="${docUrl}" style="width: 100%; height: 600px; border: none;"></iframe>
+        </div>
+        <div class="modal-footer">
+          <a href="${docUrl}" class="btn btn-primary" download>
+            <i class="fas fa-download me-2"></i> Télécharger
+          </a>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  new bootstrap.Modal(modal).show();
+  
+  // Clean up modal when hidden
+  modal.addEventListener('hidden.bs.modal', function() {
+    modal.remove();
+  });
 }
 
 // Approve transfer
