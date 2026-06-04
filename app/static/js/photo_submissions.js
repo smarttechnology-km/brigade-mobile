@@ -114,6 +114,8 @@ function openPhotoModal(index) {
     document.getElementById('photo-preview').src = photoUrl;
     document.getElementById('modal-plate').textContent = submission.license_plate || '-';
     document.getElementById('modal-username').textContent = submission.user?.username || '-';
+    document.getElementById('modal-vehicle-type').textContent = submission.vehicle_type || '-';
+    document.getElementById('modal-usage-type').textContent = submission.usage_type || '-';
     document.getElementById('modal-description').textContent = submission.description || '-';
     
     const submittedAt = submission.submitted_at ? new Date(submission.submitted_at).toLocaleString('fr-FR') : '-';
