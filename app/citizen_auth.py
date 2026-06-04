@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
-from app.models import db, Vehicle, User, VehicleOwner
+from app.models import db, Vehicle, User, VehicleOwner, Fine, VehicleTransfer
 from app.sms_service import SMSService
 from app.push_notifications import send_expo_push_notification
 
@@ -760,6 +760,10 @@ def get_my_vehicles():
             vehicle = owner.vehicle
             if not vehicle:
                 continue
+            
+            # Count unpaid fines for this vehicle
+            fines_count = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).count()
+            
             vehicles.append({
                 'id': vehicle.id,
                 'license_plate': vehicle.license_plate,
@@ -770,6 +774,7 @@ def get_my_vehicles():
                 'is_current': vehicle.id == int(current_vehicle_id) if current_vehicle_id else False,
                 'last_login': owner.last_login.isoformat() if owner.last_login else None,
                 'verified_at': owner.verified_at.isoformat() if owner.verified_at else None,
+                'fines_count': fines_count,
             })
 
         return jsonify({
@@ -935,3 +940,77 @@ def check_document_expirations():
     except Exception as e:
         print(f"Error checking document expirations: {e}")
         return jsonify({'error': str(e), 'notifications_sent': []}), 500
+
+
+@citizen_auth_bp.route('/request-vehicle-transfer', methods=['POST'])
+@jwt_required()
+def request_vehicle_transfer():
+    """Submit a vehicle ownership transfer request"""
+    try:
+        claims = get_jwt()
+        phone = (claims.get('phone') or '').strip()
+        current_vehicle_id = claims.get('vehicle_id')
+
+        if not phone:
+            return jsonify({'error': 'Missing phone in token'}), 401
+
+        if not current_vehicle_id:
+            return jsonify({'error': 'No active vehicle selected'}), 400
+
+        try:
+            current_vehicle_id = int(current_vehicle_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid vehicle_id'}), 400
+
+        vehicle = Vehicle.query.get(current_vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+
+        data = request.get_json() or {}
+        new_owner_phone = (data.get('new_owner_phone') or '').strip()
+        new_owner_name = (data.get('new_owner_name') or '').strip()
+        transfer_type = (data.get('transfer_type') or '').strip()
+        reason = (data.get('reason') or '').strip()
+
+        # Validate required fields
+        if not new_owner_phone or not transfer_type:
+            return jsonify({'error': 'Missing required fields: new_owner_phone, transfer_type'}), 400
+
+        if transfer_type not in ['sale', 'gift', 'inheritance', 'other']:
+            return jsonify({'error': 'Invalid transfer_type. Must be: sale, gift, inheritance, or other'}), 400
+
+        # Check if there's already a pending transfer for this vehicle
+        existing_transfer = VehicleTransfer.query.filter_by(
+            vehicle_id=current_vehicle_id,
+            status='pending'
+        ).first()
+
+        if existing_transfer:
+            return jsonify({'error': 'A transfer request is already pending for this vehicle'}), 409
+
+        # Create transfer request
+        transfer = VehicleTransfer(
+            vehicle_id=current_vehicle_id,
+            current_owner_phone=phone,
+            new_owner_phone=new_owner_phone,
+            new_owner_name=new_owner_name,
+            transfer_type=transfer_type,
+            reason=reason,
+            status='pending'
+        )
+
+        db.session.add(transfer)
+        db.session.commit()
+
+        print(f"✅ Vehicle transfer request created: {vehicle.license_plate} from {phone} to {new_owner_phone}")
+
+        return jsonify({
+            'message': 'Transfer request submitted successfully',
+            'transfer': transfer.to_dict()
+        }), 201
+
+    except Exception as e:
+        print(f"❌ Error requesting vehicle transfer: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500

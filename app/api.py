@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
 from datetime import timedelta, datetime
 from app.timezone_utils import now_comoros
+from app.push_notifications import send_fine_push_notification
 from io import BytesIO
 import qrcode
 import os
@@ -654,6 +655,10 @@ def api_fines_create():
         'Amende créée (mobile)',
         f"Amende pour {vehicle.license_plate}: {reason} ({amount})"
     )
+
+    # Send push notification to vehicle owner
+    push_result = send_fine_push_notification(vehicle, fine)
+    print(f"📲 Push notification result: {push_result}")
     
     return jsonify({
         "message": "Fine created successfully",
@@ -1765,8 +1770,12 @@ def list_photo_submissions():
     # Support both JWT (mobile) and session auth (web admin)
     user = get_current_user()
     
+    print(f"[DEBUG] /photo-submissions/list - User: {user}")
+    print(f"[DEBUG] current_user: {current_user}, is_authenticated: {current_user.is_authenticated if current_user else 'N/A'}")
+    
     if not user or user.role not in ['administrateur', 'policier', 'judiciaire']:
-        return jsonify({"error": "Forbidden"}), 403
+        print(f"[DEBUG] Access denied - user={user}, role={user.role if user else 'N/A'}")
+        return jsonify({"error": "Forbidden", "user": str(user)}), 403
     
     status = request.args.get('status', 'all')
     country = request.args.get('country', '')
@@ -1799,6 +1808,7 @@ def list_photo_submissions():
     
     submissions = query.order_by(PhotoSubmission.submitted_at.desc()).all()
     
+    print(f"[DEBUG] Found {len(submissions)} photo submissions")
     return jsonify({
         "submissions": [s.to_dict() for s in submissions]
     })
@@ -1999,3 +2009,184 @@ def renew_vehicle_qrcode_by_token(token):
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================================================
+# VEHICLE TRANSFER ENDPOINTS (ADMIN)
+# ============================================================================
+
+@api_bp.route('/vehicle-transfers', methods=['GET'])
+def get_vehicle_transfers():
+    """Get all vehicle transfer requests (admin only)"""
+    try:
+        # Get current user
+        user = get_current_user()
+        print(f"[DEBUG] /vehicle-transfers - User: {user}")
+        
+        if not user or user.role not in ['administrateur', 'judiciaire']:
+            print(f"[DEBUG] Access denied - user={user}, role={user.role if user else 'N/A'}")
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get query parameters for filtering
+        status = request.args.get('status', '')
+        license_plate = request.args.get('license_plate', '').upper()
+        transfer_type = request.args.get('transfer_type', '')
+        
+        # Start query
+        query = VehicleTransfer.query
+        
+        # Apply filters
+        if status:
+            query = query.filter_by(status=status)
+        if transfer_type:
+            query = query.filter_by(transfer_type=transfer_type)
+        if license_plate:
+            query = query.join(Vehicle).filter(Vehicle.license_plate.ilike(f'%{license_plate}%'))
+        
+        # Sort by created date descending
+        transfers = query.order_by(VehicleTransfer.created_at.desc()).all()
+        
+        # Return as list of dicts with vehicle info
+        result = []
+        for t in transfers:
+            transfer_dict = t.to_dict()
+            # Add vehicle info
+            if t.vehicle:
+                transfer_dict['vehicle'] = {
+                    'id': t.vehicle.id,
+                    'license_plate': t.vehicle.license_plate,
+                    'current_owner': t.vehicle.owner_name
+                }
+            result.append(transfer_dict)
+        
+        print(f"✅ Fetched {len(result)} vehicle transfers")
+        return jsonify(result), 200
+    
+    except Exception as e:
+        print(f"❌ Error fetching transfers: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/vehicle-transfers/approve', methods=['POST'])
+def approve_vehicle_transfer():
+    """Approve a vehicle transfer request (admin only)"""
+    try:
+        # Get current user
+        user = get_current_user()
+        if not user or user.role not in ['administrateur', 'judiciaire']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        data = request.get_json() or {}
+        transfer_id = data.get('transfer_id')
+        notes = data.get('notes', '')
+        
+        if not transfer_id:
+            return jsonify({'error': 'transfer_id required'}), 400
+        
+        # Get the transfer
+        transfer = VehicleTransfer.query.get(transfer_id)
+        if not transfer:
+            return jsonify({'error': 'Transfer not found'}), 404
+        
+        if transfer.status != 'pending':
+            return jsonify({'error': 'Only pending transfers can be approved'}), 400
+        
+        # Get the vehicle
+        vehicle = Vehicle.query.get(transfer.vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        # Update transfer status
+        transfer.status = 'approved'
+        transfer.processed_at = now_comoros()
+        transfer.processed_by = user.id
+        transfer.notes = notes
+        
+        # Update vehicle owner information
+        vehicle.owner_name = transfer.new_owner_name
+        vehicle.owner_phone = transfer.new_owner_phone
+        vehicle.updated_at = now_comoros()
+        
+        # Create or update VehicleOwner record if it exists (for mobile app registration)
+        vehicle_owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        
+        if not vehicle_owner:
+            # Create new owner record
+            vehicle_owner = VehicleOwner(
+                vehicle_id=vehicle.id,
+                phone=transfer.new_owner_phone,
+                owner_name=transfer.new_owner_name
+            )
+            db.session.add(vehicle_owner)
+        else:
+            # Update existing owner
+            vehicle_owner.owner_name = transfer.new_owner_name
+            vehicle_owner.phone = transfer.new_owner_phone
+            vehicle_owner.updated_at = now_comoros()
+        
+        db.session.commit()
+        
+        print(f"✅ Transfer approved: {vehicle.license_plate} to {transfer.new_owner_name}")
+        
+        return jsonify({
+            'message': 'Transfer approved and vehicle owner updated',
+            'transfer': transfer.to_dict(),
+            'vehicle': {
+                'id': vehicle.id,
+                'license_plate': vehicle.license_plate,
+                'owner_name': vehicle.owner_name,
+                'owner_phone': vehicle.owner_phone
+            }
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error approving transfer: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/vehicle-transfers/reject', methods=['POST'])
+def reject_vehicle_transfer():
+    """Reject a vehicle transfer request (admin only)"""
+    try:
+        # Get current user
+        user = get_current_user()
+        if not user or user.role not in ['administrateur', 'judiciaire']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        data = request.get_json() or {}
+        transfer_id = data.get('transfer_id')
+        notes = data.get('notes', '')
+        
+        if not transfer_id:
+            return jsonify({'error': 'transfer_id required'}), 400
+        
+        # Get the transfer
+        transfer = VehicleTransfer.query.get(transfer_id)
+        if not transfer:
+            return jsonify({'error': 'Transfer not found'}), 404
+        
+        if transfer.status != 'pending':
+            return jsonify({'error': 'Only pending transfers can be rejected'}), 400
+        
+        # Update transfer status
+        transfer.status = 'rejected'
+        transfer.processed_at = now_comoros()
+        transfer.processed_by = user.id
+        transfer.notes = notes
+        
+        db.session.commit()
+        
+        print(f"✅ Transfer rejected: {transfer.vehicle.license_plate if transfer.vehicle else 'Unknown'}")
+        
+        return jsonify({
+            'message': 'Transfer rejected',
+            'transfer': transfer.to_dict()
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error rejecting transfer: {e}")
+        return jsonify({'error': str(e)}), 500

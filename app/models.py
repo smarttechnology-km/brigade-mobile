@@ -619,6 +619,44 @@ class VignetteRate(db.Model):
         }
 
 
+class VehicleTransfer(db.Model):
+    """Record of vehicle ownership transfers requested by owners"""
+    __tablename__ = 'vehicle_transfers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    current_owner_phone = db.Column(db.String(15), nullable=False)  # Phone of current owner making the request
+    new_owner_phone = db.Column(db.String(15), nullable=False)  # Phone of new owner (may not be registered yet)
+    new_owner_name = db.Column(db.String(100), nullable=True)  # Name of new owner if known
+    transfer_type = db.Column(db.String(50), nullable=False)  # 'sale', 'gift', 'inheritance', 'other'
+    reason = db.Column(db.Text, nullable=True)  # Details about the transfer reason
+    status = db.Column(db.String(20), default='pending')  # 'pending', 'approved', 'rejected', 'completed'
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    processed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Admin who processed it
+    notes = db.Column(db.Text, nullable=True)  # Admin notes
+    
+    vehicle = db.relationship('Vehicle', backref='transfers')
+    processor = db.relationship('User', foreign_keys=[processed_by])
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'current_owner_phone': self.current_owner_phone,
+            'new_owner_phone': self.new_owner_phone,
+            'new_owner_name': self.new_owner_name,
+            'transfer_type': self.transfer_type,
+            'reason': self.reason,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'processed_at': self.processed_at.isoformat() if self.processed_at else None,
+            'processed_by': self.processed_by,
+            'processor_username': self.processor.username if self.processor else None,
+            'notes': self.notes,
+        }
+
+
 class PenaltyRate(db.Model):
     """Penalty pricing based on days late for vignette renewal"""
     __tablename__ = 'penalty_rates'
