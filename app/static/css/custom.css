@@ -99,6 +99,21 @@
   }
 }
 
+/* Pas d'animation pour les onglets - apparition directe */
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.show {
+  display: block;
+}
+
+/* Désactiver l'animation fade de Bootstrap */
+.tab-pane.fade {
+  opacity: 1 !important;
+  transition: none !important;
+}
+
 /* Animations pour les cartes du dashboard */
 
 /* Loading spinner */
