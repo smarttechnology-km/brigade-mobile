@@ -34,7 +34,7 @@ def init_db():
         admin_username = 'admin'
         admin_password = 'admin123'  # Recommander de changer en production
         if not User.query.filter_by(username=admin_username).first():
-            admin = User(username=admin_username, is_admin=True)
+            admin = User(username=admin_username, is_admin=True, role='administrateur')
             admin.set_password(admin_password)
             db.session.add(admin)
             db.session.commit()
