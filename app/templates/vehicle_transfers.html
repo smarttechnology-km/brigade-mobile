@@ -223,29 +223,29 @@ async function showTransferModal(transferId) {
       <div class="row mb-3">
         <div class="col-md-6">
           <label class="form-label text-muted">Propriétaire actuel</label>
-          <p>${transfer.vehicle?.current_owner || 'N/A'}</p>
+          <p>${transfer.current_owner_name || 'N/A'}</p>
         </div>
         <div class="col-md-6">
           <label class="form-label text-muted">Téléphone actuel</label>
-          <p>${transfer.current_owner_phone || 'N/A'}</p>
+          <p>${transfer.current_owner_name || 'N/A'}</p>
         </div>
       </div>
 
       <div class="row mb-3">
         <div class="col-md-6">
           <label class="form-label text-muted">Nouveau propriétaire</label>
-          <p>${transfer.new_owner_name || 'N/A'}</p>
+          <input type="text" class="form-control form-control-sm transfer-editable" id="modal-new-owner-name" value="${transfer.new_owner_name || ''}" ${transfer.status !== 'pending' ? 'readonly' : ''}>
         </div>
         <div class="col-md-6">
           <label class="form-label text-muted">Téléphone nouveau</label>
-          <p>${transfer.new_owner_phone || 'N/A'}</p>
+          <input type="text" class="form-control form-control-sm transfer-editable" id="modal-new-owner-phone" value="${transfer.new_owner_phone || ''}" ${transfer.status !== 'pending' ? 'readonly' : ''}>
         </div>
       </div>
 
       <div class="row mb-3">
         <div class="col-12">
           <label class="form-label text-muted">Motif du transfert</label>
-          <p>${transfer.reason || 'Aucun détail fourni'}</p>
+          <textarea class="form-control form-control-sm transfer-editable" id="modal-reason" rows="3" ${transfer.status !== 'pending' ? 'readonly' : ''}>${transfer.reason || 'Aucun détail fourni'}</textarea>
         </div>
       </div>
 
@@ -331,6 +331,7 @@ async function showTransferModal(transferId) {
     if (transfer.status === 'pending') {
       actions = `
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" onclick="saveTransfer(${transfer.id})">Enregistrer les modifications</button>
         <button type="button" class="btn btn-danger" onclick="rejectTransfer(${transfer.id})">Rejeter</button>
         <button type="button" class="btn btn-success" onclick="approveTransfer(${transfer.id})">Approuver</button>
       `;
@@ -342,6 +343,52 @@ async function showTransferModal(transferId) {
     document.getElementById('transfer-actions').innerHTML = actions;
 
     new bootstrap.Modal(document.getElementById('transferModal')).show();
+  } catch (error) {
+    alert('Erreur: ' + error.message);
+  }
+}
+
+// Save transfer modifications
+async function saveTransfer(transferId) {
+  const newOwnerName = document.getElementById('modal-new-owner-name')?.value || '';
+  const newOwnerPhone = document.getElementById('modal-new-owner-phone')?.value || '';
+  const reason = document.getElementById('modal-reason')?.value || '';
+
+  if (!newOwnerName.trim()) {
+    alert('Veuillez entrer le nom du nouveau propriétaire');
+    return;
+  }
+
+  if (!newOwnerPhone.trim()) {
+    alert('Veuillez entrer le téléphone du nouveau propriétaire');
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/vehicle-transfers/${transferId}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      body: JSON.stringify({
+        new_owner_name: newOwnerName,
+        new_owner_phone: newOwnerPhone,
+        reason: reason
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert('Erreur: ' + (data.error || 'Impossible d\'enregistrer les modifications'));
+      return;
+    }
+
+    alert('Modifications enregistrées avec succès!');
+    bootstrap.Modal.getInstance(document.getElementById('transferModal')).hide();
+    loadTransfers();
   } catch (error) {
     alert('Erreur: ' + error.message);
   }
