@@ -149,7 +149,7 @@
             <a class="nav-link text-white {% if request.path.startswith('/phones') and not request.path.startswith('/phone-') %}active{% endif %}" href="/phones"><i class="fas fa-mobile-alt me-2"></i> Téléphones</a>
             <a class="nav-link text-white {% if request.path.startswith('/phone-usage') %}active{% endif %}" href="/phone-usage"><i class="fas fa-history me-2"></i> Historique Téléphones</a>
             {% if current_user.is_admin or (current_user.role == 'judiciaire') %}
-            <a class="nav-link text-white {% if request.path.startswith('/photo-submissions') %}active{% endif %}" href="/photo-submissions"><i class="fas fa-images me-2"></i> Soumissions Photos <span id="photo-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
+            <a class="nav-link text-white {% if request.path.startswith('/photo-submissions') %}active{% endif %}" href="/photo-submissions"><i class="fas fa-images me-2"></i> Soumission <span id="photo-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% endif %}
             {% endif %}
 
