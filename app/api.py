@@ -798,6 +798,11 @@ def api_reports_vehicles_with_fines():
             Fine.paid == False
         ).scalar() or 0
         
+        unpaid_amount = db.session.query(func.sum(Fine.amount)).filter(
+            Fine.vehicle_id == v.id,
+            Fine.paid == False
+        ).scalar() or 0
+        
         vehicles_data.append({
             'id': v.id,
             'license_plate': v.license_plate,
@@ -806,7 +811,8 @@ def api_reports_vehicles_with_fines():
             'track_token': v.track_token,
             'fines_count': v.fines_count,
             'total_amount': float(v.total_amount or 0),
-            'unpaid_count': unpaid_count
+            'unpaid_count': unpaid_count,
+            'unpaid_amount': float(unpaid_amount or 0)
         })
     
     # Calculate statistics
@@ -1741,6 +1747,28 @@ def upload_photo_submission():
     db.session.add(submission)
     db.session.commit()
 
+    # Get vehicle details if available
+    vehicle_info = {}
+    if vehicle_id:
+        vehicle = Vehicle.query.get(vehicle_id)
+        if vehicle:
+            vehicle_info = {
+                'vehicle_type': vehicle.vehicle_type,
+                'usage_type': vehicle.usage_type,
+                'color': vehicle.color,
+                'owner_name': vehicle.owner_name
+            }
+    elif license_plate:
+        # Try to find vehicle by license plate
+        vehicle = Vehicle.query.filter_by(license_plate=license_plate).first()
+        if vehicle:
+            vehicle_info = {
+                'vehicle_type': vehicle.vehicle_type,
+                'usage_type': vehicle.usage_type,
+                'color': vehicle.color,
+                'owner_name': vehicle.owner_name
+            }
+
     log_user_history(
         user,
         'Photo soumise (mobile)',
@@ -1750,7 +1778,10 @@ def upload_photo_submission():
     return jsonify({
         "message": "Photo submitted successfully",
         "submission_id": submission.id,
-        "status": "pending"
+        "status": "pending",
+        "license_plate": license_plate,
+        "description": description,
+        "vehicle": vehicle_info
     }), 201
 
 
@@ -2316,4 +2347,41 @@ def reject_vehicle_transfer():
     except Exception as e:
         db.session.rollback()
         print(f"❌ Error rejecting transfer: {e}")
+        return jsonify({'error': str(e)}), 500
+@api_bp.route('/vehicle-transfers/check/<int:vehicle_id>', methods=['GET'])
+@jwt_required()
+def check_vehicle_transfer_status(vehicle_id):
+    """Check if there's a pending vehicle transfer for this vehicle"""
+    try:
+        uid = get_jwt_identity()
+        user = User.query.get(int(uid))
+        
+        # Get vehicle and verify ownership
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        # Verify user owns the vehicle
+        if vehicle.owner_phone != user.phone:
+            return jsonify({'error': 'You can only check transfers for vehicles you own'}), 403
+        
+        # Get the pending transfer for this vehicle (most recent one)
+        transfer = VehicleTransfer.query.filter_by(
+            vehicle_id=vehicle_id,
+            status='pending'
+        ).order_by(VehicleTransfer.created_at.desc()).first()
+        
+        if transfer:
+            return jsonify({
+                'has_pending_transfer': True,
+                'transfer': transfer.to_dict()
+            }), 200
+        else:
+            return jsonify({
+                'has_pending_transfer': False,
+                'transfer': None
+            }), 200
+            
+    except Exception as e:
+        print(f"Error checking transfer status: {str(e)}")
         return jsonify({'error': str(e)}), 500

@@ -576,6 +576,8 @@ class PhotoSubmission(db.Model):
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
             'reviewed_at_str': self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else None,
             'review_notes': self.review_notes,
+            'vehicle_type': self.vehicle.vehicle_type if self.vehicle else None,
+            'usage_type': self.vehicle.usage_type if self.vehicle else None,
         }
 
 

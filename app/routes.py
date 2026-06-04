@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort, send_file, current_app
 from flask_login import login_required, current_user
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from functools import wraps
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
