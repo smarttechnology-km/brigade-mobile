@@ -2067,6 +2067,133 @@ def get_vehicle_transfers():
         return jsonify({'error': str(e)}), 500
 
 
+@api_bp.route('/vehicle-transfers', methods=['POST'])
+def create_vehicle_transfer():
+    """Create a new vehicle transfer request (citizen submission)"""
+    try:
+        # Get current user (mobile app)
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        # Get form data
+        vehicle_id = request.form.get('vehicle_id', type=int)
+        transfer_type = request.form.get('transfer_type', '').strip()
+        new_owner_phone = request.form.get('new_owner_phone', '').strip()
+        new_owner_name = request.form.get('new_owner_name', '').strip()
+        transfer_reason = request.form.get('transfer_reason', '').strip() or None
+        
+        # Validate required fields
+        if not vehicle_id or not transfer_type or not new_owner_phone or not new_owner_name:
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Validate transfer type
+        valid_types = ['sale', 'gift', 'inheritance', 'other']
+        if transfer_type not in valid_types:
+            return jsonify({'error': f'Invalid transfer type. Must be one of: {", ".join(valid_types)}'}), 400
+        
+        # Get vehicle
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        # Verify user owns the vehicle
+        if vehicle.owner_phone != user.phone:
+            return jsonify({'error': 'You can only transfer vehicles you own'}), 403
+        
+        # Handle identity document upload
+        identity_document_path = None
+        if 'identity_document' in request.files:
+            doc_file = request.files['identity_document']
+            
+            if doc_file.filename != '':
+                # Validate file type (PDF or image)
+                allowed_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp']
+                if doc_file.content_type not in allowed_types:
+                    return jsonify({'error': 'Only PDF and image files (JPEG, PNG, GIF, WebP) are allowed'}), 400
+                
+                # Create uploads directory if not exists
+                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'identity_documents')
+                os.makedirs(upload_dir, exist_ok=True)
+                
+                # Generate unique filename
+                ext = secure_filename(doc_file.filename).split('.')[-1]
+                filename = f"transfer_{uuid.uuid4()}.{ext}"
+                filepath = os.path.join(upload_dir, filename)
+                
+                # Save file
+                doc_file.save(filepath)
+                identity_document_path = filename
+                
+                print(f"[DEBUG] Identity document saved: {filename}")
+        
+        # Create vehicle transfer record
+        transfer = VehicleTransfer(
+            vehicle_id=vehicle_id,
+            current_owner_phone=user.phone,
+            new_owner_phone=new_owner_phone,
+            new_owner_name=new_owner_name,
+            transfer_type=transfer_type,
+            reason=transfer_reason,
+            identity_document_path=identity_document_path,
+            status='pending'
+        )
+        
+        db.session.add(transfer)
+        db.session.commit()
+        
+        print(f"✅ Vehicle transfer created: {vehicle.license_plate} by {user.phone}")
+        
+        return jsonify({
+            'message': 'Transfer request submitted successfully',
+            'transfer': transfer.to_dict()
+        }), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error creating transfer: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/vehicle-transfers/<int:transfer_id>/identity-document', methods=['GET'])
+def get_transfer_identity_document(transfer_id):
+    """Get identity document for a vehicle transfer (admin only)"""
+    try:
+        # Get current user
+        user = get_current_user()
+        if not user or user.role not in ['administrateur', 'judiciaire']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get transfer
+        transfer = VehicleTransfer.query.get(transfer_id)
+        if not transfer or not transfer.identity_document_path:
+            return jsonify({'error': 'Document not found'}), 404
+        
+        # Build file path
+        doc_path = os.path.join(os.path.dirname(__file__), 'static', 'identity_documents', transfer.identity_document_path)
+        
+        if not os.path.exists(doc_path):
+            return jsonify({'error': 'Document file not found'}), 404
+        
+        # Determine MIME type
+        mime_type = 'application/pdf' if transfer.identity_document_path.endswith('.pdf') else 'image/jpeg'
+        
+        print(f"[DEBUG] Serving identity document: {transfer.identity_document_path}")
+        
+        return send_file(
+            doc_path,
+            mimetype=mime_type,
+            as_attachment=False,
+            download_name=f"transfer_{transfer.id}_identity.{transfer.identity_document_path.split('.')[-1]}"
+        )
+    
+    except Exception as e:
+        print(f"❌ Error retrieving identity document: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/vehicle-transfers/approve', methods=['POST'])
 def approve_vehicle_transfer():
     """Approve a vehicle transfer request (admin only)"""

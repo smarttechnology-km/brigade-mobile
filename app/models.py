@@ -630,6 +630,7 @@ class VehicleTransfer(db.Model):
     new_owner_name = db.Column(db.String(100), nullable=True)  # Name of new owner if known
     transfer_type = db.Column(db.String(50), nullable=False)  # 'sale', 'gift', 'inheritance', 'other'
     reason = db.Column(db.Text, nullable=True)  # Details about the transfer reason
+    identity_document_path = db.Column(db.String(255), nullable=True)  # Path to uploaded identity document (PDF or image)
     status = db.Column(db.String(20), default='pending')  # 'pending', 'approved', 'rejected', 'completed'
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     processed_at = db.Column(db.DateTime, nullable=True)
@@ -648,6 +649,7 @@ class VehicleTransfer(db.Model):
             'new_owner_name': self.new_owner_name,
             'transfer_type': self.transfer_type,
             'reason': self.reason,
+            'identity_document_path': self.identity_document_path,
             'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'processed_at': self.processed_at.isoformat() if self.processed_at else None,
