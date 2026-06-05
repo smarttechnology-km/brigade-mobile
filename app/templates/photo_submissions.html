@@ -563,7 +563,7 @@ function renderSubmissionsTable(submissions) {
                 <td class="small text-muted">${submittedDate}</td>
                 <td>${statusBadge}</td>
                 <td>
-                    <button class="btn btn-sm btn-primary" onclick="openPhotoModal(${sub.id})">
+                    <button class="btn btn-sm btn-primary" onclick="editVehicleFromSubmission(${sub.id}, '${escapeHtml(sub.license_plate || '')}')">
                         <i class="fas fa-edit"></i>
                     </button>
                     ${deleteButton}
