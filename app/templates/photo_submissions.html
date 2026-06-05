@@ -295,11 +295,14 @@
                                     <label class="form-label">Type de véhicule</label>
                                     <select class="form-select" id="edit-vehicle-type">
                                         <option value="">Sélectionner...</option>
-                                        <option value="voiture">Voiture</option>
-                                        <option value="moto">Moto</option>
-                                        <option value="camion">Camion</option>
-                                        <option value="bus">Bus</option>
-                                        <option value="autre">Autre</option>
+                                        <option value="voiture">🚗 Voiture</option>
+                                        <option value="taxi">🚕 Taxi</option>
+                                        <option value="moto">🏍️ Moto</option>
+                                        <option value="camion">🚚 Camion</option>
+                                        <option value="minibus">🚐 Minibus</option>
+                                        <option value="ambulance">🚑 Ambulance</option>
+                                        <option value="suv">🚙 SUV</option>
+                                        <option value="other">➕ Autre</option>
                                     </select>
                                 </div>
                             </div>
@@ -312,11 +315,16 @@
                                 <div class="col-md-4">
                                     <label class="form-label">Usage</label>
                                     <select class="form-select" id="edit-usage-type">
-                                        <option value="Personnelle">Personnelle</option>
-                                        <option value="Taxi">Taxi</option>
-                                        <option value="Transport public">Transport public</option>
-                                        <option value="Professionnel">Professionnel</option>
-                                        <option value="Autre">Autre</option>
+                                        <option value="Personnelle">👤 Personnelle</option>
+                                        <option value="Taxi">🚕 Taxi</option>
+                                        <option value="Transport public">🚌 Transport public</option>
+                                        <option value="Location">🚗 Location</option>
+                                        <option value="Véhicule de service">🔧 Véhicule de service</option>
+                                        <option value="Véhicule utilitaire">📦 Véhicule utilitaire</option>
+                                        <option value="Transport scolaire">🏫 Transport scolaire</option>
+                                        <option value="Transport touristique">🗺️ Transport touristique</option>
+                                        <option value="Auto-école">🎓 Auto-école</option>
+                                        <option value="autre">➕ Autre</option>
                                     </select>
                                 </div>
                             </div>
@@ -430,15 +438,13 @@
 
 <!-- MODAL POUR LES TRANSFERTS DE PROPRIÉTÉ -->
 <div class="modal fade" id="transferModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-xl">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Détails du Transfert</h5>
+        <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Détails du Transfert</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body">
-        <div id="transfer-content"></div>
-      </div>
+      <div class="modal-body" id="transfer-content"></div>
       <div class="modal-footer" id="transfer-actions"></div>
     </div>
   </div>
@@ -1004,7 +1010,7 @@ function renderTransfersTable(transfers) {
                     ${getTypeLabel(transfer.transfer_type)}
                 </span>
             </td>
-            <td>${transfer.vehicle?.owner_name || 'N/A'}</td>
+            <td>${transfer.current_owner_name || 'N/A'}</td>
             <td>${transfer.new_owner_name || 'N/A'}</td>
             <td>${formatDate(transfer.created_at)}</td>
             <td>
@@ -1023,150 +1029,226 @@ function renderTransfersTable(transfers) {
 
 async function showTransferModal(transferId) {
     try {
-        const response = await fetch(`/api/vehicle-transfers?id=${transferId}`, {
-            credentials: 'include'
-        });
-
+        const response = await fetch(`/api/vehicle-transfers?id=${transferId}`, { credentials: 'include' });
         if (!response.ok) throw new Error('Failed to fetch transfer');
-
         const transfers = await response.json();
         const transfer = transfers.find(t => t.id === transferId);
+        if (!transfer) { alert('Transfert non trouvé'); return; }
 
-        if (!transfer) {
-            alert('Transfert non trouvé');
-            return;
-        }
+        const isPending = transfer.status === 'pending';
+        const ro = isPending ? '' : 'readonly';
+        const roStyle = isPending ? '' : 'style="background-color:#e9ecef;"';
+        const plate = transfer.vehicle?.license_plate || 'N/A';
+        const hasDoc = !!transfer.identity_document_path;
+        const isPdf = hasDoc && transfer.identity_document_path.toLowerCase().endsWith('.pdf');
 
-        let content = `
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label class="form-label text-muted">Plaque d'immatriculation</label>
-                    <p class="h5">${transfer.vehicle?.license_plate || 'N/A'}</p>
+        // Left column: document preview OR vehicle info card
+        let leftCol = '';
+        if (hasDoc) {
+            leftCol = `
+                <div class="card border-0 bg-light h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-title mb-0">
+                                <i class="fas fa-${isPdf ? 'file-pdf text-danger' : 'file-image text-primary'} me-2"></i>Pièce d'identité
+                            </h6>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="downloadIdentityDoc(${transfer.id})">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
+                        <div id="doc-preview-${transfer.id}" style="text-align:center;">
+                            <div class="spinner-border text-primary mt-4" role="status"></div>
+                            <p class="text-muted mt-2 small">Chargement...</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label text-muted">Type de transfert</label>
-                    <p class="h5">${getTypeLabel(transfer.transfer_type)}</p>
-                </div>
-            </div>
-
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label class="form-label text-muted">Propriétaire actuel</label>
-                    <p>${transfer.vehicle?.owner_name || 'N/A'}</p>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label text-muted">Téléphone actuel</label>
-                    <p>${transfer.current_owner_phone || 'N/A'}</p>
-                </div>
-            </div>
-
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label class="form-label text-muted">Nouveau propriétaire</label>
-                    <p>${transfer.new_owner_name || 'N/A'}</p>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label text-muted">Téléphone nouveau</label>
-                    <p>${transfer.new_owner_phone || 'N/A'}</p>
-                </div>
-            </div>
-
-            <div class="row mb-3">
-                <div class="col-12">
-                    <label class="form-label text-muted">Motif du transfert</label>
-                    <p>${transfer.reason || 'Aucun détail fourni'}</p>
-                </div>
-            </div>
-
-            <div class="row mb-3">
-                <div class="col-12">
-                    <label class="form-label text-muted">Statut</label>
-                    <p>
-                        <span class="badge" style="background-color: ${getStatusColor(transfer.status)}; font-size: 0.95rem;">
-                            ${getStatusLabel(transfer.status)}
-                        </span>
-                    </p>
-                </div>
-            </div>
-
-            <div class="row mb-3">
-                <div class="col-12">
-                    <label class="form-label text-muted">Date de soumission</label>
-                    <p>${formatDatetime(transfer.created_at)}</p>
-                </div>
-            </div>
-        `;
-
-        if (transfer.identity_document_path) {
-            content += `
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <label class="form-label text-muted">Pièce d'identité</label>
-                        <div class="alert alert-info">
-                            <i class="fas fa-file me-2"></i>
-                            <a href="/api/vehicle-transfers/${transfer.id}/identity-document" target="_blank" class="alert-link">
-                                Télécharger la pièce d'identité
-                            </a>
+            `;
+        } else {
+            leftCol = `
+                <div class="card border-0 bg-light h-100">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">Informations</h6>
+                        <div class="small text-muted">
+                            <p><strong>Plaque :</strong> ${plate}</p>
+                            <p><strong>Type :</strong> ${getTypeLabel(transfer.transfer_type)}</p>
+                            <p><strong>Statut :</strong>
+                                <span class="badge" style="background-color:${getStatusColor(transfer.status)};">
+                                    ${getStatusLabel(transfer.status)}
+                                </span>
+                            </p>
+                            <p><strong>Date :</strong> ${formatDatetime(transfer.created_at)}</p>
+                            ${transfer.processed_by && transfer.processor_username ? `
+                            <hr>
+                            <p><strong>Traité par :</strong> ${escapeHtml(transfer.processor_username)}</p>
+                            <p><strong>Le :</strong> ${formatDatetime(transfer.processed_at)}</p>
+                            ` : ''}
+                            ${transfer.notes ? `<hr><p><strong>Notes :</strong> ${escapeHtml(transfer.notes)}</p>` : ''}
                         </div>
                     </div>
                 </div>
             `;
         }
 
-        if (transfer.status === 'pending') {
-            content += `
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <label class="form-label text-muted">Notes d'examen</label>
-                        <textarea class="form-control" id="review-notes" rows="3" placeholder="Vos notes (optionnel)..."></textarea>
+        // Right column: form
+        let rightCol = `
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Plaque d'immatriculation</label>
+                    <input type="text" class="form-control" value="${plate}" readonly style="background-color:#e9ecef;">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Type de transfert</label>
+                    <input type="text" class="form-control" value="${getTypeLabel(transfer.transfer_type)}" readonly style="background-color:#e9ecef;">
+                </div>
+            </div>
+
+            <hr class="my-2">
+            <h6 class="text-muted mb-3">Propriétaire actuel</h6>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Nom complet</label>
+                    <input type="text" class="form-control" id="modal-current-owner-name"
+                        value="${escapeHtml(transfer.current_owner_name)}" ${ro} ${roStyle}>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Téléphone</label>
+                    <input type="text" class="form-control" id="modal-current-owner-phone"
+                        value="${escapeHtml(transfer.current_owner_phone)}" ${ro} ${roStyle}>
+                </div>
+            </div>
+
+            <hr class="my-2">
+            <h6 class="text-muted mb-3">Nouveau propriétaire</h6>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Nom complet</label>
+                    <input type="text" class="form-control" id="modal-new-owner-name"
+                        value="${escapeHtml(transfer.new_owner_name)}" ${ro} ${roStyle}>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Téléphone</label>
+                    <input type="text" class="form-control" id="modal-new-owner-phone"
+                        value="${escapeHtml(transfer.new_owner_phone)}" ${ro} ${roStyle}>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Motif du transfert</label>
+                <textarea class="form-control" id="modal-reason" rows="3"
+                    placeholder="Aucun motif fourni" ${ro} ${roStyle}>${escapeHtml(transfer.reason)}</textarea>
+            </div>
+        `;
+
+        if (isPending) {
+            rightCol += `
+                <div class="mb-3">
+                    <label class="form-label">Notes d'examen</label>
+                    <textarea class="form-control" id="review-notes" rows="2"
+                        placeholder="Vos notes (optionnel)..."></textarea>
+                </div>
+            `;
+        }
+
+        if (hasDoc && transfer.processed_by && transfer.processor_username) {
+            rightCol += `
+                <hr class="my-2">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">Traité par</label>
+                        <input type="text" class="form-control" value="${escapeHtml(transfer.processor_username)}" readonly style="background-color:#e9ecef;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Date de traitement</label>
+                        <input type="text" class="form-control" value="${formatDatetime(transfer.processed_at)}" readonly style="background-color:#e9ecef;">
                     </div>
                 </div>
             `;
         }
 
-        if (transfer.processed_by && transfer.processor_username) {
-            content += `
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label text-muted">Traité par</label>
-                        <p>${transfer.processor_username}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label text-muted">Date de traitement</label>
-                        <p>${formatDatetime(transfer.processed_at)}</p>
-                    </div>
+        if (hasDoc && transfer.notes) {
+            rightCol += `
+                <div class="mb-0 mt-3">
+                    <label class="form-label">Notes</label>
+                    <div class="form-control" style="background-color:#e9ecef; min-height:38px;">${escapeHtml(transfer.notes)}</div>
                 </div>
             `;
         }
 
-        if (transfer.notes) {
-            content += `
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <label class="form-label text-muted">Notes</label>
-                        <p>${transfer.notes}</p>
-                    </div>
-                </div>
-            `;
-        }
+        const content = `
+            <div class="row">
+                <div class="col-md-5">${leftCol}</div>
+                <div class="col-md-7">${rightCol}</div>
+            </div>
+        `;
 
         document.getElementById('transfer-content').innerHTML = content;
 
+        if (hasDoc) {
+            setTimeout(() => loadIdentityDocPreview(transfer.id, isPdf), 50);
+        }
+
+        // Footer
         let actions = '';
-        if (transfer.status === 'pending') {
+        if (isPending) {
             actions = `
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveTransfer(${transfer.id})">
+                    <i class="fas fa-save me-2"></i>Enregistrer
+                </button>
                 <button type="button" class="btn btn-danger" onclick="rejectTransfer(${transfer.id})">Rejeter</button>
                 <button type="button" class="btn btn-success" onclick="approveTransfer(${transfer.id})">Approuver</button>
             `;
         } else {
-            actions = `
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-            `;
+            actions = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>`;
         }
         document.getElementById('transfer-actions').innerHTML = actions;
 
         new bootstrap.Modal(document.getElementById('transferModal')).show();
+    } catch (error) {
+        alert('Erreur: ' + error.message);
+    }
+}
+
+async function saveTransfer(transferId) {
+    const currentOwnerName = document.getElementById('modal-current-owner-name')?.value || '';
+    const currentOwnerPhone = document.getElementById('modal-current-owner-phone')?.value || '';
+    const newOwnerName = document.getElementById('modal-new-owner-name')?.value || '';
+    const newOwnerPhone = document.getElementById('modal-new-owner-phone')?.value || '';
+    const reason = document.getElementById('modal-reason')?.value || '';
+
+    if (!newOwnerName.trim()) {
+        alert('Veuillez entrer le nom du nouveau propriétaire');
+        return;
+    }
+    if (!newOwnerPhone.trim()) {
+        alert('Veuillez entrer le téléphone du nouveau propriétaire');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/vehicle-transfers/${transferId}`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_owner_name: currentOwnerName,
+                current_owner_phone: currentOwnerPhone,
+                new_owner_name: newOwnerName,
+                new_owner_phone: newOwnerPhone,
+                reason: reason
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            alert('Erreur: ' + (data.error || 'Impossible d\'enregistrer'));
+            return;
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('transferModal')).hide();
+        loadTransfers();
     } catch (error) {
         alert('Erreur: ' + error.message);
     }
@@ -1179,17 +1261,11 @@ async function approveTransfer(transferId) {
         const response = await fetch('/api/vehicle-transfers/approve', {
             method: 'POST',
             credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                transfer_id: transferId,
-                notes: notes
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transfer_id: transferId, notes: notes })
         });
 
         const data = await response.json();
-
         if (!response.ok) {
             alert('Erreur: ' + (data.error || 'Impossible d\'approuver'));
             return;
@@ -1212,17 +1288,11 @@ async function rejectTransfer(transferId) {
         const response = await fetch('/api/vehicle-transfers/reject', {
             method: 'POST',
             credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                transfer_id: transferId,
-                notes: notes
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transfer_id: transferId, notes: notes })
         });
 
         const data = await response.json();
-
         if (!response.ok) {
             alert('Erreur: ' + (data.error || 'Impossible de rejeter'));
             return;
@@ -1233,6 +1303,49 @@ async function rejectTransfer(transferId) {
         loadTransfers();
     } catch (error) {
         alert('Erreur: ' + error.message);
+    }
+}
+
+async function loadIdentityDocPreview(transferId, isPdf) {
+    const container = document.getElementById(`doc-preview-${transferId}`);
+    if (!container) return;
+    try {
+        const response = await fetch(`/api/vehicle-transfers/${transferId}/identity-document`, {
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            container.innerHTML = `<div class="alert alert-danger m-3">Erreur: ${err.error || response.status}</div>`;
+            return;
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        if (isPdf) {
+            container.innerHTML = `<iframe src="${objectUrl}" style="width:100%;height:540px;border:none;" title="Pièce d'identité"></iframe>`;
+        } else {
+            container.innerHTML = `<img src="${objectUrl}" alt="Pièce d'identité"
+                style="width:100%;max-height:540px;object-fit:contain;display:block;background:#f8f9fa;">`;
+        }
+    } catch (e) {
+        container.innerHTML = `<div class="alert alert-danger m-3">Impossible de charger le document.</div>`;
+    }
+}
+
+async function downloadIdentityDoc(transferId) {
+    try {
+        const response = await fetch(`/api/vehicle-transfers/${transferId}/identity-document`, {
+            credentials: 'include'
+        });
+        if (!response.ok) { alert('Erreur lors du téléchargement'); return; }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = `piece_identite_transfert_${transferId}`;
+        a.click();
+        URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+        alert('Erreur: ' + e.message);
     }
 }
 

@@ -85,16 +85,24 @@
 
 <!-- TRANSFER DETAIL MODAL -->
 <div class="modal fade" id="transferModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Détails du Transfert</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content border-0 shadow-lg">
+      <!-- Header -->
+      <div class="modal-header border-0 pb-0 px-4 pt-4" style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%);">
+        <div class="w-100">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h5 class="modal-title text-white fw-bold mb-0">
+              <i class="fas fa-exchange-alt me-2"></i>Détails du Transfert
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div id="modal-header-meta" class="pb-3"></div>
+        </div>
       </div>
-      <div class="modal-body">
-        <div id="transfer-content"></div>
-      </div>
-      <div class="modal-footer" id="transfer-actions"></div>
+      <!-- Body -->
+      <div class="modal-body px-4 py-4" id="transfer-content"></div>
+      <!-- Footer -->
+      <div class="modal-footer border-top px-4 py-3" id="transfer-actions"></div>
     </div>
   </div>
 </div>
@@ -193,121 +201,157 @@ function renderTransfersTable(transfers) {
 // Show transfer modal
 async function showTransferModal(transferId) {
   try {
-    const response = await fetch(`/api/vehicle-transfers?id=${transferId}`, {
-      credentials: 'include'
-    });
-
+    const response = await fetch(`/api/vehicle-transfers?id=${transferId}`, { credentials: 'include' });
     if (!response.ok) throw new Error('Failed to fetch transfer');
-
     const transfers = await response.json();
     const transfer = transfers.find(t => t.id === transferId);
+    if (!transfer) { alert('Transfert non trouvé'); return; }
 
-    if (!transfer) {
-      alert('Transfert non trouvé');
-      return;
-    }
+    const isPending = transfer.status === 'pending';
+    const ro = isPending ? '' : 'readonly';
+    const plate = transfer.vehicle?.license_plate || 'N/A';
 
-    // Build modal content
+    // Header meta
+    document.getElementById('modal-header-meta').innerHTML = `
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="badge bg-white text-dark fw-semibold fs-6">
+          <i class="fas fa-car me-1"></i>${plate}
+        </span>
+        <span class="badge" style="background-color:${getTypeColor(transfer.transfer_type)}; font-size:0.85rem;">
+          ${getTypeLabel(transfer.transfer_type)}
+        </span>
+        <span class="badge" style="background-color:${getStatusColor(transfer.status)}; font-size:0.85rem;">
+          ${getStatusLabel(transfer.status)}
+        </span>
+        <span class="text-white-50 small ms-auto">
+          <i class="fas fa-calendar-alt me-1"></i>${formatDatetime(transfer.created_at)}
+        </span>
+      </div>
+    `;
+
+    // Body
     let content = `
-      <div class="row mb-3">
+      <!-- Owners side-by-side -->
+      <div class="row g-3 mb-4">
+
+        <!-- Propriétaire actuel -->
         <div class="col-md-6">
-          <label class="form-label text-muted">Plaque d'immatriculation</label>
-          <p class="h5">${transfer.vehicle?.license_plate || 'N/A'}</p>
+          <div class="card h-100 border-0 shadow-sm" style="border-left: 4px solid #1565C0 !important;">
+            <div class="card-header border-0 pb-1" style="background:rgba(21,101,192,0.06);">
+              <span class="fw-semibold text-primary">
+                <i class="fas fa-user me-2"></i>Propriétaire actuel
+              </span>
+            </div>
+            <div class="card-body pt-3">
+              <div class="mb-3">
+                <label class="form-label small text-muted mb-1">Nom complet</label>
+                <input type="text" class="form-control" id="modal-current-owner-name"
+                  value="${escapeHtml(transfer.current_owner_name || '')}"
+                  placeholder="Nom du propriétaire actuel" ${ro}>
+              </div>
+              <div class="mb-0">
+                <label class="form-label small text-muted mb-1">Téléphone</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                  <input type="text" class="form-control" id="modal-current-owner-phone"
+                    value="${escapeHtml(transfer.current_owner_phone || '')}"
+                    placeholder="Numéro de téléphone" ${ro}>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- Nouveau propriétaire -->
         <div class="col-md-6">
-          <label class="form-label text-muted">Type de transfert</label>
-          <p class="h5">${getTypeLabel(transfer.transfer_type)}</p>
+          <div class="card h-100 border-0 shadow-sm" style="border-left: 4px solid #2E7D32 !important;">
+            <div class="card-header border-0 pb-1" style="background:rgba(46,125,50,0.06);">
+              <span class="fw-semibold text-success">
+                <i class="fas fa-user-plus me-2"></i>Nouveau propriétaire
+              </span>
+            </div>
+            <div class="card-body pt-3">
+              <div class="mb-3">
+                <label class="form-label small text-muted mb-1">Nom complet</label>
+                <input type="text" class="form-control" id="modal-new-owner-name"
+                  value="${escapeHtml(transfer.new_owner_name || '')}"
+                  placeholder="Nom du nouveau propriétaire" ${ro}>
+              </div>
+              <div class="mb-0">
+                <label class="form-label small text-muted mb-1">Téléphone</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                  <input type="text" class="form-control" id="modal-new-owner-phone"
+                    value="${escapeHtml(transfer.new_owner_phone || '')}"
+                    placeholder="Numéro de téléphone" ${ro}>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="row mb-3">
-        <div class="col-md-6">
-          <label class="form-label text-muted">Propriétaire actuel</label>
-          <p class="fw-bold">${transfer.current_owner_name || 'N/A'}</p>
+      <!-- Motif -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header border-0 pb-1" style="background:rgba(0,0,0,0.03);">
+          <span class="fw-semibold text-secondary">
+            <i class="fas fa-comment-alt me-2"></i>Motif du transfert
+          </span>
         </div>
-        <div class="col-md-6">
-          <label class="form-label text-muted">Téléphone actuel</label>
-          <p class="fw-bold">${transfer.current_owner_phone || 'N/A'}</p>
-        </div>
-      </div>
-
-      <div class="row mb-3">
-        <div class="col-md-6">
-          <label class="form-label text-muted">Nouveau propriétaire</label>
-          <input type="text" class="form-control form-control-sm" id="modal-new-owner-name" value="${transfer.new_owner_name || ''}" ${transfer.status === 'pending' ? '' : 'readonly'}>
-        </div>
-        <div class="col-md-6">
-          <label class="form-label text-muted">Téléphone nouveau</label>
-          <input type="text" class="form-control form-control-sm" id="modal-new-owner-phone" value="${transfer.new_owner_phone || ''}" ${transfer.status === 'pending' ? '' : 'readonly'}>
-        </div>
-      </div>
-
-      <div class="row mb-3">
-        <div class="col-12">
-          <label class="form-label text-muted">Motif du transfert</label>
-          <textarea class="form-control form-control-sm" id="modal-reason" rows="3" ${transfer.status === 'pending' ? '' : 'readonly'}>${transfer.reason || 'Aucun détail fourni'}</textarea>
-        </div>
-      </div>
-
-      <div class="row mb-3">
-        <div class="col-12">
-          <label class="form-label text-muted">Statut</label>
-          <p>
-            <span class="badge" style="background-color: ${getStatusColor(transfer.status)}; font-size: 0.95rem;">
-              ${getStatusLabel(transfer.status)}
-            </span>
-          </p>
-        </div>
-      </div>
-
-      <div class="row mb-3">
-        <div class="col-12">
-          <label class="form-label text-muted">Date de soumission</label>
-          <p>${formatDatetime(transfer.created_at)}</p>
+        <div class="card-body pt-3">
+          <textarea class="form-control" id="modal-reason" rows="3"
+            placeholder="Aucun motif fourni" ${ro}>${escapeHtml(transfer.reason || '')}</textarea>
         </div>
       </div>
     `;
 
-    // Add identity document section if available
+    // Pièce d'identité
     if (transfer.identity_document_path) {
       content += `
-        <div class="row mb-3">
-          <div class="col-12">
-            <label class="form-label text-muted">Pièce d'identité</label>
-            <div class="alert alert-info">
-              <i class="fas fa-file-pdf me-2"></i>
-              <a href="#" onclick="viewIdentityDocument(${transfer.id}); return false;" class="alert-link">
-                Voir la pièce d'identité
-              </a>
-            </div>
+        <div class="alert alert-info d-flex align-items-center gap-2 mb-4">
+          <i class="fas fa-file-pdf fa-lg"></i>
+          <div>
+            <strong>Pièce d'identité jointe</strong><br>
+            <a href="#" onclick="viewIdentityDocument(${transfer.id}); return false;" class="alert-link">
+              Cliquer pour visualiser le document
+            </a>
           </div>
         </div>
       `;
     }
 
-    // Add review section if pending
-    if (transfer.status === 'pending') {
+    // Notes d'examen (pending only)
+    if (isPending) {
       content += `
-        <div class="row mb-3">
-          <div class="col-12">
-            <label class="form-label text-muted">Notes d'examen</label>
-            <textarea class="form-control" id="review-notes" rows="3" placeholder="Vos notes (optionnel)..."></textarea>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header border-0 pb-1" style="background:rgba(255,193,7,0.08);">
+            <span class="fw-semibold" style="color:#856404;">
+              <i class="fas fa-clipboard-check me-2"></i>Notes d'examen
+            </span>
+          </div>
+          <div class="card-body pt-3">
+            <textarea class="form-control" id="review-notes" rows="2"
+              placeholder="Vos notes (optionnel)..."></textarea>
           </div>
         </div>
       `;
     }
 
-    // Add processed by section if completed
+    // Traitement info
     if (transfer.processed_by && transfer.processor_username) {
       content += `
-        <div class="row mb-3">
+        <div class="row g-2 mb-3">
           <div class="col-md-6">
-            <label class="form-label text-muted">Traité par</label>
-            <p>${transfer.processor_username}</p>
+            <div class="p-3 rounded" style="background:rgba(0,0,0,0.04);">
+              <div class="small text-muted mb-1"><i class="fas fa-user-shield me-1"></i>Traité par</div>
+              <strong>${escapeHtml(transfer.processor_username)}</strong>
+            </div>
           </div>
           <div class="col-md-6">
-            <label class="form-label text-muted">Date de traitement</label>
-            <p>${formatDatetime(transfer.processed_at)}</p>
+            <div class="p-3 rounded" style="background:rgba(0,0,0,0.04);">
+              <div class="small text-muted mb-1"><i class="fas fa-clock me-1"></i>Date de traitement</div>
+              <strong>${formatDatetime(transfer.processed_at)}</strong>
+            </div>
           </div>
         </div>
       `;
@@ -315,29 +359,36 @@ async function showTransferModal(transferId) {
 
     if (transfer.notes) {
       content += `
-        <div class="row mb-3">
-          <div class="col-12">
-            <label class="form-label text-muted">Notes</label>
-            <p>${transfer.notes}</p>
-          </div>
+        <div class="alert alert-secondary mb-0">
+          <strong><i class="fas fa-sticky-note me-1"></i>Notes :</strong> ${escapeHtml(transfer.notes)}
         </div>
       `;
     }
 
     document.getElementById('transfer-content').innerHTML = content;
 
-    // Set modal actions
+    // Footer actions
     let actions = '';
-    if (transfer.status === 'pending') {
+    if (isPending) {
       actions = `
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-        <button type="button" class="btn btn-primary" onclick="saveTransfer(${transfer.id})">Enregistrer les modifications</button>
-        <button type="button" class="btn btn-danger" onclick="rejectTransfer(${transfer.id})">Rejeter</button>
-        <button type="button" class="btn btn-success" onclick="approveTransfer(${transfer.id})">Approuver</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Fermer
+        </button>
+        <button type="button" class="btn btn-primary" onclick="saveTransfer(${transfer.id})">
+          <i class="fas fa-save me-1"></i>Enregistrer
+        </button>
+        <button type="button" class="btn btn-danger" onclick="rejectTransfer(${transfer.id})">
+          <i class="fas fa-ban me-1"></i>Rejeter
+        </button>
+        <button type="button" class="btn btn-success" onclick="approveTransfer(${transfer.id})">
+          <i class="fas fa-check me-1"></i>Approuver
+        </button>
       `;
     } else {
       actions = `
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Fermer
+        </button>
       `;
     }
     document.getElementById('transfer-actions').innerHTML = actions;
@@ -348,8 +399,18 @@ async function showTransferModal(transferId) {
   }
 }
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 // Save transfer modifications
 async function saveTransfer(transferId) {
+  const currentOwnerName = document.getElementById('modal-current-owner-name')?.value || '';
+  const currentOwnerPhone = document.getElementById('modal-current-owner-phone')?.value || '';
   const newOwnerName = document.getElementById('modal-new-owner-name')?.value || '';
   const newOwnerPhone = document.getElementById('modal-new-owner-phone')?.value || '';
   const reason = document.getElementById('modal-reason')?.value || '';
@@ -372,6 +433,8 @@ async function saveTransfer(transferId) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
+        current_owner_name: currentOwnerName,
+        current_owner_phone: currentOwnerPhone,
         new_owner_name: newOwnerName,
         new_owner_phone: newOwnerPhone,
         reason: reason
