@@ -2386,23 +2386,32 @@ def approve_vehicle_transfer():
         vehicle.owner_phone = transfer.new_owner_phone
         vehicle.updated_at = now_comoros()
         
-        # Create or update VehicleOwner record if it exists (for mobile app registration)
-        vehicle_owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
-        
+        # Force-logout current owner: bump session_version so their JWT is rejected
+        current_owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if current_owner:
+            current_owner.session_version = (current_owner.session_version or 0) + 1
+            current_owner.current_device_id = None
+
+        # Force-logout new owner: they may have an account on another vehicle
+        for acct in VehicleOwner.query.filter_by(phone=transfer.new_owner_phone).all():
+            acct.session_version = (acct.session_version or 0) + 1
+            acct.current_device_id = None
+
+        # Create or update VehicleOwner record for this vehicle
+        vehicle_owner = current_owner
         if not vehicle_owner:
-            # Create new owner record
             vehicle_owner = VehicleOwner(
                 vehicle_id=vehicle.id,
                 phone=transfer.new_owner_phone,
-                owner_name=transfer.new_owner_name
+                owner_name=transfer.new_owner_name,
+                session_version=1
             )
             db.session.add(vehicle_owner)
         else:
-            # Update existing owner
             vehicle_owner.owner_name = transfer.new_owner_name
             vehicle_owner.phone = transfer.new_owner_phone
             vehicle_owner.updated_at = now_comoros()
-        
+
         db.session.commit()
         
         print(f"✅ Transfer approved: {vehicle.license_plate} to {transfer.new_owner_name}")
