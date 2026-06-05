@@ -4807,11 +4807,15 @@ def submit_vehicle_transfer():
     from werkzeug.utils import secure_filename
     
     try:
-        # Get vehicle ID from JWT
+        # Get vehicle ID from JWT (identity is stored as str(vehicle.id))
         vehicle_id = get_jwt_identity()
         if not vehicle_id:
             return jsonify({'error': 'Invalid token: missing vehicle_id'}), 401
-        
+        try:
+            vehicle_id = int(vehicle_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid token: vehicle_id must be an integer'}), 401
+
         # Verify vehicle exists
         vehicle = Vehicle.query.get(vehicle_id)
         if not vehicle:
@@ -4835,37 +4839,30 @@ def submit_vehicle_transfer():
         if transfer_type == 'other' and not transfer_reason:
             return jsonify({'error': 'Reason required for transfer type "other"'}), 400
         
-        # Check if file was uploaded
-        if 'identity_document' not in request.files:
-            return jsonify({'error': 'Identity document file is required'}), 400
-        
-        file = request.files['identity_document']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-        
-        # Validate file type (PDF or image)
-        allowed_extensions = {'pdf', 'jpg', 'jpeg', 'png', 'gif'}
-        if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
-            return jsonify({'error': 'Invalid file type. Allowed: PDF, JPG, PNG, GIF'}), 400
-        
         # Check for existing pending transfer
         existing_transfer = VehicleTransfer.query.filter_by(
             vehicle_id=vehicle_id,
             status='pending'
         ).first()
-        
+
         if existing_transfer:
             return jsonify({'error': 'A transfer request is already pending for this vehicle'}), 409
-        
-        # Create uploads directory if needed
-        upload_dir = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'app/static'), 'vehicle_transfers')
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Save file with secure name
-        filename = secure_filename(f"{vehicle_id}_{datetime.now().timestamp()}_{file.filename}")
-        filepath = os.path.join(upload_dir, filename)
-        file.save(filepath)
-        
+
+        # Handle optional identity document
+        identity_document_path = None
+        if 'identity_document' in request.files:
+            file = request.files['identity_document']
+            if file and file.filename:
+                allowed_extensions = {'pdf', 'jpg', 'jpeg', 'png', 'gif'}
+                if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+                    return jsonify({'error': 'Invalid file type. Allowed: PDF, JPG, PNG, GIF'}), 400
+
+                upload_dir = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'app/static'), 'vehicle_transfers')
+                os.makedirs(upload_dir, exist_ok=True)
+                filename = secure_filename(f"{vehicle_id}_{datetime.now().timestamp()}_{file.filename}")
+                file.save(os.path.join(upload_dir, filename))
+                identity_document_path = os.path.join('vehicle_transfers', filename)
+
         # Create transfer record
         transfer = VehicleTransfer(
             vehicle_id=vehicle_id,
@@ -4874,18 +4871,17 @@ def submit_vehicle_transfer():
             new_owner_name=new_owner_name,
             transfer_type=transfer_type,
             reason=transfer_reason or None,
-            identity_document_path=os.path.join('vehicle_transfers', filename),
+            identity_document_path=identity_document_path,
             status='pending',
             created_at=now_comoros()
         )
-        
+
         db.session.add(transfer)
         db.session.commit()
-        
+
         return jsonify({
             'message': 'Transfer request submitted successfully',
-            'transfer_id': transfer.id,
-            'vehicle_plate': vehicle.license_plate
+            'transfer': transfer.to_dict()
         }), 201
         
     except Exception as e:
