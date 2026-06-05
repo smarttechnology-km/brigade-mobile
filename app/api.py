@@ -2474,17 +2474,16 @@ def reject_vehicle_transfer():
 def check_vehicle_transfer_status(vehicle_id):
     """Check if there's a pending vehicle transfer for this vehicle"""
     try:
-        uid = get_jwt_identity()
-        user = User.query.get(int(uid))
-        
-        # Get vehicle and verify ownership
+        # Citizen tokens have identity=str(vehicle.id) and a vehicle_id claim
+        claims = get_jwt()
+        token_vehicle_id = claims.get('vehicle_id')
+        if not token_vehicle_id or int(token_vehicle_id) != vehicle_id:
+            return jsonify({'error': 'You can only check transfers for vehicles you own'}), 403
+
+        # Get vehicle
         vehicle = Vehicle.query.get(vehicle_id)
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
-        
-        # Verify user owns the vehicle
-        if vehicle.owner_phone != user.phone:
-            return jsonify({'error': 'You can only check transfers for vehicles you own'}), 403
         
         # Get the pending transfer for this vehicle (most recent one)
         transfer = VehicleTransfer.query.filter_by(
