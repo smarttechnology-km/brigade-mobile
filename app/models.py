@@ -647,7 +647,7 @@ class VehicleTransfer(db.Model):
             'id': self.id,
             'vehicle_id': self.vehicle_id,
             'current_owner_phone': self.current_owner_phone,
-            'current_owner_name': self.vehicle.owner_name if self.vehicle else 'N/A',
+            'current_owner_name': (self.vehicle.owner_name or '') if self.vehicle else '',
             'new_owner_phone': self.new_owner_phone,
             'new_owner_name': self.new_owner_name,
             'transfer_type': self.transfer_type,

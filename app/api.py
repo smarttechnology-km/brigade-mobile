@@ -73,21 +73,34 @@ def check_island_access(island):
 
 
 def get_current_user():
-    """Get current user from JWT (mobile) or session (web)"""
-    # Try JWT auth first (mobile)
+    """Get current user from JWT (mobile) or session (web).
+    Citizen mobile tokens have identity=str(vehicle_id) and a 'vehicle_id' claim.
+    Web tokens have identity=str(user_id) with no 'vehicle_id' claim.
+    """
     try:
-        from flask_jwt_extended import get_jwt_identity
+        from flask_jwt_extended import get_jwt_identity, get_jwt
         uid = get_jwt_identity()
+        claims = get_jwt()
+
+        # Citizen mobile token: has 'vehicle_id' in additional claims
+        if claims.get('vehicle_id'):
+            vehicle_id = claims['vehicle_id']
+            owner = VehicleOwner.query.filter_by(vehicle_id=int(vehicle_id)).first()
+            if owner:
+                return owner
+            return None
+
+        # Web/police token: identity is the user id
         user = User.query.get(int(uid))
         if user:
             return user
-    except:
+    except Exception:
         pass
-    
+
     # Fall back to session auth (web)
     if current_user and current_user.is_authenticated:
         return current_user
-    
+
     return None
 
 
@@ -2077,20 +2090,28 @@ def get_vehicle_transfers():
         
         # Sort by created date descending
         transfers = query.order_by(VehicleTransfer.created_at.desc()).all()
-        
+
+        # Pre-fetch vehicles by ID in one query — bypasses ORM relationship loading
+        # issues (e.g. SQLite FK enforcement off, or joinedload conflict with explicit join).
+        transfer_vehicle_ids = list({t.vehicle_id for t in transfers if t.vehicle_id})
+        vehicles_by_id = {}
+        if transfer_vehicle_ids:
+            vehicles_by_id = {
+                v.id: v for v in Vehicle.query.filter(Vehicle.id.in_(transfer_vehicle_ids)).all()
+            }
+
         # Build result with proper current_owner_name
         result = []
         for t in transfers:
             transfer_dict = t.to_dict()
-            # Override current_owner_name to ensure it's populated
-            if t.vehicle:
-                transfer_dict['current_owner_name'] = t.vehicle.owner_name
+            vehicle = t.vehicle or vehicles_by_id.get(t.vehicle_id)
+            if vehicle:
+                transfer_dict['current_owner_name'] = vehicle.owner_name
                 transfer_dict['vehicle'] = {
-                    'id': t.vehicle.id,
-                    'license_plate': t.vehicle.license_plate,
-                    'current_owner': t.vehicle.owner_name
+                    'id': vehicle.id,
+                    'license_plate': vehicle.license_plate,
+                    'current_owner': vehicle.owner_name
                 }
-            print(f"[DEBUG] Transfer {t.id}: current_owner_name={transfer_dict.get('current_owner_name')}, vehicle={t.vehicle}")
             result.append(transfer_dict)
         
         print(f"✅ Fetched {len(result)} vehicle transfers")
@@ -2196,49 +2217,79 @@ def create_vehicle_transfer():
 
 
 @api_bp.route('/vehicle-transfers/<int:transfer_id>', methods=['PUT'])
-@jwt_required()
 def update_vehicle_transfer(transfer_id):
-    """Update a vehicle transfer request - allows citizens to edit pending transfers"""
+    """Update a vehicle transfer request.
+    - Admins (Flask session): can edit all fields including current owner info.
+    - Citizens (JWT): can only edit their own pending transfers (new owner fields + reason).
+    """
     try:
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        
-        if not user or user.role != 'citizen':
-            return {'error': 'Only citizens can edit their transfer requests'}, 403
-        
+        user = get_current_user()
+        is_admin = user and hasattr(user, 'role') and user.role in ['administrateur', 'judiciaire']
+        is_citizen = False
+
+        if not user:
+            # Fall back to JWT for citizen mobile app
+            try:
+                from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity as _get_identity
+                verify_jwt_in_request()
+                citizen_id = _get_identity()
+                citizen = User.query.get(citizen_id)
+                if citizen and citizen.role == 'citizen':
+                    user = citizen
+                    is_citizen = True
+            except Exception:
+                return jsonify({'error': 'Authentication required'}), 401
+        elif not is_admin:
+            is_citizen = True
+
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+
         transfer = VehicleTransfer.query.get(transfer_id)
         if not transfer:
-            return {'error': 'Transfer not found'}, 404
-        
-        # Verify ownership - user must own the vehicle
-        vehicle = Vehicle.query.get(transfer.vehicle_id)
-        if not vehicle or vehicle.owner_phone != user.phone:
-            return {'error': 'You can only edit your own transfer requests'}, 403
-        
-        # Only allow editing if status is pending
+            return jsonify({'error': 'Transfer not found'}), 404
+
+        if not is_admin:
+            # Citizens can only edit their own pending transfers
+            vehicle = Vehicle.query.get(transfer.vehicle_id)
+            if not vehicle or vehicle.owner_phone != getattr(user, 'phone', None):
+                return jsonify({'error': 'You can only edit your own transfer requests'}), 403
+
         if transfer.status != 'pending':
-            return {'error': 'Can only edit pending transfer requests'}, 400
-        
+            return jsonify({'error': 'Can only edit pending transfer requests'}), 400
+
         data = request.get_json()
-        
-        # Update allowed fields
+
+        # Fields editable by everyone
         if 'new_owner_phone' in data:
             transfer.new_owner_phone = data['new_owner_phone']
         if 'new_owner_name' in data:
             transfer.new_owner_name = data['new_owner_name']
-        if 'transfer_type' in data:
-            if data['transfer_type'] not in ['sale', 'gift', 'inheritance', 'other']:
-                return {'error': 'Invalid transfer type'}, 400
-            transfer.transfer_type = data['transfer_type']
         if 'reason' in data:
             transfer.reason = data['reason']
-        
+
+        # Fields editable by admins only
+        vehicle = transfer.vehicle or Vehicle.query.get(transfer.vehicle_id)
+        if is_admin:
+            if 'current_owner_phone' in data:
+                transfer.current_owner_phone = data['current_owner_phone']
+            if 'current_owner_name' in data and vehicle:
+                vehicle.owner_name = data['current_owner_name']
+
         db.session.commit()
-        return transfer.to_dict(), 200
-        
+        result = transfer.to_dict()
+        if vehicle:
+            result['current_owner_name'] = vehicle.owner_name
+            result['vehicle'] = {
+                'id': vehicle.id,
+                'license_plate': vehicle.license_plate,
+                'current_owner': vehicle.owner_name
+            }
+        return jsonify(result), 200
+
     except Exception as e:
         db.session.rollback()
-        return {'error': f'Error updating transfer: {str(e)}'}, 500
+        return jsonify({'error': f'Error updating transfer: {str(e)}'}), 500
 
 
 @api_bp.route('/vehicle-transfers/<int:transfer_id>/identity-document', methods=['GET'])

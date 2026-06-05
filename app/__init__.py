@@ -85,13 +85,12 @@ def create_app():
                     print(f"⚠️  No session_version in mobile token for vehicle_id={vehicle_id}")
                     return True
 
-                if not token_device_id:
-                    print(f"⚠️  No device_id in mobile token for vehicle_id={vehicle_id}")
-                    return True
-
-                if owner.current_device_id and str(owner.current_device_id) != str(token_device_id):
-                    print(f"⚠️  Mobile device mismatch for vehicle_id={vehicle_id}")
-                    return True
+                # Only enforce device_id when the owner has one stored.
+                # Owners created before OTP login have device_id=None — don't reject their tokens.
+                if owner.current_device_id:
+                    if not token_device_id or str(owner.current_device_id) != str(token_device_id):
+                        print(f"⚠️  Mobile device mismatch for vehicle_id={vehicle_id}")
+                        return True
 
                 result = int(token_session_version) != int(getattr(owner, 'session_version', 0))
                 if result:
