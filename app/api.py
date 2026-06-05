@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -372,9 +372,29 @@ def api_vehicles_search():
         vehicles_query = vehicles_query.filter(Vehicle.owner_island == user.country)
     
     vehicles = vehicles_query.limit(10).all()
-    
+
+    setting = VignetteSetting.get()
+    renewal_opening = None
+    if setting and setting.renewal_opening_date:
+        from datetime import date
+        renewal_opening = setting.renewal_opening_date
+    now_date = now_comoros().date()
+
+    def vehicle_dict_with_renewal(v):
+        d = v.to_dict()
+        if renewal_opening:
+            in_renewal = now_date >= renewal_opening
+            expiry_str = d.get('vignette_expiry')
+            vignette_active = bool(expiry_str and expiry_str >= str(now_date))
+            d['renewal_needed'] = in_renewal and vignette_active
+            d['renewal_period_open'] = in_renewal
+        else:
+            d['renewal_needed'] = False
+            d['renewal_period_open'] = False
+        return d
+
     return jsonify({
-        "vehicles": [v.to_dict() for v in vehicles]
+        "vehicles": [vehicle_dict_with_renewal(v) for v in vehicles]
     })
 
 

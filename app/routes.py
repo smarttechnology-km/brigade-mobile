@@ -62,6 +62,19 @@ def get_vignette_expiry_date(reference_date=None):
         # Sinon, expiration le 31 mars de l'année prochaine
         return ensure_comoros(datetime(current_year + 1, 3, 31, 23, 59, 59))
 
+def get_renewal_opening_datetime():
+    """Return the configured renewal opening date as a timezone-aware datetime, or None."""
+    try:
+        from app.models import VignetteSetting
+        from datetime import datetime as _dt
+        setting = VignetteSetting.query.first()
+        if setting and setting.renewal_opening_date:
+            return ensure_comoros(_dt.combine(setting.renewal_opening_date, _dt.min.time()))
+    except Exception:
+        pass
+    return None
+
+
 # Helper function to apply island filter for judiciaire and policier users
 def apply_island_filter(query, island_field, force_country=None):
     """Apply island/country filter for judiciaire and policier users with assigned country.
@@ -3360,12 +3373,22 @@ def get_vignette_vehicles():
         
         payment_approved = bool(getattr(vehicle, 'vignette_payment_approved', False))
 
+        # Determine renewal period status
+        renewal_opening = get_renewal_opening_datetime()
+        in_renewal_period = (
+            renewal_opening is not None
+            and now >= renewal_opening
+            and (not vignette_expiry or vignette_expiry >= now)
+            and not payment_approved
+        )
+        vehicle_data['renewal_period_open'] = bool(renewal_opening)
+        vehicle_data['renewal_needed'] = in_renewal_period
+
         # Calculate penalty amount based on days late unless payment has already been approved,
         # in which case we keep the approved amount frozen for display.
-        # 
+        #
         # Penalties apply ONLY when the vignette has expired (March 31st has passed).
         # Aux Comores: Les pénalités s'appliquent uniquement après le 31 mars (date d'expiration).
-        # Avant le 31 mars, aucune pénalité n'est appliquée, même si un renouvellement est demandé.
         if payment_approved:
             vehicle_data['penalty_amount'] = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         elif vignette_expiry and vignette_expiry < now:
@@ -3415,12 +3438,14 @@ def approve_vignette_payment(vehicle_id):
     requested_expiry = ensure_comoros(get_pending_vignette_request_expiry(vehicle))
     current_expiry = ensure_comoros(vehicle.vignette_expiry) if vehicle.vignette_expiry else None
     if not current_expiry and not requested_expiry:
-        return jsonify({'error': 'Ce véhicule n’a pas de vignette à confirmer.'}), 400
+        return jsonify({'error': "Ce vehicule n'a pas de vignette a confirmer."}), 400
 
     now_time = now_comoros()
     expiry = current_expiry or requested_expiry
-    if current_expiry and expiry >= now_time:
-        return jsonify({'error': 'Cette vignette n’est pas expirée. Paiement de renouvellement non requis.'}), 400
+    renewal_opening = get_renewal_opening_datetime()
+    in_renewal_period = renewal_opening is not None and now_time >= renewal_opening
+    if current_expiry and expiry >= now_time and not in_renewal_period:
+        return jsonify({'error': "La periode de renouvellement n'est pas encore ouverte."}), 400
 
     if getattr(vehicle, 'vignette_payment_approved', False):
         return jsonify({'error': 'Le paiement de cette vignette est déjà approuvé.'}), 400
@@ -3525,7 +3550,7 @@ def request_vignette_payment(vehicle_id):
     requested_expiry_value = data.get('vignette_expiry')
 
     if not requested_expiry_value:
-        return jsonify({'error': 'La date d’expiration est requise.'}), 400
+        return jsonify({'error': "La date d'expiration est requise."}), 400
 
     try:
         requested_expiry = datetime.fromisoformat(requested_expiry_value)
@@ -3538,7 +3563,7 @@ def request_vignette_payment(vehicle_id):
     vignette_price = float(calculate_vignette_price(vehicle) or 0.0)
     if vignette_price <= 0:
         return jsonify({
-            'error': 'Impossible d’ajouter une vignette: aucun tarif n’est disponible pour cette combinaison de classe fiscale et classe CV.'
+            'error': "Impossible d'ajouter une vignette: aucun tarif n'est disponible pour cette combinaison."
         }), 400
 
     now_time = now_comoros()
@@ -4794,6 +4819,40 @@ def delete_penalty_rate(rate_id):
     db.session.commit()
     
     return jsonify({"message": "Penalty rate deleted successfully"})
+
+
+@vehicle_bp.route('/vignette-settings', methods=['GET'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def get_vignette_settings():
+    """Get global vignette settings."""
+    from app.models import VignetteSetting
+    setting = VignetteSetting.get()
+    return jsonify(setting.to_dict())
+
+
+@vehicle_bp.route('/vignette-settings', methods=['PUT'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def update_vignette_settings():
+    """Update global vignette settings."""
+    from app.models import VignetteSetting
+    from datetime import date
+    data = request.get_json() or {}
+    setting = VignetteSetting.get()
+
+    raw_date = data.get('renewal_opening_date')
+    if raw_date:
+        try:
+            setting.renewal_opening_date = date.fromisoformat(raw_date)
+        except ValueError:
+            return jsonify({'error': 'Format de date invalide. Utilisez YYYY-MM-DD.'}), 400
+    else:
+        setting.renewal_opening_date = None
+
+    setting.updated_by = current_user.username if current_user.is_authenticated else None
+    db.session.commit()
+    return jsonify({'message': 'Paramètres mis à jour.', **setting.to_dict()})
 
 
 # Vehicle Transfers - Citizen API

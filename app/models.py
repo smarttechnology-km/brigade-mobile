@@ -693,3 +693,30 @@ class PenaltyRate(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class VignetteSetting(db.Model):
+    """Global vignette renewal settings — single-row table (singleton)."""
+    __tablename__ = 'vignette_settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    renewal_opening_date = db.Column(db.Date, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=True, default=now_comoros, onupdate=now_comoros)
+    updated_by = db.Column(db.String(80), nullable=True)
+
+    @classmethod
+    def get(cls):
+        """Return the singleton row, creating it if it doesn't exist."""
+        setting = cls.query.first()
+        if not setting:
+            setting = cls()
+            db.session.add(setting)
+            db.session.commit()
+        return setting
+
+    def to_dict(self):
+        return {
+            'renewal_opening_date': self.renewal_opening_date.isoformat() if self.renewal_opening_date else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'updated_by': self.updated_by,
+        }
