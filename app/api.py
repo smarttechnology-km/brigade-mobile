@@ -2061,33 +2061,43 @@ def renew_vehicle_qrcode_by_token(token):
 
 @api_bp.route('/vehicle-transfers', methods=['GET'])
 def get_vehicle_transfers():
-    """Get all vehicle transfer requests (admin only)"""
+    """Get all vehicle transfer requests"""
     try:
         # Get current user
         user = get_current_user()
         print(f"[DEBUG] /vehicle-transfers - User: {user}")
-        
+
         if not user or user.role not in ['administrateur', 'judiciaire']:
             print(f"[DEBUG] Access denied - user={user}, role={user.role if user else 'N/A'}")
             return jsonify({'error': 'Access denied'}), 403
-        
+
         # Get query parameters for filtering
         status = request.args.get('status', '')
         license_plate = request.args.get('license_plate', '').upper()
         transfer_type = request.args.get('transfer_type', '')
-        
-        # Start query with eager loading of vehicle
-        from sqlalchemy.orm import joinedload
-        query = VehicleTransfer.query.options(joinedload(VehicleTransfer.vehicle))
-        
-        # Apply filters
+        country = request.args.get('country', '')
+
+        # Join with Vehicle to allow island filtering and plate search
+        query = VehicleTransfer.query.join(
+            Vehicle, VehicleTransfer.vehicle_id == Vehicle.id, isouter=True
+        )
+
+        # Apply island filter:
+        # - Judiciaire: automatically restricted to their island
+        # - Administrateur: filtered only when a country param is explicitly provided
+        if user.role == 'judiciaire' and user.country:
+            query = query.filter(Vehicle.owner_island == user.country)
+        elif user.role == 'administrateur' and country:
+            query = query.filter(Vehicle.owner_island == country)
+
+        # Apply other filters
         if status:
             query = query.filter(VehicleTransfer.status == status)
         if transfer_type:
             query = query.filter(VehicleTransfer.transfer_type == transfer_type)
         if license_plate:
-            query = query.join(Vehicle).filter(Vehicle.license_plate.ilike(f'%{license_plate}%'))
-        
+            query = query.filter(Vehicle.license_plate.ilike(f'%{license_plate}%'))
+
         # Sort by created date descending
         transfers = query.order_by(VehicleTransfer.created_at.desc()).all()
 
@@ -2306,14 +2316,21 @@ def get_transfer_identity_document(transfer_id):
         if not transfer or not transfer.identity_document_path:
             return jsonify({'error': 'Document not found'}), 404
         
-        # Build file path
-        doc_path = os.path.join(os.path.dirname(__file__), 'static', 'identity_documents', transfer.identity_document_path)
-        
+        # Build file path — handle two upload conventions:
+        # - Mobile/api.py uploads: path is just the filename, stored in static/identity_documents/
+        # - Web/routes.py uploads: path includes directory prefix like "vehicle_transfers/file.jpg"
+        static_dir = os.path.join(os.path.dirname(__file__), 'static')
+        if os.sep in transfer.identity_document_path or '/' in transfer.identity_document_path:
+            doc_path = os.path.join(static_dir, transfer.identity_document_path)
+        else:
+            doc_path = os.path.join(static_dir, 'identity_documents', transfer.identity_document_path)
+
         if not os.path.exists(doc_path):
             return jsonify({'error': 'Document file not found'}), 404
-        
+
         # Determine MIME type
-        mime_type = 'application/pdf' if transfer.identity_document_path.endswith('.pdf') else 'image/jpeg'
+        ext = transfer.identity_document_path.rsplit('.', 1)[-1].lower()
+        mime_type = 'application/pdf' if ext == 'pdf' else f'image/{ext}' if ext in ('jpg', 'jpeg', 'png', 'gif') else 'application/octet-stream'
         
         print(f"[DEBUG] Serving identity document: {transfer.identity_document_path}")
         

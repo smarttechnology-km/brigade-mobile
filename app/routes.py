@@ -4893,36 +4893,7 @@ def submit_vehicle_transfer():
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
-@main_bp.route('/api/vehicle-transfers/<int:transfer_id>/identity-document', methods=['GET'])
-@jwt_required()
-def download_transfer_identity_document(transfer_id):
-    """Download identity document from a transfer request (admin only)"""
-    from app.models import VehicleTransfer
-    
-    try:
-        # Verify user is admin or judiciaire
-        jwt_claims = get_jwt()
-        user_role = jwt_claims.get('role', 'citizen')
-        
-        if user_role not in ['administrateur', 'judiciaire']:
-            return jsonify({'error': 'Access denied'}), 403
-        
-        transfer = VehicleTransfer.query.get_or_404(transfer_id)
-        
-        if not transfer.identity_document_path:
-            return jsonify({'error': 'No document attached to this transfer'}), 404
-        
-        # Construct full path
-        file_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'app/static'), transfer.identity_document_path)
-        
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'Document file not found'}), 404
-        
-        return send_file(file_path, as_attachment=True)
-        
-    except Exception as e:
-        print(f'Error downloading transfer document: {str(e)}')
-        return jsonify({'error': f'Server error: {str(e)}'}), 500
+# Route removed — handled by api_bp in api.py (supports both session and JWT auth)
 
 
 
