@@ -264,8 +264,12 @@ def lookup():
         requested_expiry = get_vignette_expiry_date(now)
     renewal_allowed = not (vignette_expiry and vignette_expiry > now) or renewal_needed
 
+    vehicle_payload = vehicle.to_dict()
+    vehicle_payload['renewal_needed'] = renewal_needed
+    vehicle_payload['renewal_period_open'] = bool(in_renewal_period)
+
     return jsonify({
-        'vehicle': vehicle.to_dict(),
+        'vehicle': vehicle_payload,
         'fines': unpaid_fines,
         'vignette_quote': {
             'status': vignette_status,
