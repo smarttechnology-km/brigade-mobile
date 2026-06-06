@@ -226,6 +226,9 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
             statusBadge = 'badge bg-danger';
             statusText = 'Expirée';
             isExpired = true;
+        } else if (vehicle.renewal_needed) {
+            statusBadge = 'badge bg-info';
+            statusText = 'À renouveler';
         } else if (vignetteExpiry < new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)) {
             statusBadge = 'badge bg-warning';
             statusText = 'Expiration proche';
