@@ -3447,6 +3447,10 @@ def approve_vignette_payment(vehicle_id):
     if current_expiry and expiry >= now_time and not in_renewal_period:
         return jsonify({'error': "La periode de renouvellement n'est pas encore ouverte."}), 400
 
+    # Early renewal: vignette is still active but the renewal window is open.
+    # Approving the payment also extends the vignette to next year's cycle right away.
+    early_renewal = bool(current_expiry and current_expiry >= now_time and in_renewal_period)
+
     if getattr(vehicle, 'vignette_payment_approved', False):
         return jsonify({'error': 'Le paiement de cette vignette est déjà approuvé.'}), 400
 
@@ -3462,6 +3466,12 @@ def approve_vignette_payment(vehicle_id):
     # without vignette. For expired renewals, keep the renewal date equal to the approved date.
     if requested_expiry and not current_expiry:
         vehicle.vignette_expiry = requested_expiry
+    elif early_renewal:
+        # Citizen paid ahead of expiry during the open renewal window: extend the
+        # vignette to next year's cycle (same day/month, one year later) right away.
+        vehicle.vignette_expiry = ensure_comoros(datetime(
+            current_expiry.year + 1, current_expiry.month, current_expiry.day, 23, 59, 59
+        ))
 
     vignette_price = calculate_vignette_price(vehicle)
     penalty_amount = 0.0
@@ -3519,10 +3529,14 @@ def approve_vignette_payment(vehicle_id):
     ))
     db.session.commit()
 
+    success_message = 'Paiement vignette approuvé avec succès.'
+    if early_renewal and vehicle.vignette_expiry:
+        success_message += f" Vignette renouvelée jusqu'au {vehicle.vignette_expiry.strftime('%d/%m/%Y')}."
+
     return jsonify({
         'ok': True,
         'vehicle': vehicle.to_dict(),
-        'message': 'Paiement vignette approuvé avec succès.',
+        'message': success_message,
         'vignette_price': round(vignette_price, 2),
         'penalty_amount': round(penalty_amount, 2),
         'unpaid_fines_amount': round(unpaid_fines_amount, 2),

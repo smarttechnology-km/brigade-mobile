@@ -386,7 +386,8 @@ def api_vehicles_search():
             in_renewal = now_date >= renewal_opening
             expiry_str = d.get('vignette_expiry')
             vignette_active = bool(expiry_str and expiry_str >= str(now_date))
-            d['renewal_needed'] = in_renewal and vignette_active
+            payment_approved = bool(getattr(v, 'vignette_payment_approved', False))
+            d['renewal_needed'] = in_renewal and vignette_active and not payment_approved
             d['renewal_period_open'] = in_renewal
         else:
             d['renewal_needed'] = False
