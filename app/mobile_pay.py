@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app, url_for, render_template, send_file
 from app import db
-from app.models import Payment, Fine, Vehicle, VehicleHistory
+from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting
 from datetime import datetime, timedelta
 import io
 import json
@@ -25,6 +25,17 @@ def _parse_vignette_datetime(value):
         except Exception:
             return None
     return ensure_comoros(value)
+
+
+def _get_renewal_opening_datetime():
+    """Return the configured renewal opening date as a timezone-aware Comoros datetime, or None."""
+    try:
+        setting = VignetteSetting.query.first()
+        if setting and setting.renewal_opening_date:
+            return ensure_comoros(datetime.combine(setting.renewal_opening_date, datetime.min.time()))
+    except Exception:
+        pass
+    return None
 
 
 def _calculate_unpaid_fines_amount(vehicle):
@@ -216,6 +227,16 @@ def lookup():
     now = now_comoros()
     vignette_expiry = _parse_vignette_datetime(vehicle.vignette_expiry)
 
+    renewal_opening = _get_renewal_opening_datetime()
+    in_renewal_period = renewal_opening is not None and now >= renewal_opening
+    payment_approved = bool(getattr(vehicle, 'vignette_payment_approved', False))
+    renewal_needed = bool(
+        in_renewal_period
+        and vignette_expiry
+        and vignette_expiry >= now
+        and not payment_approved
+    )
+
     vignette_status = 'no_vignette'
     penalty_amount = 0.0
     if vignette_expiry:
@@ -233,8 +254,15 @@ def lookup():
     vignette_price = float(vignette_breakdown['base_amount']) if vignette_breakdown else 0.0
     annual_ds_amount = float(vignette_breakdown['annual_ds_amount']) if vignette_breakdown else 0.0
     vignette_total = float(vignette_breakdown['total_amount']) if vignette_breakdown else 0.0
-    requested_expiry = get_vignette_expiry_date(now)
-    renewal_allowed = not (vignette_expiry and vignette_expiry > now)
+    if renewal_needed and vignette_expiry:
+        # Early renewal during the open window: quote the vignette extended by
+        # one year from its current expiry (matches the agent approval flow).
+        requested_expiry = ensure_comoros(datetime(
+            vignette_expiry.year + 1, vignette_expiry.month, vignette_expiry.day, 23, 59, 59
+        ))
+    else:
+        requested_expiry = get_vignette_expiry_date(now)
+    renewal_allowed = not (vignette_expiry and vignette_expiry > now) or renewal_needed
 
     return jsonify({
         'vehicle': vehicle.to_dict(),
@@ -247,8 +275,10 @@ def lookup():
             'fines_amount': round(unpaid_fines_amount, 2),
             'total_amount': round(vignette_total + penalty_amount + unpaid_fines_amount, 2) if renewal_allowed else 0.0,
             'requested_expiry': requested_expiry.isoformat() if requested_expiry else None,
-            'is_renewal': bool(vignette_expiry and vignette_expiry < now),
+            'is_renewal': bool(vignette_expiry and (vignette_expiry < now or renewal_needed)),
             'renewal_allowed': renewal_allowed,
+            'renewal_needed': renewal_needed,
+            'renewal_period_open': bool(in_renewal_period),
         }
     })
 
