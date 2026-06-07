@@ -1011,6 +1011,14 @@ def download_receipt_pdf(payment_id):
                 col2_items.append(Paragraph(f"<b>Type:</b> Paiement amendes ({len(fines)} selectionnee(s))", normal_style))
             col2_items.append(Paragraph(f"<b>Montant total paye:</b> <b>{round(float(payment.amount or 0.0), 2)} KMF</b>", normal_style))
             col2_items.append(Paragraph(f"<b>Reference recu:</b> {receipt_number or '—'}", normal_style))
+            if payment_kind == 'vignette' and isinstance(raw_payload, dict):
+                expiry = raw_payload.get('requested_expiry', '')
+                if expiry:
+                    try:
+                        expiry = datetime.fromisoformat(expiry).strftime('%d/%m/%Y')
+                    except Exception:
+                        pass
+                    col2_items.append(Paragraph(f"<b>Expiration vignette:</b> {expiry}", normal_style))
             
             # Create nested tables for each column
             col1_table = Table([[item] for item in col1_items], colWidths=[2.7*inch])
@@ -1044,8 +1052,48 @@ def download_receipt_pdf(payment_id):
             ]))
             elements.append(main_table)
 
+        # VIGNETTE BREAKDOWN SECTION
+        if payment_kind == 'vignette' and isinstance(raw_payload, dict):
+            elements.append(Spacer(1, 0.15 * inch))
+            elements.append(Paragraph("<b>Decomposition du paiement</b>", heading_style))
+
+            vig_price   = float(raw_payload.get('vignette_price') or 0.0)
+            annual_ds   = float(raw_payload.get('annual_ds_amount') or 0.0)
+            penalty     = float(raw_payload.get('penalty_amount') or 0.0)
+            fines_amt   = float(raw_payload.get('fines_amount') or 0.0)
+            total_amt   = float(payment.amount or 0.0)
+
+            breakdown_data = [
+                [Paragraph('<b>Composante</b>', normal_style), Paragraph('<b>Montant (KMF)</b>', normal_style)],
+            ]
+            if vig_price > 0:
+                breakdown_data.append(['Vignette annuelle', f"{round(vig_price, 2)}"])
+            if annual_ds > 0:
+                breakdown_data.append(['DS annuelle', f"{round(annual_ds, 2)}"])
+            if penalty > 0:
+                breakdown_data.append(['Penalite de retard', f"{round(penalty, 2)}"])
+            if fines_amt > 0:
+                breakdown_data.append([f'Amendes incluses ({len(fines)})', f"{round(fines_amt, 2)}"])
+            breakdown_data.append([
+                Paragraph('<b>TOTAL</b>', normal_style),
+                Paragraph(f'<b>{round(total_amt, 2)}</b>', normal_style),
+            ])
+
+            breakdown_table = Table(breakdown_data, colWidths=[3.5 * inch, 1.8 * inch])
+            breakdown_table.setStyle(TableStyle([
+                ('GRID',        (0, 0), (-1, -1), 0.5, colors.lightgrey),
+                ('BACKGROUND',  (0, 0), (-1,  0), colors.whitesmoke),
+                ('BACKGROUND',  (0, -1), (-1, -1), colors.HexColor('#f0f0f0')),
+                ('FONTNAME',    (0, 0), (-1,  0), 'Helvetica-Bold'),
+                ('ALIGN',       (1, 0), (1, -1), 'RIGHT'),
+                ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING',  (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.append(breakdown_table)
+
         if fines:
-            elements.append(Spacer(1, 0.12 * inch))
+            elements.append(Spacer(1, 0.15 * inch))
             elements.append(Paragraph(f"<b>Amendes reglees ({len(fines)})</b>", heading_style))
 
             fines_table_data = [[
