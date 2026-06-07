@@ -168,3 +168,96 @@ def check_vehicle_qr_code_expiry():
         except Exception as e:
             logger.error(f"Error checking vehicle QR code expiry: {str(e)}")
             db.session.rollback()
+
+
+def send_expiry_notifications():
+    """
+    Daily job (08:00 AM) that sends push notifications to citizens for:
+    - Vignette expiring in 30, 7, 1 day(s) or expired today
+    - Vignette renewal period just opened (sent once on opening day)
+    - Insurance expiring in 30, 7, 1 day(s) or today
+
+    Only vehicles linked to a VehicleOwner (citizen app account) receive notifications.
+    Thresholds are checked by exact day count to avoid duplicate notifications.
+    """
+    app = get_app()
+    with app.app_context():
+        try:
+            from app.models import VehicleOwner
+            from app.push_notifications import (
+                send_vignette_expiry_notification,
+                send_vignette_renewal_notification,
+                send_insurance_expiry_notification,
+            )
+            from app.timezone_utils import ensure_comoros
+
+            # Only consider vehicles that have a registered citizen account with a push token
+            owners_with_token = VehicleOwner.query.filter(
+                VehicleOwner.expo_push_token.isnot(None),
+                VehicleOwner.expo_push_token != ''
+            ).all()
+
+            vehicle_ids = {o.vehicle_id for o in owners_with_token}
+            if not vehicle_ids:
+                logger.info("No vehicles with push tokens — skipping expiry notifications")
+                return
+
+            vehicles = Vehicle.query.filter(Vehicle.id.in_(vehicle_ids)).all()
+            now = ensure_comoros(now_comoros())
+            today = now.date()
+
+            # Check if renewal period opened today
+            try:
+                from app.routes import get_renewal_opening_datetime
+                renewal_opening = get_renewal_opening_datetime()
+                renewal_opened_today = (
+                    renewal_opening is not None
+                    and ensure_comoros(renewal_opening).date() == today
+                )
+            except Exception:
+                renewal_opened_today = False
+
+            VIGNETTE_THRESHOLDS = {30, 7, 1, 0}
+            INSURANCE_THRESHOLDS = {30, 7, 1, 0}
+
+            notified = 0
+            for vehicle in vehicles:
+                # --- Vignette notifications ---
+                if vehicle.vignette_expiry:
+                    try:
+                        expiry_date = ensure_comoros(vehicle.vignette_expiry).date()
+                        days_until = (expiry_date - today).days
+                        if days_until in VIGNETTE_THRESHOLDS or days_until < 0:
+                            send_vignette_expiry_notification(vehicle, days_until)
+                            notified += 1
+                            logger.info(f"Vignette expiry notif → {vehicle.license_plate} (days={days_until})")
+                    except Exception as e:
+                        logger.warning(f"Vignette expiry notif failed for {vehicle.license_plate}: {e}")
+
+                # --- Vignette renewal period opened today ---
+                if renewal_opened_today and vehicle.vignette_expiry:
+                    try:
+                        send_vignette_renewal_notification(vehicle)
+                        notified += 1
+                        logger.info(f"Vignette renewal notif → {vehicle.license_plate}")
+                    except Exception as e:
+                        logger.warning(f"Vignette renewal notif failed for {vehicle.license_plate}: {e}")
+
+                # --- Insurance notifications ---
+                if vehicle.insurance_expiry:
+                    try:
+                        expiry_date = ensure_comoros(vehicle.insurance_expiry).date()
+                        days_until = (expiry_date - today).days
+                        if days_until in INSURANCE_THRESHOLDS:
+                            send_insurance_expiry_notification(vehicle, days_until)
+                            notified += 1
+                            logger.info(f"Insurance expiry notif → {vehicle.license_plate} (days={days_until})")
+                    except Exception as e:
+                        logger.warning(f"Insurance expiry notif failed for {vehicle.license_plate}: {e}")
+
+            logger.info(f"Expiry notifications job complete — {notified} notification(s) sent")
+
+        except Exception as e:
+            logger.error(f"Error in send_expiry_notifications: {e}")
+            import traceback
+            traceback.print_exc()

@@ -171,7 +171,7 @@ def create_app():
         tasks_set_app(app)
 
         # Add the exoneration task to run every hour
-        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry
+        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications
         scheduler.add_job(
             func=process_exonerated_fines,
             trigger=IntervalTrigger(hours=1),
@@ -195,6 +195,15 @@ def create_app():
             trigger=CronTrigger(hour=2, minute=0),
             id='check_vehicle_qr_code_expiry',
             name='Check vehicle QR code expiry and mark as inactive daily at 02:00 AM',
+            replace_existing=True
+        )
+
+        # Send push notifications for vignette/insurance expiry daily at 08:00 AM
+        scheduler.add_job(
+            func=send_expiry_notifications,
+            trigger=CronTrigger(hour=8, minute=0),
+            id='send_expiry_notifications',
+            name='Send vignette and insurance expiry push notifications daily at 08:00 AM',
             replace_existing=True
         )
 
