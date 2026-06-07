@@ -391,7 +391,7 @@ def create_payment():
         return jsonify({
             'payment_id': payment.id,
             'checkout_url': checkout_url,
-            'amount': int(total * 100),
+            'amount': round(total, 2),
             'currency': 'KMF',
             'status': 'pending',
             'payment_type': 'vignette',
@@ -427,7 +427,7 @@ def create_payment():
 
     total = sum([f.amount for f in fines])
 
-    payment = Payment(amount=total, currency='USD', status='pending', license_plate=license_plate, owner_name=owner_name, payer_name=payer_name, payer_email=payer_email, fines=str(fines_ids))
+    payment = Payment(amount=total, currency='KMF', status='pending', license_plate=license_plate, owner_name=owner_name, payer_name=payer_name, payer_email=payer_email, fines=str(fines_ids))
     db.session.add(payment)
     db.session.commit()
 
@@ -437,8 +437,8 @@ def create_payment():
     return jsonify({
         'payment_id': payment.id, 
         'checkout_url': checkout_url,
-        'amount': int(total * 100),  # Convert to cents for API consistency
-        'currency': 'USD',
+        'amount': round(float(total), 2),
+        'currency': 'KMF',
         'status': 'pending'
     })
 
@@ -446,11 +446,11 @@ def create_payment():
 @mobile_pay_bp.route('/check-balance', methods=['POST'])
 def check_balance():
     """Check if Huri Money account has sufficient balance for payment.
-    
+
     Expected JSON:
     {
         "phone_number": "3123456",
-        "required_amount": 50000  // in cents (KMF)
+        "required_amount": 13000  // in KMF
     }
     """
     data = request.get_json() or {}
@@ -460,49 +460,34 @@ def check_balance():
     if not phone_number or required_amount is None:
         return jsonify({'error': 'Missing phone_number or required_amount'}), 400
 
-    # In production, this would call Huri Money API to check balance
-    # For now, simulate different scenarios based on phone number
-    
-    # Simulate balance check: for demo purposes, some numbers have insufficient balance
+    # Simulated balances in KMF
     simulated_balances = {
-        '3111111': 10000,       # Insufficient (100.00 KMF)
-        '3122222': 2000000,     # Sufficient (20,000.00 KMF) - test number
-        '3133333': 5000,        # Insufficient (50.00 KMF)
+        '3111111': 100,    # Insufficient (100 KMF)
+        '3122222': 20000,  # Sufficient (20,000 KMF) - test number
+        '3133333': 50,     # Insufficient (50 KMF)
     }
 
-    # Get balance or default to sufficient amount (2,000,000 cents = 20,000 KMF)
-    account_balance = simulated_balances.get(phone_number, 2000000)
-    
-    # Convert cents to KMF for display
-    required_amount_kmf = required_amount / 100 if required_amount > 100 else required_amount
-    account_balance_kmf = account_balance / 100 if account_balance > 100 else account_balance
-    
+    # Default: 20,000 KMF
+    account_balance = simulated_balances.get(phone_number, 20000)
     has_sufficient_balance = account_balance >= required_amount
-    
-    console_output = {
-        'phone_number': phone_number,
-        'required_amount': int(required_amount_kmf),
-        'account_balance': int(account_balance_kmf),
-        'has_sufficient_balance': has_sufficient_balance,
-    }
-    
-    print(f'💰 Balance Check: {console_output}')
-    
+
+    print(f'💰 Balance Check: phone={phone_number}, required={required_amount} KMF, balance={account_balance} KMF, ok={has_sufficient_balance}')
+
     if has_sufficient_balance:
         return jsonify({
             'status': 'connected',
             'has_sufficient_balance': True,
-            'balance': int(account_balance),
+            'balance': account_balance,
             'message': 'Balance is sufficient'
         }), 200
     else:
         return jsonify({
             'status': 'insufficient_balance',
             'has_sufficient_balance': False,
-            'balance': int(account_balance),
-            'required': int(required_amount),
-            'message': f'Insufficient balance. Required: {required_amount}, Available: {account_balance}'
-        }), 200  # Return 200 even for insufficient balance to allow client-side handling
+            'balance': account_balance,
+            'required': required_amount,
+            'message': f'Insufficient balance. Required: {required_amount} KMF, Available: {account_balance} KMF'
+        }), 200
 
 
 @mobile_pay_bp.route('/webhook', methods=['POST'])
@@ -681,7 +666,7 @@ def get_receipt(payment_id):
     return jsonify({
         'payment_id': str(p.id),
         'receipt_number': receipt_number,
-        'amount': int(p.amount * 100),  # Convert to cents for API consistency
+        'amount': round(float(p.amount), 2),
         'currency': p.currency,
         'status': p.status,
         'payment_type': payment_type,
