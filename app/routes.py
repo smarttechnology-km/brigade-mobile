@@ -2635,6 +2635,7 @@ def update_vehicle(vehicle_id):
         if was_vignette_expired:
             payer_name = current_user.username if (current_user and getattr(current_user, 'is_authenticated', False)) else 'agent_impot'
             unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).order_by(Fine.issued_at.asc()).all()
+            auto_paid_fines_amount = sum(float(f.amount or 0) for f in unpaid_fines)
             for fine in unpaid_fines:
                 _apply_fine_payment(
                     fine,
@@ -2642,6 +2643,8 @@ def update_vehicle(vehicle_id):
                     'Paiement automatique lors du renouvellement de vignette par agent d\'impôt'
                 )
                 auto_paid_fines.append(fine)
+            if auto_paid_fines_amount > 0:
+                vehicle.vignette_last_paid_fines_amount = auto_paid_fines_amount
         vehicle.vignette_payment_approved = False
         vehicle.vignette_payment_approved_at = None
         vehicle.vignette_payment_approved_by = None
@@ -3400,19 +3403,19 @@ def get_vignette_vehicles():
             # Vignette is still valid (before March 31st) or no vignette: no penalty
             vehicle_data['penalty_amount'] = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         
-        # Add unpaid fines amount
+        # Add fines amount
         unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
         total_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
         if payment_approved:
+            # Vignette payée : afficher ce qui a été inclus dans le paiement
             vehicle_data['unpaid_fines_amount'] = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
             vehicle_data['unpaid_fines_count'] = 0
-        elif pending_request_expiry:
-            vehicle_data['unpaid_fines_amount'] = total_fines_amount
-            vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
-        elif vignette_expiry and vignette_expiry < now:
+        elif total_fines_amount > 0:
+            # Des amendes impayées existent : toujours les afficher
             vehicle_data['unpaid_fines_amount'] = total_fines_amount
             vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
         else:
+            # Pas d'amendes impayées : afficher le dernier montant payé si disponible
             vehicle_data['unpaid_fines_amount'] = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
             vehicle_data['unpaid_fines_count'] = 0
         
