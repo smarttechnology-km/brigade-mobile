@@ -3395,28 +3395,28 @@ def get_vignette_vehicles():
         if payment_approved:
             vehicle_data['penalty_amount'] = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         elif vignette_expiry and vignette_expiry < now:
-            # Vignette is expired: calculate penalty based on days since March 31st
+            # Vignette is expired: calculate current penalty based on days overdue
             days_late = (now - vignette_expiry).days
             penalty_amount = calculate_penalty_amount(days_late)
             vehicle_data['penalty_amount'] = penalty_amount
         else:
-            # Vignette is still valid (before March 31st) or no vignette: no penalty
-            vehicle_data['penalty_amount'] = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
-        
+            # Vignette still valid (renewal window or active): no current penalty
+            vehicle_data['penalty_amount'] = 0.0
+
         # Add fines amount
         unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
         total_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
         if payment_approved:
-            # Vignette payée : afficher ce qui a été inclus dans le paiement
+            # Payment approved: freeze what was included in the approved payment
             vehicle_data['unpaid_fines_amount'] = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
             vehicle_data['unpaid_fines_count'] = 0
         elif total_fines_amount > 0:
-            # Des amendes impayées existent : toujours les afficher
+            # Current unpaid fines exist: show them
             vehicle_data['unpaid_fines_amount'] = total_fines_amount
             vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
         else:
-            # Pas d'amendes impayées : afficher le dernier montant payé si disponible
-            vehicle_data['unpaid_fines_amount'] = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
+            # No current unpaid fines: show 0 (old paid amounts are historical, not due)
+            vehicle_data['unpaid_fines_amount'] = 0.0
             vehicle_data['unpaid_fines_count'] = 0
         
         vehicles_payload.append(vehicle_data)
@@ -3462,7 +3462,8 @@ def approve_vignette_payment(vehicle_id):
 
     vehicle.vignette_payment_approved = True
     vehicle.vignette_payment_approved_at = now_time
-    vehicle.vignette_payment_approved_by = current_user.username if getattr(current_user, 'is_authenticated', False) else 'Système'
+    agent_display_name = (getattr(current_user, 'full_name', None) or getattr(current_user, 'username', None)) if getattr(current_user, 'is_authenticated', False) else 'Système'
+    vehicle.vignette_payment_approved_by = agent_display_name or 'Système'
     vehicle.vignette_payment_method = payment_method
 
     # Finalize the requested expiry date when this was a payment request for a vehicle
@@ -3487,6 +3488,7 @@ def approve_vignette_payment(vehicle_id):
 
     # Persist last paid breakdown so tax dashboard can still display paid components after renewal.
     vehicle.vignette_last_paid_at = now_time
+    vehicle.vignette_last_paid_by = vehicle.vignette_payment_approved_by
     vehicle.vignette_last_paid_vignette_amount = float(vignette_price or 0.0)
     vehicle.vignette_last_paid_penalty_amount = float(penalty_amount or 0.0)
     vehicle.vignette_last_paid_fines_amount = float(unpaid_fines_amount or 0.0)
@@ -3497,7 +3499,7 @@ def approve_vignette_payment(vehicle_id):
 
     unpaid_fines_count = len(unpaid_fines)
 
-    # If there are unpaid fines included in the vignette payment, mark them as paid
+    # Mark bundled fines as paid
     paid_fine_ids = []
     if unpaid_fines_count > 0:
         receipt_ref = f"VIGN-{vehicle.id}-{now_time.strftime('%Y%m%d%H%M%S')}"
@@ -3509,20 +3511,32 @@ def approve_vignette_payment(vehicle_id):
             db.session.add(f)
             paid_fine_ids.append(f.id)
 
-        # Create a payment record representing the combined transaction
-        from app.models import Payment
-        payment_record = Payment(
-            amount=total_amount,
-            currency='KMF',
-            status='paid',
-            license_plate=vehicle.license_plate,
-            owner_name=vehicle.owner_name,
-            payer_name=vehicle.vignette_payment_approved_by,
-            payer_email=None,
-            paid_at=now_time,
-            fines=json.dumps(paid_fine_ids)
-        )
-        db.session.add(payment_record)
+    # Always create a payment record in vignette payload format so the citizen app
+    # can display the receipt in "Retelecharger un recu".
+    from app.models import Payment
+    vignette_payload = {
+        'type': 'vignette_request',
+        'vehicle_id': vehicle.id,
+        'vignette_price': float(vignette_price or 0.0),
+        'annual_ds_amount': 0.0,
+        'penalty_amount': float(penalty_amount or 0.0),
+        'fines_amount': float(unpaid_fines_amount or 0.0),
+        'total_amount': float(total_amount or 0.0),
+        'requested_expiry': vehicle.vignette_expiry.isoformat() if vehicle.vignette_expiry else None,
+        'fine_ids': paid_fine_ids,
+    }
+    payment_record = Payment(
+        amount=total_amount,
+        currency='KMF',
+        status='paid',
+        license_plate=vehicle.license_plate,
+        owner_name=vehicle.owner_name,
+        payer_name=vehicle.vignette_payment_approved_by,
+        payer_email=None,
+        paid_at=now_time,
+        fines=json.dumps(vignette_payload)
+    )
+    db.session.add(payment_record)
 
     db.session.add(VehicleHistory(
         vehicle_id=vehicle.id,
@@ -4119,7 +4133,7 @@ def get_mobile_money_archive():
             'penalty_amount': penalty_amount,
             'fines_amount': fines_amount,
             'total_amount': total_amount,
-            'approved_by': vehicle.vignette_payment_approved_by,
+            'approved_by': vehicle.vignette_last_paid_by or vehicle.vignette_payment_approved_by,
             'payment_method': vehicle.vignette_payment_method,
             'receipt_number': f"VIGN-{vehicle.id}-{int(vehicle.vignette_last_paid_at.timestamp())}" if vehicle.vignette_last_paid_at else None,
             'included_fines': float(fines_amount),

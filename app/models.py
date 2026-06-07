@@ -94,6 +94,7 @@ class Vehicle(db.Model):
     vignette_payment_requested_by = db.Column(db.String(80), nullable=True)
     vignette_payment_requested_expiry = db.Column(db.DateTime, nullable=True)
     vignette_last_paid_at = db.Column(db.DateTime, nullable=True)
+    vignette_last_paid_by = db.Column(db.String(150), nullable=True)
     vignette_last_paid_vignette_amount = db.Column(db.Float, nullable=False, default=0.0)
     vignette_last_paid_penalty_amount = db.Column(db.Float, nullable=False, default=0.0)
     vignette_last_paid_fines_amount = db.Column(db.Float, nullable=False, default=0.0)
@@ -175,6 +176,7 @@ class Vehicle(db.Model):
             'vignette_payment_requested_by': self.vignette_payment_requested_by,
             'vignette_payment_requested_expiry': self.vignette_payment_requested_expiry.isoformat() if self.vignette_payment_requested_expiry else None,
             'vignette_last_paid_at': self.vignette_last_paid_at.isoformat() if self.vignette_last_paid_at else None,
+            'vignette_last_paid_by': self.vignette_last_paid_by,
             'vignette_last_paid_vignette_amount': float(self.vignette_last_paid_vignette_amount or 0),
             'vignette_last_paid_penalty_amount': float(self.vignette_last_paid_penalty_amount or 0),
             'vignette_last_paid_fines_amount': float(self.vignette_last_paid_fines_amount or 0),

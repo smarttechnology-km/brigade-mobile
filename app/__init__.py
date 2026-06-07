@@ -263,6 +263,7 @@ def create_app():
                             'vignette_payment_requested_by': "ALTER TABLE vehicles ADD COLUMN vignette_payment_requested_by VARCHAR(80)",
                             'vignette_payment_requested_expiry': "ALTER TABLE vehicles ADD COLUMN vignette_payment_requested_expiry DATETIME",
                             'vignette_last_paid_at': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_at DATETIME",
+                            'vignette_last_paid_by': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_by VARCHAR(150)",
                             'vignette_last_paid_vignette_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_vignette_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_penalty_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_penalty_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_fines_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_fines_amount FLOAT NOT NULL DEFAULT 0.0",

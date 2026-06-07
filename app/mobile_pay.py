@@ -554,6 +554,7 @@ def webhook():
                 vehicle.vignette_payment_method = 'huri_money' if payment.huri_payment_id else 'app_mobile'
                 vehicle.vignette_expiry = requested_expiry
                 vehicle.vignette_last_paid_at = payment_time
+                vehicle.vignette_last_paid_by = payment.payer_name or payment.phone_number or 'HuriMoney'
                 vehicle.vignette_last_paid_vignette_amount = float(fine_payload.get('vignette_price') or 0.0) + float(fine_payload.get('annual_ds_amount') or 0.0)
                 vehicle.vignette_last_paid_penalty_amount = float(fine_payload.get('penalty_amount') or 0.0)
                 vehicle.vignette_last_paid_fines_amount = float(fine_payload.get('fines_amount') or 0.0)
