@@ -110,6 +110,29 @@ def vehicle_has_unpaid_fines(vehicle_id):
     return Fine.query.filter_by(vehicle_id=vehicle_id, paid=False).first() is not None
 
 
+def _record_qr_payment(vehicle, payment_type, officer):
+    """Auto-record a SmartTech QRCodePayment. Activation recorded once; renewal always."""
+    try:
+        from app.models import QRCodePayment, SmartTechSetting
+        if payment_type == 'activation':
+            if QRCodePayment.query.filter_by(vehicle_id=vehicle.id, payment_type='activation', status='paid').first():
+                return
+            amount = SmartTechSetting.get('qr_activation_price', 5000)
+        else:
+            amount = SmartTechSetting.get('qr_renewal_price', 3000)
+        db.session.add(QRCodePayment(
+            vehicle_id=vehicle.id,
+            payment_type=payment_type,
+            amount=amount,
+            status='paid',
+            paid_at=now_comoros(),
+            recorded_by=officer,
+        ))
+        db.session.commit()
+    except Exception as e:
+        print(f"Warning: could not record QR payment: {e}")
+
+
 def _sync_vehicle_owner_link(vehicle):
     """Best-effort sync between vehicles.owner_phone and vehicle_owners.phone."""
     phone = (vehicle.owner_phone or '').strip()
@@ -782,11 +805,28 @@ def get_vehicle_stats():
 def get_vehicles_list():
     """Retourner la liste des véhicules"""
     country = request.args.get('country', type=str)  # New country filter for admin
-    
+
     query = Vehicle.query
     query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
     vehicles = query.order_by(Vehicle.created_at.desc()).all()
     return jsonify([v.to_dict() for v in vehicles])
+
+
+@vehicle_bp.route('/last-update', methods=['GET'])
+@login_required
+def vehicles_last_update():
+    """Lightweight endpoint: returns the most recent updated_at and vehicle count.
+    Used by the dashboard to detect changes without fetching all vehicle data."""
+    from sqlalchemy import func
+    country = request.args.get('country', type=str)
+    query = Vehicle.query
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
+    result = query.with_entities(
+        func.max(Vehicle.updated_at).label('last_update'),
+        func.count(Vehicle.id).label('total')
+    ).one()
+    last_update = result.last_update.strftime('%Y-%m-%d %H:%M:%S') if result.last_update else ''
+    return jsonify({'last_update': last_update, 'total': result.total})
 
 
 @vehicle_bp.route('/query', methods=['GET'])
@@ -1046,6 +1086,8 @@ def create_vehicle():
             vehicle.insurance_expiry = datetime.fromisoformat(insurance_expiry)
         except Exception:
             pass
+    if current_user and getattr(current_user, 'is_authenticated', False):
+        vehicle.created_by = getattr(current_user, 'username', None)
     db.session.add(vehicle)
     db.session.flush()  # Flush to get the vehicle ID before committing
     
@@ -1654,7 +1696,8 @@ def get_vehicle_qrcode(vehicle_id):
     if not vehicle.qr_code_expiry:
         vehicle.generate_qr_code_with_expiry()
         db.session.commit()
-    
+        _record_qr_payment(vehicle, 'activation', current_user.username)
+
     # URL publique de suivi
     track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
     # Générer QR code PNG
@@ -1690,19 +1733,20 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         if not vehicle.qr_code_expiry:
             vehicle.generate_qr_code_with_expiry()
             db.session.commit()
-        
+            _record_qr_payment(vehicle, 'activation', current_user.username)
+
         # Générer QR code
         track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
         qr = qrcode.QRCode(box_size=6, border=2)
         qr.add_data(track_url)
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="black", back_color="white")
-        
+
         # Sauvegarder QR code dans un buffer
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
-        
+
         # Générer le PDF avec format petit (carte autocollante 10x10cm)
         pdf_buf = io.BytesIO()
         card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise
@@ -1771,11 +1815,12 @@ def renew_vehicle_qrcode(vehicle_id):
         
         # Renouveler uniquement l'expiration du QR code
         vehicle.generate_qr_code_with_expiry()
-        
+        vehicle.qr_renewed_by = current_user.username
+
         # Réactiver le véhicule s'il était inactif
         if vehicle.status == 'inactive':
             vehicle.status = 'active'
-        
+
         # Enregistrer dans l'historique
         from app.models import VehicleHistory
         history = VehicleHistory(
@@ -1786,7 +1831,8 @@ def renew_vehicle_qrcode(vehicle_id):
         )
         db.session.add(history)
         db.session.commit()
-        
+        _record_qr_payment(vehicle, 'renewal', current_user.username)
+
         return jsonify({
             'success': True,
             'message': f'Code QR renouvelé pour {vehicle.license_plate}',
@@ -2478,19 +2524,20 @@ def public_track_qrcode_pdf(token):
         if not vehicle.qr_code_expiry:
             vehicle.generate_qr_code_with_expiry()
             db.session.commit()
-        
+            _record_qr_payment(vehicle, 'activation', current_user.username)
+
         # Générer QR code
         track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
         qr = qrcode.QRCode(box_size=6, border=2)
         qr.add_data(track_url)
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="black", back_color="white")
-        
+
         # Sauvegarder QR code dans un buffer
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
-        
+
         # Générer le PDF avec format petit (carte autocollante 10x10cm)
         pdf_buf = io.BytesIO()
         card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise

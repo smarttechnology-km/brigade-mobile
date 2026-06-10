@@ -45,12 +45,14 @@ def create_app():
     from app.auth import auth_bp
     from app.citizen_auth import citizen_auth_bp
     from app.mobile_pay import mobile_pay_bp
+    from app.smart_tech import smart_tech_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(vehicle_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(citizen_auth_bp)
     app.register_blueprint(mobile_pay_bp)
+    app.register_blueprint(smart_tech_bp)
 
     # Enable CORS for API endpoints during development (restrict in production)
     CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -277,11 +279,86 @@ def create_app():
                             'vignette_last_paid_penalty_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_penalty_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_fines_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_fines_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_total_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_total_amount FLOAT NOT NULL DEFAULT 0.0",
+                            'created_by': "ALTER TABLE vehicles ADD COLUMN created_by VARCHAR(80)",
+                            'qr_renewed_by': "ALTER TABLE vehicles ADD COLUMN qr_renewed_by VARCHAR(80)",
                         }
                         for column_name, alter_sql in vehicle_column_definitions.items():
                             if column_name not in vehicle_columns:
                                 conn.execute(text(alter_sql))
                                 logger.info(f"Added missing vehicles.{column_name} column for SQLite compatibility")
+                    st_subs_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_subscriptions'")
+                    ).first() is not None
+                    if st_subs_exists:
+                        sub_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(st_subscriptions)")).fetchall()}
+                        st_sub_col_defs = {
+                            'payment_mode': "ALTER TABLE st_subscriptions ADD COLUMN payment_mode VARCHAR(20) NOT NULL DEFAULT 'manuel'",
+                            'last_paid_at': "ALTER TABLE st_subscriptions ADD COLUMN last_paid_at DATETIME",
+                            'last_paid_by': "ALTER TABLE st_subscriptions ADD COLUMN last_paid_by VARCHAR(80)",
+                            'phone_id':     "ALTER TABLE st_subscriptions ADD COLUMN phone_id INTEGER",
+                            'start_date':   "ALTER TABLE st_subscriptions ADD COLUMN start_date DATE",
+                            'employee_id':  "ALTER TABLE st_subscriptions ADD COLUMN employee_id INTEGER REFERENCES st_employees(id)",
+                        }
+                        for col, sql in st_sub_col_defs.items():
+                            if col not in sub_cols:
+                                conn.execute(text(sql))
+                                logger.info(f"Added missing st_subscriptions.{col} column")
+
+                    st_exp_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_expenses'")
+                    ).first() is not None
+                    if not st_exp_exists:
+                        conn.execute(text(
+                            "CREATE TABLE IF NOT EXISTS st_expenses ("
+                            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                            "description VARCHAR(200) NOT NULL,"
+                            "category VARCHAR(80) NOT NULL,"
+                            "amount FLOAT NOT NULL DEFAULT 0.0,"
+                            "expense_date DATE NOT NULL,"
+                            "vendor VARCHAR(120),"
+                            "notes TEXT,"
+                            "created_at DATETIME NOT NULL,"
+                            "created_by VARCHAR(80)"
+                            ")"
+                        ))
+                        logger.info("Created st_expenses table")
+
+                    st_accts_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='smart_tech_accounts'")
+                    ).first() is not None
+                    if st_accts_exists:
+                        acct_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(smart_tech_accounts)")).fetchall()}
+                        if 'employee_id' not in acct_cols:
+                            conn.execute(text("ALTER TABLE smart_tech_accounts ADD COLUMN employee_id INTEGER REFERENCES st_employees(id)"))
+                            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_smart_tech_accounts_employee_id ON smart_tech_accounts(employee_id) WHERE employee_id IS NOT NULL"))
+                            logger.info("Added missing smart_tech_accounts.employee_id column")
+                        if 'role' not in acct_cols:
+                            conn.execute(text("ALTER TABLE smart_tech_accounts ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'admin'"))
+                            logger.info("Added missing smart_tech_accounts.role column")
+
+                    st_emp_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_employees'")
+                    ).first() is not None
+                    if not st_emp_exists:
+                        conn.execute(text(
+                            "CREATE TABLE IF NOT EXISTS st_employees ("
+                            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                            "first_name VARCHAR(80) NOT NULL,"
+                            "last_name VARCHAR(80) NOT NULL,"
+                            "phone VARCHAR(30),"
+                            "email VARCHAR(120),"
+                            "island VARCHAR(50),"
+                            "position VARCHAR(100) NOT NULL,"
+                            "salary FLOAT NOT NULL DEFAULT 0.0,"
+                            "hire_date DATE,"
+                            "status VARCHAR(20) NOT NULL DEFAULT 'actif',"
+                            "notes TEXT,"
+                            "created_at DATETIME NOT NULL,"
+                            "created_by VARCHAR(80)"
+                            ")"
+                        ))
+                        logger.info("Created st_employees table")
+
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
         
@@ -306,7 +383,7 @@ def create_app():
         # S'assurer que l'utilisateur admin existe toujours
         admin_username = 'admin'
         admin_password = 'admin123'
-        
+
         admin = User.query.filter_by(username=admin_username).first()
         if not admin:
             admin = User(username=admin_username, is_admin=True, role='administrateur')
@@ -319,5 +396,69 @@ def create_app():
             admin.role = 'administrateur'
             db.session.commit()
             print(f"✓ Droits admin restaurés: {admin_username}")
+
+        # Supprimer le compte système smarttech s'il existe encore
+        from app.models import SmartTechAccount
+        st_account = SmartTechAccount.query.filter_by(username='smarttech').first()
+        if st_account:
+            db.session.delete(st_account)
+            db.session.commit()
+            print("✓ Compte système smarttech supprimé")
+
+        # Initialiser les paramètres par défaut Smart Technology
+        from app.models import SmartTechSetting
+        for key, default_val in [('qr_activation_price', '5000'), ('qr_renewal_price', '3000')]:
+            if not SmartTechSetting.query.filter_by(key=key).first():
+                db.session.add(SmartTechSetting(key=key, value=default_val))
+        db.session.commit()
+
+        # Backfill QRCodePayment pour véhicules existants sans enregistrement
+        try:
+            from app.models import QRCodePayment, VehicleHistory, Vehicle
+            from app.timezone_utils import now_comoros as _now
+            act_price = SmartTechSetting.get('qr_activation_price', 5000)
+            ren_price = SmartTechSetting.get('qr_renewal_price', 3000)
+
+            vehicles_with_qr = Vehicle.query.filter(Vehicle.qr_code_expiry.isnot(None)).all()
+            for v in vehicles_with_qr:
+                # Activation : une seule fois par véhicule
+                if not QRCodePayment.query.filter_by(vehicle_id=v.id, payment_type='activation', status='paid').first():
+                    db.session.add(QRCodePayment(
+                        vehicle_id=v.id,
+                        payment_type='activation',
+                        amount=act_price,
+                        status='paid',
+                        paid_at=v.qr_code_generated_at or v.created_at or _now(),
+                        recorded_by=v.created_by or 'system',
+                    ))
+
+                # Renouvellements : un enregistrement par entrée d'historique
+                renewals = VehicleHistory.query.filter(
+                    VehicleHistory.vehicle_id == v.id,
+                    VehicleHistory.action.like('%QR Code renouvelé%')
+                ).order_by(VehicleHistory.created_at).all()
+                for r in renewals:
+                    from datetime import timedelta
+                    already = QRCodePayment.query.filter(
+                        QRCodePayment.vehicle_id == v.id,
+                        QRCodePayment.payment_type == 'renewal',
+                        QRCodePayment.status == 'paid',
+                        QRCodePayment.paid_at >= r.created_at - timedelta(minutes=5),
+                        QRCodePayment.paid_at <= r.created_at + timedelta(minutes=5),
+                    ).first()
+                    if not already:
+                        db.session.add(QRCodePayment(
+                            vehicle_id=v.id,
+                            payment_type='renewal',
+                            amount=ren_price,
+                            status='paid',
+                            paid_at=r.created_at or _now(),
+                            recorded_by=r.officer or 'system',
+                        ))
+
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"Warning: QRCodePayment backfill failed: {e}")
 
     return app

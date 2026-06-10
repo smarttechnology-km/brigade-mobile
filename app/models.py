@@ -104,6 +104,8 @@ class Vehicle(db.Model):
     fiscal_class = db.Column(db.String(10))  # A, B, C, D
     cv_class = db.Column(db.String(20))  # 0-5 CV, 6-9 CV, 10-12 CV, 12 CV et +
     notes = db.Column(db.Text)
+    created_by = db.Column(db.String(80), nullable=True)   # username who registered the vehicle
+    qr_renewed_by = db.Column(db.String(80), nullable=True)  # username who last renewed the QR code
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
     
@@ -410,6 +412,70 @@ class InsuranceAccount(db.Model, UserMixin):
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+class QRCodePayment(db.Model):
+    """Tracks QR code activation and renewal payments managed by Smart Technology."""
+    __tablename__ = 'qr_code_payments'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    # 'activation' = first QR code for a new vehicle
+    # 'renewal'    = renewing an expired QR code
+    payment_type = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Float, nullable=False, default=0.0)
+    status = db.Column(db.String(20), nullable=False, default='paid')  # 'pending' | 'paid'
+    paid_at = db.Column(db.DateTime, nullable=True)
+    recorded_by = db.Column(db.String(80), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    vehicle = db.relationship('Vehicle', backref=db.backref('qr_payments', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'license_plate': self.vehicle.license_plate if self.vehicle else None,
+            'owner_name': self.vehicle.owner_name if self.vehicle else None,
+            'payment_type': self.payment_type,
+            'amount': float(self.amount),
+            'status': self.status,
+            'paid_at': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else None,
+            'recorded_by': self.recorded_by,
+            'notes': self.notes,
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else None,
+        }
+
+
+class SmartTechAccount(db.Model, UserMixin):
+    """Smart Technology agency account — independent finance dashboard login."""
+    __tablename__ = 'smart_tech_accounts'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    full_name = db.Column(db.String(150), nullable=True)
+    email = db.Column(db.String(150), nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    employee_id = db.Column(db.Integer, db.ForeignKey('st_employees.id'), nullable=True, unique=True)
+    employee = db.relationship('Employee', backref=db.backref('account', uselist=False))
+    role = db.Column(db.String(20), nullable=False, default='admin')
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def get_id(self):
+        return f'smarttech:{self.id}'
+
+    @property
+    def is_smart_tech(self):
+        return True
+
+    def __repr__(self):
+        return f'<SmartTechAccount {self.username}>'
 
 
 class VehicleInsuranceAssignment(db.Model):
@@ -722,3 +788,260 @@ class VignetteSetting(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'updated_by': self.updated_by,
         }
+
+
+class Subscription(db.Model):
+    """Smart Technology recurring cost subscriptions."""
+    __tablename__ = 'st_subscriptions'
+
+    id           = db.Column(db.Integer, primary_key=True)
+    name         = db.Column(db.String(120), nullable=False)
+    sub_type     = db.Column(db.String(80),  nullable=False)
+    frequency    = db.Column(db.String(30),  nullable=False)
+    amount       = db.Column(db.Float, nullable=False, default=0.0)
+    payment_mode = db.Column(db.String(20), nullable=False, default='manuel')  # automatique / manuel
+    phone_id     = db.Column(db.Integer, db.ForeignKey('phones.id'), nullable=True)
+    notes        = db.Column(db.Text, nullable=True)
+    is_active    = db.Column(db.Boolean, nullable=False, default=True)
+    start_date   = db.Column(db.Date, nullable=True)
+    last_paid_at = db.Column(db.DateTime, nullable=True)
+    last_paid_by = db.Column(db.String(80), nullable=True)
+    created_at   = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    created_by   = db.Column(db.String(80), nullable=True)
+    employee_id  = db.Column(db.Integer, db.ForeignKey('st_employees.id'), nullable=True)
+    phone        = db.relationship('Phone',     backref=db.backref('subscriptions', lazy=True), foreign_keys=[phone_id])
+    employee     = db.relationship('Employee',  backref=db.backref('subscriptions', lazy=True), foreign_keys=[employee_id])
+
+    _MONTHLY_FACTOR = {
+        'hebdomadaire':  52 / 12,
+        'mensuelle':     1,
+        'trimestrielle': 1 / 3,
+        'semestrielle':  1 / 6,
+        'annuelle':      1 / 12,
+        'ponctuelle':    0,
+    }
+
+    _NEXT_DUE_DELTA = {
+        'hebdomadaire':  {'weeks': 1},
+        'mensuelle':     {'months': 1},
+        'trimestrielle': {'months': 3},
+        'semestrielle':  {'months': 6},
+        'annuelle':      {'years': 1},
+    }
+
+    def monthly_cost(self):
+        return self.amount * self._MONTHLY_FACTOR.get(self.frequency, 1)
+
+    def _build_delta(self):
+        delta_kwargs = self._NEXT_DUE_DELTA.get(self.frequency)
+        if not delta_kwargs:
+            return None
+        try:
+            from dateutil.relativedelta import relativedelta
+            return relativedelta(**delta_kwargs)
+        except ImportError:
+            from datetime import timedelta
+            approx = {'weeks': 7, 'months': 30, 'years': 365}
+            return timedelta(days=sum(approx.get(k, 30) * v for k, v in delta_kwargs.items()))
+
+    def next_payment_date(self):
+        """Next upcoming debit date (>= today) for automatic subscriptions."""
+        delta = self._build_delta()
+        if delta is None:
+            return None
+        base = self.start_date
+        if base is None:
+            return None
+        from app.timezone_utils import now_comoros
+        today = now_comoros().date()
+        d = base
+        while d < today:
+            d = d + delta
+        return d
+
+    def next_manual_due_date(self):
+        """Next due date for manual subscriptions: last_paid_at + delta, or start_date if never paid."""
+        delta = self._build_delta()
+        if delta is None:
+            return None
+        if self.last_paid_at:
+            return self.last_paid_at.date() + delta
+        return self.start_date
+
+    def last_debit_date(self):
+        """Date of the most recent past debit (next_payment_date − one period).
+        Returns None when the first debit hasn't happened yet."""
+        npd = self.next_payment_date()
+        if npd is None or npd == self.start_date:
+            return None
+        delta = self._build_delta()
+        if delta is None:
+            return None
+        return npd - delta
+
+    def is_payment_due(self):
+        """Return True when this manual subscription needs a new payment."""
+        if self.payment_mode == 'automatique':
+            return False
+        if self.frequency == 'ponctuelle':
+            return self.last_paid_at is None
+        if self.last_paid_at is None:
+            return True
+        from app.timezone_utils import now_comoros, ensure_comoros
+        delta = self._build_delta()
+        if delta is None:
+            return False
+        return now_comoros() >= ensure_comoros(self.last_paid_at) + delta
+
+    def to_dict(self):
+        return {
+            'id':           self.id,
+            'name':         self.name,
+            'sub_type':     self.sub_type,
+            'frequency':    self.frequency,
+            'amount':       self.amount,
+            'payment_mode': self.payment_mode,
+            'phone_id':       self.phone_id,
+            'phone_label':    (f"{self.phone.phone_code} — {self.phone.brand} {self.phone.model}" if self.phone else None),
+            'employee_id':    self.employee_id,
+            'employee_label': (f"{self.employee.full_name} — {self.employee.position}" if self.employee else None),
+            'notes':        self.notes,
+            'is_active':    self.is_active,
+            'monthly_cost': round(self.monthly_cost(), 2),
+            'is_due':       self.is_payment_due(),
+            'start_date':        self.start_date.strftime('%d/%m/%Y') if self.start_date else None,
+            'start_date_iso':    self.start_date.isoformat() if self.start_date else None,
+            'next_payment_date': (
+                (self.next_manual_due_date().strftime('%d/%m/%Y') if self.next_manual_due_date() else None)
+                if self.payment_mode == 'manuel'
+                else (self.next_payment_date().strftime('%d/%m/%Y') if self.next_payment_date() else None)
+            ),
+            'last_debit_date':   self.last_debit_date().strftime('%d/%m/%Y') if self.last_debit_date() else None,
+            'last_paid_at': self.last_paid_at.strftime('%d/%m/%Y %H:%M') if self.last_paid_at else None,
+            'last_paid_by': self.last_paid_by,
+            'created_at':   self.created_at.strftime('%d/%m/%Y') if self.created_at else None,
+            'created_by':   self.created_by,
+        }
+
+
+class Employee(db.Model):
+    """Smart Technology employee registry."""
+    __tablename__ = 'st_employees'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    first_name = db.Column(db.String(80),  nullable=False)
+    last_name  = db.Column(db.String(80),  nullable=False)
+    phone      = db.Column(db.String(30),  nullable=True)
+    email      = db.Column(db.String(120), nullable=True)
+    island     = db.Column(db.String(50),  nullable=True)
+    position   = db.Column(db.String(100), nullable=False)
+    salary     = db.Column(db.Float, nullable=False, default=0.0)
+    hire_date  = db.Column(db.Date, nullable=True)
+    status     = db.Column(db.String(20),  nullable=False, default='actif')
+    notes      = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    created_by = db.Column(db.String(80), nullable=True)
+
+    POSITIONS = [
+        'Directeur', 'Responsable technique', 'Technicien',
+        'Commercial', 'Comptable', 'Secrétaire', 'Agent de terrain', 'Autre',
+    ]
+    ISLANDS = ['Grande Comores', 'Anjouan', 'Moheli']
+
+    @property
+    def full_name(self):
+        return f'{self.first_name} {self.last_name}'
+
+    def to_dict(self):
+        return {
+            'id':         self.id,
+            'first_name': self.first_name,
+            'last_name':  self.last_name,
+            'full_name':  self.full_name,
+            'phone':      self.phone,
+            'email':      self.email,
+            'island':     self.island,
+            'position':   self.position,
+            'salary':     self.salary,
+            'hire_date':     self.hire_date.strftime('%d/%m/%Y') if self.hire_date else None,
+            'hire_date_iso': self.hire_date.isoformat()          if self.hire_date else None,
+            'status':     self.status,
+            'notes':      self.notes,
+            'created_at': self.created_at.strftime('%d/%m/%Y')  if self.created_at else None,
+            'created_by': self.created_by,
+            'account_id':       self.account.id        if self.account else None,
+            'account_username': self.account.username  if self.account else None,
+            'account_active':   self.account.is_active if self.account else None,
+            'account_role':     self.account.role      if self.account else None,
+        }
+
+
+class Expense(db.Model):
+    """Smart Technology one-off expenses (purchases, travel, training, etc.)."""
+    __tablename__ = 'st_expenses'
+
+    id           = db.Column(db.Integer, primary_key=True)
+    description  = db.Column(db.String(200), nullable=False)
+    category     = db.Column(db.String(80),  nullable=False)
+    amount       = db.Column(db.Float, nullable=False, default=0.0)
+    expense_date = db.Column(db.Date, nullable=False)
+    vendor       = db.Column(db.String(120), nullable=True)
+    notes        = db.Column(db.Text, nullable=True)
+    created_at   = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    created_by   = db.Column(db.String(80), nullable=True)
+
+    CATEGORIES = [
+        'Achat produit',
+        'Équipement',
+        'Déplacement',
+        'Formation',
+        'Maintenance',
+        'Logiciel',
+        'Fournitures',
+        'Autre',
+    ]
+
+    def to_dict(self):
+        return {
+            'id':           self.id,
+            'description':  self.description,
+            'category':     self.category,
+            'amount':       self.amount,
+            'expense_date': self.expense_date.strftime('%d/%m/%Y') if self.expense_date else None,
+            'expense_date_iso': self.expense_date.isoformat() if self.expense_date else None,
+            'vendor':       self.vendor,
+            'notes':        self.notes,
+            'created_at':   self.created_at.strftime('%d/%m/%Y') if self.created_at else None,
+            'created_by':   self.created_by,
+        }
+
+
+class SmartTechSetting(db.Model):
+    """Key-value config store for Smart Technology parameters."""
+    __tablename__ = 'st_settings'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    key        = db.Column(db.String(60), unique=True, nullable=False)
+    value      = db.Column(db.String(200), nullable=False, default='0')
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+
+    @staticmethod
+    def get(key, default=0):
+        row = SmartTechSetting.query.filter_by(key=key).first()
+        if not row:
+            return default
+        try:
+            f = float(row.value)
+            return int(f) if f == int(f) else f
+        except (ValueError, TypeError):
+            return row.value
+
+    @staticmethod
+    def set(key, value):
+        row = SmartTechSetting.query.filter_by(key=key).first()
+        if row:
+            row.value = str(value)
+            row.updated_at = now_comoros()
+        else:
+            db.session.add(SmartTechSetting(key=key, value=str(value)))
+        db.session.commit()

@@ -20,6 +20,9 @@ def load_user(user_id):
             return InsuranceAccount.query.get(account_id)
         if account_type == 'user':
             return User.query.get(account_id)
+        if account_type == 'smarttech':
+            from app.models import SmartTechAccount
+            return SmartTechAccount.query.get(account_id)
         return None
 
     # Backward compatibility for old sessions that stored only numeric IDs.
