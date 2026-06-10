@@ -1747,57 +1747,226 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
 
-        # Générer le PDF avec format petit (carte autocollante 10x10cm)
         pdf_buf = io.BytesIO()
-        card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise
-        doc = SimpleDocTemplate(pdf_buf, pagesize=card_size, topMargin=0.2*cm, bottomMargin=0.2*cm, leftMargin=0.2*cm, rightMargin=0.2*cm)
+        card_size = (10*cm, 10*cm)
+        doc = SimpleDocTemplate(
+            pdf_buf, pagesize=card_size,
+            topMargin=0.4*cm, bottomMargin=0.35*cm,
+            leftMargin=0.4*cm, rightMargin=0.4*cm
+        )
         styles = getSampleStyleSheet()
-        elems = []
-        
-        # QR Code image (plus grand)
-        qr_image = RLImage(qr_buf, width=6.5*cm, height=6.5*cm)
-        
-        # Créer une table pour centrer l'image
-        qr_table = Table([[qr_image]])
-        qr_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
-            ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+
+        footer_style = ParagraphStyle(
+            'QRFooter', parent=styles['Normal'],
+            fontSize=7, textColor=colors.HexColor('#555555'),
+            alignment=TA_CENTER, fontName='Helvetica-Oblique', leading=9,
+        )
+
+        qr_big = RLImage(qr_buf, width=8.0*cm, height=8.0*cm)
+        qr_band = Table([[qr_big]], colWidths=[9.2*cm], rowHeights=[8.28*cm])
+        qr_band.setStyle(TableStyle([
+            ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+            ('BACKGROUND',    (0,0), (-1,-1), colors.white),
+            ('TOPPADDING',    (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
         ]))
-        elems.append(qr_table)
-        elems.append(Spacer(1, 0.05*cm))
-        
-        # Numéro d'immatriculation
-        license_plate_style = ParagraphStyle(
-            'LicensePlate',
-            parent=styles['Normal'],
-            fontSize=14,
-            textColor=colors.HexColor('#003366'),
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=0.15*cm
+
+        footer_band = Table(
+            [[Paragraph('Brigade Mobile — Comores', footer_style)]],
+            colWidths=[9.2*cm], rowHeights=[0.46*cm]
         )
-        elems.append(Paragraph(f'<b>{vehicle.license_plate}</b>', license_plate_style))
-        
-        # Espace supplémentaire avant le texte descriptif
-        elems.append(Spacer(1, 0.05*cm))
-        
-        # Texte descriptif "votre identifiant numérique"
-        subtitle_style = ParagraphStyle(
-            'Subtitle',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.HexColor('#0066CC'),
-            alignment=TA_CENTER,
-            fontName='Helvetica-Oblique',
-            spaceAfter=0
+        footer_band.setStyle(TableStyle([
+            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#eef2ff')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ]))
+
+        card = Table(
+            [[qr_band], [footer_band]],
+            colWidths=[9.2*cm],
+            rowHeights=[8.28*cm, 0.46*cm],
         )
-        elems.append(Paragraph('Votre identifiant numérique', subtitle_style))
-        
-        # Créer le PDF
-        doc.build(elems)
+        card.setStyle(TableStyle([
+            ('BOX',           (0,0), (-1,-1), 1.5, colors.HexColor('#003399')),
+            ('NOSPLIT',       (0,0), (-1,-1)),
+            ('TOPPADDING',    (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('LEFTPADDING',   (0,0), (-1,-1), 0),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 0),
+        ]))
+
+        doc.build([card])
         pdf_buf.seek(0)
-        
-        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'{vehicle.license_plate}_qrcode.pdf')
+
+        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'qrcode_{vehicle.track_token[:8]}.pdf')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/sheet.pdf', methods=['GET'])
+@login_required
+def vehicle_sheet_pdf(vehicle_id):
+    """Fiche complète véhicule : infos + QR code"""
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({'error': 'PDF generation not available'}), 500
+
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage, HRFlowable
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+        # ── QR code ──────────────────────────────────────────────────────────
+        if not vehicle.qr_code_expiry:
+            vehicle.generate_qr_code_with_expiry()
+            db.session.commit()
+            _record_qr_payment(vehicle, 'activation', current_user.username)
+
+        track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+        qr = qrcode.QRCode(box_size=6, border=2)
+        qr.add_data(track_url)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color='black', back_color='white')
+        qr_buf = io.BytesIO()
+        qr_img.save(qr_buf, format='PNG')
+        qr_buf.seek(0)
+
+        # ── PDF A4 ────────────────────────────────────────────────────────────
+        pdf_buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            pdf_buf, pagesize=A4,
+            topMargin=1.5*cm, bottomMargin=1.5*cm,
+            leftMargin=2*cm, rightMargin=2*cm
+        )
+        W = A4[0] - 4*cm
+        styles = getSampleStyleSheet()
+
+        def ps(name, **kw):
+            return ParagraphStyle(name, parent=styles['Normal'], **kw)
+
+        title_s   = ps('T',  fontSize=16, fontName='Helvetica-Bold', textColor=colors.HexColor('#003399'), alignment=TA_CENTER, spaceAfter=10)
+        sub_s     = ps('S',  fontSize=9,  textColor=colors.HexColor('#555'), alignment=TA_CENTER, spaceAfter=10)
+        section_s = ps('SE', fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor('#003399'), spaceBefore=10, spaceAfter=4)
+        label_s   = ps('L',  fontSize=8,  textColor=colors.HexColor('#888'))
+        value_s   = ps('V',  fontSize=9,  fontName='Helvetica-Bold')
+        footer_s  = ps('F',  fontSize=7,  textColor=colors.HexColor('#aaa'), alignment=TA_CENTER)
+
+        def field(lbl, val):
+            return [Paragraph(lbl, label_s), Paragraph(str(val) if val else '—', value_s)]
+
+        def date_fmt(d):
+            if not d: return '—'
+            try: return d.strftime('%d/%m/%Y')
+            except: return str(d)
+
+        story = []
+
+        # Header
+        story.append(Paragraph('FICHE D\'IMMATRICULATION', title_s))
+        story.append(Paragraph('Brigade Mobile — Comores', sub_s))
+        story.append(HRFlowable(width=W, thickness=1.5, color=colors.HexColor('#003399'), spaceAfter=10))
+
+        # QR + plaque côte à côte
+        qr_rl = RLImage(qr_buf, width=4.5*cm, height=4.5*cm)
+        plate_s = ps('PL', fontSize=22, fontName='Helvetica-Bold',
+                     textColor=colors.HexColor('#003399'), alignment=TA_CENTER)
+        plate_sub = ps('PS', fontSize=8, textColor=colors.HexColor('#666'), alignment=TA_CENTER)
+        top_tbl = Table([
+            [qr_rl, [
+                Paragraph(vehicle.license_plate, plate_s),
+                Spacer(1, 12),
+                Paragraph(f'{vehicle.make or ""} {vehicle.model or ""}'.strip() or '—', ps('MK', fontSize=11, alignment=TA_CENTER)),
+                Spacer(1, 4),
+                Paragraph(f'Statut : {vehicle.status or "—"}', plate_sub),
+                Paragraph(f'Enregistré le : {date_fmt(vehicle.registration_date)}', plate_sub),
+            ]]
+        ], colWidths=[4.8*cm, W - 4.8*cm])
+        top_tbl.setStyle(TableStyle([
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN',         (1,0), (1,0),  'CENTER'),
+            ('LEFTPADDING',   (0,0), (-1,-1), 4),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 4),
+            ('TOPPADDING',    (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+            ('BOX',           (0,0), (-1,-1), 0.8, colors.HexColor('#dde')),
+            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#f5f7ff')),
+        ]))
+        story.append(top_tbl)
+        story.append(Spacer(1, 6))
+
+        # ── Section véhicule ──
+        story.append(Paragraph('Informations du Véhicule', section_s))
+        veh_data = [
+            field('Type', vehicle.vehicle_type) + field("Type d'usage", vehicle.usage_type),
+            field('Marque', vehicle.make) + field('Modèle', vehicle.model),
+            field('Année', vehicle.year) + field('Couleur', vehicle.color),
+            field('Carburant', vehicle.fuel_type) + field('Classe fiscale', vehicle.fiscal_class),
+            field('Classe CV', vehicle.cv_class) + field('VIN', vehicle.vin),
+        ]
+        veh_tbl = Table(veh_data, colWidths=[W*0.16, W*0.34, W*0.16, W*0.34])
+        veh_tbl.setStyle(TableStyle([
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#dde')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('LEFTPADDING',   (0,0), (-1,-1), 5),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 5),
+        ]))
+        story.append(veh_tbl)
+
+        # ── Section propriétaire ──
+        story.append(Paragraph('Propriétaire', section_s))
+        own_data = [
+            field('Nom complet', vehicle.owner_name) + field('Téléphone', vehicle.owner_phone),
+            field('Île', vehicle.owner_island) + field('Adresse', vehicle.owner_address),
+        ]
+        own_tbl = Table(own_data, colWidths=[W*0.16, W*0.34, W*0.16, W*0.34])
+        own_tbl.setStyle(TableStyle([
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#dde')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('LEFTPADDING',   (0,0), (-1,-1), 5),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 5),
+        ]))
+        story.append(own_tbl)
+
+        # ── Section assurance / vignette ──
+        story.append(Paragraph('Assurance & Vignette', section_s))
+        ins_data = [
+            field('Compagnie', vehicle.insurance_company) + field("Expiration assurance", date_fmt(vehicle.insurance_expiry)),
+            field('Expiration vignette', date_fmt(vehicle.vignette_expiry)) + field('Expiration QR Code', date_fmt(vehicle.qr_code_expiry)),
+        ]
+        ins_tbl = Table(ins_data, colWidths=[W*0.16, W*0.34, W*0.16, W*0.34])
+        ins_tbl.setStyle(TableStyle([
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#dde')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('LEFTPADDING',   (0,0), (-1,-1), 5),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 5),
+        ]))
+        story.append(ins_tbl)
+
+        if vehicle.notes:
+            story.append(Paragraph('Notes', section_s))
+            story.append(Paragraph(vehicle.notes, ps('N', fontSize=8, textColor=colors.HexColor('#444'))))
+
+        story.append(Spacer(1, 10))
+        story.append(HRFlowable(width=W, thickness=0.5, color=colors.HexColor('#ccc'), spaceAfter=4))
+        from app.timezone_utils import now_comoros as _now
+        story.append(Paragraph(f'Généré le {_now().strftime("%d/%m/%Y à %H:%M")} — Brigade Mobile Comores', footer_s))
+
+        doc.build(story)
+        pdf_buf.seek(0)
+        return send_file(pdf_buf, mimetype='application/pdf',
+                         download_name=f'fiche_{vehicle.license_plate}.pdf')
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2582,13 +2751,53 @@ def public_track_qrcode_pdf(token):
             fontName='Helvetica-Oblique',
             spaceAfter=0
         )
-        elems.append(Paragraph('Votre identifiant numérique', subtitle_style))
-        
-        # Créer le PDF
-        doc.build(elems)
+        # ── Nouveau design : bandeau bleu + QR grand + footer ──────────────────
+        footer_style = ParagraphStyle(
+            'QRFooter', parent=styles['Normal'],
+            fontSize=7, textColor=colors.HexColor('#555555'),
+            alignment=TA_CENTER, fontName='Helvetica-Oblique', leading=9,
+        )
+
+        # Zone utile = 10cm - 0.4cm (top) - 0.35cm (bottom) = 9.25cm
+        # QR 8.0cm + padding 4+2pt (~0.21cm) + footer ~0.46cm = ~8.67cm → OK
+        qr_big = RLImage(qr_buf, width=8.0*cm, height=8.0*cm)
+        qr_band = Table([[qr_big]], colWidths=[9.2*cm], rowHeights=[8.28*cm])
+        qr_band.setStyle(TableStyle([
+            ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+            ('BACKGROUND',    (0,0), (-1,-1), colors.white),
+            ('TOPPADDING',    (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ]))
+
+        footer_band = Table(
+            [[Paragraph('Brigade Mobile — Comores', footer_style)]],
+            colWidths=[9.2*cm], rowHeights=[0.46*cm]
+        )
+        footer_band.setStyle(TableStyle([
+            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#eef2ff')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ]))
+
+        card = Table(
+            [[qr_band], [footer_band]],
+            colWidths=[9.2*cm],
+            rowHeights=[8.28*cm, 0.46*cm],
+        )
+        card.setStyle(TableStyle([
+            ('BOX',           (0,0), (-1,-1), 1.5, colors.HexColor('#003399')),
+            ('NOSPLIT',       (0,0), (-1,-1)),
+            ('TOPPADDING',    (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('LEFTPADDING',   (0,0), (-1,-1), 0),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 0),
+        ]))
+
+        doc.build([card])
         pdf_buf.seek(0)
-        
-        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'{vehicle.license_plate}_qrcode.pdf')
+
+        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'qrcode_{vehicle.track_token[:8]}.pdf')
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

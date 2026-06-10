@@ -351,6 +351,38 @@ def api_insurances_delete(insurance_id):
     return jsonify({"message": "Insurance deleted successfully"})
 
 
+@api_bp.route('/vehicles/lookup-phone', methods=['GET'])
+@jwt_required(optional=True)
+def api_lookup_phone():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Forbidden"}), 403
+    phone = request.args.get('phone', '').strip()
+    if not phone:
+        return jsonify({"found": False})
+    vehicle = Vehicle.query.filter_by(owner_phone=phone).order_by(Vehicle.created_at.desc()).first()
+    if vehicle and vehicle.owner_name:
+        return jsonify({"found": True, "owner_name": vehicle.owner_name})
+    from app.models import VehicleOwner
+    vo = VehicleOwner.query.filter_by(phone=phone).order_by(VehicleOwner.created_at.desc()).first()
+    if vo and vo.owner_name:
+        return jsonify({"found": True, "owner_name": vo.owner_name})
+    return jsonify({"found": False})
+
+
+@api_bp.route('/vehicles/check-plate', methods=['GET'])
+@jwt_required(optional=True)
+def api_check_plate():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Forbidden"}), 403
+    plate = request.args.get('plate', '').upper().strip()
+    if not plate:
+        return jsonify({"exists": False})
+    exists = Vehicle.query.filter_by(license_plate=plate).first() is not None
+    return jsonify({"exists": exists, "plate": plate})
+
+
 @api_bp.route('/vehicles/search', methods=['GET'])
 @jwt_required(optional=True)
 def api_vehicles_search():
@@ -408,15 +440,15 @@ def api_vehicles_create():
     
     data = request.get_json() or {}
     license_plate = data.get('license_plate', '').upper().strip()
-    
+
     if not license_plate:
         return jsonify({"error": "License plate is required"}), 400
-    
+
     # Check if vehicle already exists
     existing = Vehicle.query.filter_by(license_plate=license_plate).first()
     if existing:
         return jsonify({"error": "Vehicle with this license plate already exists"}), 400
-    
+
     vehicle = Vehicle(
         license_plate=license_plate,
         owner_name=data.get('owner_name', ''),
@@ -542,7 +574,7 @@ def api_vehicles_update(vehicle_id):
         vehicle.insurance_company = data['insurance_company']
     if 'notes' in data:
         vehicle.notes = data['notes']
-    
+
     # Update date fields
     if 'registration_date' in data and data['registration_date']:
         try:
@@ -2499,6 +2531,19 @@ def reject_vehicle_transfer():
         db.session.rollback()
         print(f"❌ Error rejecting transfer: {e}")
         return jsonify({'error': str(e)}), 500
+@api_bp.route('/vehicle-transfers/<int:transfer_id>', methods=['DELETE'])
+def delete_vehicle_transfer(transfer_id):
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire']:
+        return jsonify({'error': 'Access denied'}), 403
+    transfer = VehicleTransfer.query.get(transfer_id)
+    if not transfer:
+        return jsonify({'error': 'Transfer not found'}), 404
+    db.session.delete(transfer)
+    db.session.commit()
+    return jsonify({'message': 'Transfer deleted'}), 200
+
+
 @api_bp.route('/vehicle-transfers/check/<int:vehicle_id>', methods=['GET'])
 @jwt_required()
 def check_vehicle_transfer_status(vehicle_id):
