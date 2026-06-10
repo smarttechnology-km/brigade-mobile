@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Technology — Employés</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg:#0d1117; --st-surface:#161b22; --st-border:rgba(255,255,255,0.08);
+            --st-cyan:#00d4ff; --st-green:#3fb950; --st-yellow:#f0b429;
+            --st-red:#f85149; --st-blue:#58a6ff; --st-purple:#bc8cff;
+            --st-orange:#f78166; --sidebar-w:260px;
+        }
+        *{box-sizing:border-box;}
+        body{background:var(--st-bg);color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;margin:0;}
+
+        /* ── Sidebar ── */
+        .st-sidebar{background:linear-gradient(180deg,#1a1a2e 0%,#0f3460 100%);width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;padding:1.4rem 1rem;border-right:1px solid rgba(0,212,255,0.1);z-index:100;display:flex;flex-direction:column;}
+        .st-brand{display:flex;align-items:center;gap:10px;padding-bottom:1.2rem;border-bottom:1px solid rgba(0,212,255,0.15);margin-bottom:1.5rem;}
+        .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
+        .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
+        .st-brand-sub{font-size:.7rem;color:var(--st-cyan);}
+        .st-nav{flex:1;}
+        .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
+        .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
+        .st-nav-item.active{border-left:3px solid var(--st-cyan);}
+        .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
+        .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
+        .st-sidebar-footer{padding-top:1rem;border-top:1px solid rgba(255,255,255,0.07);}
+
+        /* ── Main ── */
+        .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;}
+        .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
+        .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
+        .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);}
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+        .st-theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .2s;}
+        .st-theme-btn:hover{background:rgba(0,212,255,0.15);border-color:var(--st-cyan);color:var(--st-cyan);}
+
+        /* ── Stat cards ── */
+        .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.4rem;}
+        .stat-card{background:var(--st-surface);border:1px solid var(--st-border);border-radius:12px;padding:.9rem 1.1rem;display:flex;align-items:center;gap:.85rem;}
+        .stat-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
+        .stat-label{font-size:.72rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.4px;}
+        .stat-val{font-size:1.3rem;font-weight:700;margin-top:1px;}
+
+        /* ── Toolbar ── */
+        .toolbar{display:flex;align-items:center;gap:.7rem;margin-bottom:1rem;flex-wrap:wrap;}
+        .st-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.42rem .9rem;border-radius:8px;border:none;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .18s;}
+        .st-btn-primary{background:linear-gradient(135deg,var(--st-cyan),#0080ff);color:#fff;}
+        .st-btn-primary:hover{opacity:.88;}
+        .st-search{flex:1;min-width:180px;max-width:280px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.82rem;padding:.38rem .75rem;outline:none;}
+        .st-search:focus{border-color:var(--st-cyan);}
+        .st-select{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.82rem;padding:.38rem .65rem;outline:none;cursor:pointer;}
+        .st-select:focus{border-color:var(--st-cyan);}
+        .st-select option{background:#1c2333;color:#e6edf3;}
+
+        /* ── Table ── */
+        .st-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;overflow:hidden;}
+        .st-section-header{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.2rem;border-bottom:1px solid var(--st-border);}
+        .st-section-title{font-size:.86rem;font-weight:600;color:#fff;}
+        .table{--bs-table-color:#e6edf3;--bs-table-bg:transparent;color:#e6edf3;margin:0;font-size:.82rem;}
+        .table thead th{background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.45);border-color:var(--st-border);font-weight:500;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;padding:.65rem 1rem;}
+        .table tbody td{border-color:rgba(255,255,255,0.04);padding:.7rem 1rem;vertical-align:middle;}
+        .table tbody tr:hover td{background:rgba(0,212,255,0.07);color:#e6edf3;}
+        .badge-actif{background:rgba(63,185,80,0.15);color:var(--st-green);border:1px solid rgba(63,185,80,0.3);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        .badge-inactif{background:rgba(248,81,73,0.12);color:var(--st-red);border:1px solid rgba(248,81,73,0.25);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        .badge-access-on{background:rgba(0,212,255,0.1);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.25);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        .badge-access-off{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.35);border:1px solid rgba(255,255,255,0.1);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        html[data-theme="light"] .badge-access-off{background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.35);border-color:rgba(0,0,0,0.1);}
+        .badge-role-admin{background:rgba(149,76,233,0.12);color:var(--st-purple);border:1px solid rgba(149,76,233,0.3);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        .badge-role-emp{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.12);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        html[data-theme="light"] .badge-role-emp{background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.5);border-color:rgba(0,0,0,0.1);}
+        .account-section{background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.15);border-radius:8px;padding:.75rem 1rem;margin-top:.5rem;}
+        html[data-theme="light"] .account-section{background:rgba(0,100,200,0.04);border-color:rgba(0,100,200,0.15);}
+        .form-check-input:checked{background-color:var(--st-cyan);border-color:var(--st-cyan);}
+        .form-check-label{font-size:.85rem;}
+        .island-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;font-weight:600;padding:.15em .55em;border-radius:20px;}
+        .badge-gc{background:rgba(0,212,255,0.1);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.2);}
+        .badge-an{background:rgba(188,140,255,0.1);color:var(--st-purple);border:1px solid rgba(188,140,255,0.2);}
+        .badge-mo{background:rgba(63,185,80,0.1);color:var(--st-green);border:1px solid rgba(63,185,80,0.2);}
+        .position-pill{font-size:.74rem;color:rgba(255,255,255,0.55);}
+        .action-btn{width:30px;height:30px;border-radius:7px;border:none;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;cursor:pointer;transition:all .16s;}
+        .btn-edit{background:rgba(88,166,255,0.12);color:var(--st-blue);}
+        .btn-edit:hover{background:rgba(88,166,255,0.25);}
+        .btn-delete{background:rgba(248,81,73,0.1);color:var(--st-red);}
+        .btn-delete:hover{background:rgba(248,81,73,0.22);}
+        .empty-state{padding:3rem;text-align:center;color:rgba(255,255,255,0.25);}
+
+        /* ── Modal ── */
+        .modal-content{background:#1c2333;border:1px solid rgba(0,212,255,0.15);border-radius:14px;}
+        .modal-header{border-bottom:1px solid rgba(255,255,255,0.07);padding:1rem 1.3rem;}
+        .modal-title{font-size:.95rem;font-weight:700;color:#fff;}
+        .modal-footer{border-top:1px solid rgba(255,255,255,0.07);padding:.75rem 1.3rem;}
+        .btn-close{filter:invert(1) brightness(0.6);}
+        .form-label{font-size:.78rem;color:rgba(255,255,255,0.5);margin-bottom:.25rem;}
+        .form-control,.form-select{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:.83rem;padding:.45rem .7rem;}
+        .form-control:focus,.form-select:focus{background:rgba(255,255,255,0.07);border-color:var(--st-cyan);box-shadow:0 0 0 2px rgba(0,212,255,0.15);color:#e6edf3;}
+        .form-select option{background:#1c2333;}
+        .form-control::placeholder{color:rgba(255,255,255,0.2);}
+        .section-divider{font-size:.7rem;text-transform:uppercase;letter-spacing:.6px;color:rgba(255,255,255,0.3);border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:.3rem;margin-bottom:.75rem;margin-top:.3rem;}
+        .st-save-btn{background:linear-gradient(135deg,var(--st-cyan),#0080ff);border:none;color:#fff;font-weight:600;font-size:.84rem;padding:.5rem 1.4rem;border-radius:8px;cursor:pointer;}
+        .st-cancel-btn{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);font-size:.84rem;padding:.5rem 1.2rem;border-radius:8px;cursor:pointer;}
+        .st-danger-btn{background:rgba(248,81,73,0.15);border:1px solid rgba(248,81,73,0.3);color:var(--st-red);font-size:.84rem;font-weight:600;padding:.5rem 1.3rem;border-radius:8px;cursor:pointer;}
+
+        /* ── Light mode ── */
+        html[data-theme="light"] body{background:#f0f2f5;color:#1a1a2e;}
+        html[data-theme="light"] .st-brand-name{color:#fff;}
+        html[data-theme="light"] .stat-card,
+        html[data-theme="light"] .st-section{background:#fff;border-color:rgba(0,0,0,0.08);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+        html[data-theme="light"] .stat-label{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .stat-val{color:#1a1a2e;}
+        html[data-theme="light"] .st-section-title{color:#1a1a2e;}
+        html[data-theme="light"] .table{color:#1a1a2e;}
+        .text-muted{color:rgba(255,255,255,0.42) !important;}html[data-theme="light"] .table{--bs-table-color:#1a1a2e;}html[data-theme="light"] .table tbody tr:hover td{color:#1a1a2e;background:rgba(0,149,179,0.06);}html[data-theme="light"] .text-muted{color:rgba(0,0,0,0.45) !important;}html[data-theme="light"] .table thead th{background:#f6f8fa;color:rgba(0,0,0,0.45);border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .table tbody td{border-color:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .st-search,
+        html[data-theme="light"] .st-select{background:#fff;border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .st-user-pill{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.1);color:#1a1a2e;}
+        html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.12);background:rgba(0,0,0,0.04);color:#555;}
+        html[data-theme="light"] .st-page-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .modal-content{background:#fff;border-color:rgba(0,0,0,0.1);}
+        html[data-theme="light"] .modal-header,
+        html[data-theme="light"] .modal-footer{border-color:rgba(0,0,0,0.07);}
+        html[data-theme="light"] .modal-title{color:#1a1a2e;}
+        html[data-theme="light"] .form-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .form-control,
+        html[data-theme="light"] .form-select{background:#f6f8fa;border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .btn-close{filter:none;}
+        html[data-theme="light"] .position-pill{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .empty-state{color:rgba(0,0,0,0.25);}
+        /* Muted text adapts to theme */
+        .td-muted{font-size:.8rem;color:rgba(255,255,255,0.5);}
+        .td-dim{color:rgba(255,255,255,0.3);}
+        .td-tiny{font-size:.7rem;color:rgba(255,255,255,0.3);}
+        html[data-theme="light"] .td-muted{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .td-dim{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .td-tiny{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] #count-label{color:rgba(0,0,0,0.35)!important;}
+
+        @media(max-width:992px){.stats-row{grid-template-columns:1fr 1fr;}}
+        /* ── Mobile nav drawer ── */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-menu-btn:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--st-cyan);}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
+        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}.stats-row{grid-template-columns:1fr 1fr;}}}
+    </style>
+    <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- ── Sidebar ── -->
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">Smart Technology</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+    <div class="st-sidebar-footer">
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="st-main">
+
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-users me-2" style="color:var(--st-blue);"></i>Employés</div>
+            <div class="st-page-sub">Gestion du personnel Smart Technology</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(88,166,255,0.12);color:var(--st-blue);">
+                <i class="fas fa-users"></i>
+            </div>
+            <div>
+                <div class="stat-label">Total employés</div>
+                <div class="stat-val" id="s-total" style="color:var(--st-blue);">—</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(63,185,80,0.12);color:var(--st-green);">
+                <i class="fas fa-user-check"></i>
+            </div>
+            <div>
+                <div class="stat-label">Actifs</div>
+                <div class="stat-val" id="s-actifs" style="color:var(--st-green);">—</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(240,180,41,0.12);color:var(--st-yellow);">
+                <i class="fas fa-coins"></i>
+            </div>
+            <div>
+                <div class="stat-label">Masse salariale</div>
+                <div class="stat-val" id="s-salaires" style="color:var(--st-yellow);font-size:1rem;">—</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(0,212,255,0.12);color:var(--st-cyan);">
+                <i class="fas fa-map-marker-alt"></i>
+            </div>
+            <div>
+                <div class="stat-label">Îles représentées</div>
+                <div class="stat-val" id="s-iles" style="color:var(--st-cyan);">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <button class="st-btn st-btn-primary" onclick="openModal()">
+            <i class="fas fa-plus"></i> Ajouter un employé
+        </button>
+        <input type="text" id="search-input" class="st-search" placeholder="Rechercher…" oninput="applyFilters()">
+        <select id="filter-island" class="st-select" onchange="applyFilters()">
+            <option value="">Toutes les îles</option>
+            <option>Grande Comores</option>
+            <option>Anjouan</option>
+            <option>Moheli</option>
+        </select>
+        <select id="filter-status" class="st-select" onchange="applyFilters()">
+            <option value="">Tous les statuts</option>
+            <option value="actif">Actif</option>
+            <option value="inactif">Inactif</option>
+        </select>
+    </div>
+
+    <!-- Table -->
+    <div class="st-section">
+        <div class="st-section-header">
+            <div class="st-section-title"><i class="fas fa-list me-2" style="color:var(--st-blue);"></i>Liste des employés</div>
+            <small id="count-label" class="td-dim" style="font-size:.75rem;"></small>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Nom complet</th>
+                        <th>Île</th>
+                        <th>Poste</th>
+                        <th>Salaire</th>
+                        <th>Date d'embauche</th>
+                        <th>Contact</th>
+                        <th>Statut</th>
+                        <th>Accès dashboard</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="employes-tbody">
+                    <tr><td colspan="10" class="empty-state"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</main>
+
+<!-- ── Add / Edit Modal ── -->
+<div class="modal fade" id="empModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-title">Ajouter un employé</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="hidden" id="emp-id">
+                <div class="section-divider">Informations personnelles</div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Prénom *</label>
+                        <input type="text" id="emp-fname" class="form-control" placeholder="Prénom">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Nom *</label>
+                        <input type="text" id="emp-lname" class="form-control" placeholder="Nom de famille">
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Téléphone</label>
+                        <input type="tel" id="emp-phone" class="form-control" placeholder="+269…">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="emp-email" class="form-control" placeholder="email@exemple.com">
+                    </div>
+                </div>
+                <div class="section-divider mt-3">Poste & contrat</div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Île *</label>
+                        <select id="emp-island" class="form-select">
+                            <option value="">— Sélectionner —</option>
+                            <option>Grande Comores</option>
+                            <option>Anjouan</option>
+                            <option>Moheli</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Poste / Fonction *</label>
+                        <select id="emp-position" class="form-select">
+                            <option value="">— Sélectionner —</option>
+                            <option>Directeur</option>
+                            <option>Responsable technique</option>
+                            <option>Technicien</option>
+                            <option>Commercial</option>
+                            <option>Comptable</option>
+                            <option>Secrétaire</option>
+                            <option>Agent de terrain</option>
+                            <option>Autre</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-4">
+                        <label class="form-label">Salaire (KMF) *</label>
+                        <input type="number" id="emp-salary" class="form-control" placeholder="0" min="0" step="500">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">Date d'embauche</label>
+                        <input type="date" id="emp-hire-date" class="form-control">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">Statut</label>
+                        <select id="emp-status" class="form-select">
+                            <option value="actif">Actif</option>
+                            <option value="inactif">Inactif</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-1 mt-2">
+                    <label class="form-label">Notes</label>
+                    <textarea id="emp-notes" class="form-control" rows="2" placeholder="Informations complémentaires…"></textarea>
+                </div>
+                <div class="section-divider mt-3">Accès au dashboard</div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="emp-has-account" onchange="toggleAccountSection()">
+                    <label class="form-check-label" for="emp-has-account">Donner accès au dashboard Smart Tech</label>
+                </div>
+                <div id="account-section" class="account-section" style="display:none;">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label">Nom d'utilisateur *</label>
+                            <input type="text" id="emp-username" class="form-control" placeholder="username" autocomplete="off">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Mot de passe <span id="pwd-hint" class="td-muted" style="font-size:.75rem;display:none;">(laisser vide pour ne pas changer)</span></label>
+                            <input type="password" id="emp-password" class="form-control" placeholder="●●●●●●●●" autocomplete="new-password">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Rôle</label>
+                        <select id="emp-account-role" class="form-select">
+                            <option value="employe">Employé — accès limité (Vue d'ensemble, Véhicules, Abonnements, Dépenses)</option>
+                            <option value="admin">Administrateur — accès complet</option>
+                        </select>
+                    </div>
+                    <div id="account-status-row" class="form-check form-switch" style="display:none;">
+                        <input class="form-check-input" type="checkbox" id="emp-account-active">
+                        <label class="form-check-label" for="emp-account-active">Compte actif</label>
+                    </div>
+                </div>
+                <div id="modal-error" class="text-danger mt-2" style="font-size:.8rem;display:none;"></div>
+            </div>
+            <div class="modal-footer gap-2">
+                <button class="st-cancel-btn" data-bs-dismiss="modal">Annuler</button>
+                <button class="st-save-btn" onclick="saveEmployee()"><i class="fas fa-save me-1"></i>Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Delete Confirm Modal ── -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" style="color:var(--st-red);">Confirmer la suppression</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size:.85rem;color:rgba(255,255,255,0.7);">
+                Supprimer <strong id="delete-name"></strong> ? Cette action est irréversible.
+            </div>
+            <div class="modal-footer gap-2">
+                <button class="st-cancel-btn" data-bs-dismiss="modal">Annuler</button>
+                <button class="st-danger-btn" onclick="confirmDelete()"><i class="fas fa-trash me-1"></i>Supprimer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    /* ── Theme ── */
+    const html = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    /* ── State ── */
+    let allEmployees = [];
+    let deleteId     = null;
+    const empModal    = new bootstrap.Modal(document.getElementById('empModal'));
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+    /* ── Helpers ── */
+    function fmt(n) { return Math.round(n).toLocaleString('fr') + ' KMF'; }
+    function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    const ISLAND_CSS = { 'Grande Comores': 'gc', 'Anjouan': 'an', 'Moheli': 'mo' };
+    const ISLAND_FLAG = { 'Grande Comores': '🌋', 'Anjouan': '🌿', 'Moheli': '🐢' };
+
+    /* ── Load data ── */
+    function loadEmployees() {
+        fetch('/smart-tech/api/employes')
+            .then(r => r.json())
+            .then(function (data) {
+                allEmployees = data;
+                updateStats(data);
+                applyFilters();
+            });
+    }
+
+    function updateStats(data) {
+        const actifs  = data.filter(e => e.status === 'actif');
+        const salaires = actifs.reduce((s, e) => s + (e.salary || 0), 0);
+        const iles    = new Set(data.filter(e => e.island).map(e => e.island)).size;
+        document.getElementById('s-total').textContent   = data.length;
+        document.getElementById('s-actifs').textContent  = actifs.length;
+        document.getElementById('s-salaires').textContent = fmt(salaires);
+        document.getElementById('s-iles').textContent    = iles;
+    }
+
+    /* ── Filters ── */
+    window.applyFilters = function () {
+        const q      = document.getElementById('search-input').value.toLowerCase();
+        const island = document.getElementById('filter-island').value;
+        const status = document.getElementById('filter-status').value;
+        const filtered = allEmployees.filter(function (e) {
+            const matchQ = !q || (e.full_name + ' ' + e.position + ' ' + (e.phone||'') + ' ' + (e.email||'')).toLowerCase().includes(q);
+            const matchI = !island || e.island === island;
+            const matchS = !status || e.status === status;
+            return matchQ && matchI && matchS;
+        });
+        renderTable(filtered);
+    };
+
+    function renderTable(rows) {
+        const tbody = document.getElementById('employes-tbody');
+        document.getElementById('count-label').textContent = rows.length + ' employé' + (rows.length !== 1 ? 's' : '');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="10" class="empty-state"><i class="fas fa-user-slash me-2"></i>Aucun employé trouvé</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(function (e, i) {
+            const css  = ISLAND_CSS[e.island]  || '';
+            const flag = ISLAND_FLAG[e.island] || '';
+            const islandBadge = e.island
+                ? `<span class="island-badge badge-${css}">${flag} ${e.island}</span>`
+                : '<span class="td-dim" style="font-size:.75rem;">—</span>';
+            const statusBadge = e.status === 'actif'
+                ? '<span class="badge-actif">Actif</span>'
+                : '<span class="badge-inactif">Inactif</span>';
+            const contact = [e.phone, e.email].filter(Boolean).join(' · ') || '<span class="td-dim">—</span>';
+            const accessBadge = e.account_id
+                ? (e.account_active
+                    ? `<span class="badge-access-on"><i class="fas fa-user-check me-1"></i>${escHtml(e.account_username)}</span>`
+                    : `<span class="badge-access-off"><i class="fas fa-user-slash me-1"></i>${escHtml(e.account_username)}</span>`)
+                : '<span class="td-dim" style="font-size:.75rem;">—</span>';
+            return `<tr>
+                <td class="td-dim">${i + 1}</td>
+                <td>
+                    <div style="font-weight:600;">${escHtml(e.full_name)}</div>
+                    ${e.created_by ? `<div class="td-tiny">Ajouté par ${escHtml(e.created_by)}</div>` : ''}
+                </td>
+                <td>${islandBadge}</td>
+                <td><span class="position-pill">${escHtml(e.position)}</span></td>
+                <td style="color:var(--st-yellow);font-weight:600;">${fmt(e.salary || 0)}</td>
+                <td class="td-muted">${e.hire_date || '—'}</td>
+                <td class="td-muted" style="font-size:.78rem;">${contact}</td>
+                <td>${statusBadge}</td>
+                <td style="white-space:nowrap;">${e.account_id
+                    ? `${accessBadge}<br><span style="margin-top:.25rem;display:inline-block;">${
+                        e.account_role === 'admin'
+                            ? '<span class="badge-role-admin"><i class="fas fa-crown me-1"></i>Admin</span>'
+                            : '<span class="badge-role-emp"><i class="fas fa-user me-1"></i>Employé</span>'
+                    }</span>`
+                    : '<span class="td-dim" style="font-size:.75rem;">—</span>'
+                }</td>
+                <td>
+                    <button class="action-btn btn-edit me-1" onclick="editEmployee(${e.id})" title="Modifier"><i class="fas fa-pen"></i></button>
+                    <button class="action-btn btn-delete" onclick="askDelete(${e.id}, '${e.full_name.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    /* ── Modal open/edit ── */
+    window.toggleAccountSection = function () {
+        const on = document.getElementById('emp-has-account').checked;
+        document.getElementById('account-section').style.display = on ? '' : 'none';
+    };
+
+    window.openModal = function (emp) {
+        document.getElementById('modal-title').textContent = emp ? 'Modifier l\'employé' : 'Ajouter un employé';
+        document.getElementById('emp-id').value       = emp ? emp.id : '';
+        document.getElementById('emp-fname').value    = emp ? emp.first_name : '';
+        document.getElementById('emp-lname').value    = emp ? emp.last_name  : '';
+        document.getElementById('emp-phone').value    = emp ? (emp.phone  || '') : '';
+        document.getElementById('emp-email').value    = emp ? (emp.email  || '') : '';
+        document.getElementById('emp-island').value   = emp ? (emp.island || '') : '';
+        document.getElementById('emp-position').value = emp ? emp.position : '';
+        document.getElementById('emp-salary').value   = emp ? emp.salary : '';
+        document.getElementById('emp-hire-date').value = emp ? (emp.hire_date_iso || '') : '';
+        document.getElementById('emp-status').value   = emp ? emp.status : 'actif';
+        document.getElementById('emp-notes').value    = emp ? (emp.notes || '') : '';
+        // Account section
+        const hasAcct = !!(emp && emp.account_id);
+        document.getElementById('emp-has-account').checked      = hasAcct;
+        document.getElementById('account-section').style.display = hasAcct ? '' : 'none';
+        document.getElementById('emp-username').value            = emp && emp.account_username ? emp.account_username : '';
+        document.getElementById('emp-password').value            = '';
+        document.getElementById('pwd-hint').style.display        = hasAcct ? '' : 'none';
+        document.getElementById('account-status-row').style.display = hasAcct ? '' : 'none';
+        document.getElementById('emp-account-active').checked   = emp && emp.account_active !== null ? emp.account_active : true;
+        document.getElementById('emp-account-role').value       = (emp && emp.account_role) ? emp.account_role : 'employe';
+        document.getElementById('modal-error').style.display = 'none';
+        empModal.show();
+    };
+
+    window.editEmployee = function (id) {
+        const emp = allEmployees.find(e => e.id === id);
+        if (emp) openModal(emp);
+    };
+
+    /* ── Save ── */
+    window.saveEmployee = function () {
+        const fname    = document.getElementById('emp-fname').value.trim();
+        const lname    = document.getElementById('emp-lname').value.trim();
+        const island   = document.getElementById('emp-island').value;
+        const position = document.getElementById('emp-position').value;
+        const salary   = document.getElementById('emp-salary').value;
+        const errEl    = document.getElementById('modal-error');
+
+        if (!fname || !lname || !position || salary === '') {
+            errEl.textContent = 'Prénom, nom, poste et salaire sont obligatoires.';
+            errEl.style.display = 'block';
+            return;
+        }
+
+        const id         = document.getElementById('emp-id').value;
+        const hasAccount = document.getElementById('emp-has-account').checked;
+        const username   = document.getElementById('emp-username').value.trim();
+        const password   = document.getElementById('emp-password').value;
+        if (hasAccount && !username) {
+            errEl.textContent = "Un nom d'utilisateur est requis pour l'accès au dashboard.";
+            errEl.style.display = 'block';
+            return;
+        }
+        if (hasAccount && !id && !password) {
+            errEl.textContent = 'Un mot de passe est requis pour créer un accès.';
+            errEl.style.display = 'block';
+            return;
+        }
+        const payload = {
+            first_name: fname, last_name: lname,
+            phone:     document.getElementById('emp-phone').value.trim(),
+            email:     document.getElementById('emp-email').value.trim(),
+            island:    island,
+            position:  position,
+            salary:    parseFloat(salary) || 0,
+            hire_date: document.getElementById('emp-hire-date').value,
+            status:    document.getElementById('emp-status').value,
+            notes:     document.getElementById('emp-notes').value.trim(),
+            has_account:    hasAccount,
+            username:       username,
+            password:       password,
+            account_active: document.getElementById('emp-account-active').checked,
+            account_role:   document.getElementById('emp-account-role').value,
+        };
+
+        const url    = id ? `/smart-tech/api/employes/${id}` : '/smart-tech/api/employes';
+        const method = id ? 'PUT' : 'POST';
+
+        fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            .then(r => r.json())
+            .then(function (data) {
+                if (data.error) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+                empModal.hide();
+                loadEmployees();
+            })
+            .catch(function () {
+                errEl.textContent = 'Erreur réseau. Réessayez.';
+                errEl.style.display = 'block';
+            });
+    };
+
+    /* ── Delete ── */
+    window.askDelete = function (id, name) {
+        deleteId = id;
+        document.getElementById('delete-name').textContent = name;
+        deleteModal.show();
+    };
+
+    window.confirmDelete = function () {
+        if (!deleteId) return;
+        fetch(`/smart-tech/api/employes/${deleteId}`, { method: 'DELETE' })
+            .then(function () {
+                deleteModal.hide();
+                loadEmployees();
+            });
+    };
+
+    /* ── Init ── */
+    loadEmployees();
+})();
+    /* ── Mobile sidebar ── */
+    (function(){
+        function openSidebar(){
+            document.querySelector('.st-sidebar').classList.add('mob-open');
+            document.getElementById('mob-overlay').classList.add('active');
+        }
+        function closeSidebar(){
+            document.querySelector('.st-sidebar').classList.remove('mob-open');
+            document.getElementById('mob-overlay').classList.remove('active');
+        }
+        window.openSidebar = openSidebar;
+        window.closeSidebar = closeSidebar;
+        // Close on nav link click (mobile)
+        document.querySelectorAll('.st-nav-item').forEach(function(a){
+            a.addEventListener('click', closeSidebar);
+        });
+    })();
+</script>
+</body>
+</html>

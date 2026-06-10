@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Technology — Dépenses</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg:#0d1117; --st-surface:#161b22; --st-border:rgba(255,255,255,0.08);
+            --st-cyan:#00d4ff; --st-green:#3fb950; --st-yellow:#f0b429;
+            --st-red:#f85149; --st-blue:#58a6ff; --st-purple:#bc8cff;
+            --st-orange:#f78166;
+            --sidebar-w:260px;
+        }
+        *{box-sizing:border-box;}
+        body{background:var(--st-bg);color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;margin:0;}
+
+        /* ── Sidebar ── */
+        .st-sidebar{background:linear-gradient(180deg,#1a1a2e 0%,#0f3460 100%);width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;padding:1.4rem 1rem;border-right:1px solid rgba(0,212,255,0.1);z-index:100;display:flex;flex-direction:column;}
+        .st-brand{display:flex;align-items:center;gap:10px;padding-bottom:1.2rem;border-bottom:1px solid rgba(0,212,255,0.15);margin-bottom:1.5rem;}
+        .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
+        .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
+        .st-brand-sub{font-size:.7rem;color:var(--st-cyan);font-weight:400;}
+        .st-nav{flex:1;}
+        .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
+        .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
+        .st-nav-item.active{border-left:3px solid var(--st-cyan);}
+        .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
+        .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
+        .st-sidebar-footer{padding-top:1rem;border-top:1px solid rgba(255,255,255,0.07);}
+
+        /* ── Main ── */
+        .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;}
+        .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
+        .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
+        .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);}
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+
+        /* ── Stat cards ── */
+        .st-card{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;padding:1.3rem 1.1rem;transition:border-color .2s;height:100%;}
+        .st-card:hover{border-color:rgba(0,212,255,0.25);}
+        .st-card-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1rem;margin-bottom:.75rem;}
+        .icon-cyan{background:rgba(0,212,255,0.12);color:var(--st-cyan);}
+        .icon-red{background:rgba(248,81,73,0.12);color:var(--st-red);}
+        .icon-orange{background:rgba(247,129,102,0.12);color:var(--st-orange);}
+        .icon-yellow{background:rgba(240,180,41,0.12);color:var(--st-yellow);}
+        .st-stat-label{font-size:.74rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.25rem;}
+        .st-stat-val{font-size:1.45rem;font-weight:700;color:#fff;}
+
+        /* ── Filters bar ── */
+        .st-filters{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;}
+        .st-search-wrap{position:relative;flex:1;min-width:180px;}
+        .st-search-input{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.83rem;padding:.4rem .4rem .4rem 2rem;outline:none;transition:border-color .18s;}
+        .st-search-input:focus{border-color:var(--st-cyan);}
+        .st-search-icon{position:absolute;left:.6rem;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.3);font-size:.75rem;pointer-events:none;}
+        .st-search-clear{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,0.35);font-size:.75rem;cursor:pointer;padding:0;display:none;}
+        .st-search-clear:hover{color:#fff;}
+        .st-filter-select{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.83rem;padding:.4rem .65rem;outline:none;transition:border-color .18s;}
+        .st-filter-select:focus{border-color:var(--st-cyan);}
+        .st-filter-select option{background:#1e2736;}
+
+        /* ── Section ── */
+        .st-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;overflow:hidden;margin-bottom:1.5rem;}
+        .st-section-header{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.2rem;border-bottom:1px solid var(--st-border);flex-wrap:wrap;gap:.6rem;}
+        .st-section-title{font-size:.88rem;font-weight:600;color:#fff;}
+
+        /* ── Table ── */
+        .table{--bs-table-color:#e6edf3;--bs-table-bg:transparent;color:#e6edf3;margin:0;font-size:.82rem;}
+        .table thead th{background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.45);border-color:var(--st-border);font-weight:500;font-size:.73rem;text-transform:uppercase;letter-spacing:.4px;padding:.65rem 1rem;}
+        .table tbody td{border-color:rgba(255,255,255,0.04);padding:.7rem 1rem;vertical-align:middle;}
+        .table tbody tr:hover td{background:rgba(0,212,255,0.07);color:#e6edf3;}
+
+        /* ── Category pills ── */
+        .pill{display:inline-block;font-size:.7rem;font-weight:500;padding:.2em .65em;border-radius:20px;}
+        .pill-achat{background:rgba(88,166,255,0.13);color:var(--st-blue);border:1px solid rgba(88,166,255,0.28);}
+        .pill-equipement{background:rgba(0,212,255,0.13);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.28);}
+        .pill-deplacement{background:rgba(240,180,41,0.13);color:var(--st-yellow);border:1px solid rgba(240,180,41,0.28);}
+        .pill-formation{background:rgba(188,140,255,0.13);color:var(--st-purple);border:1px solid rgba(188,140,255,0.28);}
+        .pill-maintenance{background:rgba(247,129,102,0.13);color:var(--st-orange);border:1px solid rgba(247,129,102,0.28);}
+        .pill-logiciel{background:rgba(63,185,80,0.13);color:var(--st-green);border:1px solid rgba(63,185,80,0.28);}
+        .pill-fournitures{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.15);}
+        .pill-autre{background:rgba(248,81,73,0.1);color:var(--st-red);border:1px solid rgba(248,81,73,0.22);}
+
+        /* ── Buttons ── */
+        .btn-st{border-radius:7px;padding:.25rem .6rem;font-size:.75rem;cursor:pointer;transition:all .15s;border:1px solid;}
+        .btn-st-edit{background:rgba(88,166,255,0.08);border-color:rgba(88,166,255,0.22);color:var(--st-blue);}
+        .btn-st-edit:hover{background:rgba(88,166,255,0.18);border-color:var(--st-blue);}
+        .btn-st-del{background:rgba(248,81,73,0.08);border-color:rgba(248,81,73,0.22);color:var(--st-red);}
+        .btn-st-del:hover{background:rgba(248,81,73,0.18);border-color:var(--st-red);}
+        .btn-st-add{background:linear-gradient(135deg,rgba(0,212,255,0.15),rgba(0,128,255,0.12));border-color:rgba(0,212,255,0.3);color:var(--st-cyan);padding:.42rem .9rem;font-size:.82rem;border-radius:9px;}
+        .btn-st-add:hover{background:linear-gradient(135deg,rgba(0,212,255,0.25),rgba(0,128,255,0.2));border-color:var(--st-cyan);}
+
+        /* ── Theme toggle ── */
+        .st-theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .2s;flex-shrink:0;}
+        .st-theme-btn:hover{background:rgba(0,212,255,0.15);border-color:var(--st-cyan);color:var(--st-cyan);}
+
+        /* ── Modal ── */
+        .st-modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1050;align-items:center;justify-content:center;}
+        .st-modal-backdrop.open{display:flex;}
+        .st-modal{background:#1a1f2e;border:1px solid rgba(0,212,255,0.18);border-radius:14px;width:100%;max-width:500px;padding:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.5);position:relative;max-height:90vh;overflow-y:auto;}
+        .st-modal-title{font-size:1rem;font-weight:700;color:#fff;margin-bottom:1.3rem;display:flex;align-items:center;gap:8px;}
+        .st-modal-close{position:absolute;top:1rem;right:1rem;background:none;border:none;color:rgba(255,255,255,0.45);font-size:1.1rem;cursor:pointer;}
+        .st-modal-close:hover{color:#fff;}
+        .st-form-label{font-size:.75rem;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.3rem;display:block;}
+        .st-form-ctrl{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.85rem;padding:.45rem .75rem;outline:none;transition:border-color .18s;}
+        .st-form-ctrl:focus{border-color:var(--st-cyan);}
+        .st-form-ctrl::placeholder{color:rgba(255,255,255,0.25);}
+        select.st-form-ctrl option{background:#1e2736;}
+        .st-form-group{margin-bottom:1rem;}
+        .st-form-actions{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.3rem;}
+        .btn-st-cancel{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);border-radius:8px;padding:.42rem .9rem;font-size:.82rem;cursor:pointer;}
+        .btn-st-cancel:hover{background:rgba(255,255,255,0.1);color:#fff;}
+        .btn-st-save{background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(0,128,255,0.15));border:1px solid rgba(0,212,255,0.35);color:var(--st-cyan);border-radius:8px;padding:.42rem 1.1rem;font-size:.82rem;font-weight:600;cursor:pointer;}
+        .btn-st-save:hover{background:linear-gradient(135deg,rgba(0,212,255,0.3),rgba(0,128,255,0.25));border-color:var(--st-cyan);}
+
+        /* ── Confirm modal ── */
+        .st-confirm-modal{max-width:380px;text-align:center;}
+        .st-confirm-modal p{color:rgba(255,255,255,0.6);font-size:.88rem;margin:.5rem 0 1.3rem;}
+
+        /* ── Pagination ── */
+        .st-pagination{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.2rem;border-top:1px solid var(--st-border);font-size:.78rem;color:rgba(255,255,255,0.4);}
+        .st-pagination .pages{display:flex;gap:.3rem;}
+        .pg-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);border-radius:6px;padding:.2rem .55rem;font-size:.75rem;cursor:pointer;transition:all .15s;}
+        .pg-btn:hover,.pg-btn.active{background:rgba(0,212,255,0.12);border-color:rgba(0,212,255,0.3);color:var(--st-cyan);}
+
+        /* ── Light mode ── */
+        html[data-theme="light"] body{background:#f0f2f5;color:#1a1a2e;}
+        html[data-theme="light"] .st-card{background:#fff;border-color:rgba(0,0,0,0.08);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+        html[data-theme="light"] .st-stat-label{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .st-stat-val{color:#1a1a2e;}
+        html[data-theme="light"] .st-section{background:#fff;border-color:rgba(0,0,0,0.08);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+        html[data-theme="light"] .st-section-header{border-bottom-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .st-section-title{color:#1a1a2e;}
+        html[data-theme="light"] .table{color:#1a1a2e;}
+        html[data-theme="light"] .table{--bs-table-color:#1a1a2e;}html[data-theme="light"] .table tbody tr:hover td{color:#1a1a2e;background:rgba(0,149,179,0.06);}html[data-theme="light"] .table thead th{background:#f6f8fa;color:rgba(0,0,0,0.5);border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .table tbody td{border-color:rgba(0,0,0,0.05);}
+        .text-muted{color:rgba(255,255,255,0.42) !important;}html[data-theme="light"] .text-muted{color:rgba(0,0,0,0.45) !important;}
+        html[data-theme="light"] .st-page-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .st-user-pill{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:#555;}
+        html[data-theme="light"] .st-modal{background:#fff;border-color:rgba(0,0,0,0.12);}
+        html[data-theme="light"] .st-modal-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-form-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .st-form-ctrl{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .st-form-ctrl:focus{border-color:#0095b3;}
+        html[data-theme="light"] select.st-form-ctrl option{background:#fff;color:#1a1a2e;}
+        html[data-theme="light"] .st-search-input{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .st-search-input:focus{border-color:#0095b3;}
+        html[data-theme="light"] .st-filter-select{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .st-filter-select:focus{border-color:#0095b3;}
+        html[data-theme="light"] .st-filter-select option{background:#fff;color:#1a1a2e;}
+        html[data-theme="light"] .btn-st-cancel{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.12);color:#555;}
+        html[data-theme="light"] .st-pagination{border-top-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .pg-btn{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.1);color:#555;}
+        html[data-theme="light"] .pg-btn:hover,.html[data-theme="light"] .pg-btn.active{background:rgba(0,149,179,0.1);border-color:rgba(0,149,179,0.25);color:#0095b3;}
+
+        /* ── Mobile nav drawer ── */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-menu-btn:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--st-cyan);}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
+        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}}}
+    </style>
+    <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- ── Sidebar ── -->
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">Smart Technology</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+    <div class="st-sidebar-footer">
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="st-main">
+
+    <!-- Topbar -->
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-receipt me-2" style="color:var(--st-orange);"></i>Dépenses</div>
+            <div class="st-page-sub">Achats, équipements, déplacements, formations et autres coûts ponctuels</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn" title="Changer le thème">
+                <i class="fas fa-sun" id="theme-icon"></i>
+            </button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-4">
+            <div class="st-card">
+                <div class="st-card-icon icon-red"><i class="fas fa-coins"></i></div>
+                <div class="st-stat-label">Total des dépenses</div>
+                <div class="st-stat-val" style="color:var(--st-red);" id="stat-total">{{ "{:,.0f}".format(total_all) }} <small style="font-size:.5em;font-weight:400;">KMF</small></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-4">
+            <div class="st-card">
+                <div class="st-card-icon icon-orange"><i class="fas fa-calendar-day"></i></div>
+                <div class="st-stat-label">Ce mois-ci</div>
+                <div class="st-stat-val" style="color:var(--st-orange);" id="stat-month">{{ "{:,.0f}".format(total_month) }} <small style="font-size:.5em;font-weight:400;">KMF</small></div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-4">
+            <div class="st-card">
+                <div class="st-card-icon icon-yellow"><i class="fas fa-list-alt"></i></div>
+                <div class="st-stat-label">Nombre de dépenses</div>
+                <div class="st-stat-val" style="color:var(--st-yellow);" id="stat-count">{{ count }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="st-section">
+        <div class="st-section-header">
+            <div class="st-section-title">
+                <i class="fas fa-list me-2" style="color:var(--st-orange);"></i>Liste des dépenses
+            </div>
+            <div class="st-filters">
+                <div class="st-search-wrap">
+                    <i class="fas fa-search st-search-icon"></i>
+                    <input type="text" id="search-input" class="st-search-input" placeholder="Rechercher…" oninput="onSearch()">
+                    <button id="search-clear" class="st-search-clear" onclick="clearSearch()"><i class="fas fa-times"></i></button>
+                </div>
+                <select id="cat-filter" class="st-filter-select" onchange="refreshTable(1)">
+                    <option value="">Toutes catégories</option>
+                    {% for c in categories %}
+                    <option value="{{ c }}">{{ c }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn-st btn-st-add" onclick="openModal()">
+                    <i class="fas fa-plus me-1"></i>Ajouter
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table" id="exp-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Description</th>
+                        <th>Catégorie</th>
+                        <th>Montant</th>
+                        <th>Fournisseur</th>
+                        <th>Date</th>
+                        <th>Enregistré par</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="exp-tbody">
+                    <tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-1"></i>Chargement…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="st-pagination" id="pagination-wrap" style="{{ 'display:none;' if not expenses else '' }}">
+            <span id="pagination-info"></span>
+            <div class="pages" id="pagination-pages"></div>
+        </div>
+    </div>
+
+</main>
+
+<!-- ── Add / Edit modal ── -->
+<div class="st-modal-backdrop" id="exp-modal">
+    <div class="st-modal">
+        <button class="st-modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+        <div class="st-modal-title">
+            <i class="fas fa-receipt" style="color:var(--st-orange);"></i>
+            <span id="modal-title-text">Ajouter une dépense</span>
+        </div>
+        <input type="hidden" id="edit-id" value="">
+
+        <div class="st-form-group">
+            <label class="st-form-label">Description *</label>
+            <input type="text" id="f-desc" class="st-form-ctrl" placeholder="Ex : Achat disque dur externe 2 To">
+        </div>
+
+        <div class="row g-3">
+            <div class="col-6">
+                <div class="st-form-group">
+                    <label class="st-form-label">Catégorie *</label>
+                    <select id="f-cat" class="st-form-ctrl">
+                        <option value="">— Sélectionner —</option>
+                        {% for c in categories %}
+                        <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="st-form-group">
+                    <label class="st-form-label">Date *</label>
+                    <input type="date" id="f-date" class="st-form-ctrl">
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-6">
+                <div class="st-form-group">
+                    <label class="st-form-label">Montant (KMF) *</label>
+                    <input type="number" id="f-amount" class="st-form-ctrl" placeholder="0" min="0" step="1">
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="st-form-group">
+                    <label class="st-form-label">Fournisseur <small style="text-transform:none;opacity:.6;">(optionnel)</small></label>
+                    <input type="text" id="f-vendor" class="st-form-ctrl" placeholder="Nom du fournisseur">
+                </div>
+            </div>
+        </div>
+
+        <div class="st-form-group">
+            <label class="st-form-label">Notes <small style="text-transform:none;opacity:.6;">(optionnel)</small></label>
+            <textarea id="f-notes" class="st-form-ctrl" rows="2" placeholder="Informations supplémentaires…" style="resize:vertical;"></textarea>
+        </div>
+
+        <div id="modal-error" style="color:var(--st-red);font-size:.8rem;display:none;margin-bottom:.5rem;"></div>
+
+        <div class="st-form-actions">
+            <button class="btn-st-cancel" onclick="closeModal()">Annuler</button>
+            <button class="btn-st-save" onclick="saveExpense()"><i class="fas fa-save me-1"></i>Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Confirm delete ── -->
+<div class="st-modal-backdrop" id="del-modal">
+    <div class="st-modal st-confirm-modal">
+        <div class="st-modal-title" style="justify-content:center;">
+            <i class="fas fa-trash" style="color:var(--st-red);"></i>Supprimer la dépense
+        </div>
+        <p>Voulez-vous vraiment supprimer <strong id="del-name"></strong> ?<br>Cette action est irréversible.</p>
+        <div class="d-flex gap-2 justify-content-center">
+            <button class="btn-st-cancel" onclick="closeDelModal()">Annuler</button>
+            <button class="btn-st btn-st-del" style="padding:.42rem 1.1rem;font-size:.82rem;" onclick="doDelete()">
+                <i class="fas fa-trash me-1"></i>Supprimer
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    /* ── Theme ── */
+    const html = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    /* ── Helpers ── */
+    function escHtml(s) {
+        return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function fmt(n) { return Math.round(n).toLocaleString('fr'); }
+
+    const CAT_CLASS = {
+        'Achat produit': 'achat', 'Équipement': 'equipement',
+        'Déplacement': 'deplacement', 'Formation': 'formation',
+        'Maintenance': 'maintenance', 'Logiciel': 'logiciel',
+        'Fournitures': 'fournitures', 'Autre': 'autre',
+    };
+    function catPill(cat) {
+        const cls = CAT_CLASS[cat] || 'autre';
+        return '<span class="pill pill-' + cls + '">' + escHtml(cat) + '</span>';
+    }
+
+    /* ── State ── */
+    let allRows   = [];
+    let curPage   = 1;
+    const perPage = 25;
+
+    /* ── Search ── */
+    let _searchTimer = null;
+    window.onSearch = function () {
+        const v = document.getElementById('search-input').value;
+        document.getElementById('search-clear').style.display = v ? 'block' : 'none';
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(function () { refreshTable(1); }, 250);
+    };
+    window.clearSearch = function () {
+        document.getElementById('search-input').value = '';
+        document.getElementById('search-clear').style.display = 'none';
+        refreshTable(1);
+    };
+
+    /* ── Load data and render ── */
+    window.refreshTable = function (page) {
+        curPage = page || 1;
+        fetch('/smart-tech/api/expenses')
+            .then(r => r.ok ? r.json() : null)
+            .then(function (d) {
+                if (!d) return;
+                document.getElementById('stat-total').innerHTML = fmt(d.total_all)   + ' <small style="font-size:.5em;font-weight:400;">KMF</small>';
+                document.getElementById('stat-month').innerHTML = fmt(d.total_month) + ' <small style="font-size:.5em;font-weight:400;">KMF</small>';
+                document.getElementById('stat-count').textContent = d.count;
+
+                const search  = document.getElementById('search-input').value.toLowerCase().trim();
+                const catFilt = document.getElementById('cat-filter').value;
+
+                allRows = d.expenses.filter(function (e) {
+                    const matchCat = !catFilt || e.category === catFilt;
+                    const matchQ   = !search  ||
+                        (e.description || '').toLowerCase().includes(search) ||
+                        (e.category    || '').toLowerCase().includes(search) ||
+                        (e.vendor      || '').toLowerCase().includes(search) ||
+                        (e.notes       || '').toLowerCase().includes(search);
+                    return matchCat && matchQ;
+                });
+
+                renderPage(curPage);
+                updatePagination();
+            })
+            .catch(function () {});
+    };
+
+    function renderPage(page) {
+        const start = (page - 1) * perPage;
+        const rows  = allRows.slice(start, start + perPage);
+        const tbody = document.getElementById('exp-tbody');
+        if (!allRows.length) {
+            const msg = (document.getElementById('search-input').value || document.getElementById('cat-filter').value)
+                ? 'Aucune dépense ne correspond aux filtres.'
+                : 'Aucune dépense enregistrée. Cliquez sur « Ajouter » pour commencer.';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' + msg + '</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(function (e, i) {
+            const descExtra = e.notes ? '<br><small class="text-muted">' + escHtml(e.notes) + '</small>' : '';
+            const vendor    = e.vendor ? '<span style="font-size:.82rem;">' + escHtml(e.vendor) + '</span>' : '<span class="text-muted">—</span>';
+            return '<tr>'
+                + '<td class="text-muted">' + (start + i + 1) + '</td>'
+                + '<td><strong>' + escHtml(e.description) + '</strong>' + descExtra + '</td>'
+                + '<td>' + catPill(e.category) + '</td>'
+                + '<td><strong style="color:var(--st-red);">' + fmt(e.amount) + ' KMF</strong></td>'
+                + '<td>' + vendor + '</td>'
+                + '<td><span style="font-size:.82rem;">' + (e.expense_date || '—') + '</span></td>'
+                + '<td class="text-muted">' + escHtml(e.created_by || '—') + '</td>'
+                + '<td><div class="d-flex gap-1">'
+                + '<button class="btn-st btn-st-edit" onclick=\'openModal(' + JSON.stringify(e) + ')\'><i class="fas fa-pen"></i></button>'
+                + '<button class="btn-st btn-st-del" onclick="confirmDelete(' + e.id + ',\'' + escHtml(e.description) + '\')"><i class="fas fa-trash"></i></button>'
+                + '</div></td></tr>';
+        }).join('');
+    }
+
+    function updatePagination() {
+        const totalPages = Math.ceil(allRows.length / perPage) || 1;
+        const wrap  = document.getElementById('pagination-wrap');
+        const info  = document.getElementById('pagination-info');
+        const pages = document.getElementById('pagination-pages');
+        wrap.style.display = '';
+        info.textContent   = allRows.length + ' dépense' + (allRows.length !== 1 ? 's' : '');
+        pages.innerHTML    = '';
+        for (let p = 1; p <= totalPages; p++) {
+            const btn = document.createElement('button');
+            btn.className = 'pg-btn' + (p === curPage ? ' active' : '');
+            btn.textContent = p;
+            btn.onclick = (function (pg) { return function () { curPage = pg; renderPage(pg); updatePagination(); }; })(p);
+            pages.appendChild(btn);
+        }
+    }
+
+    /* ── Modal ── */
+    window.openModal = function (exp) {
+        document.getElementById('modal-error').style.display = 'none';
+        if (exp) {
+            document.getElementById('modal-title-text').textContent = 'Modifier la dépense';
+            document.getElementById('edit-id').value   = exp.id;
+            document.getElementById('f-desc').value    = exp.description || '';
+            document.getElementById('f-cat').value     = exp.category    || '';
+            document.getElementById('f-date').value    = exp.expense_date_iso || '';
+            document.getElementById('f-amount').value  = exp.amount      || '';
+            document.getElementById('f-vendor').value  = exp.vendor      || '';
+            document.getElementById('f-notes').value   = exp.notes       || '';
+        } else {
+            document.getElementById('modal-title-text').textContent = 'Ajouter une dépense';
+            document.getElementById('edit-id').value  = '';
+            document.getElementById('f-desc').value   = '';
+            document.getElementById('f-cat').value    = '';
+            document.getElementById('f-date').value   = new Date().toISOString().slice(0, 10);
+            document.getElementById('f-amount').value = '';
+            document.getElementById('f-vendor').value = '';
+            document.getElementById('f-notes').value  = '';
+        }
+        document.getElementById('exp-modal').classList.add('open');
+        setTimeout(function () { document.getElementById('f-desc').focus(); }, 80);
+    };
+    window.closeModal = function () { document.getElementById('exp-modal').classList.remove('open'); };
+
+    window.saveExpense = function () {
+        const errEl = document.getElementById('modal-error');
+        errEl.style.display = 'none';
+        const payload = {
+            description:  document.getElementById('f-desc').value.trim(),
+            category:     document.getElementById('f-cat').value,
+            expense_date: document.getElementById('f-date').value,
+            amount:       parseFloat(document.getElementById('f-amount').value) || 0,
+            vendor:       document.getElementById('f-vendor').value.trim(),
+            notes:        document.getElementById('f-notes').value.trim(),
+        };
+        if (!payload.description || !payload.category || !payload.expense_date) {
+            errEl.textContent = 'Veuillez remplir la description, la catégorie et la date.';
+            errEl.style.display = 'block';
+            return;
+        }
+        const editId = document.getElementById('edit-id').value;
+        const url    = editId ? '/smart-tech/api/expenses/' + editId : '/smart-tech/api/expenses';
+        const method = editId ? 'PUT' : 'POST';
+        fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+            .then(r => r.json())
+            .then(function (d) {
+                if (d.error) { errEl.textContent = d.error; errEl.style.display = 'block'; return; }
+                closeModal();
+                refreshTable(curPage);
+            })
+            .catch(function () { errEl.textContent = 'Erreur réseau.'; errEl.style.display = 'block'; });
+    };
+
+    /* ── Delete ── */
+    let _deleteId = null;
+    window.confirmDelete = function (id, name) {
+        _deleteId = id;
+        document.getElementById('del-name').textContent = name;
+        document.getElementById('del-modal').classList.add('open');
+    };
+    window.closeDelModal = function () { document.getElementById('del-modal').classList.remove('open'); _deleteId = null; };
+    window.doDelete = function () {
+        if (!_deleteId) return;
+        fetch('/smart-tech/api/expenses/' + _deleteId, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(function () { closeDelModal(); refreshTable(1); })
+            .catch(function () { closeDelModal(); });
+    };
+
+    /* ── Close on backdrop / Escape ── */
+    ['exp-modal', 'del-modal'].forEach(function (id) {
+        document.getElementById(id).addEventListener('click', function (e) {
+            if (e.target === this) {
+                if (id === 'exp-modal') closeModal();
+                else closeDelModal();
+            }
+        });
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { closeModal(); closeDelModal(); }
+        if (e.key === 'Enter' && document.getElementById('exp-modal').classList.contains('open')) saveExpense();
+    });
+
+    /* ── Init ── */
+    refreshTable(1);
+})();
+    /* ── Mobile sidebar ── */
+    (function(){
+        function openSidebar(){
+            document.querySelector('.st-sidebar').classList.add('mob-open');
+            document.getElementById('mob-overlay').classList.add('active');
+        }
+        function closeSidebar(){
+            document.querySelector('.st-sidebar').classList.remove('mob-open');
+            document.getElementById('mob-overlay').classList.remove('active');
+        }
+        window.openSidebar = openSidebar;
+        window.closeSidebar = closeSidebar;
+        // Close on nav link click (mobile)
+        document.querySelectorAll('.st-nav-item').forEach(function(a){
+            a.addEventListener('click', closeSidebar);
+        });
+    })();
+</script>
+</body>
+</html>

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Technology — Statistiques par île</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg:#0d1117; --st-surface:#161b22; --st-border:rgba(255,255,255,0.08);
+            --st-cyan:#00d4ff; --st-green:#3fb950; --st-yellow:#f0b429;
+            --st-red:#f85149; --st-blue:#58a6ff; --st-purple:#bc8cff;
+            --st-orange:#f78166; --sidebar-w:260px;
+            --gc:#00d4ff; --an:#bc8cff; --mo:#3fb950;
+        }
+        *{box-sizing:border-box;}
+        body{background:var(--st-bg);color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;margin:0;}
+
+        /* ── Sidebar ── */
+        .st-sidebar{background:linear-gradient(180deg,#1a1a2e 0%,#0f3460 100%);width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;padding:1.4rem 1rem;border-right:1px solid rgba(0,212,255,0.1);z-index:100;display:flex;flex-direction:column;}
+        .st-brand{display:flex;align-items:center;gap:10px;padding-bottom:1.2rem;border-bottom:1px solid rgba(0,212,255,0.15);margin-bottom:1.5rem;}
+        .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
+        .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
+        .st-brand-sub{font-size:.7rem;color:var(--st-cyan);}
+        .st-nav{flex:1;}
+        .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
+        .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
+        .st-nav-item.active{border-left:3px solid var(--st-cyan);}
+        .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
+        .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
+        .st-sidebar-footer{padding-top:1rem;border-top:1px solid rgba(255,255,255,0.07);}
+
+        /* ── Main ── */
+        .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;}
+        .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
+        .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
+        .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);}
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+        .st-theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .2s;}
+        .st-theme-btn:hover{background:rgba(0,212,255,0.15);border-color:var(--st-cyan);color:var(--st-cyan);}
+
+        /* ── Pills ── */
+        .pill{display:inline-block;font-size:.7rem;font-weight:500;padding:.2em .65em;border-radius:20px;}
+        .pill-activation{background:rgba(0,212,255,0.13);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.28);}
+        .pill-renewal{background:rgba(188,140,255,0.13);color:var(--st-purple);border:1px solid rgba(188,140,255,0.28);}
+        html[data-theme="light"] .pill-activation{background:rgba(0,149,179,.1);color:#0095b3;border-color:rgba(0,149,179,.3);}
+        html[data-theme="light"] .pill-renewal{background:rgba(130,80,255,.1);color:#6f42c1;border-color:rgba(130,80,255,.3);}
+
+        /* ── Filter bar ── */
+        .filter-bar{background:var(--st-surface);border:1px solid var(--st-border);border-radius:12px;padding:.75rem 1.1rem;margin-bottom:1.4rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+        .filter-label{font-size:.8rem;color:rgba(255,255,255,0.5);}
+        .filter-tabs{display:flex;background:rgba(255,255,255,0.04);border-radius:8px;padding:3px;gap:2px;}
+        .filter-tab{padding:.3rem .8rem;border-radius:6px;border:none;background:none;color:rgba(255,255,255,0.5);font-size:.8rem;cursor:pointer;transition:all .18s;}
+        .filter-tab.active{background:rgba(0,212,255,0.15);color:var(--st-cyan);font-weight:600;}
+        .st-ctrl{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:#e6edf3;font-size:.82rem;padding:.35rem .6rem;outline:none;}
+        .st-ctrl:focus{border-color:var(--st-cyan);}
+
+        /* ── Global summary ── */
+        .global-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.4rem;}
+        .global-card{background:var(--st-surface);border:1px solid var(--st-border);border-radius:12px;padding:.9rem 1rem;}
+        .global-card .label{font-size:.72rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.2rem;}
+        .global-card .val{font-size:1.4rem;font-weight:700;}
+
+        /* ── Island cards ── */
+        .islands-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.4rem;}
+        .island-card{background:var(--st-surface);border-radius:14px;overflow:hidden;border:1px solid var(--st-border);}
+        .island-card.gc{border-top:3px solid var(--gc);}
+        .island-card.an{border-top:3px solid var(--an);}
+        .island-card.mo{border-top:3px solid var(--mo);}
+        .island-header{padding:.85rem 1.1rem .6rem;border-bottom:1px solid var(--st-border);}
+        .island-name{font-size:.95rem;font-weight:700;color:#fff;display:flex;align-items:center;gap:.5rem;}
+        .island-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+        .dot-gc{background:var(--gc);}
+        .dot-an{background:var(--an);}
+        .dot-mo{background:var(--mo);}
+        .island-subtitle{font-size:.72rem;color:rgba(255,255,255,0.35);margin-top:2px;}
+        .island-body{padding:.75rem 1.1rem;}
+        .stat-row{display:flex;align-items:center;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+        .stat-row:last-child{border-bottom:none;}
+        .stat-row-label{font-size:.78rem;color:rgba(255,255,255,0.5);display:flex;align-items:center;gap:.5rem;}
+        .stat-row-val{font-size:.88rem;font-weight:600;color:#e6edf3;}
+        .stat-row-val.green{color:var(--st-green);}
+        .stat-row-val.red{color:var(--st-red);}
+        .stat-row-val.cyan{color:var(--st-cyan);}
+        .stat-row-val.yellow{color:var(--st-yellow);}
+        .stat-row-val.purple{color:var(--st-purple);}
+        .stat-row-val.blue{color:var(--st-blue);}
+
+        /* ── Progress bars ── */
+        .progress-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1.4rem;}
+        .progress-section-title{font-size:.86rem;font-weight:600;color:#fff;margin-bottom:1rem;}
+        .progress-metric{margin-bottom:.9rem;}
+        .progress-metric:last-child{margin-bottom:0;}
+        .progress-metric-label{font-size:.76rem;color:rgba(255,255,255,0.5);margin-bottom:.3rem;display:flex;justify-content:space-between;}
+        .progress-bar-track{height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;display:flex;gap:2px;}
+        .progress-bar-seg{height:100%;border-radius:4px;transition:width .6s ease;min-width:0;}
+        .seg-gc{background:var(--gc);}
+        .seg-an{background:var(--an);}
+        .seg-mo{background:var(--mo);}
+        .seg-other{background:rgba(255,255,255,0.2);}
+        .progress-legend{display:flex;gap:1rem;margin-top:.5rem;flex-wrap:wrap;}
+        .legend-item{display:flex;align-items:center;gap:.35rem;font-size:.72rem;color:rgba(255,255,255,0.5);}
+        .legend-dot{width:8px;height:8px;border-radius:50%;}
+
+        /* ── Table ── */
+        .st-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;overflow:hidden;}
+        .st-section-header{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.2rem;border-bottom:1px solid var(--st-border);}
+        .st-section-title{font-size:.86rem;font-weight:600;color:#fff;}
+        .table{--bs-table-color:#e6edf3;--bs-table-bg:transparent;color:#e6edf3;margin:0;font-size:.82rem;}
+        .table thead th{background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.45);border-color:var(--st-border);font-weight:500;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;padding:.65rem 1rem;}
+        .table tbody td{border-color:rgba(255,255,255,0.04);padding:.7rem 1rem;vertical-align:middle;}
+        .table tbody tr:hover td{background:rgba(0,212,255,0.07);color:#e6edf3;}
+        .island-badge{display:inline-flex;align-items:center;gap:.35rem;font-size:.78rem;font-weight:600;padding:.18em .6em;border-radius:20px;}
+        .badge-gc{background:rgba(0,212,255,0.12);color:var(--gc);border:1px solid rgba(0,212,255,0.25);}
+        .badge-an{background:rgba(188,140,255,0.12);color:var(--an);border:1px solid rgba(188,140,255,0.25);}
+        .badge-mo{background:rgba(63,185,80,0.12);color:var(--mo);border:1px solid rgba(63,185,80,0.25);}
+        .badge-ot{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.12);}
+
+        /* ── Bar chart ── */
+        .bar-chart{padding:1rem 1.3rem;}
+        .bar-item{display:flex;align-items:center;gap:.8rem;margin-bottom:.6rem;}
+        .bar-item-label{width:130px;font-size:.78rem;color:rgba(255,255,255,0.6);flex-shrink:0;text-align:right;}
+        .bar-track{flex:1;height:22px;background:rgba(255,255,255,0.04);border-radius:5px;overflow:hidden;position:relative;}
+        .bar-fill{height:100%;border-radius:5px;transition:width .7s ease;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;}
+        .bar-val{font-size:.73rem;font-weight:600;color:#fff;white-space:nowrap;}
+
+        /* ── Loading ── */
+        #loading-state{padding:3rem;text-align:center;color:rgba(255,255,255,0.3);}
+
+        /* ── Light mode ── */
+        html[data-theme="light"] body{background:#f0f2f5;color:#1a1a2e;}
+        html[data-theme="light"] .st-brand-name{color:#fff;}
+        html[data-theme="light"] .global-card,
+        html[data-theme="light"] .island-card,
+        html[data-theme="light"] .progress-section,
+        html[data-theme="light"] .st-section,
+        html[data-theme="light"] .filter-bar{background:#fff;border-color:rgba(0,0,0,0.08);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+        html[data-theme="light"] .global-card .label{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .global-card .val{color:#1a1a2e;}
+        html[data-theme="light"] .island-header{border-bottom-color:rgba(0,0,0,0.07);}
+        html[data-theme="light"] .island-name{color:#1a1a2e;}
+        html[data-theme="light"] .island-subtitle{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .stat-row{border-bottom-color:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .stat-row-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .stat-row-val{color:#1a1a2e;}
+        html[data-theme="light"] .progress-section-title,
+        html[data-theme="light"] .st-section-title{color:#1a1a2e;}
+        html[data-theme="light"] .progress-metric-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .legend-item{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .progress-bar-track{background:rgba(0,0,0,0.06);}
+        html[data-theme="light"] .bar-track{background:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .bar-item-label{color:rgba(0,0,0,0.55);}
+        html[data-theme="light"] .table{color:#1a1a2e;}
+        .text-muted{color:rgba(255,255,255,0.42) !important;}html[data-theme="light"] .table{--bs-table-color:#1a1a2e;}html[data-theme="light"] .table tbody tr:hover td{color:#1a1a2e;background:rgba(0,149,179,0.06);}html[data-theme="light"] .text-muted{color:rgba(0,0,0,0.45) !important;}html[data-theme="light"] .table thead th{background:#f6f8fa;color:rgba(0,0,0,0.45);border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .table tbody td{border-color:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .filter-tabs{background:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .filter-tab{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .filter-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .st-ctrl{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .st-user-pill{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.1);color:#1a1a2e;}
+        html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.12);background:rgba(0,0,0,0.04);color:#555;}
+        html[data-theme="light"] .st-page-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.4);}
+
+        @media(max-width:992px){.islands-grid{grid-template-columns:1fr 1fr;}.global-row{grid-template-columns:1fr 1fr;}}
+        /* ── Mobile nav drawer ── */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-menu-btn:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--st-cyan);}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
+        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}.islands-grid{grid-template-columns:1fr;}.global-row{grid-template-columns:1fr 1fr;}}}
+    </style>
+    <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- ── Sidebar ── -->
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">Smart Technology</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+    <div class="st-sidebar-footer">
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="st-main">
+
+    <!-- Topbar -->
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-map-marked-alt me-2" style="color:var(--st-green);"></i>Statistiques par île</div>
+            <div class="st-page-sub">Grande Comores · Anjouan · Moheli</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+        <span class="filter-label"><i class="fas fa-calendar me-1"></i>Paiements QR :</span>
+        <span class="pill pill-activation" id="ref-act-price" style="font-size:.7rem;" title="Tarif activation">
+            <i class="fas fa-bolt me-1"></i>{{ "{:,}".format(activation_price) }} KMF
+        </span>
+        <span class="pill pill-renewal" id="ref-ren-price" style="font-size:.7rem;" title="Tarif renouvellement">
+            <i class="fas fa-sync-alt me-1"></i>{{ "{:,}".format(renewal_price) }} KMF
+        </span>
+        <div class="filter-tabs">
+            <button class="filter-tab active" data-y="" onclick="setYear(this,'')">Tout</button>
+            <button class="filter-tab" data-y="{{ current_year }}" onclick="setYear(this,'{{ current_year }}')">{{ current_year }}</button>
+            <button class="filter-tab" data-y="{{ current_year - 1 }}" onclick="setYear(this,'{{ current_year - 1 }}')">{{ current_year - 1 }}</button>
+            <button class="filter-tab" data-y="{{ current_year - 2 }}" onclick="setYear(this,'{{ current_year - 2 }}')">{{ current_year - 2 }}</button>
+        </div>
+        <input type="number" id="custom-year" class="st-ctrl" placeholder="Autre année…" min="2020" max="2099" style="width:130px;"
+               onchange="setYear(null, this.value)"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();setYear(null,this.value);}">
+        <button onclick="setYear(null, document.getElementById('custom-year').value)" style="background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.3);color:var(--st-cyan);border-radius:7px;padding:.3rem .7rem;font-size:.8rem;cursor:pointer;"><i class="fas fa-search"></i></button>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+
+    <!-- Content -->
+    <div id="stats-content" style="display:none;">
+
+        <!-- Global summary -->
+        <div class="global-row">
+            <div class="global-card">
+                <div class="label">Total véhicules</div>
+                <div class="val" style="color:var(--st-cyan);" id="g-vehicles">—</div>
+            </div>
+            <div class="global-card">
+                <div class="label">QR Actifs</div>
+                <div class="val" style="color:var(--st-green);" id="g-qr-valid">—</div>
+            </div>
+            <div class="global-card">
+                <div class="label">Activations + Renouvellements</div>
+                <div class="val" style="color:var(--st-blue);" id="g-qr-ops">—</div>
+            </div>
+            <div class="global-card">
+                <div class="label">Revenus QR</div>
+                <div class="val" style="color:var(--st-yellow);" id="g-revenue">—</div>
+            </div>
+        </div>
+
+        <!-- Island cards -->
+        <div class="islands-grid" id="island-cards"></div>
+
+        <!-- Bar chart: vehicles -->
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-lg-6">
+                <div class="progress-section">
+                    <div class="progress-section-title"><i class="fas fa-car me-2" style="color:var(--st-cyan);"></i>Répartition des véhicules</div>
+                    <div id="bar-vehicles"></div>
+                    <div class="progress-legend mt-3">
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--gc);"></span>Grande Comores</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--an);"></span>Anjouan</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--mo);"></span>Moheli</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-6">
+                <div class="progress-section">
+                    <div class="progress-section-title"><i class="fas fa-coins me-2" style="color:var(--st-yellow);"></i>Revenus QR par île</div>
+                    <div id="bar-revenue"></div>
+                    <div class="progress-legend mt-3">
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--gc);"></span>Grande Comores</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--an);"></span>Anjouan</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--mo);"></span>Moheli</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison table -->
+        <div class="st-section">
+            <div class="st-section-header">
+                <div class="st-section-title"><i class="fas fa-table me-2" style="color:var(--st-purple);"></i>Tableau comparatif</div>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Île</th>
+                            <th>Véhicules</th>
+                            <th>Actifs</th>
+                            <th>QR Valide</th>
+                            <th>QR Expiré</th>
+                            <th>Activations</th>
+                            <th>Renouvellements</th>
+                            <th>Revenus</th>
+                        </tr>
+                    </thead>
+                    <tbody id="comparison-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- /stats-content -->
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    /* ── Theme ── */
+    const html = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    /* ── Helpers ── */
+    function fmt(n)    { return Math.round(n).toLocaleString('fr') + ' KMF'; }
+    function fmtN(n)   { return n.toLocaleString('fr'); }
+    function pct(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; }
+
+    const ISLANDS = ['Grande Comores', 'Anjouan', 'Moheli'];
+    const ISLAND_CSS = { 'Grande Comores': 'gc', 'Anjouan': 'an', 'Moheli': 'mo', 'Autre': 'ot' };
+    const ISLAND_ICON = {
+        'Grande Comores': '🌋',
+        'Anjouan':        '🌿',
+        'Moheli':         '🐢',
+        'Autre':          '📍',
+    };
+
+    /* ── Year filter ── */
+    let currentYear = '';
+    window.setYear = function (btn, y) {
+        const val = String(y || '').trim();
+        if (!val && !btn) return;          // ignore empty custom input
+        currentYear = val;
+        document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+        if (btn) {
+            btn.classList.add('active');
+            document.getElementById('custom-year').value = '';
+        } else {
+            // Mark "Tout" tab active if no year, or deactivate all tabs for custom year
+            if (!currentYear) {
+                document.querySelector('.filter-tab[data-y=""]').classList.add('active');
+                document.getElementById('custom-year').value = '';
+            }
+        }
+        loadStats();
+    };
+
+    function loadStats() {
+        document.getElementById('loading-state').style.display = 'block';
+        document.getElementById('stats-content').style.display = 'none';
+        const url = '/smart-tech/api/stats-iles' + (currentYear ? '?year=' + currentYear : '');
+        fetch(url)
+            .then(r => r.json())
+            .then(renderStats)
+            .catch(function () {
+                document.getElementById('loading-state').style.display = 'none';
+            });
+    }
+
+    function renderStats(d) {
+        document.getElementById('loading-state').style.display = 'none';
+        document.getElementById('stats-content').style.display = 'block';
+        const t = d.totals;
+
+        /* Tariff ref pills */
+        if (d.activation_price != null) {
+            const el = document.getElementById('ref-act-price');
+            if (el) el.innerHTML = '<i class="fas fa-bolt me-1"></i>' + Number(d.activation_price).toLocaleString('fr') + ' KMF';
+        }
+        if (d.renewal_price != null) {
+            const el = document.getElementById('ref-ren-price');
+            if (el) el.innerHTML = '<i class="fas fa-sync-alt me-1"></i>' + Number(d.renewal_price).toLocaleString('fr') + ' KMF';
+        }
+
+        /* Global */
+        document.getElementById('g-vehicles').textContent  = fmtN(t.vehicles);
+        document.getElementById('g-qr-valid').textContent  = fmtN(t.qr_valid);
+        document.getElementById('g-qr-ops').textContent    = fmtN(t.activations + t.renewals);
+        document.getElementById('g-revenue').innerHTML     = fmt(t.revenue);
+
+        /* Island cards */
+        const cardsEl = document.getElementById('island-cards');
+        cardsEl.innerHTML = ISLANDS.map(function (isl) {
+            const s   = d.islands[isl] || {};
+            const css = ISLAND_CSS[isl];
+            const ico = ISLAND_ICON[isl];
+            const qrPct = s.vehicles > 0 ? Math.round(s.qr_valid / s.vehicles * 100) : 0;
+            return `
+            <div class="island-card ${css}">
+                <div class="island-header">
+                    <div class="island-name">
+                        <span class="island-dot dot-${css}"></span>${ico} ${isl}
+                    </div>
+                    <div class="island-subtitle">${fmtN(s.vehicles || 0)} véhicule${s.vehicles !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="island-body">
+                    <div class="stat-row">
+                        <span class="stat-row-label"><i class="fas fa-car" style="opacity:.5;width:14px;"></i>Véhicules actifs</span>
+                        <span class="stat-row-val green">${fmtN(s.active || 0)}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-row-label"><i class="fas fa-check-circle" style="opacity:.5;width:14px;"></i>QR valide</span>
+                        <span class="stat-row-val cyan">${fmtN(s.qr_valid || 0)} <small style="font-size:.7rem;opacity:.5;">(${qrPct}%)</small></span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-row-label"><i class="fas fa-times-circle" style="opacity:.5;width:14px;"></i>QR expiré</span>
+                        <span class="stat-row-val red">${fmtN(s.qr_expired || 0)}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-row-label"><i class="fas fa-qrcode" style="opacity:.5;width:14px;"></i>Activations</span>
+                        <span class="stat-row-val blue">${fmtN(s.activations || 0)}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-row-label"><i class="fas fa-redo" style="opacity:.5;width:14px;"></i>Renouvellements</span>
+                        <span class="stat-row-val purple">${fmtN(s.renewals || 0)}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-row-label"><i class="fas fa-coins" style="opacity:.5;width:14px;"></i>Revenus</span>
+                        <span class="stat-row-val yellow">${fmt(s.revenue || 0)}</span>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        /* Bar charts */
+        const maxV = Math.max(...ISLANDS.map(i => (d.islands[i] || {}).vehicles || 0), 1);
+        const maxR = Math.max(...ISLANDS.map(i => (d.islands[i] || {}).revenue  || 0), 1);
+        const barColors = {'Grande Comores': 'var(--gc)', 'Anjouan': 'var(--an)', 'Moheli': 'var(--mo)'};
+
+        document.getElementById('bar-vehicles').innerHTML = ISLANDS.map(function (isl) {
+            const v = (d.islands[isl] || {}).vehicles || 0;
+            const w = Math.round(v / maxV * 100);
+            return `<div class="bar-item">
+                <div class="bar-item-label">${ISLAND_ICON[isl]} ${isl}</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:${w}%;background:${barColors[isl]};">
+                        <span class="bar-val">${fmtN(v)}</span>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        document.getElementById('bar-revenue').innerHTML = ISLANDS.map(function (isl) {
+            const r = (d.islands[isl] || {}).revenue || 0;
+            const w = Math.round(r / maxR * 100);
+            return `<div class="bar-item">
+                <div class="bar-item-label">${ISLAND_ICON[isl]} ${isl}</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width:${w}%;background:${barColors[isl]};">
+                        <span class="bar-val">${r >= 1000 ? (Math.round(r/1000)) + 'k' : Math.round(r)} KMF</span>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        /* Comparison table */
+        const allRows = [...ISLANDS];
+        const tbody = document.getElementById('comparison-tbody');
+        tbody.innerHTML = allRows.map(function (isl) {
+            const s   = d.islands[isl] || {};
+            const css = ISLAND_CSS[isl] || 'ot';
+            return `<tr>
+                <td><span class="island-badge badge-${css}">${ISLAND_ICON[isl] || '📍'} ${isl}</span></td>
+                <td><strong>${fmtN(s.vehicles || 0)}</strong></td>
+                <td style="color:var(--st-green);">${fmtN(s.active || 0)}</td>
+                <td style="color:var(--st-cyan);">${fmtN(s.qr_valid || 0)}</td>
+                <td style="color:var(--st-red);">${fmtN(s.qr_expired || 0)}</td>
+                <td style="color:var(--st-blue);">${fmtN(s.activations || 0)}</td>
+                <td style="color:var(--st-purple);">${fmtN(s.renewals || 0)}</td>
+                <td><strong style="color:var(--st-yellow);">${fmt(s.revenue || 0)}</strong></td>
+            </tr>`;
+        }).join('') + `<tr style="background:rgba(255,255,255,0.03);font-weight:600;">
+            <td>Total</td>
+            <td>${fmtN(t.vehicles)}</td>
+            <td style="color:var(--st-green);">${fmtN(t.active)}</td>
+            <td style="color:var(--st-cyan);">${fmtN(t.qr_valid)}</td>
+            <td style="color:var(--st-red);">${fmtN(t.qr_expired)}</td>
+            <td style="color:var(--st-blue);">${fmtN(t.activations)}</td>
+            <td style="color:var(--st-purple);">${fmtN(t.renewals)}</td>
+            <td><strong style="color:var(--st-yellow);">${fmt(t.revenue)}</strong></td>
+        </tr>`;
+    }
+
+    /* ── Init ── */
+    loadStats();
+})();
+    /* ── Mobile sidebar ── */
+    (function(){
+        function openSidebar(){
+            document.querySelector('.st-sidebar').classList.add('mob-open');
+            document.getElementById('mob-overlay').classList.add('active');
+        }
+        function closeSidebar(){
+            document.querySelector('.st-sidebar').classList.remove('mob-open');
+            document.getElementById('mob-overlay').classList.remove('active');
+        }
+        window.openSidebar = openSidebar;
+        window.closeSidebar = closeSidebar;
+        // Close on nav link click (mobile)
+        document.querySelectorAll('.st-nav-item').forEach(function(a){
+            a.addEventListener('click', closeSidebar);
+        });
+    })();
+</script>
+</body>
+</html>

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Technology — Mon profil</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg:#0d1117; --st-surface:#161b22; --st-border:rgba(255,255,255,0.08);
+            --st-cyan:#00d4ff; --st-green:#3fb950; --st-yellow:#f0b429;
+            --st-red:#f85149; --st-blue:#58a6ff; --st-purple:#bc8cff;
+            --sidebar-w:260px;
+        }
+        *{box-sizing:border-box;}
+        body{background:var(--st-bg);color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;margin:0;}
+
+        .st-sidebar{background:linear-gradient(180deg,#1a1a2e 0%,#0f3460 100%);width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;padding:1.4rem 1rem;border-right:1px solid rgba(0,212,255,0.1);z-index:100;display:flex;flex-direction:column;}
+        .st-brand{display:flex;align-items:center;gap:10px;padding-bottom:1.2rem;border-bottom:1px solid rgba(0,212,255,0.15);margin-bottom:1.5rem;}
+        .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
+        .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
+        .st-brand-sub{font-size:.7rem;color:var(--st-cyan);}
+        .st-nav{flex:1;}
+        .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
+        .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
+        .st-nav-item.active{border-left:3px solid var(--st-cyan);}
+        .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
+        .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
+        .st-sidebar-footer{padding-top:1rem;border-top:1px solid rgba(255,255,255,0.07);}
+
+        .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;}
+        .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
+        .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
+        .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);}
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+        .st-theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .2s;}
+        .st-theme-btn:hover{background:rgba(0,212,255,0.15);border-color:var(--st-cyan);color:var(--st-cyan);}
+
+        .profile-card{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;overflow:hidden;}
+        .btn-back{display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .75rem;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.6);font-size:.8rem;cursor:pointer;transition:all .18s;text-decoration:none;}
+        .btn-back:hover{border-color:var(--st-cyan);color:var(--st-cyan);background:rgba(0,212,255,0.07);}
+        html[data-theme="light"] .btn-back{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.04);color:rgba(0,0,0,0.55);}
+        html[data-theme="light"] .btn-back:hover{border-color:var(--st-cyan);color:var(--st-cyan);background:rgba(0,212,255,0.07);}
+        .profile-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--st-cyan),#0080ff);display:flex;align-items:center;justify-content:center;font-size:1.8rem;color:#fff;flex-shrink:0;}
+        .section-divider{font-size:.7rem;text-transform:uppercase;letter-spacing:.6px;color:rgba(255,255,255,0.3);padding:.6rem 0;border-top:1px solid var(--st-border);margin-top:1.2rem;margin-bottom:.8rem;}
+        .form-label{font-size:.8rem;color:rgba(255,255,255,0.5);margin-bottom:.3rem;}
+        .form-control{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.85rem;padding:.45rem .75rem;}
+        .form-control:focus,.form-select:focus{background:rgba(0,212,255,0.05);border-color:var(--st-cyan);color:#e6edf3;box-shadow:none;outline:none;}
+        .form-select{background:rgba(255,255,255,0.04) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2300d4ff' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right .75rem center;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.85rem;padding:.45rem 2rem .45rem .75rem;appearance:none;-webkit-appearance:none;}
+        .form-select option{background:#1a1a2e;color:#e6edf3;}
+        .form-control:disabled,.form-control[readonly]{background:rgba(255,255,255,0.02);color:rgba(255,255,255,0.3);cursor:not-allowed;}
+        .readonly-hint{font-size:.73rem;color:rgba(255,255,255,0.25);margin-top:.2rem;}
+        .btn-save{background:linear-gradient(135deg,var(--st-cyan),#0080ff);color:#fff;border:none;border-radius:9px;padding:.5rem 1.4rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:opacity .18s;}
+        .btn-save:hover{opacity:.88;}
+        .alert-success{background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:8px;color:var(--st-green);font-size:.82rem;padding:.5rem .85rem;display:none;}
+        .alert-error{background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);border-radius:8px;color:var(--st-red);font-size:.82rem;padding:.5rem .85rem;display:none;}
+
+        /* Light mode */
+        html[data-theme="light"]{--st-bg:#f0f2f5;--st-surface:#fff;--st-border:rgba(0,0,0,0.08);}
+        html[data-theme="light"] body{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .st-user-pill{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.1);color:#1a1a2e;}
+        html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .form-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .form-control{background:#f8f9fa;border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .form-control:focus{background:#fff;border-color:var(--st-cyan);}
+        html[data-theme="light"] .form-control:disabled,
+        html[data-theme="light"] .form-control[readonly]{background:#f0f0f0;color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .section-divider{color:rgba(0,0,0,0.3);border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .readonly-hint{color:rgba(0,0,0,0.3);}
+        html[data-theme="light"] .form-select{background:#f8f9fa url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2300b4d8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right .75rem center;border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .form-select option{background:#fff;color:#1a1a2e;}
+        html[data-theme="light"] .form-select:focus{background:#fff;border-color:var(--st-cyan);}
+        html[data-theme="light"] .form-control:focus,.form-select:focus{color:#1a1a2e;}
+        .td-muted-light{color:rgba(255,255,255,0.4);}
+        html[data-theme="light"] .td-muted-light{color:rgba(0,0,0,0.45);}
+        .pay-count-txt{color:rgba(255,255,255,0.3);}
+        html[data-theme="light"] .pay-count-txt{color:rgba(0,0,0,0.35);}
+        .empty-dim{color:rgba(255,255,255,0.25);}
+        html[data-theme="light"] .empty-dim{color:rgba(0,0,0,0.3);}
+
+        /* Payment history */
+        .pay-row{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1.2rem;border-bottom:1px solid var(--st-border);gap:1rem;}
+        .pay-row:last-child{border-bottom:none;}
+        .pay-row:hover{background:rgba(0,212,255,0.03);}
+        .pay-name{font-size:.85rem;font-weight:600;}
+        .pay-meta{font-size:.75rem;color:rgba(255,255,255,0.4);margin-top:.1rem;}
+        .pay-amount{font-size:.9rem;font-weight:700;color:var(--st-green);white-space:nowrap;}
+        .pay-date{font-size:.75rem;color:rgba(255,255,255,0.35);text-align:right;white-space:nowrap;}
+        .pay-type-pill{display:inline-block;font-size:.68rem;padding:.1em .55em;border-radius:20px;background:rgba(0,212,255,0.1);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.2);}
+        html[data-theme="light"] .pay-meta{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .pay-date{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .pay-row:hover{background:rgba(0,0,0,0.02);}
+
+        /* ── Mobile nav drawer ── */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-menu-btn:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--st-cyan);}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
+        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}}
+    </style>
+    <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">Smart Technology</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+    <div class="st-sidebar-footer">
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<main class="st-main">
+
+    <div class="st-topbar">
+        <div class="d-flex align-items-center gap-3">
+            <button class="btn-back" onclick="history.back()">
+                <i class="fas fa-arrow-left"></i>Retour
+            </button>
+            <div>
+                <div class="st-page-title"><i class="fas fa-user-circle me-2" style="color:var(--st-cyan);"></i>Mon profil</div>
+                <div class="st-page-sub">Informations du compte</div>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4 align-items-start">
+
+        <!-- ── Left : account info ── -->
+        <div class="col-12 col-xl-5">
+            <div class="profile-card p-4">
+
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="profile-avatar">
+                        {{ (current_user.full_name or current_user.username)[0]|upper }}
+                    </div>
+                    <div>
+                        <div style="font-size:1.05rem;font-weight:700;">{{ current_user.full_name or current_user.username }}</div>
+                        <div class="td-muted-light" style="font-size:.8rem;">@{{ current_user.username }}</div>
+                        {% if current_user.employee %}
+                        <div style="font-size:.78rem;margin-top:.2rem;color:var(--st-cyan);">
+                            <i class="fas fa-id-badge me-1"></i>{{ current_user.employee.position }}
+                            {% if current_user.employee.island %} — {{ current_user.employee.island }}{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="section-divider">Identifiants</div>
+                <div class="row g-2 mb-1">
+                    <div class="col-6">
+                        <label class="form-label">Nom d'utilisateur</label>
+                        <input type="text" class="form-control" value="{{ current_user.username }}" readonly>
+                        <div class="readonly-hint"><i class="fas fa-lock me-1"></i>Non modifiable</div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" value="{{ (current_user.employee.email if current_user.employee and current_user.employee.email else current_user.email) or '—' }}" readonly>
+                        <div class="readonly-hint"><i class="fas fa-lock me-1"></i>Non modifiable</div>
+                    </div>
+                </div>
+
+                <div class="section-divider">Informations personnelles</div>
+                {% if current_user.employee %}
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Prénom</label>
+                        <input type="text" id="p-firstname" class="form-control" placeholder="Prénom"
+                               value="{{ current_user.employee.first_name }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Nom</label>
+                        <input type="text" id="p-lastname" class="form-control" placeholder="Nom de famille"
+                               value="{{ current_user.employee.last_name }}">
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Téléphone</label>
+                    <input type="tel" id="p-phone" class="form-control" placeholder="+269…"
+                           value="{{ current_user.employee.phone or '' }}">
+                </div>
+                {% else %}
+                <div class="mb-2">
+                    <label class="form-label">Nom complet</label>
+                    <input type="text" id="p-firstname" class="form-control" placeholder="Votre nom"
+                           value="{{ current_user.full_name or '' }}">
+                    <input type="hidden" id="p-lastname" value="">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Téléphone</label>
+                    <input type="tel" id="p-phone" class="form-control" placeholder="+269…" value="">
+                </div>
+                {% endif %}
+                {% if current_user.employee %}
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Poste</label>
+                        {% if current_user.role == 'admin' %}
+                        <select id="p-position" class="form-select">
+                            {% for pos in ['Directeur','Responsable technique','Technicien','Commercial','Comptable','Secrétaire','Agent de terrain','Autre'] %}
+                            <option value="{{ pos }}" {{ 'selected' if current_user.employee.position == pos }}>{{ pos }}</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <input type="text" class="form-control" value="{{ current_user.employee.position }}" readonly>
+                        <div class="readonly-hint"><i class="fas fa-lock me-1"></i>Modifiable par l'admin</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Île</label>
+                        {% if current_user.role == 'admin' %}
+                        <select id="p-island" class="form-select">
+                            <option value="">— Aucune île —</option>
+                            <option value="Grande Comores" {{ 'selected' if current_user.employee.island == 'Grande Comores' }}>Grande Comores</option>
+                            <option value="Anjouan" {{ 'selected' if current_user.employee.island == 'Anjouan' }}>Anjouan</option>
+                            <option value="Moheli" {{ 'selected' if current_user.employee.island == 'Moheli' }}>Moheli</option>
+                        </select>
+                        {% else %}
+                        <input type="text" class="form-control" value="{{ current_user.employee.island or '—' }}" readonly>
+                        <div class="readonly-hint"><i class="fas fa-lock me-1"></i>Modifiable par l'admin</div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="section-divider">Changer le mot de passe</div>
+                <div class="mb-2">
+                    <label class="form-label">Nouveau mot de passe</label>
+                    <input type="password" id="p-password" class="form-control" placeholder="Laisser vide pour ne pas changer" autocomplete="new-password">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Confirmer le mot de passe</label>
+                    <input type="password" id="p-confirm" class="form-control" placeholder="●●●●●●●●" autocomplete="new-password">
+                </div>
+
+                <div id="alert-success" class="alert-success mb-3"><i class="fas fa-check-circle me-1"></i>Profil mis à jour.</div>
+                <div id="alert-error"   class="alert-error   mb-3"></div>
+
+                <button class="btn-save" onclick="saveProfile()">
+                    <i class="fas fa-save me-1"></i>Enregistrer les modifications
+                </button>
+            </div>
+        </div>
+
+        <!-- ── Right : payment history ── -->
+        <div class="col-12 col-xl-7">
+            <div class="profile-card p-0" style="height:100%;">
+                <div class="px-4 py-3" style="border-bottom:1px solid var(--st-border);display:flex;align-items:center;justify-content:space-between;">
+                    <div style="font-size:.88rem;font-weight:600;"><i class="fas fa-history me-2" style="color:var(--st-cyan);"></i>Historique de paiements validés</div>
+                    <span id="pay-count" class="pay-count-txt" style="font-size:.75rem;"></span>
+                </div>
+                <div id="pay-history-body" style="max-height:520px;overflow-y:auto;">
+                    <div class="empty-dim" style="text-align:center;padding:2rem;font-size:.82rem;">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    const html      = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    const FREQ_LABELS = {
+        hebdomadaire:'Hebdo', mensuelle:'Mensuel', trimestrielle:'Trimestriel',
+        semestrielle:'Semestriel', annuelle:'Annuel', ponctuelle:'Ponctuel',
+    };
+
+    function loadHistory() {
+        fetch('/smart-tech/api/profil/payment-history')
+            .then(r => r.json())
+            .then(function (rows) {
+                const body    = document.getElementById('pay-history-body');
+                const countEl = document.getElementById('pay-count');
+                countEl.textContent = rows.length + ' paiement' + (rows.length !== 1 ? 's' : '');
+                if (!rows.length) {
+                    body.innerHTML = '<div class="empty-dim" style="text-align:center;padding:2rem;font-size:.82rem;"><i class="fas fa-inbox me-2"></i>Aucun paiement validé pour l\'instant</div>';
+                    return;
+                }
+                body.innerHTML = rows.map(function (p) {
+                    const freq = FREQ_LABELS[p.frequency] || p.frequency;
+                    return `<div class="pay-row">
+                        <div style="flex:1;min-width:0;">
+                            <div class="pay-name">${escHtml(p.name)}</div>
+                            <div class="pay-meta">
+                                <span class="pay-type-pill">${escHtml(p.sub_type)}</span>
+                                <span style="margin-left:.4rem;">${freq}</span>
+                            </div>
+                        </div>
+                        <div style="text-align:right;flex-shrink:0;">
+                            <div class="pay-amount">${Math.round(p.amount).toLocaleString('fr')} KMF</div>
+                            <div class="pay-date"><i class="fas fa-clock me-1"></i>${p.last_paid_at}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            });
+    }
+
+    function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    loadHistory();
+
+    window.saveProfile = function () {
+        const firstName = document.getElementById('p-firstname').value.trim();
+        const lastName  = document.getElementById('p-lastname').value.trim();
+        const phone     = document.getElementById('p-phone').value.trim();
+        const password  = document.getElementById('p-password').value;
+        const confirm   = document.getElementById('p-confirm').value;
+        const posEl     = document.getElementById('p-position');
+        const islEl     = document.getElementById('p-island');
+        const position  = posEl ? posEl.value.trim() : null;
+        const island    = islEl ? islEl.value : null;
+        const okEl  = document.getElementById('alert-success');
+        const errEl = document.getElementById('alert-error');
+        okEl.style.display = 'none';
+        errEl.style.display = 'none';
+
+        fetch('/smart-tech/api/profil', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ first_name: firstName, last_name: lastName, phone, password, confirm, position, island }),
+        })
+        .then(r => r.json())
+        .then(function (data) {
+            if (data.error) {
+                errEl.textContent = data.error;
+                errEl.style.display = 'block';
+                return;
+            }
+            // Update topbar pill + heading avatar
+            document.querySelectorAll('.st-user-pill').forEach(function (el) {
+                const icon = el.querySelector('i');
+                el.textContent = ' ' + data.full_name;
+                if (icon) el.prepend(icon);
+            });
+            const avatarEl = document.querySelector('.profile-avatar');
+            if (avatarEl) avatarEl.textContent = data.full_name[0].toUpperCase();
+            const nameEl = document.querySelector('.profile-card .d-flex div div:first-child');
+            if (nameEl) nameEl.textContent = data.full_name;
+            document.getElementById('p-password').value = '';
+            document.getElementById('p-confirm').value  = '';
+            okEl.style.display = 'block';
+            setTimeout(function () { okEl.style.display = 'none'; }, 3000);
+        })
+        .catch(function () {
+            errEl.textContent = 'Erreur réseau. Réessayez.';
+            errEl.style.display = 'block';
+        });
+    };
+})();
+    /* ── Mobile sidebar ── */
+    (function(){
+        function openSidebar(){
+            document.querySelector('.st-sidebar').classList.add('mob-open');
+            document.getElementById('mob-overlay').classList.add('active');
+        }
+        function closeSidebar(){
+            document.querySelector('.st-sidebar').classList.remove('mob-open');
+            document.getElementById('mob-overlay').classList.remove('active');
+        }
+        window.openSidebar = openSidebar;
+        window.closeSidebar = closeSidebar;
+        // Close on nav link click (mobile)
+        document.querySelectorAll('.st-nav-item').forEach(function(a){
+            a.addEventListener('click', closeSidebar);
+        });
+    })();
+</script>
+</body>
+</html>

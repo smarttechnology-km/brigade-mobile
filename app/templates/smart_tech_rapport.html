@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Technology — Rapport</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg:#0d1117; --st-surface:#161b22; --st-border:rgba(255,255,255,0.08);
+            --st-cyan:#00d4ff; --st-green:#3fb950; --st-yellow:#f0b429;
+            --st-red:#f85149; --st-blue:#58a6ff; --st-purple:#bc8cff;
+            --st-orange:#f78166; --sidebar-w:260px;
+        }
+        *{box-sizing:border-box;}
+        body{background:var(--st-bg);color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;margin:0;}
+
+        /* ── Sidebar ── */
+        .st-sidebar{background:linear-gradient(180deg,#1a1a2e 0%,#0f3460 100%);width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;padding:1.4rem 1rem;border-right:1px solid rgba(0,212,255,0.1);z-index:100;display:flex;flex-direction:column;}
+        .st-brand{display:flex;align-items:center;gap:10px;padding-bottom:1.2rem;border-bottom:1px solid rgba(0,212,255,0.15);margin-bottom:1.5rem;}
+        .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
+        .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
+        .st-brand-sub{font-size:.7rem;color:var(--st-cyan);}
+        .st-nav{flex:1;}
+        .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
+        .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
+        .st-nav-item.active{border-left:3px solid var(--st-cyan);}
+        .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
+        .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
+        .st-sidebar-footer{padding-top:1rem;border-top:1px solid rgba(255,255,255,0.07);}
+
+        /* ── Main ── */
+        .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;}
+        .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
+        .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
+        .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);}
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+        .st-theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .2s;}
+        .st-theme-btn:hover{background:rgba(0,212,255,0.15);border-color:var(--st-cyan);color:var(--st-cyan);}
+
+        /* ── Period selector ── */
+        .period-bar{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.4rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+        .period-tabs{display:flex;background:rgba(255,255,255,0.04);border-radius:9px;padding:3px;gap:2px;}
+        .period-tab{padding:.35rem .9rem;border-radius:7px;border:none;background:none;color:rgba(255,255,255,0.5);font-size:.82rem;cursor:pointer;transition:all .18s;}
+        .period-tab.active{background:rgba(0,212,255,0.15);color:var(--st-cyan);font-weight:600;}
+        .period-inputs{display:flex;align-items:center;gap:.6rem;}
+        .st-form-ctrl{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.83rem;padding:.4rem .65rem;outline:none;transition:border-color .18s;}
+        .st-form-ctrl:focus{border-color:var(--st-cyan);}
+        .btn-generate{background:linear-gradient(135deg,rgba(0,212,255,0.18),rgba(0,128,255,0.14));border:1px solid rgba(0,212,255,0.3);color:var(--st-cyan);border-radius:8px;padding:.4rem 1rem;font-size:.83rem;font-weight:600;cursor:pointer;transition:all .18s;}
+        .btn-generate:hover{background:linear-gradient(135deg,rgba(0,212,255,0.28),rgba(0,128,255,0.22));border-color:var(--st-cyan);}
+        .btn-pdf{background:linear-gradient(135deg,rgba(248,81,73,0.15),rgba(200,50,50,0.1));border:1px solid rgba(248,81,73,0.3);color:var(--st-red);border-radius:8px;padding:.4rem 1rem;font-size:.83rem;font-weight:600;cursor:pointer;transition:all .18s;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem;}
+        .btn-pdf:hover{background:linear-gradient(135deg,rgba(248,81,73,0.25),rgba(200,50,50,0.18));border-color:var(--st-red);color:var(--st-red);}
+
+        /* ── Stat cards ── */
+        .st-card{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;padding:1.1rem 1rem;height:100%;}
+        .st-card-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:.95rem;margin-bottom:.65rem;}
+        .icon-blue{background:rgba(88,166,255,0.12);color:var(--st-blue);}
+        .icon-green{background:rgba(63,185,80,0.12);color:var(--st-green);}
+        .icon-yellow{background:rgba(240,180,41,0.12);color:var(--st-yellow);}
+        .icon-red{background:rgba(248,81,73,0.12);color:var(--st-red);}
+        .icon-cyan{background:rgba(0,212,255,0.12);color:var(--st-cyan);}
+        .icon-purple{background:rgba(188,140,255,0.12);color:var(--st-purple);}
+        .st-stat-label{font-size:.72rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.2rem;}
+        .st-stat-val{font-size:1.25rem;font-weight:700;}
+
+        /* ── Pills ── */
+        .pill{display:inline-block;font-size:.7rem;font-weight:500;padding:.2em .65em;border-radius:20px;}
+        .pill-activation{background:rgba(0,212,255,0.13);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.28);}
+        .pill-renewal{background:rgba(188,140,255,0.13);color:var(--st-purple);border:1px solid rgba(188,140,255,0.28);}
+        html[data-theme="light"] .pill-activation{background:rgba(0,149,179,.1);color:#0095b3;border-color:rgba(0,149,179,.3);}
+        html[data-theme="light"] .pill-renewal{background:rgba(130,80,255,.1);color:#6f42c1;border-color:rgba(130,80,255,.3);}
+
+        /* ── Section ── */
+        .st-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;overflow:hidden;margin-bottom:1.2rem;}
+        .st-section-header{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.2rem;border-bottom:1px solid var(--st-border);}
+        .st-section-title{font-size:.86rem;font-weight:600;color:#fff;}
+        .badge-count{display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.08);border-radius:20px;font-size:.7rem;color:rgba(255,255,255,0.5);padding:.1em .55em;margin-left:.4rem;}
+        .badge-amount{font-size:.78rem;font-weight:600;}
+
+        /* ── Table ── */
+        .table{--bs-table-color:#e6edf3;--bs-table-bg:transparent;color:#e6edf3;margin:0;font-size:.81rem;}
+        .table thead th{background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.45);border-color:var(--st-border);font-weight:500;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;padding:.6rem 1rem;}
+        .table tbody td{border-color:rgba(255,255,255,0.04);padding:.65rem 1rem;vertical-align:middle;}
+        .table tbody tr:hover td{background:rgba(0,212,255,0.07);color:#e6edf3;}
+
+        /* ── Net result banner ── */
+        .net-banner{border-radius:12px;padding:1rem 1.4rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem;}
+        .net-banner.positive{background:rgba(63,185,80,0.12);border:1px solid rgba(63,185,80,0.3);}
+        .net-banner.negative{background:rgba(248,81,73,0.12);border:1px solid rgba(248,81,73,0.3);}
+        .net-label{font-size:.95rem;font-weight:600;color:#e6edf3;}
+        .net-sub{font-size:.76rem;color:rgba(255,255,255,0.55);margin-top:2px;}
+        .net-val{font-size:1.6rem;font-weight:700;}
+
+        /* ── Empty state ── */
+        .empty-state{padding:2rem;text-align:center;color:rgba(255,255,255,0.3);font-size:.82rem;}
+
+        /* ── Loading ── */
+        #loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:2000;align-items:center;justify-content:center;font-size:1.1rem;color:#fff;gap:.8rem;}
+        #loading-overlay.show{display:flex;}
+
+        /* ── Light mode ── */
+        html[data-theme="light"] body{background:#f0f2f5;color:#1a1a2e;}
+        html[data-theme="light"] .st-card,html[data-theme="light"] .st-section,html[data-theme="light"] .period-bar{background:#fff;border-color:rgba(0,0,0,0.08);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+        html[data-theme="light"] .period-bar{background:#fff;border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .st-section{background:#fff;border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .period-tabs{background:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .period-tab{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .st-form-ctrl{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .table{color:#1a1a2e;}
+        .text-muted{color:rgba(255,255,255,0.42) !important;}html[data-theme="light"] .table{--bs-table-color:#1a1a2e;}html[data-theme="light"] .table tbody tr:hover td{color:#1a1a2e;background:rgba(0,149,179,0.06);}html[data-theme="light"] .text-muted{color:rgba(0,0,0,0.45) !important;}html[data-theme="light"] .table thead th{background:#f6f8fa;color:rgba(0,0,0,0.5);border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .table tbody td{border-color:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .st-section-header{border-bottom-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .st-section-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-stat-label{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .st-page-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .st-user-pill{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:#555;}
+        html[data-theme="light"] .badge-count{background:rgba(0,0,0,0.06);color:rgba(0,0,0,0.4);}
+
+        html[data-theme="light"] .net-label{color:#1a1a2e;}
+        html[data-theme="light"] .net-sub{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .net-banner.positive{background:rgba(63,185,80,0.1);border-color:rgba(63,185,80,0.3);}
+        html[data-theme="light"] .net-banner.negative{background:rgba(248,81,73,0.1);border-color:rgba(248,81,73,0.3);}
+        /* ── Stat card sub-labels ── */
+        .st-card-sub{font-size:.72rem;color:rgba(255,255,255,0.35);}
+        html[data-theme="light"] .st-card-sub{color:rgba(0,0,0,0.45);}
+        /* ── Subscription table dynamic content ── */
+        .sub-badge-scheduled{background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:.7rem;padding:.1em .5em;white-space:nowrap;}
+        .sub-muted{font-size:.78rem;color:rgba(255,255,255,0.45);}
+        .sub-dim{font-size:.72rem;color:rgba(255,255,255,0.3);}
+        .sub-amt-dim{color:rgba(255,255,255,0.45);}
+        html[data-theme="light"] .sub-badge-scheduled{background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.45);border-color:rgba(0,0,0,0.1);}
+        html[data-theme="light"] .sub-muted{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .sub-dim{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .sub-amt-dim{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .empty-state{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .net-sub{color:rgba(0,0,0,0.5);}
+        /* ── Mobile nav drawer ── */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-menu-btn:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--st-cyan);}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
+        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}}}
+    </style>
+    <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- ── Loading overlay ── -->
+<div id="loading-overlay"><i class="fas fa-spinner fa-spin"></i> Génération du rapport…</div>
+
+<!-- ── Sidebar ── -->
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">Smart Technology</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+    <div class="st-sidebar-footer">
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="st-main">
+
+    <!-- Topbar -->
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-chart-bar me-2" style="color:var(--st-purple);"></i>Rapport</div>
+            <div class="st-page-sub" id="report-period-label">Sélectionnez une période pour générer le rapport</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Period selector -->
+    <div class="period-bar">
+        <div class="period-tabs">
+            <button class="period-tab active" data-type="daily"   onclick="setType('daily')">Journalier</button>
+            <button class="period-tab"         data-type="monthly" onclick="setType('monthly')">Mensuel</button>
+            <button class="period-tab"         data-type="annual"  onclick="setType('annual')">Annuel</button>
+        </div>
+        <div class="period-inputs">
+            <input type="date"  id="input-daily"   class="st-form-ctrl" value="{{ today }}" style="display:block;">
+            <input type="month" id="input-monthly" class="st-form-ctrl" value="{{ current_month }}" style="display:none;">
+            <input type="number" id="input-annual" class="st-form-ctrl" value="{{ current_year }}" min="2020" max="2099" style="display:none;width:90px;">
+        </div>
+        <button class="btn-generate" onclick="generateReport()"><i class="fas fa-sync-alt me-1"></i>Générer</button>
+        <a id="pdf-btn" href="#" class="btn-pdf" style="display:none;" target="_blank">
+            <i class="fas fa-file-pdf"></i>Télécharger PDF
+        </a>
+    </div>
+
+    <!-- Content (hidden until generated) -->
+    <div id="report-content" style="display:none;">
+
+        <!-- Net result banner -->
+        <div id="net-banner" class="net-banner positive">
+            <div>
+                <div class="net-label">Résultat net de la période</div>
+                <div class="net-sub">Revenus &minus; Abonnements &minus; Dépenses</div>
+            </div>
+            <div class="net-val" id="net-val" style="color:var(--st-green);">— KMF</div>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-lg-2">
+                <div class="st-card">
+                    <div class="st-card-icon icon-blue"><i class="fas fa-qrcode"></i></div>
+                    <div class="st-stat-label">Activations</div>
+                    <div class="st-stat-val" style="color:var(--st-blue);" id="s-act-count">—</div>
+                    <div class="st-card-sub" id="s-act-amt">—</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="st-card">
+                    <div class="st-card-icon icon-cyan"><i class="fas fa-redo"></i></div>
+                    <div class="st-stat-label">Renouvellements</div>
+                    <div class="st-stat-val" style="color:var(--st-cyan);" id="s-ren-count">—</div>
+                    <div class="st-card-sub" id="s-ren-amt">—</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="st-card">
+                    <div class="st-card-icon icon-green"><i class="fas fa-coins"></i></div>
+                    <div class="st-stat-label">Revenus</div>
+                    <div class="st-stat-val" style="color:var(--st-green);" id="s-revenue">—</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="st-card">
+                    <div class="st-card-icon icon-yellow"><i class="fas fa-file-invoice-dollar"></i></div>
+                    <div class="st-stat-label">Abonnements</div>
+                    <div class="st-stat-val" style="color:var(--st-yellow);" id="s-sub-total">—</div>
+                    <div class="st-card-sub" id="s-sub-detail">—</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="st-card">
+                    <div class="st-card-icon icon-red"><i class="fas fa-receipt"></i></div>
+                    <div class="st-stat-label">Dépenses</div>
+                    <div class="st-stat-val" style="color:var(--st-red);" id="s-exp-count">—</div>
+                    <div class="st-card-sub" id="s-exp-amt">—</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="st-card">
+                    <div class="st-card-icon icon-purple"><i class="fas fa-balance-scale"></i></div>
+                    <div class="st-stat-label">Net</div>
+                    <div class="st-stat-val" id="s-net">—</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail tables -->
+        <div id="section-activations" class="st-section" style="display:none;">
+            <div class="st-section-header">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="st-section-title"><i class="fas fa-qrcode me-2" style="color:var(--st-blue);"></i>Activations QR Code<span class="badge-count" id="cnt-act">0</span></div>
+                    <span class="pill pill-activation" style="font-size:.68rem;" id="tarif-act-ref" title="Tarif unitaire activation">{{ "{:,}".format(activation_price) }} KMF/unité</span>
+                </div>
+                <span class="badge-amount" style="color:var(--st-blue);" id="amt-act">0 KMF</span>
+            </div>
+            <div class="table-responsive"><table class="table"><thead><tr><th>Véhicule</th><th>Propriétaire</th><th>Montant</th><th>Enregistré par</th><th>Date</th></tr></thead><tbody id="tbody-act"></tbody></table></div>
+        </div>
+
+        <div id="section-renewals" class="st-section" style="display:none;">
+            <div class="st-section-header">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="st-section-title"><i class="fas fa-redo me-2" style="color:var(--st-cyan);"></i>Renouvellements QR Code<span class="badge-count" id="cnt-ren">0</span></div>
+                    <span class="pill pill-renewal" style="font-size:.68rem;" id="tarif-ren-ref" title="Tarif unitaire renouvellement">{{ "{:,}".format(renewal_price) }} KMF/unité</span>
+                </div>
+                <span class="badge-amount" style="color:var(--st-cyan);" id="amt-ren">0 KMF</span>
+            </div>
+            <div class="table-responsive"><table class="table"><thead><tr><th>Véhicule</th><th>Propriétaire</th><th>Montant</th><th>Enregistré par</th><th>Date</th></tr></thead><tbody id="tbody-ren"></tbody></table></div>
+        </div>
+
+        <div id="section-subs" class="st-section" style="display:none;">
+            <div class="st-section-header">
+                <div class="st-section-title"><i class="fas fa-file-invoice-dollar me-2" style="color:var(--st-yellow);"></i>Abonnements actifs<span class="badge-count" id="cnt-sub">0</span></div>
+                <span class="badge-amount" style="color:var(--st-yellow);" id="amt-sub">0 KMF</span>
+            </div>
+            <div class="table-responsive"><table class="table"><thead><tr><th>Nom</th><th>Type</th><th>Mode</th><th>Fréquence</th><th>Montant</th><th>Statut</th><th>Date / Validé par</th></tr></thead><tbody id="tbody-sub"></tbody></table></div>
+        </div>
+
+        <div id="section-expenses" class="st-section" style="display:none;">
+            <div class="st-section-header">
+                <div class="st-section-title"><i class="fas fa-receipt me-2" style="color:var(--st-red);"></i>Dépenses<span class="badge-count" id="cnt-exp">0</span></div>
+                <span class="badge-amount" style="color:var(--st-red);" id="amt-exp">0 KMF</span>
+            </div>
+            <div class="table-responsive"><table class="table"><thead><tr><th>Description</th><th>Catégorie</th><th>Fournisseur</th><th>Montant</th><th>Date</th></tr></thead><tbody id="tbody-exp"></tbody></table></div>
+        </div>
+
+        <div id="empty-msg" style="display:none;" class="empty-state">
+            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune activité pour cette période.
+        </div>
+
+    </div><!-- /report-content -->
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    /* ── Theme ── */
+    const html = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    /* ── Helpers ── */
+    function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function fmt(n) { return Math.round(n).toLocaleString('fr') + ' KMF'; }
+
+    /* ── Period type ── */
+    let currentType = 'daily';
+    window.setType = function (t) {
+        currentType = t;
+        document.querySelectorAll('.period-tab').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.type === t);
+        });
+        document.getElementById('input-daily').style.display   = t === 'daily'   ? 'block' : 'none';
+        document.getElementById('input-monthly').style.display = t === 'monthly' ? 'block' : 'none';
+        document.getElementById('input-annual').style.display  = t === 'annual'  ? 'block' : 'none';
+    };
+
+    function getPeriodValue() {
+        if (currentType === 'daily')   return document.getElementById('input-daily').value;
+        if (currentType === 'monthly') return document.getElementById('input-monthly').value;
+        return document.getElementById('input-annual').value;
+    }
+
+    /* ── Generate report ── */
+    window.generateReport = function () {
+        const value = getPeriodValue();
+        if (!value) return;
+        document.getElementById('loading-overlay').classList.add('show');
+        fetch('/smart-tech/api/rapport?type=' + currentType + '&value=' + encodeURIComponent(value))
+            .then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error || 'Erreur'); }))
+            .then(renderReport)
+            .catch(function (e) {
+                document.getElementById('loading-overlay').classList.remove('show');
+                alert('Erreur : ' + e.message);
+            });
+    };
+
+    function renderReport(d) {
+        document.getElementById('loading-overlay').classList.remove('show');
+        document.getElementById('report-content').style.display = 'block';
+        document.getElementById('report-period-label').textContent = 'Rapport du ' + d.period_label;
+
+        // PDF link
+        const pdfBtn = document.getElementById('pdf-btn');
+        pdfBtn.href = '/smart-tech/rapport/pdf?type=' + d.period_type + '&value=' + encodeURIComponent(d.period_value);
+        pdfBtn.style.display = 'inline-flex';
+
+        // Stats
+        document.getElementById('s-act-count').textContent = d.activations.length;
+        document.getElementById('s-act-amt').textContent   = fmt(d.act_total);
+        document.getElementById('s-ren-count').textContent = d.renewals.length;
+        document.getElementById('s-ren-amt').textContent   = fmt(d.ren_total);
+        document.getElementById('s-revenue').textContent   = fmt(d.revenue);
+        document.getElementById('s-sub-total').textContent = fmt(d.sub_total);
+        var autoCount   = d.subscriptions.filter(function(s){ return s.payment_mode === 'automatique'; }).length;
+        var manuelCount = d.subscriptions.filter(function(s){ return s.payment_mode === 'manuel'; }).length;
+        document.getElementById('s-sub-detail').textContent = autoCount + ' auto · ' + manuelCount + ' manuel';
+        document.getElementById('s-exp-count').textContent = d.expenses.length;
+        document.getElementById('s-exp-amt').textContent   = fmt(d.exp_total);
+
+        const netEl = document.getElementById('s-net');
+        const netBanner = document.getElementById('net-banner');
+        const netVal    = document.getElementById('net-val');
+        netEl.textContent  = fmt(d.net);
+        netVal.textContent = fmt(d.net);
+        const positive = d.net >= 0;
+        netEl.style.color = positive ? 'var(--st-green)' : 'var(--st-red)';
+        netVal.style.color = positive ? 'var(--st-green)' : 'var(--st-red)';
+        netBanner.className = 'net-banner ' + (positive ? 'positive' : 'negative');
+
+        // Update tariff reference pills from API
+        if (d.activation_price != null) {
+            const el = document.getElementById('tarif-act-ref');
+            if (el) el.textContent = Number(d.activation_price).toLocaleString('fr') + ' KMF/unité';
+        }
+        if (d.renewal_price != null) {
+            const el = document.getElementById('tarif-ren-ref');
+            if (el) el.textContent = Number(d.renewal_price).toLocaleString('fr') + ' KMF/unité';
+        }
+
+        // Section: Activations
+        renderQrSection('activations', d.activations, 'section-activations', 'cnt-act', 'amt-act', d.act_total);
+        // Section: Renewals
+        renderQrSection('renewals', d.renewals, 'section-renewals', 'cnt-ren', 'amt-ren', d.ren_total);
+        // Section: Subscriptions
+        renderSubSection(d.subscriptions, d.sub_total);
+        // Section: Expenses
+        renderExpSection(d.expenses, d.exp_total);
+
+        // Empty message
+        const hasData = d.activations.length || d.renewals.length || d.subscriptions.length || d.expenses.length;
+        document.getElementById('empty-msg').style.display = hasData ? 'none' : 'block';
+    }
+
+    function renderQrSection(type, rows, sectionId, cntId, amtId, total) {
+        document.getElementById(sectionId).style.display = rows.length ? '' : 'none';
+        if (!rows.length) return;
+        document.getElementById(cntId).textContent = rows.length;
+        document.getElementById(amtId).textContent = fmt(total);
+        const tbody = document.getElementById('tbody-' + (type === 'activations' ? 'act' : 'ren'));
+        tbody.innerHTML = rows.map(function (q) {
+            return '<tr>'
+                + '<td><strong>' + esc(q.license_plate || '—') + '</strong></td>'
+                + '<td>' + esc(q.owner_name || '—') + '</td>'
+                + '<td><strong>' + fmt(q.amount) + '</strong></td>'
+                + '<td class="text-muted">' + esc(q.recorded_by || '—') + '</td>'
+                + '<td style="font-size:.8rem;">' + esc(q.created_at || '—') + '</td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    function renderSubSection(subs, total) {
+        document.getElementById('section-subs').style.display = subs.length ? '' : 'none';
+        if (!subs.length) return;
+        document.getElementById('cnt-sub').textContent = subs.length;
+        document.getElementById('amt-sub').textContent = fmt(total);
+        const tbody = document.getElementById('tbody-sub');
+        const statusBadge = {
+            'paid':      '<span style="background:rgba(63,185,80,0.12);color:var(--st-green);border:1px solid rgba(63,185,80,0.25);border-radius:6px;font-size:.7rem;padding:.1em .5em;white-space:nowrap;"><i class="fas fa-check me-1"></i>Payé</span>',
+            'debited':   '<span style="background:rgba(0,212,255,0.1);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.2);border-radius:6px;font-size:.7rem;padding:.1em .5em;white-space:nowrap;"><i class="fas fa-bolt me-1"></i>Prélevé</span>',
+            'due':       '<span style="background:rgba(248,81,73,0.1);color:var(--st-red);border:1px solid rgba(248,81,73,0.25);border-radius:6px;font-size:.7rem;padding:.1em .5em;white-space:nowrap;"><i class="fas fa-exclamation-circle me-1"></i>Dû</span>',
+            'scheduled': '<span class="sub-badge-scheduled"><i class="fas fa-clock me-1"></i>Prévu</span>',
+        };
+        const modeLabel = {
+            'manuel':      '<span style="color:var(--st-yellow);font-size:.75rem;"><i class="fas fa-hand-pointer me-1"></i>Manuel</span>',
+            'automatique': '<span style="color:var(--st-cyan);font-size:.75rem;"><i class="fas fa-bolt me-1"></i>Auto</span>',
+        };
+        tbody.innerHTML = subs.map(function(s) {
+            const badge = statusBadge[s.status] || statusBadge['scheduled'];
+            const mode  = modeLabel[s.payment_mode] || esc(s.payment_mode);
+            var dateCell;
+            if (s.payment_mode === 'automatique') {
+                dateCell = '<span class="sub-muted">Prélèvement automatique</span>'
+                    + (s.next_payment_date ? '<br><span class="sub-dim">Prochain : ' + esc(s.next_payment_date) + '</span>' : '');
+            } else if (s.status === 'paid') {
+                dateCell = esc(s.last_paid_at || '—')
+                    + (s.last_paid_by ? '<br><span class="text-muted" style="font-size:.72rem;">par ' + esc(s.last_paid_by) + '</span>' : '');
+            } else if (s.status === 'due') {
+                dateCell = '<span style="font-size:.78rem;color:var(--st-red);">En attente de validation</span>'
+                    + (s.start_date ? '<br><span class="sub-dim">Depuis le ' + esc(s.start_date) + '</span>' : '');
+            } else {
+                dateCell = s.next_payment_date
+                    ? '<span class="sub-muted">Prochain : ' + esc(s.next_payment_date) + '</span>'
+                    : (s.start_date ? '<span class="sub-dim">Depuis le ' + esc(s.start_date) + '</span>' : '—');
+            }
+            const amtClass = (s.status === 'paid' || s.status === 'debited') ? 'style="color:var(--st-green);"' : 'class="sub-amt-dim"';
+            return '<tr>'
+                + '<td><strong>' + esc(s.name) + '</strong></td>'
+                + '<td>' + esc(s.sub_type) + '</td>'
+                + '<td>' + mode + '</td>'
+                + '<td>' + esc(s.frequency) + '</td>'
+                + '<td><strong ' + amtClass + '>' + fmt(s.amount) + '</strong></td>'
+                + '<td>' + badge + '</td>'
+                + '<td style="font-size:.78rem;">' + dateCell + '</td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    function renderExpSection(expenses, total) {
+        document.getElementById('section-expenses').style.display = expenses.length ? '' : 'none';
+        if (!expenses.length) return;
+        document.getElementById('cnt-exp').textContent = expenses.length;
+        document.getElementById('amt-exp').textContent = fmt(total);
+        const tbody = document.getElementById('tbody-exp');
+        tbody.innerHTML = expenses.map(function (e) {
+            return '<tr>'
+                + '<td><strong>' + esc(e.description) + '</strong>' + (e.notes ? '<br><small class="text-muted">' + esc(e.notes) + '</small>' : '') + '</td>'
+                + '<td>' + esc(e.category) + '</td>'
+                + '<td class="text-muted">' + esc(e.vendor || '—') + '</td>'
+                + '<td><strong style="color:var(--st-red);">' + fmt(e.amount) + '</strong></td>'
+                + '<td style="font-size:.8rem;">' + esc(e.expense_date || '—') + '</td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    /* ── Auto-generate on load ── */
+    generateReport();
+
+    /* ── Enter key on inputs ── */
+    ['input-daily','input-monthly','input-annual'].forEach(function (id) {
+        document.getElementById(id).addEventListener('change', generateReport);
+    });
+})();
+    /* ── Mobile sidebar ── */
+    (function(){
+        function openSidebar(){
+            document.querySelector('.st-sidebar').classList.add('mob-open');
+            document.getElementById('mob-overlay').classList.add('active');
+        }
+        function closeSidebar(){
+            document.querySelector('.st-sidebar').classList.remove('mob-open');
+            document.getElementById('mob-overlay').classList.remove('active');
+        }
+        window.openSidebar = openSidebar;
+        window.closeSidebar = closeSidebar;
+        // Close on nav link click (mobile)
+        document.querySelectorAll('.st-nav-item').forEach(function(a){
+            a.addEventListener('click', closeSidebar);
+        });
+    })();
+</script>
+</body>
+</html>

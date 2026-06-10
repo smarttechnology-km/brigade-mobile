@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Technology — Véhicules</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg: #0d1117;
+            --st-surface: #161b22;
+            --st-border: rgba(255,255,255,0.08);
+            --st-cyan: #00d4ff;
+            --st-green: #3fb950;
+            --st-yellow: #f0b429;
+            --st-red: #f85149;
+            --st-blue: #58a6ff;
+            --st-purple: #bc8cff;
+            --sidebar-w: 260px;
+        }
+        * { box-sizing: border-box; }
+        body { background: var(--st-bg); color: #e6edf3; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; }
+
+        /* ── Sidebar ── */
+        .st-sidebar {
+            background: linear-gradient(180deg, #1a1a2e 0%, #0f3460 100%);
+            width: var(--sidebar-w); position: fixed; top: 0; left: 0; bottom: 0;
+            padding: 1.4rem 1rem;
+            border-right: 1px solid rgba(0,212,255,0.1);
+            z-index: 100; display: flex; flex-direction: column;
+        }
+        .st-brand { display: flex; align-items: center; gap: 10px; padding-bottom: 1.2rem; border-bottom: 1px solid rgba(0,212,255,0.15); margin-bottom: 1.5rem; }
+        .st-brand-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--st-cyan), #0080ff); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; color: #fff; flex-shrink: 0; }
+        .st-brand-name { font-weight: 700; font-size: 0.92rem; color: #fff; line-height: 1.2; }
+        .st-brand-sub  { font-size: 0.7rem; color: var(--st-cyan); font-weight: 400; }
+        .st-nav { flex: 1; }
+        .st-nav-item { display: flex; align-items: center; gap: 11px; padding: 0.7rem 1rem; border-radius: 10px; color: rgba(255,255,255,0.6); text-decoration: none; font-size: 0.9rem; margin-bottom: 4px; transition: all 0.18s; }
+        .st-nav-item:hover, .st-nav-item.active { background: rgba(0,212,255,0.1); color: #fff; }
+        .st-nav-item.active { border-left: 3px solid var(--st-cyan); }
+        .st-nav-icon { width: 20px; text-align: center; color: var(--st-cyan); flex-shrink: 0; font-size: 1rem; }
+        .st-nav-divider { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.7px; color: rgba(255,255,255,0.3); padding: 1rem 1rem 0.35rem; }
+        .st-sidebar-footer { padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.07); }
+
+        /* ── Main ── */
+        .st-main { margin-left: var(--sidebar-w); padding: 1.5rem 2rem; min-height: 100vh; }
+
+        /* ── Topbar ── */
+        .st-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.6rem; }
+        .st-page-title { font-size: 1.2rem; font-weight: 700; color: #fff; }
+        .st-page-sub   { font-size: 0.78rem; color: rgba(255,255,255,0.4); margin-top: 1px; }
+        .st-user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(0,212,255,0.15); border-radius: 30px; padding: 0.3rem 0.9rem; font-size: 0.8rem; color: rgba(255,255,255,0.7); }
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+
+        /* ── Section ── */
+        .st-section { background: var(--st-surface); border: 1px solid var(--st-border); border-radius: 14px; overflow: hidden; margin-bottom: 1.5rem; }
+        .st-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; padding: 0.9rem 1.2rem; border-bottom: 1px solid var(--st-border); }
+        .st-section-title { font-size: 0.88rem; font-weight: 600; color: #fff; white-space: nowrap; }
+
+        /* ── Search + filter toolbar ── */
+        .st-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .st-search-wrap { position: relative; }
+        .st-search-wrap .fa-search { position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.3); font-size: 0.75rem; pointer-events: none; }
+        .st-search-clear {
+            position: absolute; right: 0.45rem; top: 50%; transform: translateY(-50%);
+            width: 18px; height: 18px; border-radius: 50%;
+            background: rgba(255,255,255,0.12); border: none;
+            color: rgba(255,255,255,0.55); font-size: 0.6rem;
+            align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.15s; padding: 0;
+        }
+        .st-search-clear:hover { background: rgba(248,81,73,0.25); color: #f85149; }
+        .st-input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #e6edf3;
+            font-size: 0.8rem;
+            padding: 0.38rem 0.7rem;
+            outline: none;
+            transition: border-color 0.18s;
+        }
+        .st-input:focus { border-color: var(--st-cyan); }
+        .st-input::placeholder { color: rgba(255,255,255,0.28); }
+        .st-search-input { padding-left: 1.9rem; padding-right: 1.8rem; width: 220px; }
+        .st-select { cursor: pointer; }
+        option { background: #1e2736; }
+
+        /* ── Table ── */
+        .table { --bs-table-color: #e6edf3; --bs-table-bg: transparent; color: #e6edf3; margin: 0; font-size: 0.82rem; }
+        .text-muted { color: rgba(255,255,255,0.42) !important; }
+        .table thead th { background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.45); border-color: var(--st-border); font-weight: 500; font-size: 0.73rem; text-transform: uppercase; letter-spacing: 0.4px; padding: 0.65rem 1rem; }
+        .table tbody td { border-color: rgba(255,255,255,0.04); padding: 0.7rem 1rem; vertical-align: middle; }
+        .table tbody tr:hover td { background: rgba(0,212,255,0.07); color: #e6edf3; }
+
+        /* ── Pills ── */
+        .pill { display: inline-block; font-size: 0.7rem; font-weight: 500; padding: 0.2em 0.65em; border-radius: 20px; }
+        .pill-activation  { background: rgba(0,212,255,0.13); color: var(--st-cyan); border: 1px solid rgba(0,212,255,0.28); }
+        .pill-renewal     { background: rgba(188,140,255,0.13); color: var(--st-purple); border: 1px solid rgba(188,140,255,0.28); }
+        .pill-total       { background: rgba(88,166,255,0.13); color: var(--st-blue); border: 1px solid rgba(88,166,255,0.28); }
+        .pill-active-exp  { background: rgba(63,185,80,0.13); color: var(--st-green); border: 1px solid rgba(63,185,80,0.28); }
+        .pill-expired-exp { background: rgba(248,81,73,0.13); color: var(--st-red); border: 1px solid rgba(248,81,73,0.28); }
+
+        /* ── History button ── */
+        .btn-history {
+            background: rgba(0,212,255,0.08);
+            border: 1px solid rgba(0,212,255,0.2);
+            color: var(--st-cyan);
+            border-radius: 7px;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .btn-history:hover { background: rgba(0,212,255,0.18); border-color: var(--st-cyan); }
+
+        /* ── Live badge ── */
+        #live-badge { font-size: 0.7rem; padding: 0.18em 0.65em; border-radius: 20px; border: 1px solid rgba(63,185,80,0.3); background: rgba(63,185,80,0.1); color: var(--st-green); }
+
+        /* ── Theme toggle ── */
+        .st-theme-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.75); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; flex-shrink: 0; }
+        .st-theme-btn:hover { background: rgba(0,212,255,0.15); border-color: var(--st-cyan); color: var(--st-cyan); }
+
+        /* ── Pagination ── */
+        .st-pagination { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.2rem; border-top: 1px solid var(--st-border); font-size: 0.8rem; color: rgba(255,255,255,0.45); flex-wrap: wrap; gap: 0.5rem; }
+        .page-link { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.65); border-radius: 7px; padding: 0.3rem 0.75rem; font-size: 0.8rem; text-decoration: none; transition: all 0.15s; }
+        .page-link:hover { background: rgba(0,212,255,0.12); border-color: var(--st-cyan); color: #fff; }
+        .page-link.active { background: rgba(0,212,255,0.18); border-color: var(--st-cyan); color: var(--st-cyan); font-weight: 600; }
+        .page-link.disabled { opacity: 0.3; pointer-events: none; }
+
+        /* ── Modal ── */
+        .st-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 1050; align-items: center; justify-content: center; }
+        .st-modal-backdrop.open { display: flex; }
+        .st-modal {
+            background: #1a1f2e;
+            border: 1px solid rgba(0,212,255,0.18);
+            border-radius: 14px;
+            width: 100%; max-width: 520px;
+            padding: 1.5rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        .st-modal-title { font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 8px; }
+        .st-modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: rgba(255,255,255,0.45); font-size: 1.1rem; cursor: pointer; transition: color 0.15s; }
+        .st-modal-close:hover { color: #fff; }
+
+        .hist-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 0.75rem; }
+        .hist-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.35); margin-bottom: 0.3rem; }
+        .hist-val   { font-size: 0.88rem; color: #e6edf3; font-weight: 500; }
+        .hist-val .officer { font-size: 0.75rem; color: rgba(255,255,255,0.45); font-weight: 400; margin-left: 0.5rem; }
+
+        .hist-renewals-list { list-style: none; padding: 0; margin: 0; max-height: 260px; overflow-y: auto; }
+        .hist-renewals-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.82rem; }
+        .hist-renewals-list li:last-child { border-bottom: none; }
+        .hist-renewals-list .r-date { color: #e6edf3; }
+        .hist-renewals-list .r-officer { color: rgba(255,255,255,0.45); font-size: 0.75rem; }
+
+        .hist-empty { color: rgba(255,255,255,0.35); font-size: 0.82rem; text-align: center; padding: 1rem 0; }
+
+        /* ── Light mode ── */
+        html[data-theme="light"] body { background: #f0f2f5; color: #1a1a2e; }
+        html[data-theme="light"] .st-section { background: #ffffff; border-color: rgba(0,0,0,0.08); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        html[data-theme="light"] .st-section-header { border-bottom-color: rgba(0,0,0,0.08); }
+        html[data-theme="light"] .st-section-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-input { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: #1a1a2e; }
+        html[data-theme="light"] .st-search-clear { background: rgba(0,0,0,0.1); color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .st-search-clear:hover { background: rgba(207,34,46,0.12); color: #cf222e; }
+        html[data-theme="light"] .st-input::placeholder { color: rgba(0,0,0,0.3); }
+        html[data-theme="light"] .st-input:focus { border-color: #0095b3; }
+        html[data-theme="light"] option { background: #fff; color: #1a1a2e; }
+        html[data-theme="light"] .table { --bs-table-color: #1a1a2e; color: #1a1a2e; }
+        html[data-theme="light"] .text-muted { color: rgba(0,0,0,0.45) !important; }
+        html[data-theme="light"] .table thead th { background: #f6f8fa; color: rgba(0,0,0,0.5); border-color: rgba(0,0,0,0.08); }
+        html[data-theme="light"] .table tbody td { border-color: rgba(0,0,0,0.05); }
+        html[data-theme="light"] .table tbody tr:hover td { background: rgba(0,149,179,0.06); color: #1a1a2e; }
+        html[data-theme="light"] .st-page-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-page-sub { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .st-user-pill { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.12); color: #1a1a2e; }
+        html[data-theme="light"] .st-theme-btn { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); color: #555; }
+        html[data-theme="light"] .st-theme-btn:hover { background: rgba(0,150,180,0.1); border-color: #0095b3; color: #0095b3; }
+        html[data-theme="light"] .pill-activation { background: rgba(0,149,179,0.1); color: #0095b3; border-color: rgba(0,149,179,0.3); }
+        html[data-theme="light"] .pill-renewal { background: rgba(130,80,255,0.1); color: #6f42c1; border-color: rgba(130,80,255,0.3); }
+        html[data-theme="light"] .pill-total       { background: rgba(5,80,174,0.1); color: #0550ae; border-color: rgba(5,80,174,0.3); }
+        html[data-theme="light"] .pill-active-exp  { background: rgba(26,127,55,0.1); color: #1a7f37; border-color: rgba(26,127,55,0.3); }
+        html[data-theme="light"] .pill-expired-exp { background: rgba(207,34,46,0.1); color: #cf222e; border-color: rgba(207,34,46,0.3); }
+        html[data-theme="light"] .btn-history { background: rgba(0,149,179,0.08); border-color: rgba(0,149,179,0.25); color: #0095b3; }
+        html[data-theme="light"] .btn-history:hover { background: rgba(0,149,179,0.15); border-color: #0095b3; }
+        html[data-theme="light"] .st-pagination { border-top-color: rgba(0,0,0,0.08); color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .page-link { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: #555; }
+        html[data-theme="light"] .page-link:hover { background: rgba(0,149,179,0.08); border-color: #0095b3; color: #0095b3; }
+        html[data-theme="light"] .page-link.active { background: rgba(0,149,179,0.12); border-color: #0095b3; color: #0095b3; }
+        html[data-theme="light"] .st-modal { background: #fff; border-color: rgba(0,0,0,0.12); }
+        html[data-theme="light"] .st-modal-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-modal-close { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .st-modal-close:hover { color: #1a1a2e; }
+        html[data-theme="light"] .hist-card { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.07); }
+        html[data-theme="light"] .hist-label { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .hist-val { color: #1a1a2e; }
+        html[data-theme="light"] .hist-val .officer { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .hist-renewals-list li { border-bottom-color: rgba(0,0,0,0.06); }
+        html[data-theme="light"] .hist-renewals-list .r-date { color: #1a1a2e; }
+        html[data-theme="light"] .hist-renewals-list .r-officer { color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .hist-empty { color: rgba(0,0,0,0.35); }
+        html[data-theme="light"] .st-modal-backdrop { background: rgba(0,0,0,0.4); }
+
+        @media (max-width: 768px) {
+            .mob-menu-btn{display:flex!important;}
+            .st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}
+            .st-sidebar.mob-open{transform:translateX(0);z-index:101;}
+            .st-main{margin-left:0;padding:1rem;}
+            .st-search-input{width:160px;}
+        }
+
+        /* ── Mobile nav drawer ── */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-menu-btn:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--st-cyan);}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
+    </style>
+    <script>(function(){ const t = localStorage.getItem('st_theme') || 'dark'; document.documentElement.setAttribute('data-theme', t); })();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- ── Sidebar ── -->
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">Smart Technology</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+    <div class="st-sidebar-footer">
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="st-main">
+
+    <!-- Topbar -->
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-car-side me-2" style="color:var(--st-cyan);"></i>Véhicules</div>
+            <div class="st-page-sub">
+                {{ pagination.total }} véhicule{{ 's' if pagination.total != 1 else '' }}
+                {% if search or type_filter %} — résultats filtrés{% endif %}
+                — page {{ page }} / {{ pagination.pages }}
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span id="live-badge">● En direct</span>
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn" title="Changer le thème">
+                <i class="fas fa-sun" id="theme-icon"></i>
+            </button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Table section -->
+    <div class="st-section">
+        <!-- Header: title + search/filter toolbar -->
+        <div class="st-section-header">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="st-section-title">
+                    <i class="fas fa-list me-2" style="color:var(--st-cyan);"></i>Liste des véhicules
+                </div>
+                <span class="pill pill-activation" id="ref-activation" title="Tarif activation QR">
+                    <i class="fas fa-bolt me-1"></i>{{ "{:,}".format(activation_price) }} KMF
+                </span>
+                <span class="pill pill-renewal" id="ref-renewal" title="Tarif renouvellement QR">
+                    <i class="fas fa-sync-alt me-1"></i>{{ "{:,}".format(renewal_price) }} KMF
+                </span>
+            </div>
+            <div class="st-toolbar">
+                <!-- Search input -->
+                <div class="st-search-wrap">
+                    <i class="fas fa-search"></i>
+                    <input
+                        type="text"
+                        id="search-input"
+                        class="st-input st-search-input"
+                        placeholder="Plaque, propriétaire…"
+                        value="{{ search }}"
+                        autocomplete="off"
+                    >
+                    <button id="search-clear" class="st-search-clear" title="Effacer" style="display:{{ 'flex' if search else 'none' }}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <!-- Type filter -->
+                <select id="type-filter" class="st-input st-select" title="Filtrer par type">
+                    <option value=""       {% if not type_filter %}selected{% endif %}>Tous les types</option>
+                    <option value="activation" {% if type_filter == 'activation' %}selected{% endif %}>Activation</option>
+                    <option value="renewal"    {% if type_filter == 'renewal'    %}selected{% endif %}>Renouvellement</option>
+                </select>
+                <span class="pill pill-total">{{ pagination.total }}</span>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-responsive">
+            <table class="table" id="vehicles-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Plaque</th>
+                        <th>Propriétaire</th>
+                        <th>Type</th>
+                        <th>Montant</th>
+                        <th>Enregistré par</th>
+                        <th>Date</th>
+                        <th>Expiration QR</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set offset = (page - 1) * per_page %}
+                    {% for row in qr_rows %}
+                    <tr>
+                        <td class="text-muted">{{ offset + loop.index }}</td>
+                        <td><strong>{{ row.license_plate }}</strong></td>
+                        <td>{{ row.owner_name }}</td>
+                        <td>
+                            {% if row.payment_type == 'activation' %}
+                            <span class="pill pill-activation">Activation</span>
+                            {% else %}
+                            <span class="pill pill-renewal">Renouvellement</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.amount is not none %}
+                            <strong>{{ "{:,.0f}".format(row.amount) }} KMF</strong>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.recorded_by or '—' }}</td>
+                        <td class="text-muted">{{ row.date_obj.strftime('%d/%m/%Y %H:%M') if row.date_obj else '—' }}</td>
+                        <td>
+                            {% if row.qr_expiry %}
+                                {% if not row.qr_expired %}
+                                <span class="pill pill-active-exp">{{ row.qr_expiry.strftime('%d/%m/%Y') }}</span>
+                                {% else %}
+                                <span class="pill pill-expired-exp">{{ row.qr_expiry.strftime('%d/%m/%Y') }}</span>
+                                {% endif %}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn-history" onclick="openHistory({{ row.vehicle_id }}, '{{ row.license_plate | e }}')">
+                                <i class="fas fa-history me-1"></i>Historique
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="text-center text-muted py-4">Aucun véhicule trouvé.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if pagination.pages > 1 %}
+        <div class="st-pagination">
+            <span>
+                {{ (page - 1) * per_page + 1 }}–{{ [page * per_page, pagination.total] | min }}
+                sur {{ pagination.total }}
+            </span>
+            <div class="d-flex gap-1 flex-wrap" id="pagination-links">
+                <a href="{{ url_for('smart_tech.vehicles_page', page=1, search=search, type_filter=type_filter) }}"
+                   class="page-link {{ 'disabled' if page == 1 }}">«</a>
+                <a href="{{ url_for('smart_tech.vehicles_page', page=page-1, search=search, type_filter=type_filter) }}"
+                   class="page-link {{ 'disabled' if not pagination.has_prev }}">‹</a>
+
+                {% for p in range([1, page-2]|max, [pagination.pages+1, page+3]|min) %}
+                <a href="{{ url_for('smart_tech.vehicles_page', page=p, search=search, type_filter=type_filter) }}"
+                   class="page-link {{ 'active' if p == page }}">{{ p }}</a>
+                {% endfor %}
+
+                <a href="{{ url_for('smart_tech.vehicles_page', page=page+1, search=search, type_filter=type_filter) }}"
+                   class="page-link {{ 'disabled' if not pagination.has_next }}">›</a>
+                <a href="{{ url_for('smart_tech.vehicles_page', page=pagination.pages, search=search, type_filter=type_filter) }}"
+                   class="page-link {{ 'disabled' if page == pagination.pages }}">»</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</main>
+
+<!-- ── History modal ── -->
+<div class="st-modal-backdrop" id="history-modal">
+    <div class="st-modal">
+        <button class="st-modal-close" onclick="closeHistory()"><i class="fas fa-times"></i></button>
+        <div class="st-modal-title">
+            <i class="fas fa-history" style="color:var(--st-cyan);"></i>
+            <span>Historique QR — <span id="modal-plate"></span></span>
+        </div>
+        <div id="modal-body">
+            <div class="text-center py-3" style="color:rgba(255,255,255,0.4);">
+                <i class="fas fa-spinner fa-spin"></i> Chargement…
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    /* ── Theme ── */
+    const html      = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        themeBtn.title = t === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    /* ── Live badge ── */
+    let lastRefresh = Date.now();
+    const liveBadge = document.getElementById('live-badge');
+    function updateLiveBadge() {
+        const secs = Math.round((Date.now() - lastRefresh) / 1000);
+        if (secs < 5) {
+            liveBadge.style.background = 'rgba(63,185,80,0.1)';
+            liveBadge.style.color = '#3fb950';
+            liveBadge.textContent = '● En direct';
+        } else {
+            liveBadge.style.background = 'rgba(240,180,41,0.1)';
+            liveBadge.style.color = '#f0b429';
+            liveBadge.textContent = '↻ il y a ' + secs + 's';
+        }
+    }
+    setInterval(updateLiveBadge, 1000);
+
+    /* ── Helpers ── */
+    function escHtml(s) {
+        return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    /* ── State ── */
+    const searchInput = document.getElementById('search-input');
+    const typeSelect  = document.getElementById('type-filter');
+    let activePage    = {{ page }};
+    let searchTimer;
+
+    function buildApiUrl(page) {
+        return '/smart-tech/api/vehicles-table'
+            + '?page='        + (page || activePage)
+            + '&search='      + encodeURIComponent(searchInput.value.trim())
+            + '&type_filter=' + encodeURIComponent(typeSelect.value);
+    }
+
+    /* ── Pagination re-render ── */
+    function updatePagination(total, page, pages, perPage) {
+        /* badge total */
+        const badge = document.querySelector('.pill-total');
+        if (badge) badge.textContent = total;
+
+        /* topbar sub */
+        const sub = document.querySelector('.st-page-sub');
+        if (sub) {
+            const filtered = (searchInput.value.trim() || typeSelect.value) ? ' — résultats filtrés' : '';
+            sub.textContent = total + (total !== 1 ? ' véhicules' : ' véhicule')
+                + filtered + ' — page ' + page + ' / ' + Math.max(1, pages);
+        }
+
+        /* range text */
+        const rangeEl = document.querySelector('.st-pagination > span');
+        if (rangeEl) {
+            const s = (page - 1) * perPage + 1;
+            const e = Math.min(page * perPage, total);
+            rangeEl.textContent = (total > 0 ? s + '–' + e : '0') + ' sur ' + total;
+        }
+
+        /* pagination links */
+        const linksEl  = document.getElementById('pagination-links');
+        const paginEl  = document.querySelector('.st-pagination');
+        if (!linksEl || !paginEl) return;
+
+        if (pages <= 1) { paginEl.style.display = 'none'; return; }
+        paginEl.style.display = '';
+
+        function pgUrl(p) {
+            return '/smart-tech/vehicles?page=' + p
+                + '&search='      + encodeURIComponent(searchInput.value.trim())
+                + '&type_filter=' + encodeURIComponent(typeSelect.value);
+        }
+
+        let h = '';
+        h += '<a href="' + pgUrl(1) + '" class="page-link' + (page === 1 ? ' disabled' : '') + '">«</a>';
+        h += '<a href="' + pgUrl(page - 1) + '" class="page-link' + (page <= 1 ? ' disabled' : '') + '">‹</a>';
+        const from = Math.max(1, page - 2);
+        const to   = Math.min(pages + 1, page + 3);
+        for (let p = from; p < to; p++) {
+            h += '<a href="' + pgUrl(p) + '" class="page-link' + (p === page ? ' active' : '') + '">' + p + '</a>';
+        }
+        h += '<a href="' + pgUrl(page + 1) + '" class="page-link' + (page >= pages ? ' disabled' : '') + '">›</a>';
+        h += '<a href="' + pgUrl(pages) + '" class="page-link' + (page === pages ? ' disabled' : '') + '">»</a>';
+        linksEl.innerHTML = h;
+    }
+
+    /* ── Full table + pagination refresh (AJAX, no navigation) ── */
+    function refreshTable(page) {
+        if (page !== undefined) activePage = page;
+        fetch(buildApiUrl())
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d) return;
+                lastRefresh = Date.now();
+                activePage = d.page;
+
+                const tbody = document.querySelector('#vehicles-table tbody');
+                if (!tbody) return;
+
+                if (!d.rows.length) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Aucun véhicule trouvé.</td></tr>';
+                    updatePagination(0, 1, 1, d.per_page);
+                    updateLiveBadge();
+                    return;
+                }
+
+                const offset = (d.page - 1) * d.per_page;
+                tbody.innerHTML = d.rows.map(function (row, i) {
+                    const badge = row.payment_type === 'activation'
+                        ? '<span class="pill pill-activation">Activation</span>'
+                        : '<span class="pill pill-renewal">Renouvellement</span>';
+                    const amt = row.amount != null
+                        ? '<strong>' + Number(row.amount).toLocaleString('fr') + ' KMF</strong>'
+                        : '<span class="text-muted">—</span>';
+                    const expCell = row.qr_expiry
+                        ? (row.qr_expired
+                            ? '<span class="pill pill-expired-exp">' + row.qr_expiry + '</span>'
+                            : '<span class="pill pill-active-exp">'  + row.qr_expiry + '</span>')
+                        : '<span class="text-muted">—</span>';
+                    return '<tr>'
+                        + '<td class="text-muted">' + (offset + i + 1) + '</td>'
+                        + '<td><strong>' + escHtml(row.license_plate) + '</strong></td>'
+                        + '<td>' + escHtml(row.owner_name) + '</td>'
+                        + '<td>' + badge + '</td>'
+                        + '<td>' + amt + '</td>'
+                        + '<td>' + escHtml(row.recorded_by || '—') + '</td>'
+                        + '<td class="text-muted">' + (row.date || '—') + '</td>'
+                        + '<td>' + expCell + '</td>'
+                        + '<td><button class="btn-history" onclick="openHistory(' + row.vehicle_id + ',\'' + escHtml(row.license_plate) + '\')">'
+                        + '<i class="fas fa-history me-1"></i>Historique</button></td>'
+                        + '</tr>';
+                }).join('');
+
+                updatePagination(d.total, d.page, d.pages, d.per_page);
+                updateLiveBadge();
+
+                if (d.activation_price != null) {
+                    const el = document.getElementById('ref-activation');
+                    if (el) el.innerHTML = '<i class="fas fa-bolt me-1"></i>' + Number(d.activation_price).toLocaleString('fr') + ' KMF';
+                }
+                if (d.renewal_price != null) {
+                    const el = document.getElementById('ref-renewal');
+                    if (el) el.innerHTML = '<i class="fas fa-sync-alt me-1"></i>' + Number(d.renewal_price).toLocaleString('fr') + ' KMF';
+                }
+            })
+            .catch(function () {});
+    }
+
+    /* ── Search clear button ── */
+    const clearBtn = document.getElementById('search-clear');
+    function syncClearBtn() {
+        clearBtn.style.display = searchInput.value ? 'flex' : 'none';
+    }
+    clearBtn.addEventListener('click', function () {
+        searchInput.value = '';
+        syncClearBtn();
+        clearTimeout(searchTimer);
+        refreshTable(1);
+        searchInput.focus();
+    });
+
+    /* ── Search: debounce → AJAX (cursor stays in input) ── */
+    searchInput.addEventListener('input', function () {
+        syncClearBtn();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () { refreshTable(1); }, 400);
+    });
+
+    /* ── Type filter: immediate AJAX ── */
+    typeSelect.addEventListener('change', function () { refreshTable(1); });
+
+    /* ── 3-second lightweight change-detection ── */
+    let _stLastKey = null;
+    function checkForUpdates() {
+        if (document.hidden) return;
+        fetch('/smart-tech/api/last-update')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d) return;
+                if (_stLastKey === null) { _stLastKey = d.key; return; }
+                if (d.key !== _stLastKey) { _stLastKey = d.key; refreshTable(); }
+            })
+            .catch(function () {});
+    }
+    setInterval(checkForUpdates, 3000);
+    setInterval(refreshTable, 30000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkForUpdates(); });
+    window.addEventListener('focus', refreshTable);
+
+    /* ── History modal ── */
+    window.openHistory = function (vehicleId, plate) {
+        document.getElementById('modal-plate').textContent = plate;
+        document.getElementById('modal-body').innerHTML =
+            '<div class="text-center py-3" style="color:rgba(255,255,255,0.4);"><i class="fas fa-spinner fa-spin"></i> Chargement…</div>';
+        document.getElementById('history-modal').classList.add('open');
+
+        fetch('/smart-tech/api/vehicle-history/' + vehicleId)
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(function (d) {
+                let h = '';
+                h += '<div class="hist-card">'
+                    + '<div class="hist-label"><i class="fas fa-bolt me-1" style="color:var(--st-cyan);"></i>Activation</div>'
+                    + '<div class="hist-val">' + (d.activation_date || '—')
+                    + (d.activation_officer ? '<span class="officer"><i class="fas fa-user me-1"></i>' + escHtml(d.activation_officer) + '</span>' : '')
+                    + '</div></div>';
+
+                h += '<div class="hist-card">'
+                    + '<div class="hist-label"><i class="fas fa-sync-alt me-1" style="color:var(--st-purple);"></i>Renouvellements (' + d.renewals.length + ')</div>';
+                if (!d.renewals.length) {
+                    h += '<div class="hist-empty">Aucun renouvellement enregistré.</div>';
+                } else {
+                    h += '<ul class="hist-renewals-list">';
+                    d.renewals.forEach(function (r) {
+                        h += '<li>'
+                            + '<span class="r-date"><i class="fas fa-calendar-alt me-1" style="color:var(--st-purple);opacity:0.6;"></i>' + (r.date || '—') + '</span>'
+                            + '<span class="r-officer"><i class="fas fa-user me-1"></i>' + escHtml(r.officer) + '</span>'
+                            + '</li>';
+                    });
+                    h += '</ul>';
+                }
+                h += '</div>';
+                document.getElementById('modal-body').innerHTML = h;
+            })
+            .catch(function () {
+                document.getElementById('modal-body').innerHTML =
+                    '<div class="hist-empty">Erreur lors du chargement de l\'historique.</div>';
+            });
+    };
+
+    window.closeHistory = function () {
+        document.getElementById('history-modal').classList.remove('open');
+    };
+
+    document.getElementById('history-modal').addEventListener('click', function (e) {
+        if (e.target === this) closeHistory();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeHistory();
+    });
+})();
+    /* ── Mobile sidebar ── */
+    (function(){
+        function openSidebar(){
+            document.querySelector('.st-sidebar').classList.add('mob-open');
+            document.getElementById('mob-overlay').classList.add('active');
+        }
+        function closeSidebar(){
+            document.querySelector('.st-sidebar').classList.remove('mob-open');
+            document.getElementById('mob-overlay').classList.remove('active');
+        }
+        window.openSidebar = openSidebar;
+        window.closeSidebar = closeSidebar;
+        // Close on nav link click (mobile)
+        document.querySelectorAll('.st-nav-item').forEach(function(a){
+            a.addEventListener('click', closeSidebar);
+        });
+    })();
+</script>
+</body>
+</html>
