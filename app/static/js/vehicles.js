@@ -1,5 +1,35 @@
 var vehicleModalInstance = window.vehicleModalInstance || null;
 window.vehicleModalInstance = vehicleModalInstance;
+
+window.generateLicensePlate = async function() {
+    const btn = document.getElementById('btn-gen-plate');
+    const input = document.getElementById('license_plate');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+
+    const digits = () => Math.floor(Math.random() * 10);
+    const letter = () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 23)];
+    const FORBIDDEN = ['71','72','73'];
+    const gen = () => {
+        let suffix;
+        do { suffix = '' + digits() + digits(); } while (FORBIDDEN.includes(suffix));
+        return '' + digits() + digits() + digits() + letter() + letter() + suffix;
+    };
+
+    try {
+        for (let attempt = 0; attempt < 10; attempt++) {
+            const plate = gen();
+            const res = await fetch('/api/vehicles/check-plate?plate=' + plate, { credentials: 'same-origin' });
+            if (!res.ok) break;
+            const data = await res.json();
+            if (!data.exists) {
+                input.value = plate;
+                break;
+            }
+        }
+    } catch(e) { /* silently ignore network error */ }
+
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic"></i>'; }
+};
 var vehiclesCache = window.vehiclesCache || [];
 window.vehiclesCache = vehiclesCache;
 var searchDebounceTimer = window.searchDebounceTimer || null;
@@ -205,6 +235,44 @@ document.addEventListener('DOMContentLoaded', function() {
         
         addBtn.addEventListener('click', function() {
             openVehicleModal();
+        });
+    }
+
+    // Auto-fill / notify owner name from phone lookup
+    const phoneInput = document.getElementById('owner_phone');
+    if (phoneInput) {
+        let phoneTimer = null;
+        function clearPhoneHint() {
+            const hint = document.getElementById('owner-name-hint');
+            if (hint) hint.classList.add('d-none');
+        }
+        phoneInput.addEventListener('input', function() {
+            clearTimeout(phoneTimer);
+            const phone = this.value.trim();
+            if (phone.length < 6) { clearPhoneHint(); return; }
+            phoneTimer = setTimeout(async function() {
+                const vid = document.getElementById('vehicle-id').value;
+                if (vid) return; // edition mode — skip
+                try {
+                    const res = await fetch('/api/vehicles/lookup-phone?phone=' + encodeURIComponent(phone), { credentials: 'same-origin' });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const nameInput = document.getElementById('owner_name');
+                    const hint     = document.getElementById('owner-name-hint');
+                    const hintText = document.getElementById('owner-name-hint-text');
+                    if (data.found) {
+                        if (nameInput && !nameInput.value.trim()) {
+                            nameInput.value = data.owner_name;
+                        }
+                        if (hint && hintText) {
+                            hintText.textContent = 'Numéro associé à : ' + data.owner_name;
+                            hint.classList.remove('d-none');
+                        }
+                    } else {
+                        clearPhoneHint();
+                    }
+                } catch(e) {}
+            }, 500);
         });
     }
 
@@ -441,13 +509,18 @@ function openVehicleModal(vehicle) {
     // Reset form FIRST
     document.getElementById('vehicle-form').reset();
     document.getElementById('vehicle-id').value = '';
+    const _hint = document.getElementById('owner-name-hint');
+    if (_hint) _hint.classList.add('d-none');
     
     // Update modal title with icon
     const modalTitle = document.getElementById('vehicleModalLabel');
+    const genBtn = document.getElementById('btn-gen-plate');
     if(vehicle) {
         modalTitle.innerHTML = '<i class="fas fa-edit me-2"></i><span>Éditer le véhicule</span>';
+        if(genBtn) genBtn.style.display = 'none';
     } else {
         modalTitle.innerHTML = '<i class="fas fa-car me-2"></i><span>Ajouter un véhicule</span>';
+        if(genBtn) genBtn.style.display = '';
     }
     
     // ensure type controls are in known default state
@@ -755,47 +828,51 @@ function showQRCodeFor(id){
 
 function printQRCode(){
     const img = document.getElementById('qr-image');
-    if(!img || !img.src){
-        alert('QR Code non disponible');
-        return;
-    }
-    const printWindow = window.open('', '', 'height=500,width=500');
+    if(!img || !img.src){ alert('QR Code non disponible'); return; }
+    const printWindow = window.open('', '', 'height=520,width=420');
     if(printWindow){
-        const licensePlateHtml = currentLicensePlate ? `<p style="font-size: 18px; font-weight: bold; margin-top: 10px; margin-bottom: 0; color: #333;">${currentLicensePlate}</p>` : '';
         printWindow.document.write(`
             <html>
-                <head>
-                    <title>QR Code de suivi</title>
-                    <style>
-                        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: Arial, sans-serif; }
-                        .qr-container { text-align: center; }
-                        .qr-container img { max-width: 400px; height: auto; margin: 20px 0; }
-                        .qr-container p { margin: 10px 0; color: #666; }
-                    </style>
-                </head>
-                <body>
-                    <div class="qr-container">
-                        <img src="${img.src}" alt="QR Code" />
-                        ${licensePlateHtml}
-                    </div>
-                </body>
+            <head>
+                <title>QR Code</title>
+                <style>
+                    @page { size: 10cm 10cm; margin: 0; }
+                    * { box-sizing: border-box; margin: 0; padding: 0; }
+                    body { width: 10cm; height: 10cm; display: flex; align-items: stretch; justify-content: center; }
+                    .card { width: 9.2cm; border: 1.5px solid #003399; display: flex; flex-direction: column; margin: auto; }
+                    .qr-wrap { background: #fff; display: flex; align-items: center; justify-content: center; flex: 1; padding: 5px 4px 3px; }
+                    .qr-wrap img { width: 8.0cm; height: 8.0cm; display: block; }
+                    .footer { background: #eef2ff; text-align: center; font-family: Arial, sans-serif; font-size: 7pt; color: #555; font-style: italic; padding: 3px 4px; }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <div class="qr-wrap"><img src="${img.src}" alt="QR Code" /></div>
+                    <div class="footer">Brigade Mobile — Comores</div>
+                </div>
+            </body>
             </html>
         `);
         printWindow.document.close();
-        setTimeout(() => {
-            printWindow.print();
-        }, 250);
+        setTimeout(() => { printWindow.print(); }, 250);
     }
 }
 
 function downloadQRCodePDF(){
-    if(!currentVehicleId){
-        alert('Véhicule non disponible');
-        return;
-    }
+    if(!currentVehicleId){ alert('Véhicule non disponible'); return; }
     const link = document.createElement('a');
     link.href = `/api/vehicles/${currentVehicleId}/qrcode/pdf`;
-    link.download = `${currentLicensePlate || 'qrcode'}_qrcode.pdf`;
+    link.download = `qrcode.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function downloadVehicleSheet(){
+    if(!currentVehicleId){ alert('Véhicule non disponible'); return; }
+    const link = document.createElement('a');
+    link.href = `/api/vehicles/${currentVehicleId}/sheet.pdf`;
+    link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
