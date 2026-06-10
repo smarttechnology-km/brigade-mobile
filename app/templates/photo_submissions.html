@@ -1033,12 +1033,33 @@ function renderTransfersTable(transfers) {
                 </span>
             </td>
             <td class="text-end pe-4">
-                <button class="btn btn-sm btn-primary" title="Voir détails" onclick="event.stopPropagation(); showTransferModal(${transfer.id})">
+                <button class="btn btn-sm btn-primary me-1" title="Voir détails" onclick="event.stopPropagation(); showTransferModal(${transfer.id})">
                     <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-danger" title="Supprimer" onclick="event.stopPropagation(); deleteTransfer(${transfer.id})">
+                    <i class="fas fa-trash"></i>
                 </button>
             </td>
         </tr>
     `).join('');
+}
+
+async function deleteTransfer(transferId) {
+    if (!confirm('Supprimer ce transfert définitivement ?')) return;
+    try {
+        const res = await fetch(`/api/vehicle-transfers/${transferId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.error || 'Erreur lors de la suppression');
+            return;
+        }
+        loadTransfers();
+    } catch (e) {
+        alert('Erreur réseau');
+    }
 }
 
 async function showTransferModal(transferId) {
