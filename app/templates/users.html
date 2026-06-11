@@ -431,7 +431,16 @@ document.getElementById('btn-restore-backup').addEventListener('click', function
     formData.append('backup_file', fileInput.files[0]);
 
     fetch('/api/users/restore', { method: 'POST', body: formData })
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) {
+                return r.text().then(t => {
+                    let msg = `Erreur HTTP ${r.status}`;
+                    try { const j = JSON.parse(t); msg = j.error || msg; } catch(e) { if(t && t.length < 300) msg += ' — ' + t; }
+                    throw new Error(msg);
+                });
+            }
+            return r.json();
+        })
         .then(d => {
             if (d.error) {
                 alertEl.className = 'alert alert-danger';
@@ -444,9 +453,9 @@ document.getElementById('btn-restore-backup').addEventListener('click', function
             }
             alertEl.style.display = '';
         })
-        .catch(() => {
+        .catch(err => {
             alertEl.className = 'alert alert-danger';
-            alertEl.textContent = 'Erreur réseau.';
+            alertEl.textContent = err.message || 'Erreur réseau.';
             alertEl.style.display = '';
         })
         .finally(() => {
