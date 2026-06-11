@@ -2572,8 +2572,9 @@ def api_users_restore():
 
 
 @main_bp.route('/api/users/restore/status/<task_id>', methods=['GET'])
-@roles_required('administrateur')
 def api_users_restore_status(task_id):
+    # Pas d'auth requise : le task_id UUID 128 bits est non-devinable et ne retourne pas de données sensibles.
+    # L'auth session serait de toute façon invalide pendant la restauration (users table vidée).
     task = _restore_tasks.get(task_id)
     if not task:
         return jsonify({'error': 'Tâche introuvable.'}), 404
