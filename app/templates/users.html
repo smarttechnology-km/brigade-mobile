@@ -446,7 +446,7 @@ document.getElementById('btn-restore-backup').addEventListener('click', function
     }
 
     function pollStatus(taskId) {
-        fetch(`/api/users/restore/status/${taskId}`)
+        fetch(window.location.origin + '/api/users/restore/status/' + taskId)
             .then(r => r.json())
             .then(d => {
                 if (d.status === 'running') {
@@ -458,12 +458,12 @@ document.getElementById('btn-restore-backup').addEventListener('click', function
                     finish(false, d.message || 'Erreur inconnue.');
                 }
             })
-            .catch(() => finish(false, 'Erreur réseau lors du suivi.'));
+            .catch(err => finish(false, 'Poll échoué: ' + (err.name ? err.name + ': ' : '') + (err.message || '?')));
     }
 
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Envoi du fichier…';
 
-    fetch('/api/users/restore', { method: 'POST', body: formData })
+    fetch(window.location.origin + '/api/users/restore', { method: 'POST', body: formData })
         .then(r => {
             if (!r.ok) {
                 return r.text().then(t => {
@@ -482,7 +482,7 @@ document.getElementById('btn-restore-backup').addEventListener('click', function
                 finish(false, 'Réponse inattendue du serveur.');
             }
         })
-        .catch(err => finish(false, err.message || 'Erreur réseau.'));
+        .catch(err => finish(false, (err.name ? err.name + ': ' : '') + (err.message || 'Erreur réseau.')));
 });
 </script>
 {% endblock %}
