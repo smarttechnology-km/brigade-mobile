@@ -2478,29 +2478,34 @@ def api_users_restore():
     try:
         with db.engine.begin() as conn:
             if is_pg:
-                conn.execute(text('SET session_replication_role = replica'))
+                # PostgreSQL: TRUNCATE CASCADE gère les FK automatiquement
+                # On truncate toutes les tables en une seule commande
+                tables_quoted = ', '.join(f'"{n}"' for n in tables_to_restore)
+                conn.execute(text(f'TRUNCATE {tables_quoted} RESTART IDENTITY CASCADE'))
             else:
+                # SQLite: désactiver FK puis supprimer dans l'ordre inverse
                 conn.execute(text('PRAGMA foreign_keys = OFF'))
-
-            # Delete in reverse order to respect FK
-            for name in reversed(tables_to_restore):
-                conn.execute(text(f'DELETE FROM "{name}"'))
+                for name in reversed(tables_to_restore):
+                    conn.execute(text(f'DELETE FROM "{name}"'))
 
             # Insert in forward order using raw SQL to bypass type processors
+            # (SQLite stores datetimes as text natively; PostgreSQL auto-casts ISO strings)
             for name in tables_to_restore:
                 rows = backup_data[name]
                 if not rows:
                     continue
                 col_names = list(rows[0].keys())
                 cols_sql = ', '.join(f'"{c}"' for c in col_names)
-                vals_sql = ', '.join(f':{c}' for c in col_names)
+                if is_pg:
+                    # PostgreSQL uses $1, $2, ... style — use named params via SQLAlchemy
+                    vals_sql = ', '.join(f':{c}' for c in col_names)
+                else:
+                    vals_sql = ', '.join(f':{c}' for c in col_names)
                 stmt = text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})')
                 conn.execute(stmt, rows)
                 stats[name] = len(rows)
 
-            if is_pg:
-                conn.execute(text('SET session_replication_role = DEFAULT'))
-            else:
+            if not is_pg:
                 conn.execute(text('PRAGMA foreign_keys = ON'))
 
     except Exception as e:
