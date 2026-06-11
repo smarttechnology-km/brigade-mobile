@@ -16,7 +16,7 @@ services:
       - key: PYTHONUNBUFFERED
         value: "1"
       - key: PYTHON_VERSION
-        value: "3.12.0"
+        value: "3.13.0"
 
   - type: postgres
     name: police-db
