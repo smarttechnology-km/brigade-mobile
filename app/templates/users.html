@@ -424,11 +424,44 @@ document.getElementById('btn-restore-backup').addEventListener('click', function
 
     const btn = this;
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Restauration en cours…';
     alertEl.style.display = 'none';
 
     const formData = new FormData();
     formData.append('backup_file', fileInput.files[0]);
+
+    let elapsed = 0;
+    const timer = setInterval(() => {
+        elapsed++;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin me-2"></i>Restauration en cours… (${elapsed}s)`;
+    }, 1000);
+
+    function finish(success, message) {
+        clearInterval(timer);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-upload me-2"></i>Restaurer depuis ce backup';
+        alertEl.className = success ? 'alert alert-success' : 'alert alert-danger';
+        alertEl.textContent = message;
+        alertEl.style.display = '';
+        if (success) fileInput.value = '';
+    }
+
+    function pollStatus(taskId) {
+        fetch(`/api/users/restore/status/${taskId}`)
+            .then(r => r.json())
+            .then(d => {
+                if (d.status === 'running') {
+                    setTimeout(() => pollStatus(taskId), 2000);
+                } else if (d.status === 'done') {
+                    const count = Object.values(d.tables || {}).reduce((a, b) => a + b, 0);
+                    finish(true, `Restauration réussie — ${count} lignes réimportées dans ${Object.keys(d.tables || {}).length} tables.`);
+                } else {
+                    finish(false, d.message || 'Erreur inconnue.');
+                }
+            })
+            .catch(() => finish(false, 'Erreur réseau lors du suivi.'));
+    }
+
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Envoi du fichier…';
 
     fetch('/api/users/restore', { method: 'POST', body: formData })
         .then(r => {
@@ -442,26 +475,14 @@ document.getElementById('btn-restore-backup').addEventListener('click', function
             return r.json();
         })
         .then(d => {
-            if (d.error) {
-                alertEl.className = 'alert alert-danger';
-                alertEl.textContent = d.error;
+            if (d.error) { finish(false, d.error); return; }
+            if (d.task_id) {
+                pollStatus(d.task_id);
             } else {
-                const count = Object.values(d.tables).reduce((a, b) => a + b, 0);
-                alertEl.className = 'alert alert-success';
-                alertEl.textContent = `Restauration réussie — ${count} lignes réimportées dans ${Object.keys(d.tables).length} tables.`;
-                fileInput.value = '';
+                finish(false, 'Réponse inattendue du serveur.');
             }
-            alertEl.style.display = '';
         })
-        .catch(err => {
-            alertEl.className = 'alert alert-danger';
-            alertEl.textContent = err.message || 'Erreur réseau.';
-            alertEl.style.display = '';
-        })
-        .finally(() => {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-upload me-2"></i>Restaurer depuis ce backup';
-        });
+        .catch(err => finish(false, err.message || 'Erreur réseau.'));
 });
 </script>
 {% endblock %}
