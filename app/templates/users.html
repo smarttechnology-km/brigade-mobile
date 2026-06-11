@@ -9,7 +9,10 @@
       <h2><i class="fas fa-users me-2"></i>Gestion des Utilisateurs</h2>
       <p class="text-muted mb-0">Gérez les comptes utilisateurs et les accès au système</p>
     </div>
-    <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
+      <button class="btn btn-outline-secondary" id="btn-users-settings">
+        <i class="fas fa-cog me-1"></i>Paramètres
+      </button>
       <button class="btn btn-primary" id="btn-new-user">
         <i class="fas fa-user-plus me-2"></i>Nouvel Utilisateur
       </button>
@@ -321,8 +324,135 @@
   </div>
 </div>
 
+<!-- Settings Modal -->
+<div class="modal fade" id="usersSettingsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title"><i class="fas fa-cog me-2"></i>Paramètres — Utilisateurs</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <h6 class="text-muted mb-2"><i class="fas fa-download me-2"></i>Sauvegarde</h6>
+        <p class="text-muted small mb-3">Téléchargez une copie complète de la base de données au format ZIP.</p>
+        <button class="btn btn-primary w-100" id="btn-download-backup">
+          <i class="fas fa-download me-2"></i>Générer et télécharger le backup
+        </button>
+        <div id="backup-alert" class="mt-2" style="display:none;"></div>
+
+        <hr class="my-4">
+
+        <h6 class="text-muted mb-2"><i class="fas fa-upload me-2"></i>Restauration</h6>
+        <p class="text-muted small mb-2">Importez un fichier ZIP de backup pour restaurer toutes les données.</p>
+        <div class="alert alert-warning py-2 small mb-3">
+          <i class="fas fa-exclamation-triangle me-1"></i>
+          <strong>Attention :</strong> toutes les données actuelles seront remplacées.
+        </div>
+        <input type="file" class="form-control mb-2" id="restore-file-input" accept=".zip">
+        <button class="btn btn-danger w-100" id="btn-restore-backup">
+          <i class="fas fa-upload me-2"></i>Restaurer depuis ce backup
+        </button>
+        <div id="restore-alert" class="mt-2" style="display:none;"></div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/users.js') }}"></script>
+<script>
+document.getElementById('btn-users-settings').addEventListener('click', function(){
+    const el = document.getElementById('usersSettingsModal');
+    if (el.parentNode !== document.body) document.body.appendChild(el);
+    let m = bootstrap.Modal.getInstance(el);
+    if (!m) m = new bootstrap.Modal(el, {backdrop: true, keyboard: true});
+    m.show();
+});
+
+document.getElementById('btn-download-backup').addEventListener('click', function(){
+    const btn = this;
+    const alert = document.getElementById('backup-alert');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Génération en cours…';
+    alert.style.display = 'none';
+    fetch('/api/users/backup')
+        .then(r => {
+            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Erreur'); });
+            return r.blob();
+        })
+        .then(blob => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'backup_' + new Date().toISOString().slice(0,19).replace(/[:T]/g, '-') + '.zip';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            alert.className = 'alert alert-success';
+            alert.textContent = 'Backup téléchargé avec succès.';
+            alert.style.display = '';
+        })
+        .catch(err => {
+            alert.className = 'alert alert-danger';
+            alert.textContent = err.message;
+            alert.style.display = '';
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-download me-2"></i>Générer et télécharger le backup';
+        });
+});
+
+document.getElementById('btn-restore-backup').addEventListener('click', function(){
+    const fileInput = document.getElementById('restore-file-input');
+    const alertEl = document.getElementById('restore-alert');
+    if (!fileInput.files.length) {
+        alertEl.className = 'alert alert-warning';
+        alertEl.textContent = 'Veuillez sélectionner un fichier ZIP.';
+        alertEl.style.display = '';
+        return;
+    }
+    if (!confirm('Êtes-vous sûr ? Toutes les données actuelles seront remplacées par celles du backup.')) return;
+
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Restauration en cours…';
+    alertEl.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('backup_file', fileInput.files[0]);
+
+    fetch('/api/users/restore', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = d.error;
+            } else {
+                const count = Object.values(d.tables).reduce((a, b) => a + b, 0);
+                alertEl.className = 'alert alert-success';
+                alertEl.textContent = `Restauration réussie — ${count} lignes réimportées dans ${Object.keys(d.tables).length} tables.`;
+                fileInput.value = '';
+            }
+            alertEl.style.display = '';
+        })
+        .catch(() => {
+            alertEl.className = 'alert alert-danger';
+            alertEl.textContent = 'Erreur réseau.';
+            alertEl.style.display = '';
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-2"></i>Restaurer depuis ce backup';
+        });
+});
+</script>
 {% endblock %}
