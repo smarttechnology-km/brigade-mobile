@@ -2466,6 +2466,7 @@ def api_users_restore():
     is_pg = not db_uri.startswith('sqlite')
 
     # Reflect actual DB tables for insert
+    from sqlalchemy import DateTime, Date, Numeric
     meta = MetaData()
     meta.reflect(bind=db.engine)
 
@@ -2473,6 +2474,33 @@ def api_users_restore():
     sorted_names = [t.name for t in meta.sorted_tables]
     # Only restore tables present in both the backup and the DB
     tables_to_restore = [n for n in sorted_names if n in backup_data and backup_data[n]]
+
+    def coerce_row(tbl, row):
+        """Convert JSON strings back to proper Python types for each column."""
+        result = {}
+        for col in tbl.columns:
+            val = row.get(col.name)
+            if val is None:
+                result[col.name] = val
+                continue
+            if isinstance(col.type, (DateTime,)):
+                if isinstance(val, str):
+                    # Handle both 'YYYY-MM-DD HH:MM:SS.ffffff' and ISO 8601
+                    for fmt in ('%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S',
+                                '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S'):
+                        try:
+                            val = datetime.strptime(val, fmt)
+                            break
+                        except ValueError:
+                            continue
+            elif isinstance(col.type, Date):
+                if isinstance(val, str):
+                    try:
+                        val = datetime.strptime(val[:10], '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+            result[col.name] = val
+        return result
 
     stats = {}
     try:
@@ -2492,8 +2520,9 @@ def api_users_restore():
                 if not rows:
                     continue
                 tbl = meta.tables[name]
-                conn.execute(tbl.insert(), rows)
-                stats[name] = len(rows)
+                coerced = [coerce_row(tbl, r) for r in rows]
+                conn.execute(tbl.insert(), coerced)
+                stats[name] = len(coerced)
 
             if is_pg:
                 conn.execute(text('SET session_replication_role = DEFAULT'))
