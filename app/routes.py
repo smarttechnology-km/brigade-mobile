@@ -2494,11 +2494,26 @@ def api_users_restore():
                             continue
                         # Filtrer les colonnes du backup à celles qui existent dans la table cible
                         table_obj = db.metadata.tables.get(name)
-                        db_cols = {c.name for c in table_obj.columns} if table_obj is not None else set(rows[0].keys())
-                        col_names = [c for c in rows[0].keys() if c in db_cols]
+                        if table_obj is not None:
+                            db_col_map = {c.name: c for c in table_obj.columns}
+                        else:
+                            db_col_map = {k: None for k in rows[0].keys()}
+                        col_names = [c for c in rows[0].keys() if c in db_col_map]
                         if not col_names:
                             continue
-                        filtered_rows = [{c: row[c] for c in col_names} for row in rows]
+                        # Colonnes booléennes : SQLite les stocke en 0/1, PostgreSQL veut True/False
+                        from sqlalchemy import Boolean as _SABool
+                        bool_cols = {
+                            c for c in col_names
+                            if db_col_map[c] is not None and isinstance(db_col_map[c].type, _SABool)
+                        }
+                        def _fix_row(row):
+                            r = {c: row[c] for c in col_names}
+                            for bc in bool_cols:
+                                if r[bc] is not None:
+                                    r[bc] = bool(r[bc])
+                            return r
+                        filtered_rows = [_fix_row(row) for row in rows]
                         cols_sql = ', '.join(f'"{c}"' for c in col_names)
                         vals_sql = ', '.join(f':{c}' for c in col_names)
                         conn.execute(text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})'), filtered_rows)
