@@ -70,6 +70,7 @@ def parametres_page():
                            sim_existing=int(SmartTechSetting.get('sim_existing', 10000)),
                            sim_renewal_rate=float(SmartTechSetting.get('sim_renewal_rate', 10)),
                            sim_rate_growth=float(SmartTechSetting.get('sim_rate_growth', 5)),
+                           sim_churn_rate=float(SmartTechSetting.get('sim_churn_rate', 2)),
                            sim_annual_expenses=int(SmartTechSetting.get('sim_annual_expenses', 0)),
                            sim_years=int(SmartTechSetting.get('sim_years', 5)))
 
@@ -119,6 +120,7 @@ def api_parametres_update():
         'sim_existing':     (int, 0, None),
         'sim_renewal_rate': (float, 0, 100),
         'sim_rate_growth':  (float, 0, 50),
+        'sim_churn_rate':   (float, 0, 50),
         'sim_annual_expenses': (int, 0, None),
         'sim_years':        (int, 1, 20),
     }
