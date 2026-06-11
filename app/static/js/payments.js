@@ -229,7 +229,7 @@ function renderPaymentsTable(items, isArchive){
         ${isArchive ? `<td>${paidDate}</td>` : ''}
         <td>${f.paid ? (f.receipt_number ? 'Payée' : 'Payée') : 'Impayée'}</td>
         <td>
-            ${isArchive ? `<a class="btn btn-sm btn-outline-secondary" href="/fines/receipt/${f.id}" onclick="sessionStorage.setItem('payments-current-view', 'archive');"><i class="fas fa-print me-1"></i>Reçu</a>` : `<button class="btn btn-sm btn-success" data-pay-id="${f.id}"><i class="fas fa-check me-1"></i>Payer</button>`}
+            ${isArchive ? `<a class="btn btn-sm btn-outline-secondary" href="/fines/receipt/${f.id}" onclick="sessionStorage.setItem('payments-current-view', 'archive');"><i class="fas fa-print me-1"></i>Reçu</a>` : (typeof CURRENT_USER_ROLE !== 'undefined' && (CURRENT_USER_ROLE === 'judiciaire' || CURRENT_USER_ROLE === 'policier') ? `<button class="btn btn-sm btn-secondary" disabled title="Non autorisé"><i class="fas fa-ban me-1"></i>Payer</button>` : `<button class="btn btn-sm btn-success" data-pay-id="${f.id}"><i class="fas fa-check me-1"></i>Payer</button>`)}
         </td>
     </tr>`;
     }).join('');

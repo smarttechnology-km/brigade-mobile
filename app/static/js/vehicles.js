@@ -811,6 +811,10 @@ function showQRCodeFor(id){
             currentQrUrl = URL.createObjectURL(blob);
             const img = document.getElementById('qr-image');
             if(img) img.src = currentQrUrl;
+            const qrBtn = document.getElementById('download-qr-btn');
+            if(qrBtn) qrBtn.href = `/api/vehicles/${id}/qrcode/pdf`;
+            const sheetBtn = document.getElementById('download-sheet-btn');
+            if(sheetBtn) sheetBtn.href = `/api/vehicles/${id}/sheet.pdf`;
             const qrModalEl = document.getElementById('qrModal');
             if(qrModalEl){
                 const modal = new bootstrap.Modal(qrModalEl);
@@ -826,57 +830,6 @@ function showQRCodeFor(id){
         });
 }
 
-function printQRCode(){
-    const img = document.getElementById('qr-image');
-    if(!img || !img.src){ alert('QR Code non disponible'); return; }
-    const printWindow = window.open('', '', 'height=520,width=420');
-    if(printWindow){
-        printWindow.document.write(`
-            <html>
-            <head>
-                <title>QR Code</title>
-                <style>
-                    @page { size: 10cm 10cm; margin: 0; }
-                    * { box-sizing: border-box; margin: 0; padding: 0; }
-                    body { width: 10cm; height: 10cm; display: flex; align-items: stretch; justify-content: center; }
-                    .card { width: 9.2cm; border: 1.5px solid #003399; display: flex; flex-direction: column; margin: auto; }
-                    .qr-wrap { background: #fff; display: flex; align-items: center; justify-content: center; flex: 1; padding: 5px 4px 3px; }
-                    .qr-wrap img { width: 8.0cm; height: 8.0cm; display: block; }
-                    .footer { background: #eef2ff; text-align: center; font-family: Arial, sans-serif; font-size: 7pt; color: #555; font-style: italic; padding: 3px 4px; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <div class="qr-wrap"><img src="${img.src}" alt="QR Code" /></div>
-                    <div class="footer">Brigade Mobile — Comores</div>
-                </div>
-            </body>
-            </html>
-        `);
-        printWindow.document.close();
-        setTimeout(() => { printWindow.print(); }, 250);
-    }
-}
-
-function downloadQRCodePDF(){
-    if(!currentVehicleId){ alert('Véhicule non disponible'); return; }
-    const link = document.createElement('a');
-    link.href = `/api/vehicles/${currentVehicleId}/qrcode/pdf`;
-    link.download = `qrcode.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
-function downloadVehicleSheet(){
-    if(!currentVehicleId){ alert('Véhicule non disponible'); return; }
-    const link = document.createElement('a');
-    link.href = `/api/vehicles/${currentVehicleId}/sheet.pdf`;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
 
 /**
  * Hide modal safely and remove any lingering backdrop/classes
