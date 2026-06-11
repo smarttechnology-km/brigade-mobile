@@ -2444,8 +2444,7 @@ def api_users_backup():
 @roles_required('administrateur')
 def api_users_restore():
     import zipfile
-    from sqlalchemy import inspect, text, MetaData, Table
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy import text, MetaData
 
     f = request.files.get('backup_file')
     if not f or not f.filename.endswith('.zip'):
@@ -2465,20 +2464,15 @@ def api_users_restore():
     db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
     is_pg = not db_uri.startswith('sqlite')
 
-    # Reflect actual DB tables for insert
     meta = MetaData()
-    meta.reflect(bind=db.engine)
-
-    # Use sorted_tables for correct FK order
+    meta.reflect(db.engine)
     sorted_names = [t.name for t in meta.sorted_tables]
-    # Only restore tables present in both the backup and the DB
     tables_to_restore = [n for n in sorted_names if n in backup_data and backup_data[n]]
 
     stats = {}
     try:
         with db.engine.begin() as conn:
             if is_pg:
-                # TRUNCATE sans RESTART IDENTITY (on réinitialisera les séquences après)
                 tables_quoted = ', '.join(f'"{n}"' for n in tables_to_restore)
                 conn.execute(text(f'TRUNCATE {tables_quoted} CASCADE'))
             else:
@@ -2486,7 +2480,6 @@ def api_users_restore():
                 for name in reversed(tables_to_restore):
                     conn.execute(text(f'DELETE FROM "{name}"'))
 
-            # Insert using raw SQL — bypasses SQLAlchemy type processors entirely
             for name in tables_to_restore:
                 rows = backup_data[name]
                 if not rows:
@@ -2494,27 +2487,28 @@ def api_users_restore():
                 col_names = list(rows[0].keys())
                 cols_sql = ', '.join(f'"{c}"' for c in col_names)
                 vals_sql = ', '.join(f':{c}' for c in col_names)
-                stmt = text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})')
-                conn.execute(stmt, rows)
+                conn.execute(text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})'), rows)
                 stats[name] = len(rows)
 
-            if is_pg:
-                # Réinitialiser les séquences au max(id) pour éviter les conflits
-                for name in tables_to_restore:
-                    try:
-                        conn.execute(text(
-                            f"SELECT setval("
-                            f"pg_get_serial_sequence('{name}', 'id'), "
-                            f"COALESCE((SELECT MAX(id) FROM \"{name}\"), 1)"
-                            f")"
-                        ))
-                    except Exception:
-                        pass  # table sans colonne id séquentielle
-            else:
+            if not is_pg:
                 conn.execute(text('PRAGMA foreign_keys = ON'))
-
+        # Transaction committed successfully
     except Exception as e:
         return jsonify({'error': f'Restauration échouée : {e}'}), 500
+
+    # Reset PostgreSQL sequences APRÈS le commit, dans des connexions séparées
+    if is_pg:
+        for name in tables_to_restore:
+            try:
+                with db.engine.begin() as conn:
+                    conn.execute(text(
+                        f"SELECT setval("
+                        f"pg_get_serial_sequence('{name}', 'id'), "
+                        f"COALESCE((SELECT MAX(id) FROM \"{name}\"), 1)"
+                        f")"
+                    ))
+            except Exception:
+                pass  # table sans séquence — ignoré sans affecter la transaction principale
 
     return jsonify({'message': 'Restauration réussie.', 'tables': stats})
 
