@@ -2440,11 +2440,15 @@ def api_users_backup():
     )
 
 
+_restore_tasks = {}  # task_id -> {'status': 'running'|'done'|'error', 'message': ..., 'tables': ...}
+
+
 @main_bp.route('/api/users/restore', methods=['POST'])
 @roles_required('administrateur')
 def api_users_restore():
     import zipfile
-    from sqlalchemy import text
+    import threading
+    import uuid as _uuid
 
     f = request.files.get('backup_file')
     if not f or not f.filename.endswith('.zip'):
@@ -2461,55 +2465,68 @@ def api_users_restore():
     except Exception as e:
         return jsonify({'error': f'Lecture du ZIP échouée : {e}'}), 400
 
-    db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
-    is_pg = not db_uri.startswith('sqlite')
+    task_id = str(_uuid.uuid4())
+    _restore_tasks[task_id] = {'status': 'running', 'message': 'Restauration en cours…'}
 
-    # db.metadata est déjà chargé en mémoire depuis les modèles — pas de requête DB
-    sorted_names = [t.name for t in db.metadata.sorted_tables]
-    tables_to_restore = [n for n in sorted_names if n in backup_data and backup_data[n]]
+    app_ref = current_app._get_current_object()
 
-    stats = {}
-    try:
-        with db.engine.begin() as conn:
-            if is_pg:
-                tables_quoted = ', '.join(f'"{n}"' for n in tables_to_restore)
-                conn.execute(text(f'TRUNCATE {tables_quoted} CASCADE'))
-            else:
-                conn.execute(text('PRAGMA foreign_keys = OFF'))
-                for name in reversed(tables_to_restore):
-                    conn.execute(text(f'DELETE FROM "{name}"'))
-
-            for name in tables_to_restore:
-                rows = backup_data[name]
-                if not rows:
-                    continue
-                col_names = list(rows[0].keys())
-                cols_sql = ', '.join(f'"{c}"' for c in col_names)
-                vals_sql = ', '.join(f':{c}' for c in col_names)
-                conn.execute(text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})'), rows)
-                stats[name] = len(rows)
-
-            if not is_pg:
-                conn.execute(text('PRAGMA foreign_keys = ON'))
-        # Transaction committed successfully
-    except Exception as e:
-        return jsonify({'error': f'Restauration échouée : {e}'}), 500
-
-    # Reset PostgreSQL sequences APRÈS le commit, dans des connexions séparées
-    if is_pg:
-        for name in tables_to_restore:
-            try:
+    def do_restore():
+        from sqlalchemy import text
+        db_uri = app_ref.config.get('SQLALCHEMY_DATABASE_URI', '')
+        is_pg = not db_uri.startswith('sqlite')
+        sorted_names = [t.name for t in db.metadata.sorted_tables]
+        tables_to_restore = [n for n in sorted_names if n in backup_data and backup_data[n]]
+        stats = {}
+        try:
+            with app_ref.app_context():
                 with db.engine.begin() as conn:
-                    conn.execute(text(
-                        f"SELECT setval("
-                        f"pg_get_serial_sequence('{name}', 'id'), "
-                        f"COALESCE((SELECT MAX(id) FROM \"{name}\"), 1)"
-                        f")"
-                    ))
-            except Exception:
-                pass  # table sans séquence — ignoré sans affecter la transaction principale
+                    if is_pg:
+                        tables_quoted = ', '.join(f'"{n}"' for n in tables_to_restore)
+                        conn.execute(text(f'TRUNCATE {tables_quoted} CASCADE'))
+                    else:
+                        conn.execute(text('PRAGMA foreign_keys = OFF'))
+                        for name in reversed(tables_to_restore):
+                            conn.execute(text(f'DELETE FROM "{name}"'))
 
-    return jsonify({'message': 'Restauration réussie.', 'tables': stats})
+                    for name in tables_to_restore:
+                        rows = backup_data[name]
+                        if not rows:
+                            continue
+                        col_names = list(rows[0].keys())
+                        cols_sql = ', '.join(f'"{c}"' for c in col_names)
+                        vals_sql = ', '.join(f':{c}' for c in col_names)
+                        conn.execute(text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})'), rows)
+                        stats[name] = len(rows)
+
+                    if not is_pg:
+                        conn.execute(text('PRAGMA foreign_keys = ON'))
+
+                if is_pg:
+                    for name in tables_to_restore:
+                        try:
+                            with db.engine.begin() as conn:
+                                conn.execute(text(
+                                    f"SELECT setval(pg_get_serial_sequence('{name}', 'id'), "
+                                    f"COALESCE((SELECT MAX(id) FROM \"{name}\"), 1))"
+                                ))
+                        except Exception:
+                            pass
+
+            _restore_tasks[task_id] = {'status': 'done', 'message': 'Restauration réussie.', 'tables': stats}
+        except Exception as e:
+            _restore_tasks[task_id] = {'status': 'error', 'message': f'Restauration échouée : {e}'}
+
+    threading.Thread(target=do_restore, daemon=True).start()
+    return jsonify({'task_id': task_id, 'status': 'running'})
+
+
+@main_bp.route('/api/users/restore/status/<task_id>', methods=['GET'])
+@roles_required('administrateur')
+def api_users_restore_status(task_id):
+    task = _restore_tasks.get(task_id)
+    if not task:
+        return jsonify({'error': 'Tâche introuvable.'}), 404
+    return jsonify(task)
 
 
 @main_bp.route('/api/users/list')
