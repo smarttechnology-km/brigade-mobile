@@ -2444,7 +2444,7 @@ def api_users_backup():
 @roles_required('administrateur')
 def api_users_restore():
     import zipfile
-    from sqlalchemy import text, MetaData
+    from sqlalchemy import text
 
     f = request.files.get('backup_file')
     if not f or not f.filename.endswith('.zip'):
@@ -2464,9 +2464,8 @@ def api_users_restore():
     db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
     is_pg = not db_uri.startswith('sqlite')
 
-    meta = MetaData()
-    meta.reflect(db.engine)
-    sorted_names = [t.name for t in meta.sorted_tables]
+    # db.metadata est déjà chargé en mémoire depuis les modèles — pas de requête DB
+    sorted_names = [t.name for t in db.metadata.sorted_tables]
     tables_to_restore = [n for n in sorted_names if n in backup_data and backup_data[n]]
 
     stats = {}
