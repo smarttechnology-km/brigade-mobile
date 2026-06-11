@@ -361,7 +361,7 @@
                         <div class="price-hint">Véhicules déjà immatriculés éligibles au renouvellement</div>
                     </div>
                     <div>
-                        <label class="form-label">Taux initial d'activation (parc existant) / renouvellement (%)</label>
+                        <label class="form-label">Taux initial d'activation (parc existant) (%)</label>
                         <div class="input-group">
                             <input type="number" id="sim-renewal-rate" class="form-control" min="0" max="100" step="1" value="{{ sim_renewal_rate }}" placeholder="10">
                             <span class="input-group-text">%</span>
@@ -375,6 +375,14 @@
                             <span class="input-group-text">%</span>
                         </div>
                         <div class="price-hint">Points de % ajoutés au taux chaque année</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Taux d'attrition / an (%) <span style="color:rgba(255,255,255,.35);font-size:.68rem;">(panne / accident)</span></label>
+                        <div class="input-group">
+                            <input type="number" id="sim-churn-rate" class="form-control" min="0" max="50" step="1" value="{{ sim_churn_rate|default(2) }}" placeholder="2">
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <div class="price-hint">% du parc actif retiré chaque année (panne, accident, radiation)</div>
                     </div>
                     <div>
                         <label class="form-label">Dépenses annuelles (FC) <span style="color:rgba(255,255,255,.35);font-size:.68rem;">(abo + charges)</span></label>
@@ -450,13 +458,14 @@
                         <table class="sim-table">
                             <colgroup>
                                 <col style="width:7%">
-                                <col style="width:9%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:10%">
+                                <col style="width:8%">
+                                <col style="width:10%">
                                 <col style="width:11%">
                                 <col style="width:9%">
-                                <col style="width:11%">
-                                <col style="width:13%">
-                                <col style="width:10%">
-                                <col style="width:10%">
+                                <col style="width:9%">
                                 <col style="width:10%">
                                 <col style="width:10%">
                             </colgroup>
@@ -464,6 +473,7 @@
                                 <tr>
                                     <th>Année</th>
                                     <th>Activations</th>
+                                    <th>Retrait (attrition)</th>
                                     <th>Pool renouvellement</th>
                                     <th>Taux act./renouv.</th>
                                     <th>Rev. Activation</th>
@@ -478,7 +488,7 @@
                         </table>
                     </div>
 
-                    <div class="sim-note mt-2">* Année 1 (lancement) : le taux initial est appliqué au parc existant pour estimer les activations (parc × taux %). Ces véhicules + les nouveaux paient l'activation. À partir de l'année 2, les nouveaux paient l'activation et l'ensemble des véhicules activés est éligible au renouvellement. Le taux démarre à la valeur initiale et augmente de <span id="note-growth"></span> pt/an, plafonné à 100 %.</div>
+                    <div class="sim-note mt-2">* Année 1 (lancement) : le taux initial est appliqué au parc existant pour estimer les activations (parc × taux %). Ces véhicules + les nouveaux paient l'activation. À partir de l'année 2, les nouveaux paient l'activation et l'ensemble des véhicules activés est éligible au renouvellement. Le taux démarre à la valeur initiale et augmente de <span id="note-growth"></span> pt/an, plafonné à 100 %. Le taux d'attrition retire chaque année un % du parc actif (panne, accident, radiation) avant d'ajouter les nouveaux véhicules.</div>
                 </div>
             </div>
         </div>
@@ -544,6 +554,7 @@
             sim_existing:        parseInt(document.getElementById('sim-existing').value)        || 0,
             sim_renewal_rate:    parseFloat(document.getElementById('sim-renewal-rate').value)  || 0,
             sim_rate_growth:     parseFloat(document.getElementById('sim-rate-growth').value)   || 0,
+            sim_churn_rate:      parseFloat(document.getElementById('sim-churn-rate').value)    || 0,
             sim_annual_expenses: parseInt(document.getElementById('sim-annual-expenses').value) || 0,
             sim_years:           parseInt(document.getElementById('sim-years').value)           || 5,
         };
@@ -568,6 +579,7 @@
         const ex   = document.getElementById('sim-existing').value;
         const rr   = document.getElementById('sim-renewal-rate').value;
         const rg   = document.getElementById('sim-rate-growth').value;
+        const ch   = document.getElementById('sim-churn-rate').value;
         const ae   = parseInt(document.getElementById('sim-annual-expenses').value)||0;
         const yr   = document.getElementById('sim-years').value;
         const activatedEst = Math.round((parseInt(ex)||0) * (parseFloat(rr)||0) / 100).toLocaleString('fr-FR') + ' véh.';
@@ -577,6 +589,7 @@
             'Nvx véhicules/an : ' + nv + ' | Parc existant : ' + ex +
             ' | Taux d\'activation an 1 : ' + rr + '% (≈ ' + activatedEst + ')' +
             ' | Croissance renouv. : ' + rg + '%/an' +
+            ' | Attrition : ' + ch + '%/an' +
             ' | Dépenses annuelles : ' + ae.toLocaleString('fr-FR') + ' FC | ' + yr + ' ans';
         window.print();
     };
@@ -609,6 +622,7 @@
         const existing    = Math.max(0, parseInt(document.getElementById('sim-existing').value)       || 0);
         const initRate    = Math.min(100, Math.max(0, parseFloat(document.getElementById('sim-renewal-rate').value)  || 0));
         const rateGrowth  = Math.min(50,  Math.max(0, parseFloat(document.getElementById('sim-rate-growth').value)   || 0));
+        const churnRate   = Math.min(50,  Math.max(0, parseFloat(document.getElementById('sim-churn-rate').value)    || 0));
         const annualExp   = Math.max(0, parseFloat(document.getElementById('sim-annual-expenses').value) || 0);
         const years       = Math.min(20, Math.max(1, parseInt(document.getElementById('sim-years').value) || 5));
 
@@ -616,33 +630,38 @@
         const rows = [];
 
         const existingActivated = Math.round(existing * initRate / 100);
+        // activePool tracks vehicles still in service (reduced by churn each year)
+        let activePool = 0;
 
         for (let y = 1; y <= years; y++) {
-            let actCount, actRev, renewPool, rateY, renewCount, renRev;
+            let actCount, actRev, renewPool, rateY, renewCount, renRev, churnLoss;
             if (y === 1) {
                 // Lancement : nouveaux véhicules + taux% des existants activent le QR
                 actCount   = newVeh + existingActivated;
                 actRev     = actCount * prices.act;
+                activePool = actCount;
+                churnLoss  = 0;
                 renewPool  = 0;
                 rateY      = initRate;
                 renewCount = 0;
                 renRev     = 0;
             } else {
-                // Années 2+ : nouveaux activent, pool total renouvelle
-                actCount  = newVeh;
-                actRev    = newVeh * prices.act;
-                // Pool = activations année 1 + nouveaux des années 2..y-1
-                renewPool = existingActivated + newVeh * (y - 1);
-                rateY     = Math.min(100, initRate + (y - 1) * rateGrowth);
+                // Années 2+ : attrition d'abord, puis nouveaux s'ajoutent
+                churnLoss  = Math.round(activePool * churnRate / 100);
+                activePool = Math.max(0, activePool - churnLoss) + newVeh;
+                actCount   = newVeh;
+                actRev     = newVeh * prices.act;
+                renewPool  = activePool - newVeh; // pool éligible au renouvellement (hors nouveaux de l'année)
+                rateY      = Math.min(100, initRate + (y - 1) * rateGrowth);
                 renewCount = Math.round(renewPool * rateY / 100);
-                renRev    = renewCount * prices.ren;
+                renRev     = renewCount * prices.ren;
             }
             const yearRev = actRev + renRev;
             const netY    = yearRev - annualExp;
             cumNet       += netY;
             totalRev     += yearRev;
             totalExp     += annualExp;
-            rows.push({ y, actCount, renewPool, rateY, actRev, renRev, yearRev, netY, cumNet, isLaunch: y === 1 });
+            rows.push({ y, actCount, churnLoss, renewPool, rateY, actRev, renRev, yearRev, netY, cumNet, isLaunch: y === 1 });
         }
 
         const totalProfit = totalRev - totalExp;
@@ -689,13 +708,16 @@
             const yearLabel = r.isLaunch
                 ? 'Année 1 <span style="font-size:.65rem;font-weight:400;opacity:.6;">(lancement)</span>'
                 : 'Année ' + r.y;
-            const poolCell = r.isLaunch ? '<span style="opacity:.4;">—</span>' : fmtN(r.renewPool);
+            const poolCell  = r.isLaunch ? '<span style="opacity:.4;">—</span>' : fmtN(r.renewPool);
+            const churnCell = r.isLaunch ? '<span style="opacity:.4;">—</span>'
+                : (r.churnLoss > 0 ? '<span style="color:#f87171;">−' + fmtN(r.churnLoss) + '</span>' : fmtN(0));
             const rateCell = r.isLaunch
                 ? r.rateY.toFixed(1) + ' % <span style="font-size:.65rem;font-weight:400;opacity:.55;">(act.)</span>'
                 : r.rateY.toFixed(1) + ' %';
             return '<tr' + (r.isLaunch ? ' style="background:rgba(0,212,255,0.04);"' : '') + '>' +
                 '<td class="col-year">' + yearLabel + '</td>' +
                 '<td>' + fmtN(r.actCount) + '</td>' +
+                '<td>' + churnCell + '</td>' +
                 '<td>' + poolCell + '</td>' +
                 '<td>' + rateCell + '</td>' +
                 '<td class="col-pos">' + fmt(r.actRev) + '</td>' +
@@ -714,12 +736,6 @@
     function fmtN(n){ return n.toLocaleString('fr-FR'); }
 
     window.resetSim = function(){
-        document.getElementById('sim-new-vehicles').value   = 500;
-        document.getElementById('sim-existing').value       = 10000;
-        document.getElementById('sim-renewal-rate').value   = 10;
-        document.getElementById('sim-rate-growth').value    = 5;
-        document.getElementById('sim-annual-expenses').value = 0;
-        document.getElementById('sim-years').value          = 5;
         document.getElementById('sim-result').style.display = 'none';
         document.getElementById('btn-print-sim').style.display = 'none';
     };
