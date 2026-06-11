@@ -2492,11 +2492,17 @@ def api_users_restore():
                         rows = backup_data[name]
                         if not rows:
                             continue
-                        col_names = list(rows[0].keys())
+                        # Filtrer les colonnes du backup à celles qui existent dans la table cible
+                        table_obj = db.metadata.tables.get(name)
+                        db_cols = {c.name for c in table_obj.columns} if table_obj is not None else set(rows[0].keys())
+                        col_names = [c for c in rows[0].keys() if c in db_cols]
+                        if not col_names:
+                            continue
+                        filtered_rows = [{c: row[c] for c in col_names} for row in rows]
                         cols_sql = ', '.join(f'"{c}"' for c in col_names)
                         vals_sql = ', '.join(f':{c}' for c in col_names)
-                        conn.execute(text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})'), rows)
-                        stats[name] = len(rows)
+                        conn.execute(text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})'), filtered_rows)
+                        stats[name] = len(filtered_rows)
 
                     if not is_pg:
                         conn.execute(text('PRAGMA foreign_keys = ON'))
