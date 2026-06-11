@@ -2384,6 +2384,128 @@ def users_page():
     return render_template('users.html')
 
 
+@main_bp.route('/api/users/backup')
+@roles_required('administrateur')
+def api_users_backup():
+    import zipfile
+    from sqlalchemy import inspect, text
+    timestamp = now_comoros().strftime('%Y%m%d_%H%M%S')
+    db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    zip_buf = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # --- SQLite: include raw .db file ---
+        if db_uri.startswith('sqlite'):
+            db_path = db_uri.replace('sqlite:///', '')
+            if os.path.isfile(db_path):
+                zf.write(db_path, f'police_backup_{timestamp}.db')
+
+        # --- JSON dump of all tables (works on SQLite + PostgreSQL) ---
+        inspector = inspect(db.engine)
+        all_tables = inspector.get_table_names()
+        backup_data = {}
+        with db.engine.connect() as conn:
+            for table in all_tables:
+                try:
+                    rows = conn.execute(text(f'SELECT * FROM "{table}"')).mappings().all()
+                    backup_data[table] = [dict(r) for r in rows]
+                except Exception:
+                    backup_data[table] = []
+
+        import decimal
+        def default_serial(obj):
+            if isinstance(obj, (datetime, )):
+                return obj.isoformat()
+            if isinstance(obj, decimal.Decimal):
+                return float(obj)
+            return str(obj)
+
+        json_bytes = json.dumps(backup_data, ensure_ascii=False, indent=2, default=default_serial).encode('utf-8')
+        zf.writestr(f'police_backup_{timestamp}.json', json_bytes)
+
+        # --- Manifest ---
+        manifest = {
+            'timestamp': timestamp,
+            'database': 'sqlite' if db_uri.startswith('sqlite') else 'postgresql',
+            'tables': {t: len(backup_data.get(t, [])) for t in all_tables},
+        }
+        zf.writestr('manifest.json', json.dumps(manifest, indent=2))
+
+    zip_buf.seek(0)
+    return send_file(
+        zip_buf,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'backup_{timestamp}.zip'
+    )
+
+
+@main_bp.route('/api/users/restore', methods=['POST'])
+@roles_required('administrateur')
+def api_users_restore():
+    import zipfile
+    from sqlalchemy import inspect, text, MetaData, Table
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    f = request.files.get('backup_file')
+    if not f or not f.filename.endswith('.zip'):
+        return jsonify({'error': 'Fichier ZIP requis.'}), 400
+
+    try:
+        zip_buf = io.BytesIO(f.read())
+        with zipfile.ZipFile(zip_buf, 'r') as zf:
+            json_names = [n for n in zf.namelist() if n.endswith('.json') and 'backup' in n]
+            if not json_names:
+                return jsonify({'error': 'Aucun fichier JSON de backup trouvé dans le ZIP.'}), 400
+            raw = zf.read(json_names[0])
+            backup_data = json.loads(raw.decode('utf-8'))
+    except Exception as e:
+        return jsonify({'error': f'Lecture du ZIP échouée : {e}'}), 400
+
+    db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    is_pg = not db_uri.startswith('sqlite')
+
+    # Reflect actual DB tables for insert
+    meta = MetaData()
+    meta.reflect(bind=db.engine)
+
+    # Use sorted_tables for correct FK order
+    sorted_names = [t.name for t in meta.sorted_tables]
+    # Only restore tables present in both the backup and the DB
+    tables_to_restore = [n for n in sorted_names if n in backup_data and backup_data[n]]
+
+    stats = {}
+    try:
+        with db.engine.begin() as conn:
+            if is_pg:
+                conn.execute(text('SET session_replication_role = replica'))
+            else:
+                conn.execute(text('PRAGMA foreign_keys = OFF'))
+
+            # Delete in reverse order to respect FK
+            for name in reversed(tables_to_restore):
+                conn.execute(text(f'DELETE FROM "{name}"'))
+
+            # Insert in forward order
+            for name in tables_to_restore:
+                rows = backup_data[name]
+                if not rows:
+                    continue
+                tbl = meta.tables[name]
+                conn.execute(tbl.insert(), rows)
+                stats[name] = len(rows)
+
+            if is_pg:
+                conn.execute(text('SET session_replication_role = DEFAULT'))
+            else:
+                conn.execute(text('PRAGMA foreign_keys = ON'))
+
+    except Exception as e:
+        return jsonify({'error': f'Restauration échouée : {e}'}), 500
+
+    return jsonify({'message': 'Restauration réussie.', 'tables': stats})
+
+
 @main_bp.route('/api/users/list')
 @roles_required('administrateur')
 def api_users_list():
