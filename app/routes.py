@@ -2478,34 +2478,39 @@ def api_users_restore():
     try:
         with db.engine.begin() as conn:
             if is_pg:
-                # PostgreSQL: TRUNCATE CASCADE gère les FK automatiquement
-                # On truncate toutes les tables en une seule commande
+                # TRUNCATE sans RESTART IDENTITY (on réinitialisera les séquences après)
                 tables_quoted = ', '.join(f'"{n}"' for n in tables_to_restore)
-                conn.execute(text(f'TRUNCATE {tables_quoted} RESTART IDENTITY CASCADE'))
+                conn.execute(text(f'TRUNCATE {tables_quoted} CASCADE'))
             else:
-                # SQLite: désactiver FK puis supprimer dans l'ordre inverse
                 conn.execute(text('PRAGMA foreign_keys = OFF'))
                 for name in reversed(tables_to_restore):
                     conn.execute(text(f'DELETE FROM "{name}"'))
 
-            # Insert in forward order using raw SQL to bypass type processors
-            # (SQLite stores datetimes as text natively; PostgreSQL auto-casts ISO strings)
+            # Insert using raw SQL — bypasses SQLAlchemy type processors entirely
             for name in tables_to_restore:
                 rows = backup_data[name]
                 if not rows:
                     continue
                 col_names = list(rows[0].keys())
                 cols_sql = ', '.join(f'"{c}"' for c in col_names)
-                if is_pg:
-                    # PostgreSQL uses $1, $2, ... style — use named params via SQLAlchemy
-                    vals_sql = ', '.join(f':{c}' for c in col_names)
-                else:
-                    vals_sql = ', '.join(f':{c}' for c in col_names)
+                vals_sql = ', '.join(f':{c}' for c in col_names)
                 stmt = text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})')
                 conn.execute(stmt, rows)
                 stats[name] = len(rows)
 
-            if not is_pg:
+            if is_pg:
+                # Réinitialiser les séquences au max(id) pour éviter les conflits
+                for name in tables_to_restore:
+                    try:
+                        conn.execute(text(
+                            f"SELECT setval("
+                            f"pg_get_serial_sequence('{name}', 'id'), "
+                            f"COALESCE((SELECT MAX(id) FROM \"{name}\"), 1)"
+                            f")"
+                        ))
+                    except Exception:
+                        pass  # table sans colonne id séquentielle
+            else:
                 conn.execute(text('PRAGMA foreign_keys = ON'))
 
     except Exception as e:
