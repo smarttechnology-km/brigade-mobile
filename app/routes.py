@@ -2488,11 +2488,9 @@ def api_users_restore():
                         for name in reversed(tables_to_restore):
                             conn.execute(text(f'DELETE FROM "{name}"'))
 
-                    for name in tables_to_restore:
-                        rows = backup_data[name]
-                        if not rows:
-                            continue
-                        # Filtrer les colonnes du backup à celles qui existent dans la table cible
+                    from sqlalchemy import Boolean as _SABool
+
+                    def _prepare_rows(name, rows):
                         table_obj = db.metadata.tables.get(name)
                         if table_obj is not None:
                             db_col_map = {c.name: c for c in table_obj.columns}
@@ -2500,24 +2498,56 @@ def api_users_restore():
                             db_col_map = {k: None for k in rows[0].keys()}
                         col_names = [c for c in rows[0].keys() if c in db_col_map]
                         if not col_names:
-                            continue
-                        # Colonnes booléennes : SQLite les stocke en 0/1, PostgreSQL veut True/False
-                        from sqlalchemy import Boolean as _SABool
+                            return None, None, None
                         bool_cols = {
                             c for c in col_names
                             if db_col_map[c] is not None and isinstance(db_col_map[c].type, _SABool)
                         }
-                        def _fix_row(row):
+                        def _fix(row):
                             r = {c: row[c] for c in col_names}
                             for bc in bool_cols:
                                 if r[bc] is not None:
                                     r[bc] = bool(r[bc])
                             return r
-                        filtered_rows = [_fix_row(row) for row in rows]
-                        cols_sql = ', '.join(f'"{c}"' for c in col_names)
+                        return col_names, ', '.join(f'"{c}"' for c in col_names), [_fix(r) for r in rows]
+
+                    deferred = []  # tables qui ont échoué au premier passage (FK)
+                    for name in tables_to_restore:
+                        rows = backup_data[name]
+                        if not rows:
+                            continue
+                        col_names, cols_sql, filtered_rows = _prepare_rows(name, rows)
+                        if not col_names:
+                            continue
                         vals_sql = ', '.join(f':{c}' for c in col_names)
-                        conn.execute(text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})'), filtered_rows)
-                        stats[name] = len(filtered_rows)
+                        stmt = text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})')
+                        if is_pg:
+                            sp = f'sp_{name.replace("-", "_")}'
+                            conn.execute(text(f'SAVEPOINT {sp}'))
+                            try:
+                                conn.execute(stmt, filtered_rows)
+                                conn.execute(text(f'RELEASE SAVEPOINT {sp}'))
+                                stats[name] = len(filtered_rows)
+                            except Exception:
+                                conn.execute(text(f'ROLLBACK TO SAVEPOINT {sp}'))
+                                deferred.append((name, col_names, cols_sql, filtered_rows))
+                        else:
+                            conn.execute(stmt, filtered_rows)
+                            stats[name] = len(filtered_rows)
+
+                    # Deuxième passage pour les tables avec FK non résolues au premier tour
+                    for name, col_names, cols_sql, filtered_rows in deferred:
+                        vals_sql = ', '.join(f':{c}' for c in col_names)
+                        stmt = text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})')
+                        sp = f'sp2_{name.replace("-", "_")}'
+                        conn.execute(text(f'SAVEPOINT {sp}'))
+                        try:
+                            conn.execute(stmt, filtered_rows)
+                            conn.execute(text(f'RELEASE SAVEPOINT {sp}'))
+                            stats[name] = len(filtered_rows)
+                        except Exception as e2:
+                            conn.execute(text(f'ROLLBACK TO SAVEPOINT {sp}'))
+                            stats[name] = f'SKIPPED: {e2}'
 
                     if not is_pg:
                         conn.execute(text('PRAGMA foreign_keys = ON'))
