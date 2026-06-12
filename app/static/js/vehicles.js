@@ -511,6 +511,10 @@ function openVehicleModal(vehicle) {
     document.getElementById('vehicle-id').value = '';
     const _hint = document.getElementById('owner-name-hint');
     if (_hint) _hint.classList.add('d-none');
+    const _vinHint = document.getElementById('vin-plate-hint');
+    if (_vinHint) _vinHint.classList.add('d-none');
+    const _finesSection = document.getElementById('vehicle-fines-section');
+    if (_finesSection) _finesSection.classList.add('d-none');
     
     // Update modal title with icon
     const modalTitle = document.getElementById('vehicleModalLabel');
@@ -665,6 +669,43 @@ function openVehicleModal(vehicle) {
         if(document.getElementById('insurance_expiry')) document.getElementById('insurance_expiry').value = vehicle.insurance_expiry || '';
         if(document.getElementById('fiscal_class')) document.getElementById('fiscal_class').value = vehicle.fiscal_class || '';
         if(document.getElementById('cv_class')) document.getElementById('cv_class').value = vehicle.cv_class || '';
+
+        // Afficher la plaque sous le champ VIN
+        const vinHint = document.getElementById('vin-plate-hint');
+        const vinPlateVal = document.getElementById('vin-plate-value');
+        if(vinHint && vinPlateVal && vehicle.license_plate) {
+            vinPlateVal.textContent = vehicle.license_plate;
+            vinHint.classList.remove('d-none');
+        } else if(vinHint) {
+            vinHint.classList.add('d-none');
+        }
+
+        // Afficher uniquement les amendes non payées
+        const finesSection = document.getElementById('vehicle-fines-section');
+        const finesList = document.getElementById('vehicle-fines-list');
+        const finesLink = document.getElementById('vehicle-fines-link');
+        const unpaidFines = (vehicle.fines || []).filter(f => !f.paid);
+        if(finesSection && finesList) {
+            if(unpaidFines.length > 0) {
+                finesSection.classList.remove('d-none');
+                finesList.innerHTML = unpaidFines.map(f => {
+                    const date = f.issued_at ? f.issued_at.substring(0,10) : '';
+                    return `<div class="d-flex align-items-center justify-content-between border rounded px-3 py-2 mb-2 bg-light">
+                        <div>
+                            <span class="fw-semibold">${f.fine_type || f.description || 'Amende'}</span>
+                            <span class="badge bg-danger ms-1">Non payée</span>
+                            <div class="text-muted small">${date} — ${f.amount ? Number(f.amount).toLocaleString() + ' KMF' : ''}</div>
+                        </div>
+                        <a href="/fines?q=${encodeURIComponent(vehicle.license_plate)}" class="btn btn-sm btn-outline-danger ms-2" target="_blank">
+                            <i class="fas fa-external-link-alt me-1"></i>Voir
+                        </a>
+                    </div>`;
+                }).join('');
+                if(finesLink) finesLink.href = `/fines?q=${encodeURIComponent(vehicle.license_plate)}&paid=false`;
+            } else {
+                finesSection.classList.add('d-none');
+            }
+        }
     }
 
     // initialize and show modal (store instance globally)
@@ -918,6 +959,74 @@ function removeVehicle(id) {
         });
 }
 
-function capitalizeFirst(s){ if(!s) return ''; return s.charAt(0).toUpperCase()+s.slice(1);} 
+function capitalizeFirst(s){ if(!s) return ''; return s.charAt(0).toUpperCase()+s.slice(1);}
 function statusBadgeClass(s){ if(s==='active') return 'bg-success'; if(s==='inactive') return 'bg-danger'; if(s==='suspended') return 'bg-warning text-dark'; return 'bg-secondary'; }
 function statusLabel(s){ if(s==='active') return 'Actif'; if(s==='inactive') return 'Inactif'; if(s==='suspended') return 'Suspendu'; return s; }
+
+// Lookup VIN en live dans le modal d'édition
+(function(){
+    let _vinTimer = null;
+    document.addEventListener('DOMContentLoaded', function(){
+        const vinInput = document.getElementById('vin');
+        const vinHint = document.getElementById('vin-plate-hint');
+        const vinPlateVal = document.getElementById('vin-plate-value');
+        if(!vinInput || !vinHint || !vinPlateVal) return;
+
+        vinInput.addEventListener('input', function(){
+            clearTimeout(_vinTimer);
+            const val = this.value.trim();
+            if(!val) {
+                vinHint.classList.add('d-none');
+                const s = document.getElementById('vehicle-fines-section');
+                if(s) s.classList.add('d-none');
+                return;
+            }
+            _vinTimer = setTimeout(function(){
+                fetch('/api/vehicles/lookup-vin?vin=' + encodeURIComponent(val))
+                    .then(r => r.json())
+                    .then(d => {
+                        const v = d.vehicle;
+                        if(v) {
+                            vinPlateVal.textContent = v.license_plate + (v.owner_name ? ' — ' + v.owner_name : '');
+                            vinHint.classList.remove('d-none');
+                            // Mettre à jour la section amendes pour ce véhicule
+                            const finesSection = document.getElementById('vehicle-fines-section');
+                            const finesList = document.getElementById('vehicle-fines-list');
+                            const finesLink = document.getElementById('vehicle-fines-link');
+                            const unpaid = (v.fines || []).filter(f => !f.paid);
+                            if(finesSection && finesList) {
+                                if(unpaid.length > 0) {
+                                    finesSection.classList.remove('d-none');
+                                    finesList.innerHTML = unpaid.map(f => {
+                                        const date = f.issued_at ? f.issued_at.substring(0,10) : '';
+                                        return `<div class="d-flex align-items-center justify-content-between border rounded px-3 py-2 mb-2 bg-light">
+                                            <div>
+                                                <span class="fw-semibold">${f.fine_type || f.description || 'Amende'}</span>
+                                                <span class="badge bg-danger ms-1">Non payée</span>
+                                                <div class="text-muted small">${date} — ${f.amount ? Number(f.amount).toLocaleString() + ' KMF' : ''}</div>
+                                            </div>
+                                            <a href="/fines?q=${encodeURIComponent(v.license_plate)}&paid=false" class="btn btn-sm btn-outline-danger ms-2" target="_blank">
+                                                <i class="fas fa-external-link-alt me-1"></i>Voir
+                                            </a>
+                                        </div>`;
+                                    }).join('');
+                                    if(finesLink) finesLink.href = `/fines?q=${encodeURIComponent(v.license_plate)}&paid=false`;
+                                } else {
+                                    finesSection.classList.add('d-none');
+                                }
+                            }
+                        } else {
+                            vinHint.classList.add('d-none');
+                            const s = document.getElementById('vehicle-fines-section');
+                            if(s) s.classList.add('d-none');
+                        }
+                    })
+                    .catch(() => {
+                        vinHint.classList.add('d-none');
+                        const s = document.getElementById('vehicle-fines-section');
+                        if(s) s.classList.add('d-none');
+                    });
+            }, 400);
+        });
+    });
+})();
