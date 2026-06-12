@@ -23,7 +23,7 @@
       <div class="col-md-6">
         <div class="input-group">
           <span class="input-group-text"><i class="fas fa-search"></i></span>
-          <input id="vehicle-search" type="text" class="form-control" placeholder="Rechercher un véhicule (immatriculation, propriétaire, type...)">
+          <input id="vehicle-search" type="text" class="form-control" placeholder="Rechercher par immatriculation, propriétaire, VIN, type...">
         </div>
       </div>
       <div class="col-md-6">
@@ -367,6 +367,9 @@
                   <i class="fas fa-barcode text-muted me-1"></i>VIN (Numéro de série)
                 </label>
                 <input type="text" id="vin" name="vin" class="form-control" placeholder="Ex: 1HGBH41JXMN109186" />
+                <div id="vin-plate-hint" class="d-none mt-1" style="font-size:.78rem;color:#0d6efd;">
+                  <i class="fas fa-car me-1"></i>Immatriculation : <strong id="vin-plate-value"></strong>
+                </div>
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-semibold">
@@ -457,6 +460,17 @@
                 <textarea id="notes" name="notes" class="form-control" rows="3" placeholder="Informations supplémentaires sur le véhicule..."></textarea>
               </div>
             </div>
+          </div>
+
+          <!-- Section amendes (visible uniquement en mode édition si amendes existent) -->
+          <div id="vehicle-fines-section" class="d-none mb-3">
+            <h6 class="text-danger border-bottom pb-2 mb-3">
+              <i class="fas fa-exclamation-triangle me-2"></i>Amendes associées
+            </h6>
+            <div id="vehicle-fines-list"></div>
+            <a id="vehicle-fines-link" href="#" class="btn btn-sm btn-outline-danger mt-2" target="_blank">
+              <i class="fas fa-external-link-alt me-1"></i>Voir toutes les amendes
+            </a>
           </div>
 
           <div class="alert alert-info mb-0">
