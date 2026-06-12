@@ -405,13 +405,14 @@ def create_app():
             db.session.commit()
             print(f"✓ Droits admin restaurés: {admin_username}")
 
-        # Supprimer le compte système smarttech s'il existe encore
+        # S'assurer qu'un compte SmartTech par défaut existe toujours
         from app.models import SmartTechAccount
-        st_account = SmartTechAccount.query.filter_by(username='smarttech').first()
-        if st_account:
-            db.session.delete(st_account)
+        if not SmartTechAccount.query.first():
+            default_st = SmartTechAccount(username='smarttech', full_name='Smart Technology', role='admin', is_active=True)
+            default_st.set_password('smarttech123')
+            db.session.add(default_st)
             db.session.commit()
-            print("✓ Compte système smarttech supprimé")
+            print("✓ Compte SmartTech par défaut créé : smarttech / smarttech123")
 
         # Initialiser les paramètres par défaut Smart Technology
         from app.models import SmartTechSetting

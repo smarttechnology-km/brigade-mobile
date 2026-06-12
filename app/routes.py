@@ -1129,12 +1129,33 @@ def create_vehicle():
         print(f'Error logging vehicle creation: {e}')
     
     return jsonify(vehicle.to_dict()), 201
+@vehicle_bp.route('/lookup-vin', methods=['GET'])
+@login_required
+def lookup_vehicle_by_vin():
+    from app.models import Fine
+    vin = request.args.get('vin', '').strip()
+    if not vin:
+        return jsonify({'vehicle': None})
+    vehicle = Vehicle.query.filter(Vehicle.vin.ilike(vin)).first()
+    if not vehicle:
+        return jsonify({'vehicle': None})
+    unpaid = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).order_by(Fine.issued_at.desc()).all()
+    return jsonify({'vehicle': {
+        'id': vehicle.id,
+        'license_plate': vehicle.license_plate,
+        'owner_name': vehicle.owner_name,
+        'fines': [f.to_dict() for f in unpaid],
+    }})
+
+
 @vehicle_bp.route('/<int:vehicle_id>', methods=['GET'])
 @login_required
 def get_vehicle(vehicle_id):
+    from app.models import Fine
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
-    return jsonify(vehicle.to_dict())
+    fines = Fine.query.filter_by(vehicle_id=vehicle.id).order_by(Fine.issued_at.desc()).all()
+    return jsonify({**vehicle.to_dict(), 'fines': [f.to_dict() for f in fines]})
 
 
 @vehicle_bp.route('/<int:vehicle_id>/history', methods=['GET'])
