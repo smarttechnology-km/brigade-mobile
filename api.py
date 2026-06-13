@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, Fine, FineType, Phone, PhoneUsage, PhotoSubmission
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
 from datetime import timedelta, datetime
 from app.timezone_utils import now_comoros
+from app.push_notifications import send_fine_push_notification
 from io import BytesIO
 import qrcode
 import os
@@ -39,40 +40,116 @@ def validate_jwt_session():
 
 
 # Helper function to apply island filter for judiciaire and policier users
-def apply_island_filter(query, island_field):
+def apply_island_filter(query, island_field, force_country=None):
     """Apply island/country filter for judiciaire and policier users.
-    Judiciaire and policier users can only see data for their assigned island/country."""
-    if current_user.role in ['judiciaire', 'policier'] and current_user.country:
+    - Administrateur users can optionally filter by a specific country using force_country parameter.
+    - Judiciaire and policier users can only see data for their assigned island/country."""
+    # If force_country is explicitly provided and user is admin, apply it
+    if force_country and current_user.role == 'administrateur':
+        query = query.filter(island_field == force_country)
+    # Otherwise apply default role-based filter
+    elif current_user.role in ['judiciaire', 'policier'] and current_user.country:
         query = query.filter(island_field == current_user.country)
     return query
 
 
 def check_island_access(island):
     """Check if current user has access to data from a specific island.
-    Raises 403 Forbidden if judiciaire user doesn't have access."""
-    if current_user.role == 'judiciaire' and current_user.country:
+    Raises 403 Forbidden if judiciaire user doesn't have access.
+    Insurance accounts can only access their own island."""
+    from app.models import InsuranceAccount
+    
+    # Insurance accounts can only access their own island
+    if isinstance(current_user, InsuranceAccount):
+        if island != current_user.insurance.island:
+            return jsonify({"error": "Forbidden"}), 403
+        return None
+    
+    # Regular users (judiciaire) can only access their country's data
+    if hasattr(current_user, 'role') and current_user.role == 'judiciaire' and hasattr(current_user, 'country'):
         if island != current_user.country:
             return jsonify({"error": "Forbidden"}), 403
     return None
 
 
 def get_current_user():
-    """Get current user from JWT (mobile) or session (web)"""
-    # Try JWT auth first (mobile)
+    """Get current user from JWT (mobile) or session (web).
+    Citizen mobile tokens have identity=str(vehicle_id) and a 'vehicle_id' claim.
+    Web tokens have identity=str(user_id) with no 'vehicle_id' claim.
+    """
     try:
-        from flask_jwt_extended import get_jwt_identity
+        from flask_jwt_extended import get_jwt_identity, get_jwt
         uid = get_jwt_identity()
+        claims = get_jwt()
+
+        # Citizen mobile token: has 'vehicle_id' in additional claims
+        if claims.get('vehicle_id'):
+            vehicle_id = claims['vehicle_id']
+            owner = VehicleOwner.query.filter_by(vehicle_id=int(vehicle_id)).first()
+            if owner:
+                return owner
+            return None
+
+        # Web/police token: identity is the user id
         user = User.query.get(int(uid))
         if user:
             return user
-    except:
+    except Exception:
         pass
-    
+
     # Fall back to session auth (web)
     if current_user and current_user.is_authenticated:
         return current_user
-    
+
     return None
+
+
+def log_user_history(user, action, details):
+    """Write a best-effort entry to UserHistory without breaking the main request."""
+    if not user:
+        return
+    try:
+        from app.models import UserHistory
+        db.session.add(UserHistory(user_id=user.id, action=action, details=details))
+        db.session.commit()
+    except Exception as e:
+        print(f'[UserHistory] {action} logging failed for {getattr(user, "username", user)}: {e}')
+
+
+def _sync_vehicle_owner_link(vehicle):
+    """Best-effort sync between vehicles.owner_phone and vehicle_owners.phone."""
+    phone = (vehicle.owner_phone or '').strip()
+    if not phone:
+        return
+
+    owner_name = (vehicle.owner_name or 'Proprietaire').strip() or 'Proprietaire'
+    now = now_comoros()
+
+    try:
+        vo = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if vo:
+            vo.phone = phone
+            vo.owner_name = owner_name
+            vo.updated_at = now
+            if not vo.verified_at:
+                vo.verified_at = now
+            vo.is_verified = True
+        else:
+            db.session.add(VehicleOwner(
+                vehicle_id=vehicle.id,
+                owner_name=owner_name,
+                phone=phone,
+                is_verified=True,
+                session_version=0,
+                verified_at=now,
+                last_login=None,
+                created_at=now,
+                updated_at=now,
+            ))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[VehicleOwner] sync failed for vehicle {vehicle.id}: {e}")
 
 
 @api_bp.route('/health', methods=['GET'])
@@ -101,13 +178,31 @@ def api_login():
     if user.role not in ['policier', 'administrateur']:
         return jsonify({"error": "Unauthorized role"}), 403
     
-    access = create_access_token(identity=str(user.id), expires_delta=timedelta(hours=8))
+    # Invalidate all previous sessions by incrementing session_version
+    # This ensures only the current device stays logged in
+    user.session_version += 1
+    db.session.commit()
+    
+    # Create JWT token with the current session_version
+    # This version will be validated on every protected request
+    access = create_access_token(
+        identity=str(user.id), 
+        expires_delta=timedelta(hours=8),
+        additional_claims={'session_version': user.session_version}
+    )
+    log_user_history(user, 'Connexion mobile', f'Connexion réussie depuis l\'application mobile (Session v{user.session_version})')
     return jsonify({"access_token": access, "username": user.username, "role": user.role})
+
 
 
 @api_bp.route('/track/<token>', methods=['GET'])
 @jwt_required()
 def api_track(token):
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
     # Verify caller is a policier or administrateur
     uid = get_jwt_identity()
     user = User.query.get(int(uid))
@@ -132,6 +227,11 @@ def api_track(token):
 @api_bp.route('/fine-types/list', methods=['GET'])
 @jwt_required()
 def api_fine_types_list():
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
     uid = get_jwt_identity()
     user = User.query.get(int(uid))
     if not user or user.role not in ['policier', 'administrateur']:
@@ -145,6 +245,142 @@ def api_fine_types_list():
             "default_amount": float(ft.amount)
         } for ft in fine_types]
     })
+
+
+# Insurance Management Routes
+@api_bp.route('/insurances', methods=['GET'])
+@jwt_required(optional=True)
+def api_insurances_list():
+    insurances = Insurance.query.order_by(Insurance.company_name).all()
+    return jsonify({
+        "insurances": [ins.to_dict() for ins in insurances]
+    })
+
+
+@api_bp.route('/insurances', methods=['POST'])
+@jwt_required()
+def api_insurances_create():
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+    
+    data = request.get_json() or {}
+    company_name = data.get('company_name', '').strip()
+    
+    if not company_name:
+        return jsonify({"error": "Company name is required"}), 400
+    
+    # Check if already exists
+    existing = Insurance.query.filter_by(company_name=company_name).first()
+    if existing:
+        return jsonify({"error": "This insurance company already exists"}), 400
+    
+    insurance = Insurance(
+        company_name=company_name,
+        phone=data.get('phone', '').strip(),
+        island=data.get('island', ''),
+        address=data.get('address', '').strip()
+    )
+    
+    db.session.add(insurance)
+    db.session.commit()
+    
+    return jsonify(insurance.to_dict()), 201
+
+
+@api_bp.route('/insurances/<int:insurance_id>', methods=['PUT'])
+@jwt_required()
+def api_insurances_update(insurance_id):
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+    
+    insurance = Insurance.query.get_or_404(insurance_id)
+    data = request.get_json() or {}
+    
+    if 'company_name' in data:
+        new_name = data.get('company_name', '').strip()
+        # Check if new name conflicts with another insurance
+        existing = Insurance.query.filter_by(company_name=new_name).first()
+        if existing and existing.id != insurance_id:
+            return jsonify({"error": "This insurance company name already exists"}), 400
+        insurance.company_name = new_name
+    
+    if 'phone' in data:
+        insurance.phone = data.get('phone', '').strip()
+    
+    if 'island' in data:
+        insurance.island = data.get('island', '')
+    
+    if 'address' in data:
+        insurance.address = data.get('address', '').strip()
+    
+    db.session.commit()
+    return jsonify(insurance.to_dict())
+
+
+@api_bp.route('/insurances/<int:insurance_id>', methods=['DELETE'])
+@jwt_required()
+def api_insurances_delete(insurance_id):
+    # Validate session version (ensure token hasn't been invalidated)
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+    
+    insurance = Insurance.query.get_or_404(insurance_id)
+    db.session.delete(insurance)
+    db.session.commit()
+    
+    return jsonify({"message": "Insurance deleted successfully"})
+
+
+@api_bp.route('/vehicles/lookup-phone', methods=['GET'])
+@jwt_required(optional=True)
+def api_lookup_phone():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Forbidden"}), 403
+    phone = request.args.get('phone', '').strip()
+    if not phone:
+        return jsonify({"found": False})
+    vehicle = Vehicle.query.filter_by(owner_phone=phone).order_by(Vehicle.created_at.desc()).first()
+    if vehicle and vehicle.owner_name:
+        return jsonify({"found": True, "owner_name": vehicle.owner_name})
+    from app.models import VehicleOwner
+    vo = VehicleOwner.query.filter_by(phone=phone).order_by(VehicleOwner.created_at.desc()).first()
+    if vo and vo.owner_name:
+        return jsonify({"found": True, "owner_name": vo.owner_name})
+    return jsonify({"found": False})
+
+
+@api_bp.route('/vehicles/check-plate', methods=['GET'])
+@jwt_required(optional=True)
+def api_check_plate():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Forbidden"}), 403
+    plate = request.args.get('plate', '').upper().strip()
+    if not plate:
+        return jsonify({"exists": False})
+    exists = Vehicle.query.filter_by(license_plate=plate).first() is not None
+    return jsonify({"exists": exists, "plate": plate})
 
 
 @api_bp.route('/vehicles/search', methods=['GET'])
@@ -168,9 +404,30 @@ def api_vehicles_search():
         vehicles_query = vehicles_query.filter(Vehicle.owner_island == user.country)
     
     vehicles = vehicles_query.limit(10).all()
-    
+
+    setting = VignetteSetting.get()
+    renewal_opening = None
+    if setting and setting.renewal_opening_date:
+        from datetime import date
+        renewal_opening = setting.renewal_opening_date
+    now_date = now_comoros().date()
+
+    def vehicle_dict_with_renewal(v):
+        d = v.to_dict()
+        if renewal_opening:
+            in_renewal = now_date >= renewal_opening
+            expiry_str = d.get('vignette_expiry')
+            vignette_active = bool(expiry_str and expiry_str >= str(now_date))
+            payment_approved = bool(getattr(v, 'vignette_payment_approved', False))
+            d['renewal_needed'] = in_renewal and vignette_active and not payment_approved
+            d['renewal_period_open'] = in_renewal
+        else:
+            d['renewal_needed'] = False
+            d['renewal_period_open'] = False
+        return d
+
     return jsonify({
-        "vehicles": [v.to_dict() for v in vehicles]
+        "vehicles": [vehicle_dict_with_renewal(v) for v in vehicles]
     })
 
 
@@ -183,15 +440,15 @@ def api_vehicles_create():
     
     data = request.get_json() or {}
     license_plate = data.get('license_plate', '').upper().strip()
-    
+
     if not license_plate:
         return jsonify({"error": "License plate is required"}), 400
-    
+
     # Check if vehicle already exists
     existing = Vehicle.query.filter_by(license_plate=license_plate).first()
     if existing:
         return jsonify({"error": "Vehicle with this license plate already exists"}), 400
-    
+
     vehicle = Vehicle(
         license_plate=license_plate,
         owner_name=data.get('owner_name', ''),
@@ -243,6 +500,15 @@ def api_vehicles_create():
     
     db.session.add(vehicle)
     db.session.commit()
+
+    if vehicle.owner_phone:
+        _sync_vehicle_owner_link(vehicle)
+
+    log_user_history(
+        user,
+        'Véhicule créé (mobile)',
+        f"Véhicule {vehicle.license_plate} - {vehicle.owner_name} ({vehicle.vehicle_type})"
+    )
     
     return jsonify({
         "message": "Vehicle created successfully",
@@ -254,7 +520,7 @@ def api_vehicles_create():
 @jwt_required(optional=True)
 def api_vehicles_update(vehicle_id):
     user = get_current_user()
-    if not user or user.role not in ['administrateur', 'judiciaire']:
+    if not user or user.role not in ['administrateur', 'judiciaire', 'policier']:
         return jsonify({"error": "Forbidden"}), 403
     
     vehicle = Vehicle.query.get(vehicle_id)
@@ -308,7 +574,7 @@ def api_vehicles_update(vehicle_id):
         vehicle.insurance_company = data['insurance_company']
     if 'notes' in data:
         vehicle.notes = data['notes']
-    
+
     # Update date fields
     if 'registration_date' in data and data['registration_date']:
         try:
@@ -342,9 +608,78 @@ def api_vehicles_update(vehicle_id):
     
     vehicle.updated_at = now_comoros()
     db.session.commit()
+
+    if 'owner_phone' in data or 'owner_name' in data:
+        _sync_vehicle_owner_link(vehicle)
+
+    changed_fields = []
+    for field in [
+        'license_plate', 'owner_name', 'owner_phone', 'owner_island',
+        'vehicle_type', 'usage_type', 'color', 'make', 'model', 'year',
+        'owner_address', 'vin', 'status', 'insurance_company', 'notes',
+        'registration_date', 'registration_expiry', 'insurance_expiry',
+        'vignette_expiry', 'last_inspection_date'
+    ]:
+        if field in data:
+            changed_fields.append(field.replace('_', ' '))
+
+    if changed_fields:
+        log_user_history(
+            user,
+            'Véhicule modifié (mobile)',
+            f"Véhicule {vehicle.license_plate}: {', '.join(changed_fields)}"
+        )
     
     return jsonify({
         "message": "Vehicle updated successfully",
+        "vehicle": vehicle.to_dict()
+    })
+
+
+@api_bp.route('/vehicles/<int:vehicle_id>/status', methods=['PUT'])
+@jwt_required(optional=True)
+def api_vehicles_update_status(vehicle_id):
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire', 'policier']:
+        return jsonify({"error": "Forbidden"}), 403
+
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+
+    vehicle = Vehicle.query.get(vehicle_id)
+    if not vehicle:
+        return jsonify({"error": "Vehicle not found"}), 404
+
+    if user.role == 'judiciaire' and user.country:
+        if vehicle.owner_island != user.country:
+            return jsonify({"error": "Forbidden"}), 403
+
+    data = request.get_json() or {}
+    status = str(data.get('status', '')).strip().lower()
+    if status not in ['active', 'inactive', 'suspended']:
+        return jsonify({"error": "Invalid status"}), 400
+
+    old_status = vehicle.status
+    vehicle.status = status
+    vehicle.updated_at = now_comoros()
+
+    from app.models import VehicleHistory
+    status_labels = {
+        'active': 'Actif',
+        'inactive': 'Inactif',
+        'suspended': 'Suspendu',
+    }
+    db.session.add(VehicleHistory(
+        vehicle_id=vehicle.id,
+        action='Statut du véhicule modifié (mobile)',
+        officer=getattr(user, 'username', '') or '',
+        notes=f"Statut changé de {status_labels.get(old_status, old_status or 'Inconnu')} à {status_labels.get(status, status or 'Inconnu')}"
+    ))
+    db.session.commit()
+
+    return jsonify({
+        "message": "Vehicle status updated successfully",
         "vehicle": vehicle.to_dict()
     })
 
@@ -380,6 +715,16 @@ def api_fines_create():
     
     db.session.add(fine)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Amende créée (mobile)',
+        f"Amende pour {vehicle.license_plate}: {reason} ({amount})"
+    )
+
+    # Send push notification to vehicle owner
+    push_result = send_fine_push_notification(vehicle, fine)
+    print(f"📲 Push notification result: {push_result}")
     
     return jsonify({
         "message": "Fine created successfully",
@@ -425,6 +770,12 @@ def api_profile_update():
         user.phone = data['phone']
     
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Profil modifié (mobile)',
+        'Modification du profil depuis l\'application mobile'
+    )
     
     return jsonify({
         "message": "Profile updated successfully",
@@ -462,6 +813,12 @@ def api_profile_change_password():
     
     user.set_password(new_password)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Mot de passe modifié (mobile)',
+        'Changement du mot de passe depuis l\'application mobile'
+    )
     
     return jsonify({"message": "Password changed successfully"})
 
@@ -507,6 +864,11 @@ def api_reports_vehicles_with_fines():
             Fine.paid == False
         ).scalar() or 0
         
+        unpaid_amount = db.session.query(func.sum(Fine.amount)).filter(
+            Fine.vehicle_id == v.id,
+            Fine.paid == False
+        ).scalar() or 0
+        
         vehicles_data.append({
             'id': v.id,
             'license_plate': v.license_plate,
@@ -515,7 +877,8 @@ def api_reports_vehicles_with_fines():
             'track_token': v.track_token,
             'fines_count': v.fines_count,
             'total_amount': float(v.total_amount or 0),
-            'unpaid_count': unpaid_count
+            'unpaid_count': unpaid_count,
+            'unpaid_amount': float(unpaid_amount or 0)
         })
     
     # Calculate statistics
@@ -683,8 +1046,9 @@ def api_vehicle_qr_code(vehicle_id):
 @login_required
 def api_phones_list():
     """Get all phones"""
+    country = request.args.get('country', '')
     query = Phone.query
-    query = apply_island_filter(query, Phone.island)
+    query = apply_island_filter(query, Phone.island, force_country=country)
     phones = query.order_by(Phone.created_at.desc()).all()
     return jsonify({
         'success': True,
@@ -714,6 +1078,12 @@ def api_phone_create():
     db.session.flush()  # Generate ID
     phone.phone_code = f"TP{phone.id:05d}"  # Generate compact code like TP00001
     db.session.commit()
+
+    log_user_history(
+        current_user,
+        'Téléphone créé (mobile)',
+        f"Téléphone {phone.phone_code} - {phone.brand} {phone.model}"
+    )
     
     return jsonify(phone.to_dict()), 201
 
@@ -763,6 +1133,12 @@ def api_phone_update(phone_id):
         phone.notes = data['notes'].strip() if data['notes'] else None
     
     db.session.commit()
+
+    log_user_history(
+        current_user,
+        'Téléphone modifié (mobile)',
+        f"Téléphone {phone.phone_code} mis à jour"
+    )
     
     return jsonify(phone.to_dict())
 
@@ -774,9 +1150,17 @@ def api_phone_delete(phone_id):
     phone = Phone.query.get(phone_id)
     if not phone:
         return jsonify({'error': 'Phone not found'}), 404
+
+    phone_code = phone.phone_code
     
     db.session.delete(phone)
     db.session.commit()
+
+    log_user_history(
+        current_user,
+        'Téléphone supprimé (mobile)',
+        f"Téléphone {phone_code} supprimé"
+    )
     
     return jsonify({'ok': True})
 
@@ -891,6 +1275,13 @@ def api_checkout_phone():
     
     db.session.add(usage)
     db.session.commit()
+
+    lender_name = getattr(current_user, 'username', 'system') if current_user else 'system'
+    log_user_history(
+        user,
+        'Téléphone emprunté',
+        f"Téléphone {phone.phone_code} emprunté à {lender_name}" + (f" - Notes: {notes}" if notes else '')
+    )
     
     return jsonify(usage.to_dict()), 201
 
@@ -908,6 +1299,12 @@ def api_checkin_phone(usage_id):
     
     usage.checkin_at = now_comoros()
     db.session.commit()
+
+    log_user_history(
+        usage.user,
+        'Téléphone retourné',
+        f"Téléphone {usage.phone.phone_code if usage.phone else usage.phone_id} retourné"
+    )
     
     return jsonify(usage.to_dict())
 
@@ -918,9 +1315,10 @@ def api_phone_usage_list():
     """Get phone usage records - by default only active (checked out) phones"""
     # Get query parameter: show_all=true to show all records, otherwise only active
     show_all = request.args.get('show_all', 'false').lower() == 'true'
+    country = request.args.get('country', '')
     
     query = PhoneUsage.query.join(Phone)
-    query = apply_island_filter(query, Phone.island)
+    query = apply_island_filter(query, Phone.island, force_country=country)
     
     if show_all:
         usages = query.order_by(PhoneUsage.checkout_at.desc()).all()
@@ -935,15 +1333,17 @@ def api_phone_usage_list():
 @login_required
 def api_phone_usage_stats():
     """Get phone usage statistics"""
+    country = request.args.get('country', '')
+    
     query_phones = Phone.query
-    query_phones = apply_island_filter(query_phones, Phone.island)
+    query_phones = apply_island_filter(query_phones, Phone.island, force_country=country)
     
     total_phones = query_phones.count()
     active_phones = query_phones.filter_by(status='active').count()
     inactive_phones = query_phones.filter_by(status='inactive').count()
     
     query_usages = PhoneUsage.query.join(Phone)
-    query_usages = apply_island_filter(query_usages, Phone.island)
+    query_usages = apply_island_filter(query_usages, Phone.island, force_country=country)
     active_usages = query_usages.filter(PhoneUsage.checkin_at.is_(None)).count()
     
     return jsonify({
@@ -957,23 +1357,23 @@ def api_phone_usage_stats():
 @api_bp.route('/users/list', methods=['GET'])
 @login_required
 def api_users_list():
-    """Get all users"""
-    users = User.query.filter(User.role.in_(['policier', 'administrateur'])).order_by(User.username).all()
-    return jsonify({
-        'success': True,
-        'users': [{
-            'id': u.id,
-            'username': u.username,
-            'full_name': u.full_name,
-            'email': u.email,
-            'phone': u.phone,
-            'country': u.country,
-            'region': u.region,
-            'role': u.role,
-            'is_active': u.is_active,
-            'created_at': u.created_at.strftime('%d/%m/%Y %H:%M') if u.created_at else None
-        } for u in users]
-    })
+    """Get all users - no country filtering"""
+    # Show all policiers and admins regardless of country
+    query = User.query.filter(User.role.in_(['policier', 'administrateur']))
+    users = query.order_by(User.username).all()
+    
+    return jsonify([{
+        'id': u.id,
+        'username': u.username,
+        'full_name': u.full_name,
+        'email': u.email,
+        'phone': u.phone,
+        'country': u.country,
+        'region': u.region,
+        'role': u.role,
+        'is_active': u.is_active,
+        'created_at': u.created_at.strftime('%d/%m/%Y %H:%M') if u.created_at else None
+    } for u in users])
 
 
 @api_bp.route('/users/policiers', methods=['GET'])
@@ -1140,6 +1540,12 @@ def api_scan_phone_qr():
         # Check in the phone
         active_usage.checkin_at = now_comoros()
         db.session.commit()
+
+        log_user_history(
+            user,
+            'Téléphone retourné (mobile)',
+            f"Téléphone {phone.phone_code} retourné via scan QR"
+        )
         
         return jsonify({
             'action': 'checkin',
@@ -1155,6 +1561,12 @@ def api_scan_phone_qr():
         )
         db.session.add(usage)
         db.session.commit()
+
+        log_user_history(
+            user,
+            'Téléphone attribué (mobile)',
+            f"Téléphone {phone.phone_code} attribué via scan QR"
+        )
         
         return jsonify({
             'action': 'checkout',
@@ -1245,6 +1657,18 @@ def api_manual_checkout_debug():
     )
     db.session.add(usage)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Téléphone emprunté',
+        f"Téléphone {phone.phone_code} attribué par {admin.username}"
+    )
+
+    log_user_history(
+        admin,
+        'Téléphone attribué manuellement (mobile)',
+        f"Téléphone {phone.phone_code} attribué à {user.username}"
+    )
     
     print(f"[MANUAL CHECKOUT] Phone {phone_code} checked out to {user.username}")
     
@@ -1388,12 +1812,54 @@ def upload_photo_submission():
     )
     db.session.add(submission)
     db.session.commit()
+
+    # Get vehicle details if available
+    vehicle_info = {}
+    if vehicle_id:
+        vehicle = Vehicle.query.get(vehicle_id)
+        if vehicle:
+            vehicle_info = {
+                'vehicle_type': vehicle.vehicle_type,
+                'usage_type': vehicle.usage_type,
+                'color': vehicle.color,
+                'owner_name': vehicle.owner_name
+            }
+    elif license_plate:
+        # Try to find vehicle by license plate
+        vehicle = Vehicle.query.filter_by(license_plate=license_plate).first()
+        if vehicle:
+            vehicle_info = {
+                'vehicle_type': vehicle.vehicle_type,
+                'usage_type': vehicle.usage_type,
+                'color': vehicle.color,
+                'owner_name': vehicle.owner_name
+            }
+
+    log_user_history(
+        user,
+        'Photo soumise (mobile)',
+        f"Photo soumise pour {license_plate or 'véhicule non précisé'}"
+    )
     
     return jsonify({
         "message": "Photo submitted successfully",
         "submission_id": submission.id,
-        "status": "pending"
+        "status": "pending",
+        "license_plate": license_plate,
+        "description": description,
+        "vehicle": vehicle_info
     }), 201
+
+
+@api_bp.route('/photo-submissions/count-pending', methods=['GET'])
+def count_pending_photo_submissions():
+    """Get count of pending photo submissions"""
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    pending_count = PhotoSubmission.query.filter_by(status='pending').count()
+    return jsonify({'pending_count': pending_count})
 
 
 @api_bp.route('/photo-submissions/list', methods=['GET'])
@@ -1401,10 +1867,15 @@ def list_photo_submissions():
     # Support both JWT (mobile) and session auth (web admin)
     user = get_current_user()
     
+    print(f"[DEBUG] /photo-submissions/list - User: {user}")
+    print(f"[DEBUG] current_user: {current_user}, is_authenticated: {current_user.is_authenticated if current_user else 'N/A'}")
+    
     if not user or user.role not in ['administrateur', 'policier', 'judiciaire']:
-        return jsonify({"error": "Forbidden"}), 403
+        print(f"[DEBUG] Access denied - user={user}, role={user.role if user else 'N/A'}")
+        return jsonify({"error": "Forbidden", "user": str(user)}), 403
     
     status = request.args.get('status', 'all')
+    country = request.args.get('country', '')
     
     # Join with Vehicle (for owner_island) and User (for submitter's country)
     query = PhotoSubmission.query.join(
@@ -1414,9 +1885,16 @@ def list_photo_submissions():
     )
     
     # Apply island filter: 
-    # - Administrators see all submissions
+    # - Administrators can filter by country parameter, or see all if no country specified
     # - Policiers and Judiciaires see submissions for vehicles in their country OR submissions by officers in their country
-    if user.role in ['policier', 'judiciaire'] and user.country:
+    if user.role == 'administrateur' and country:
+        # Admin with country filter: show submissions for vehicles in that country
+        # OR submissions submitted by officers in that country (some submissions may not be linked to a vehicle)
+        query = query.filter(
+            (Vehicle.owner_island == country) | (User.country == country)
+        )
+    elif user.role in ['policier', 'judiciaire'] and user.country:
+        # Non-admin: filter by their country
         query = query.filter(
             (Vehicle.owner_island == user.country) | 
             (User.country == user.country)
@@ -1427,6 +1905,7 @@ def list_photo_submissions():
     
     submissions = query.order_by(PhotoSubmission.submitted_at.desc()).all()
     
+    print(f"[DEBUG] Found {len(submissions)} photo submissions")
     return jsonify({
         "submissions": [s.to_dict() for s in submissions]
     })
@@ -1460,6 +1939,8 @@ def review_photo_submission(submission_id):
     submission.reviewed_by = user.id
     submission.reviewed_at = now_comoros()
     submission.review_notes = review_notes
+    submitter = submission.submitter
+    vehicle_plate = submission.license_plate or (submission.vehicle.license_plate if submission.vehicle else None)
     
     # Delete photo file if status is 'resolved' to save disk space
     if status == 'resolved' and submission.photo_path and os.path.exists(submission.photo_path):
@@ -1470,6 +1951,20 @@ def review_photo_submission(submission_id):
             print(f"Error deleting photo file: {e}")
     
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Photo traitée',
+        f"Photo #{submission.id} traitée pour {vehicle_plate or 'véhicule non précisé'} - statut: {status}"
+        + (f" - Notes: {review_notes}" if review_notes else '')
+    )
+
+    if submitter and submitter.id != user.id:
+        log_user_history(
+            submitter,
+            'Photo traitée',
+            f"Votre photo #{submission.id} pour {vehicle_plate or 'véhicule non précisé'} a été traitée par {user.username}"
+        )
     
     return jsonify({
         "message": "Submission reviewed",
@@ -1488,6 +1983,9 @@ def delete_photo_submission(submission_id):
     submission = PhotoSubmission.query.get(submission_id)
     if not submission:
         return jsonify({"error": "Submission not found"}), 404
+
+    submitter = submission.submitter
+    vehicle_plate = submission.license_plate or (submission.vehicle.license_plate if submission.vehicle else None)
     
     if submission.vehicle_id:
         vehicle = Vehicle.query.get(submission.vehicle_id)
@@ -1507,6 +2005,19 @@ def delete_photo_submission(submission_id):
     # Delete from database
     db.session.delete(submission)
     db.session.commit()
+
+    log_user_history(
+        user,
+        'Photo supprimée',
+        f"Photo #{submission_id} supprimée pour {vehicle_plate or 'véhicule non précisé'}"
+    )
+
+    if submitter and submitter.id != user.id:
+        log_user_history(
+            submitter,
+            'Photo supprimée',
+            f"Votre photo #{submission_id} pour {vehicle_plate or 'véhicule non précisé'} a été supprimée par {user.username}"
+        )
     
     return jsonify({
         "message": "Submission deleted successfully"
@@ -1554,35 +2065,39 @@ def renew_vehicle_qrcode_by_token(token):
         
         # Store old values for logging
         old_expiry = vehicle.qr_code_expiry.strftime('%Y-%m-%d') if vehicle.qr_code_expiry else 'Non défini'
-        old_token = vehicle.track_token
         old_status = vehicle.status
         
-        # Generate new QR code with expiry (2 years) - also generates new token
+        # Renew QR code expiry without changing the token
         vehicle.generate_qr_code_with_expiry()
-        new_token = vehicle.track_token
         
         # Reactivate vehicle
         vehicle.status = 'active'
         
-        # Log the action in vehicle history with old and new tokens
+        # Log the action in vehicle history while preserving the token
         from app.models import VehicleHistory
         history = VehicleHistory(
             vehicle_id=vehicle.id,
-            action=f"QR Code renouvelé - Ancien token remplacé",
+            action=f"QR Code renouvelé - Token conservé",
             officer=current_user.username,
-            notes=f"Ancien token: {old_token}\nNouveau token: {new_token}\nAncien expiry: {old_expiry}\nNouveau expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
+            notes=f"Token conservé: {vehicle.track_token}\nAncien expiry: {old_expiry}\nNouvelle expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
         )
         db.session.add(history)
         
         db.session.commit()
+
+        log_user_history(
+            current_user,
+            'QR Code renouvelé (mobile)',
+            f"Véhicule {vehicle.license_plate}: QR code renouvelé et véhicule réactivé"
+        )
         
         return jsonify({
             "success": True,
             "message": f"Code QR renouvelé et véhicule réactivé",
             "old_status": old_status,
             "new_status": vehicle.status,
-            "old_token": old_token,
-            "new_token": new_token,
+            "track_token": vehicle.track_token,
+            "token_unchanged": True,
             "old_expiry": old_expiry,
             "new_expiry": vehicle.qr_code_expiry.strftime('%Y-%m-%d'),
             "generated_at": vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S')
@@ -1591,3 +2106,543 @@ def renew_vehicle_qrcode_by_token(token):
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================================================
+# VEHICLE TRANSFER ENDPOINTS (ADMIN)
+# ============================================================================
+
+@api_bp.route('/vehicle-transfers', methods=['GET'])
+def get_vehicle_transfers():
+    """Get all vehicle transfer requests"""
+    try:
+        # Get current user
+        user = get_current_user()
+        print(f"[DEBUG] /vehicle-transfers - User: {user}")
+
+        if not user or user.role not in ['administrateur', 'judiciaire']:
+            print(f"[DEBUG] Access denied - user={user}, role={user.role if user else 'N/A'}")
+            return jsonify({'error': 'Access denied'}), 403
+
+        # Get query parameters for filtering
+        status = request.args.get('status', '')
+        license_plate = request.args.get('license_plate', '').upper()
+        transfer_type = request.args.get('transfer_type', '')
+        country = request.args.get('country', '')
+
+        # Join with Vehicle to allow island filtering and plate search
+        query = VehicleTransfer.query.join(
+            Vehicle, VehicleTransfer.vehicle_id == Vehicle.id, isouter=True
+        )
+
+        # Apply island filter:
+        # - Judiciaire: automatically restricted to their island
+        # - Administrateur: filtered only when a country param is explicitly provided
+        if user.role == 'judiciaire' and user.country:
+            query = query.filter(Vehicle.owner_island == user.country)
+        elif user.role == 'administrateur' and country:
+            query = query.filter(Vehicle.owner_island == country)
+
+        # Apply other filters
+        if status:
+            query = query.filter(VehicleTransfer.status == status)
+        if transfer_type:
+            query = query.filter(VehicleTransfer.transfer_type == transfer_type)
+        if license_plate:
+            query = query.filter(Vehicle.license_plate.ilike(f'%{license_plate}%'))
+
+        # Sort by created date descending
+        transfers = query.order_by(VehicleTransfer.created_at.desc()).all()
+
+        # Pre-fetch vehicles by ID in one query — bypasses ORM relationship loading
+        # issues (e.g. SQLite FK enforcement off, or joinedload conflict with explicit join).
+        transfer_vehicle_ids = list({t.vehicle_id for t in transfers if t.vehicle_id})
+        vehicles_by_id = {}
+        if transfer_vehicle_ids:
+            vehicles_by_id = {
+                v.id: v for v in Vehicle.query.filter(Vehicle.id.in_(transfer_vehicle_ids)).all()
+            }
+
+        # Build result with proper current_owner_name
+        result = []
+        for t in transfers:
+            transfer_dict = t.to_dict()
+            vehicle = t.vehicle or vehicles_by_id.get(t.vehicle_id)
+            if vehicle:
+                transfer_dict['current_owner_name'] = vehicle.owner_name
+                transfer_dict['vehicle'] = {
+                    'id': vehicle.id,
+                    'license_plate': vehicle.license_plate,
+                    'current_owner': vehicle.owner_name
+                }
+            result.append(transfer_dict)
+        
+        print(f"✅ Fetched {len(result)} vehicle transfers")
+        return jsonify(result), 200
+    
+    except Exception as e:
+        print(f"❌ Error fetching transfers: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/vehicle-transfers', methods=['POST'])
+def create_vehicle_transfer():
+    """Create a new vehicle transfer request (citizen submission)"""
+    try:
+        # Get current user (mobile app)
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        # Get form data
+        vehicle_id = request.form.get('vehicle_id', type=int)
+        transfer_type = request.form.get('transfer_type', '').strip()
+        new_owner_phone = request.form.get('new_owner_phone', '').strip()
+        new_owner_name = request.form.get('new_owner_name', '').strip()
+        transfer_reason = request.form.get('transfer_reason', '').strip() or None
+        
+        # Validate required fields
+        if not vehicle_id or not transfer_type or not new_owner_phone or not new_owner_name:
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Validate transfer type
+        valid_types = ['sale', 'gift', 'inheritance', 'other']
+        if transfer_type not in valid_types:
+            return jsonify({'error': f'Invalid transfer type. Must be one of: {", ".join(valid_types)}'}), 400
+        
+        # Get vehicle
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        # Verify user owns the vehicle
+        if vehicle.owner_phone != user.phone:
+            return jsonify({'error': 'You can only transfer vehicles you own'}), 403
+        
+        # Handle identity document upload
+        identity_document_path = None
+        if 'identity_document' in request.files:
+            doc_file = request.files['identity_document']
+            
+            if doc_file.filename != '':
+                # Validate file type (PDF or image)
+                allowed_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp']
+                if doc_file.content_type not in allowed_types:
+                    return jsonify({'error': 'Only PDF and image files (JPEG, PNG, GIF, WebP) are allowed'}), 400
+                
+                # Create uploads directory if not exists
+                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'identity_documents')
+                os.makedirs(upload_dir, exist_ok=True)
+                
+                # Generate unique filename
+                ext = secure_filename(doc_file.filename).split('.')[-1]
+                filename = f"transfer_{uuid.uuid4()}.{ext}"
+                filepath = os.path.join(upload_dir, filename)
+                
+                # Save file
+                doc_file.save(filepath)
+                identity_document_path = filename
+                
+                print(f"[DEBUG] Identity document saved: {filename}")
+        
+        # Create vehicle transfer record
+        transfer = VehicleTransfer(
+            vehicle_id=vehicle_id,
+            current_owner_phone=user.phone,
+            new_owner_phone=new_owner_phone,
+            new_owner_name=new_owner_name,
+            transfer_type=transfer_type,
+            reason=transfer_reason,
+            identity_document_path=identity_document_path,
+            status='pending'
+        )
+        
+        db.session.add(transfer)
+        db.session.commit()
+        
+        print(f"✅ Vehicle transfer created: {vehicle.license_plate} by {user.phone}")
+        
+        return jsonify({
+            'message': 'Transfer request submitted successfully',
+            'transfer': transfer.to_dict()
+        }), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error creating transfer: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+@api_bp.route('/vehicle-transfers/<int:transfer_id>', methods=['PUT'])
+def update_vehicle_transfer(transfer_id):
+    """Update a vehicle transfer request.
+    - Admins (Flask session): can edit all fields including current owner info.
+    - Citizens (JWT): can only edit their own pending transfers (new owner fields + reason).
+    """
+    try:
+        user = get_current_user()
+        is_admin = user and hasattr(user, 'role') and user.role in ['administrateur', 'judiciaire']
+        is_citizen = False
+
+        if not user:
+            # Fall back to JWT for citizen mobile app
+            try:
+                from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity as _get_identity
+                verify_jwt_in_request()
+                citizen_id = _get_identity()
+                citizen = User.query.get(citizen_id)
+                if citizen and citizen.role == 'citizen':
+                    user = citizen
+                    is_citizen = True
+            except Exception:
+                return jsonify({'error': 'Authentication required'}), 401
+        elif not is_admin:
+            is_citizen = True
+
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        transfer = VehicleTransfer.query.get(transfer_id)
+        if not transfer:
+            return jsonify({'error': 'Transfer not found'}), 404
+
+        if not is_admin:
+            # Citizens can only edit their own pending transfers
+            vehicle = Vehicle.query.get(transfer.vehicle_id)
+            if not vehicle or vehicle.owner_phone != getattr(user, 'phone', None):
+                return jsonify({'error': 'You can only edit your own transfer requests'}), 403
+
+        if transfer.status != 'pending':
+            return jsonify({'error': 'Can only edit pending transfer requests'}), 400
+
+        data = request.get_json()
+
+        # Fields editable by everyone
+        if 'new_owner_phone' in data:
+            transfer.new_owner_phone = data['new_owner_phone']
+        if 'new_owner_name' in data:
+            transfer.new_owner_name = data['new_owner_name']
+        if 'reason' in data:
+            transfer.reason = data['reason']
+
+        # Fields editable by admins only
+        vehicle = transfer.vehicle or Vehicle.query.get(transfer.vehicle_id)
+        if is_admin:
+            if 'current_owner_phone' in data:
+                transfer.current_owner_phone = data['current_owner_phone']
+            if 'current_owner_name' in data and vehicle:
+                vehicle.owner_name = data['current_owner_name']
+
+        db.session.commit()
+        result = transfer.to_dict()
+        if vehicle:
+            result['current_owner_name'] = vehicle.owner_name
+            result['vehicle'] = {
+                'id': vehicle.id,
+                'license_plate': vehicle.license_plate,
+                'current_owner': vehicle.owner_name
+            }
+        return jsonify(result), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error updating transfer: {str(e)}'}), 500
+
+
+@api_bp.route('/vehicle-transfers/<int:transfer_id>/identity-document', methods=['GET'])
+def get_transfer_identity_document(transfer_id):
+    """Get identity document for a vehicle transfer (admin only)"""
+    try:
+        # Get current user
+        user = get_current_user()
+        if not user or user.role not in ['administrateur', 'judiciaire']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get transfer
+        transfer = VehicleTransfer.query.get(transfer_id)
+        if not transfer or not transfer.identity_document_path:
+            return jsonify({'error': 'Document not found'}), 404
+        
+        # Build file path — handle two upload conventions:
+        # - Mobile/api.py uploads: path is just the filename, stored in static/identity_documents/
+        # - Web/routes.py uploads: path includes directory prefix like "vehicle_transfers/file.jpg"
+        static_dir = os.path.join(os.path.dirname(__file__), 'static')
+        if os.sep in transfer.identity_document_path or '/' in transfer.identity_document_path:
+            doc_path = os.path.join(static_dir, transfer.identity_document_path)
+        else:
+            doc_path = os.path.join(static_dir, 'identity_documents', transfer.identity_document_path)
+
+        if not os.path.exists(doc_path):
+            return jsonify({'error': 'Document file not found'}), 404
+
+        # Determine MIME type
+        ext = transfer.identity_document_path.rsplit('.', 1)[-1].lower()
+        mime_type = 'application/pdf' if ext == 'pdf' else f'image/{ext}' if ext in ('jpg', 'jpeg', 'png', 'gif') else 'application/octet-stream'
+        
+        print(f"[DEBUG] Serving identity document: {transfer.identity_document_path}")
+        
+        return send_file(
+            doc_path,
+            mimetype=mime_type,
+            as_attachment=False,
+            download_name=f"transfer_{transfer.id}_identity.{transfer.identity_document_path.split('.')[-1]}"
+        )
+    
+    except Exception as e:
+        print(f"❌ Error retrieving identity document: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/vehicle-transfers/approve', methods=['POST'])
+def approve_vehicle_transfer():
+    """Approve a vehicle transfer request (admin only)"""
+    try:
+        # Get current user
+        user = get_current_user()
+        if not user or user.role not in ['administrateur', 'judiciaire']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        data = request.get_json() or {}
+        transfer_id = data.get('transfer_id')
+        notes = data.get('notes', '')
+        
+        if not transfer_id:
+            return jsonify({'error': 'transfer_id required'}), 400
+        
+        # Get the transfer
+        transfer = VehicleTransfer.query.get(transfer_id)
+        if not transfer:
+            return jsonify({'error': 'Transfer not found'}), 404
+        
+        if transfer.status != 'pending':
+            return jsonify({'error': 'Only pending transfers can be approved'}), 400
+        
+        # Get the vehicle
+        vehicle = Vehicle.query.get(transfer.vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        # Update transfer status
+        transfer.status = 'approved'
+        transfer.processed_at = now_comoros()
+        transfer.processed_by = user.id
+        transfer.notes = notes
+        
+        # Update vehicle owner information
+        vehicle.owner_name = transfer.new_owner_name
+        vehicle.owner_phone = transfer.new_owner_phone
+        vehicle.updated_at = now_comoros()
+        
+        # Force-logout current owner: bump session_version so their JWT is rejected
+        current_owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        if current_owner:
+            current_owner.session_version = (current_owner.session_version or 0) + 1
+            current_owner.current_device_id = None
+
+        # Force-logout new owner: they may have an account on another vehicle
+        for acct in VehicleOwner.query.filter_by(phone=transfer.new_owner_phone).all():
+            acct.session_version = (acct.session_version or 0) + 1
+            acct.current_device_id = None
+
+        # Create or update VehicleOwner record for this vehicle
+        vehicle_owner = current_owner
+        if not vehicle_owner:
+            vehicle_owner = VehicleOwner(
+                vehicle_id=vehicle.id,
+                phone=transfer.new_owner_phone,
+                owner_name=transfer.new_owner_name,
+                session_version=1
+            )
+            db.session.add(vehicle_owner)
+        else:
+            vehicle_owner.owner_name = transfer.new_owner_name
+            vehicle_owner.phone = transfer.new_owner_phone
+            vehicle_owner.updated_at = now_comoros()
+
+        db.session.commit()
+        
+        print(f"✅ Transfer approved: {vehicle.license_plate} to {transfer.new_owner_name}")
+        
+        return jsonify({
+            'message': 'Transfer approved and vehicle owner updated',
+            'transfer': transfer.to_dict(),
+            'vehicle': {
+                'id': vehicle.id,
+                'license_plate': vehicle.license_plate,
+                'owner_name': vehicle.owner_name,
+                'owner_phone': vehicle.owner_phone
+            }
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error approving transfer: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/vehicle-transfers/reject', methods=['POST'])
+def reject_vehicle_transfer():
+    """Reject a vehicle transfer request (admin only)"""
+    try:
+        # Get current user
+        user = get_current_user()
+        if not user or user.role not in ['administrateur', 'judiciaire']:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        data = request.get_json() or {}
+        transfer_id = data.get('transfer_id')
+        notes = data.get('notes', '')
+        
+        if not transfer_id:
+            return jsonify({'error': 'transfer_id required'}), 400
+        
+        # Get the transfer
+        transfer = VehicleTransfer.query.get(transfer_id)
+        if not transfer:
+            return jsonify({'error': 'Transfer not found'}), 404
+        
+        if transfer.status != 'pending':
+            return jsonify({'error': 'Only pending transfers can be rejected'}), 400
+        
+        # Update transfer status
+        transfer.status = 'rejected'
+        transfer.processed_at = now_comoros()
+        transfer.processed_by = user.id
+        transfer.notes = notes
+        
+        db.session.commit()
+        
+        print(f"✅ Transfer rejected: {transfer.vehicle.license_plate if transfer.vehicle else 'Unknown'}")
+        
+        return jsonify({
+            'message': 'Transfer rejected',
+            'transfer': transfer.to_dict()
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error rejecting transfer: {e}")
+        return jsonify({'error': str(e)}), 500
+@api_bp.route('/vehicle-transfers/<int:transfer_id>', methods=['DELETE'])
+def delete_vehicle_transfer(transfer_id):
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire']:
+        return jsonify({'error': 'Access denied'}), 403
+    transfer = VehicleTransfer.query.get(transfer_id)
+    if not transfer:
+        return jsonify({'error': 'Transfer not found'}), 404
+    db.session.delete(transfer)
+    db.session.commit()
+    return jsonify({'message': 'Transfer deleted'}), 200
+
+
+@api_bp.route('/vehicle-transfers/check/<int:vehicle_id>', methods=['GET'])
+@jwt_required()
+def check_vehicle_transfer_status(vehicle_id):
+    """Check if there's a pending vehicle transfer for this vehicle"""
+    try:
+        # Citizen tokens have identity=str(vehicle.id) and a vehicle_id claim
+        claims = get_jwt()
+        token_vehicle_id = claims.get('vehicle_id')
+        if not token_vehicle_id or int(token_vehicle_id) != vehicle_id:
+            return jsonify({'error': 'You can only check transfers for vehicles you own'}), 403
+
+        # Get vehicle
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        # Get the pending transfer for this vehicle (most recent one)
+        transfer = VehicleTransfer.query.filter_by(
+            vehicle_id=vehicle_id,
+            status='pending'
+        ).order_by(VehicleTransfer.created_at.desc()).first()
+        
+        if transfer:
+            return jsonify({
+                'has_pending_transfer': True,
+                'transfer': transfer.to_dict()
+            }), 200
+        else:
+            return jsonify({
+                'has_pending_transfer': False,
+                'transfer': None
+            }), 200
+            
+    except Exception as e:
+        print(f"Error checking transfer status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Photo Submission Reasons ──────────────────────────────────────────────────
+
+def _sort_reasons(reasons):
+    """'Autre' always last, rest by sort_order."""
+    return sorted(reasons, key=lambda r: (r.label.strip().lower() == 'autre', r.sort_order))
+
+
+@api_bp.route('/photo-submission-reasons', methods=['GET'])
+def get_photo_submission_reasons():
+    """Public endpoint used by mobile app to fetch active reasons."""
+    reasons = PhotoSubmissionReason.query.filter_by(is_active=True)\
+        .order_by(PhotoSubmissionReason.sort_order).all()
+    return jsonify([r.to_dict() for r in _sort_reasons(reasons)])
+
+
+@api_bp.route('/photo-submission-reasons/manage', methods=['GET'])
+@login_required
+def manage_photo_submission_reasons():
+    """Admin list — includes inactive reasons."""
+    reasons = PhotoSubmissionReason.query.order_by(PhotoSubmissionReason.sort_order).all()
+    return jsonify([r.to_dict() for r in _sort_reasons(reasons)])
+
+
+@api_bp.route('/photo-submission-reasons', methods=['POST'])
+@login_required
+def create_photo_submission_reason():
+    data = request.get_json() or {}
+    label = (data.get('label') or '').strip()
+    if not label:
+        return jsonify({'error': 'Le libellé est requis.'}), 400
+    max_order = db.session.query(db.func.max(PhotoSubmissionReason.sort_order)).scalar() or 0
+    reason = PhotoSubmissionReason(label=label, sort_order=max_order + 1)
+    db.session.add(reason)
+    db.session.commit()
+    return jsonify(reason.to_dict()), 201
+
+
+@api_bp.route('/photo-submission-reasons/<int:reason_id>', methods=['PUT'])
+@login_required
+def update_photo_submission_reason(reason_id):
+    reason = PhotoSubmissionReason.query.get_or_404(reason_id)
+    data = request.get_json() or {}
+    if 'label' in data:
+        label = data['label'].strip()
+        if not label:
+            return jsonify({'error': 'Le libellé est requis.'}), 400
+        reason.label = label
+    if 'is_active' in data:
+        if reason.label.strip().lower() == 'autre':
+            return jsonify({'error': '"Autre" ne peut pas être désactivé.'}), 400
+        reason.is_active = bool(data['is_active'])
+    db.session.commit()
+    return jsonify(reason.to_dict())
+
+
+@api_bp.route('/photo-submission-reasons/<int:reason_id>', methods=['DELETE'])
+@login_required
+def delete_photo_submission_reason(reason_id):
+    reason = PhotoSubmissionReason.query.get_or_404(reason_id)
+    if reason.label.strip().lower() == 'autre':
+        return jsonify({'error': '"Autre" ne peut pas être supprimé.'}), 400
+    db.session.delete(reason)
+    db.session.commit()
+    return jsonify({'ok': True})
