@@ -10,9 +10,11 @@ document.addEventListener('DOMContentLoaded', function(){
         const group = document.getElementById('payments-view-group');
         if(group){
             group.querySelectorAll('button[data-view]').forEach(b=>{
-                b.classList.remove('active');
+                b.classList.remove('active', 'btn-primary');
+                b.classList.add('btn-outline-secondary');
                 if(b.dataset.view === savedView){
-                    b.classList.add('active');
+                    b.classList.add('active', 'btn-primary');
+                    b.classList.remove('btn-outline-secondary');
                 }
             });
         }
@@ -37,8 +39,13 @@ function bindViewControls(){
     group.addEventListener('click', function(e){
         const btn = e.target.closest('button[data-view]');
         if(!btn) return;
-        group.querySelectorAll('button[data-view]').forEach(b=>b.classList.remove('active'));
+        group.querySelectorAll('button[data-view]').forEach(b=>{
+            b.classList.remove('active', 'btn-primary');
+            b.classList.add('btn-outline-secondary');
+        });
         btn.classList.add('active');
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-primary');
         const view = btn.dataset.view;
         // Save current view to sessionStorage
         sessionStorage.setItem('payments-current-view', view);

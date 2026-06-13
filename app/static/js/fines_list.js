@@ -274,12 +274,18 @@ function displayFinesPage() {
         }catch(e){ return dt; }
     }
 
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
     tbody.innerHTML = itemsOnPage.map((f,i)=>{
+        const canEdit = !f.paid && f.issued_at && (Date.now() - new Date(f.issued_at).getTime()) < THREE_DAYS_MS;
+        const editBtn = canEdit
+            ? `<button class="btn btn-sm btn-outline-secondary ms-1" title="Modifier le motif" onclick="startEditReason(this, ${f.id})"><i class="fas fa-pencil-alt"></i></button>`
+            : '';
         return `<tr class="fines-table-row">
             <td>${startIdx + i + 1}</td>
             <td><strong>${f.license_plate || f.vehicle_id}</strong></td>
             <td>${Math.round(f.amount)} KMF</td>
-            <td>${f.reason}</td>
+            <td class="fine-reason-cell" data-fine-id="${f.id}">${f.reason}${editBtn}</td>
             <td>${f.officer||''}</td>
             <td>${formatDateTime(f.issued_at)}</td>
             <td>${f.paid ? '<span class="status-badge-paid">Payée</span>' : '<span class="status-badge-unpaid">Impayée</span>'}</td>
@@ -355,6 +361,7 @@ function loadFineTypes(){
     fetch('/api/vehicles/fines/types')
         .then(r=>r.json())
         .then(data=>{
+            window.fineTypesCache = data; // cache pour l'édition inline
             // populate select for creating fines
             const typeSel = document.getElementById('fine-type-select');
             if(typeSel){
@@ -524,4 +531,67 @@ function submitFineFromForm(e){
             alert('Amande créée');
         })
         .catch(err=>{ alert(err.error || err.message || 'Erreur création amande'); });
+}
+
+function startEditReason(btn, fineId) {
+    const cell = btn.closest('.fine-reason-cell');
+    if(!cell || cell.querySelector('select')) return;
+
+    const currentReason = cell.childNodes[0].textContent.trim();
+    const types = window.fineTypesCache || [];
+
+    const options = types.map(t => {
+        const selected = t.label.toLowerCase() === currentReason.toLowerCase() ? 'selected' : '';
+        return `<option value="${t.id}" data-amount="${t.amount}" data-label="${t.label}" ${selected}>${t.label} — ${Math.round(t.amount)} KMF</option>`;
+    }).join('');
+
+    // Trouver le montant du type actuel pour l'afficher dans le badge
+    const currentType = types.find(t => t.label.toLowerCase() === currentReason.toLowerCase());
+    const initialBadge = currentType ? Math.round(currentType.amount) + ' KMF' : '';
+
+    cell.innerHTML = `
+        <div class="d-flex align-items-center gap-1 flex-wrap">
+            <select class="form-select form-select-sm" style="min-width:220px;" onchange="onEditReasonChange(this)">
+                ${options}
+            </select>
+            <span class="badge bg-secondary ms-1" id="edit-amount-badge-${fineId}">${initialBadge}</span>
+            <button class="btn btn-sm btn-success" onclick="saveEditReason(this, ${fineId})"><i class="fas fa-check"></i></button>
+            <button class="btn btn-sm btn-secondary" onclick="loadFines()"><i class="fas fa-times"></i></button>
+        </div>`;
+    cell.querySelector('select').focus();
+}
+
+function onEditReasonChange(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const cell = sel.closest('.fine-reason-cell');
+    const fineId = cell.dataset.fineId;
+    const badge = document.getElementById(`edit-amount-badge-${fineId}`);
+    if(opt && opt.value && badge) {
+        badge.textContent = Math.round(opt.dataset.amount) + ' KMF';
+    } else if(badge) {
+        badge.textContent = '';
+    }
+}
+
+function saveEditReason(btn, fineId) {
+    const cell = btn.closest('.fine-reason-cell');
+    const sel = cell.querySelector('select');
+    const opt = sel ? sel.options[sel.selectedIndex] : null;
+    if(!opt || !opt.value) { alert('Veuillez sélectionner un type d\'amende.'); return; }
+
+    const newReason = opt.dataset.label;
+    const newAmount = parseFloat(opt.dataset.amount);
+
+    btn.disabled = true;
+    fetch(`/api/vehicles/fines/${fineId}/reason`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({reason: newReason, amount: newAmount})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if(d.error) { alert(d.error); btn.disabled = false; return; }
+        loadFines();
+    })
+    .catch(() => { alert('Erreur réseau.'); btn.disabled = false; });
 }
