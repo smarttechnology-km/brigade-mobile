@@ -414,6 +414,21 @@ def create_app():
             db.session.commit()
             print("✓ Compte SmartTech par défaut créé : smarttech / smarttech123")
 
+        # Pré-peupler les raisons de soumission par défaut
+        from app.models import PhotoSubmissionReason
+        if PhotoSubmissionReason.query.count() == 0:
+            defaults = [
+                "Mise à jour de l'assurance",
+                "Vérification du certificat d'immatriculation",
+                "Contrôle technique manquant",
+                "Inspection du véhicule",
+                "Discordance documents/système",
+                "Autre",
+            ]
+            for i, label in enumerate(defaults):
+                db.session.add(PhotoSubmissionReason(label=label, sort_order=i + 1))
+            db.session.commit()
+
         # Initialiser les paramètres par défaut Smart Technology
         from app.models import SmartTechSetting
         for key, default_val in [('qr_activation_price', '5000'), ('qr_renewal_price', '3000')]:

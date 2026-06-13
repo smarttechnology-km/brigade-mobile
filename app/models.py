@@ -1045,3 +1045,20 @@ class SmartTechSetting(db.Model):
         else:
             db.session.add(SmartTechSetting(key=key, value=str(value)))
         db.session.commit()
+
+
+class PhotoSubmissionReason(db.Model):
+    __tablename__ = 'photo_submission_reasons'
+    id = db.Column(db.Integer, primary_key=True)
+    label = db.Column(db.String(200), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'label': self.label,
+            'is_active': self.is_active,
+            'sort_order': self.sort_order,
+        }

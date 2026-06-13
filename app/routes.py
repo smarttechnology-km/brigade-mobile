@@ -1504,6 +1504,41 @@ def _apply_fine_payment(fine, paid_by, payment_method=''):
     return hist
 
 
+@vehicle_bp.route('/fines/<int:fine_id>/reason', methods=['PATCH'])
+@login_required
+def update_fine_reason(fine_id):
+    from app.models import Fine, VehicleHistory
+    from decimal import Decimal
+    fine = Fine.query.get_or_404(fine_id)
+    age = (now_comoros() - ensure_comoros(fine.issued_at)).total_seconds()
+    if age > 3 * 24 * 3600:
+        return jsonify({'error': 'Le motif ne peut être modifié que dans les 3 jours suivant l\'émission.'}), 403
+    data = request.get_json() or {}
+    new_reason = (data.get('reason') or '').strip()
+    if not new_reason:
+        return jsonify({'error': 'Le motif ne peut pas être vide.'}), 400
+    old_reason = fine.reason
+    old_amount = float(fine.amount)
+    fine.reason = new_reason
+    new_amount = old_amount
+    if data.get('amount') is not None:
+        try:
+            new_amount = float(data['amount'])
+            fine.amount = Decimal(str(new_amount))
+        except (ValueError, TypeError):
+            pass
+    officer = getattr(current_user, 'username', 'inconnu')
+    notes = f'Ancien motif : « {old_reason} » ({int(old_amount)} KMF) → Nouveau : « {new_reason} » ({int(new_amount)} KMF)'
+    db.session.add(VehicleHistory(
+        vehicle_id=fine.vehicle_id,
+        action=f'Amende #{fine.id} modifiée',
+        officer=officer,
+        notes=notes
+    ))
+    db.session.commit()
+    return jsonify({'ok': True, 'reason': fine.reason, 'amount': float(fine.amount)})
+
+
 @vehicle_bp.route('/fines/<int:fine_id>/pay', methods=['POST'])
 @login_required
 def pay_fine(fine_id):
@@ -2723,6 +2758,8 @@ def api_users_delete(user_id):
     if current_user.id == user_id:
         return jsonify({'error':'cannot delete yourself'}), 400
     u = User.query.get_or_404(user_id)
+    if u.role == 'administrateur' and User.query.filter_by(role='administrateur').count() <= 1:
+        return jsonify({'error': 'Impossible de supprimer le dernier administrateur.'}), 400
     
     # Delete related phone_usages records first (to avoid foreign key constraint)
     from app.models import PhoneUsage

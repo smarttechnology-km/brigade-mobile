@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -2580,3 +2580,60 @@ def check_vehicle_transfer_status(vehicle_id):
     except Exception as e:
         print(f"Error checking transfer status: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+# ── Photo Submission Reasons ──────────────────────────────────────────────────
+
+@api_bp.route('/photo-submission-reasons', methods=['GET'])
+def get_photo_submission_reasons():
+    """Public endpoint used by mobile app to fetch active reasons."""
+    reasons = PhotoSubmissionReason.query.filter_by(is_active=True)\
+        .order_by(PhotoSubmissionReason.sort_order).all()
+    return jsonify([r.to_dict() for r in reasons])
+
+
+@api_bp.route('/photo-submission-reasons/manage', methods=['GET'])
+@login_required
+def manage_photo_submission_reasons():
+    """Admin list — includes inactive reasons."""
+    reasons = PhotoSubmissionReason.query.order_by(PhotoSubmissionReason.sort_order).all()
+    return jsonify([r.to_dict() for r in reasons])
+
+
+@api_bp.route('/photo-submission-reasons', methods=['POST'])
+@login_required
+def create_photo_submission_reason():
+    data = request.get_json() or {}
+    label = (data.get('label') or '').strip()
+    if not label:
+        return jsonify({'error': 'Le libellé est requis.'}), 400
+    max_order = db.session.query(db.func.max(PhotoSubmissionReason.sort_order)).scalar() or 0
+    reason = PhotoSubmissionReason(label=label, sort_order=max_order + 1)
+    db.session.add(reason)
+    db.session.commit()
+    return jsonify(reason.to_dict()), 201
+
+
+@api_bp.route('/photo-submission-reasons/<int:reason_id>', methods=['PUT'])
+@login_required
+def update_photo_submission_reason(reason_id):
+    reason = PhotoSubmissionReason.query.get_or_404(reason_id)
+    data = request.get_json() or {}
+    if 'label' in data:
+        label = data['label'].strip()
+        if not label:
+            return jsonify({'error': 'Le libellé est requis.'}), 400
+        reason.label = label
+    if 'is_active' in data:
+        reason.is_active = bool(data['is_active'])
+    db.session.commit()
+    return jsonify(reason.to_dict())
+
+
+@api_bp.route('/photo-submission-reasons/<int:reason_id>', methods=['DELETE'])
+@login_required
+def delete_photo_submission_reason(reason_id):
+    reason = PhotoSubmissionReason.query.get_or_404(reason_id)
+    db.session.delete(reason)
+    db.session.commit()
+    return jsonify({'ok': True})
