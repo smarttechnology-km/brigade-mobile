@@ -2584,12 +2584,17 @@ def check_vehicle_transfer_status(vehicle_id):
 
 # ── Photo Submission Reasons ──────────────────────────────────────────────────
 
+def _sort_reasons(reasons):
+    """'Autre' always last, rest by sort_order."""
+    return sorted(reasons, key=lambda r: (r.label.strip().lower() == 'autre', r.sort_order))
+
+
 @api_bp.route('/photo-submission-reasons', methods=['GET'])
 def get_photo_submission_reasons():
     """Public endpoint used by mobile app to fetch active reasons."""
     reasons = PhotoSubmissionReason.query.filter_by(is_active=True)\
         .order_by(PhotoSubmissionReason.sort_order).all()
-    return jsonify([r.to_dict() for r in reasons])
+    return jsonify([r.to_dict() for r in _sort_reasons(reasons)])
 
 
 @api_bp.route('/photo-submission-reasons/manage', methods=['GET'])
@@ -2597,7 +2602,7 @@ def get_photo_submission_reasons():
 def manage_photo_submission_reasons():
     """Admin list — includes inactive reasons."""
     reasons = PhotoSubmissionReason.query.order_by(PhotoSubmissionReason.sort_order).all()
-    return jsonify([r.to_dict() for r in reasons])
+    return jsonify([r.to_dict() for r in _sort_reasons(reasons)])
 
 
 @api_bp.route('/photo-submission-reasons', methods=['POST'])
@@ -2625,6 +2630,8 @@ def update_photo_submission_reason(reason_id):
             return jsonify({'error': 'Le libellé est requis.'}), 400
         reason.label = label
     if 'is_active' in data:
+        if reason.label.strip().lower() == 'autre':
+            return jsonify({'error': '"Autre" ne peut pas être désactivé.'}), 400
         reason.is_active = bool(data['is_active'])
     db.session.commit()
     return jsonify(reason.to_dict())
@@ -2634,6 +2641,8 @@ def update_photo_submission_reason(reason_id):
 @login_required
 def delete_photo_submission_reason(reason_id):
     reason = PhotoSubmissionReason.query.get_or_404(reason_id)
+    if reason.label.strip().lower() == 'autre':
+        return jsonify({'error': '"Autre" ne peut pas être supprimé.'}), 400
     db.session.delete(reason)
     db.session.commit()
     return jsonify({'ok': True})

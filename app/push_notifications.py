@@ -123,13 +123,31 @@ def send_expo_push_notification(push_token, title, body, data=None):
         print(f"📤 Sending to Expo push service: {EXPO_PUSH_ENDPOINT}")
         with urllib.request.urlopen(request, timeout=10) as response:
             response_body = response.read().decode('utf-8')
-            result = {
+            parsed = json.loads(response_body) if response_body else {}
+
+            # Expo returns {"data": [{"status": "ok"|"error", ...}]}
+            # HTTP 200 only means the request was accepted — must check ticket status
+            ticket = (parsed.get('data') or [{}])[0] if isinstance(parsed.get('data'), list) else {}
+            ticket_status = ticket.get('status', 'ok')
+
+            if ticket_status == 'error':
+                error_msg = ticket.get('message', 'Unknown Expo error')
+                error_detail = ticket.get('details', {})
+                print(f"❌ Expo ticket error: {error_msg} | details: {error_detail}")
+                return {
+                    'success': False,
+                    'message': error_msg,
+                    'expo_error': error_detail,
+                    'response': parsed,
+                }
+
+            print(f"✅ Expo push accepted — ticket id: {ticket.get('id', '?')}")
+            return {
                 'success': True,
                 'status': response.status,
-                'response': json.loads(response_body) if response_body else {},
+                'ticket_id': ticket.get('id'),
+                'response': parsed,
             }
-            print(f"✅ Expo push service response: {result.get('status')}")
-            return result
     except urllib.error.HTTPError as error:
         error_body = error.read().decode('utf-8') if error.fp else ''
         print(f"❌ HTTP Error {error.code}: {error_body}")
