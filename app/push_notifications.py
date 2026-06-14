@@ -1,8 +1,10 @@
 import json
+import time
 import urllib.error
 import urllib.request
 
 EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send'
+EXPO_RECEIPT_ENDPOINT = 'https://exp.host/--/api/v2/push/getReceipts'
 
 
 def _get_vehicle_tokens(vehicle):
@@ -107,6 +109,8 @@ def send_expo_push_notification(push_token, title, body, data=None):
         'title': title,
         'body': body,
         'data': data or {},
+        'channelId': 'default',  # Android: must match the channel created in the app
+        'priority': 'high',      # Android: ensures FCM delivers immediately, not batched
     }
 
     request = urllib.request.Request(
@@ -162,6 +166,38 @@ def send_expo_push_notification(push_token, title, body, data=None):
             'success': False,
             'message': str(error),
         }
+
+
+def check_push_receipt(ticket_id, wait_seconds=5):
+    """Check Expo's push receipt for a ticket to confirm FCM/APNs delivery.
+    Returns the receipt dict with 'status': 'ok' | 'error' and any error details.
+    """
+    if not ticket_id:
+        return {'status': 'unknown', 'message': 'No ticket id'}
+
+    time.sleep(wait_seconds)  # Expo receipts are ready ~5 s after sending
+
+    payload = {'ids': [ticket_id]}
+    req = urllib.request.Request(
+        EXPO_RECEIPT_ENDPOINT,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            parsed = json.loads(response.read().decode('utf-8'))
+            receipt = (parsed.get('data') or {}).get(ticket_id, {})
+            status = receipt.get('status', 'unknown')
+            if status == 'error':
+                details = receipt.get('details', {})
+                print(f"❌ FCM receipt error for {ticket_id}: {receipt.get('message')} | {details}")
+            else:
+                print(f"✅ FCM receipt ok for {ticket_id}")
+            return receipt
+    except Exception as e:
+        print(f"⚠️ Could not fetch push receipt: {e}")
+        return {'status': 'unknown', 'message': str(e)}
 
 
 def send_fine_push_notification(vehicle, fine):

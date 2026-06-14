@@ -567,11 +567,25 @@ def test_push_notification():
             {'type': 'test', 'vehicle_id': vehicle.id}
         )
 
+        # If Expo accepted the ticket, wait briefly and check the FCM receipt
+        # to confirm the notification actually reached the device via FCM/APNs.
+        receipt = {}
+        ticket_id = result.get('ticket_id')
+        if result.get('success') and ticket_id:
+            from app.push_notifications import check_push_receipt
+            receipt = check_push_receipt(ticket_id, wait_seconds=5)
+
+        fcm_ok = receipt.get('status') == 'ok'
+        fcm_error = receipt.get('message') or (receipt.get('details') or {}).get('error', '')
+
         return jsonify({
             'success': result.get('success', False),
+            'fcm_delivered': fcm_ok,
+            'fcm_error': fcm_error if not fcm_ok else None,
             'token_stored': True,
             'token_preview': f"{token[:20]}...{token[-6:]}",
             'push_result': result,
+            'receipt': receipt,
         }), 200
     except Exception as e:
         print(f"❌ Test push error: {e}")
