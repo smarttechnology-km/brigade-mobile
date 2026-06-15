@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -2173,7 +2173,8 @@ def get_vehicle_transfers():
                 transfer_dict['vehicle'] = {
                     'id': vehicle.id,
                     'license_plate': vehicle.license_plate,
-                    'current_owner': vehicle.owner_name
+                    'current_owner': vehicle.owner_name,
+                    'track_token': vehicle.track_token,
                 }
             result.append(transfer_dict)
         
@@ -2428,22 +2429,30 @@ def approve_vehicle_transfer():
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
         
+        # Capture old owner details before overwriting
+        old_owner_name = vehicle.owner_name or ''
+        old_owner_phone = vehicle.owner_phone or ''
+
         # Update transfer status
         transfer.status = 'approved'
         transfer.processed_at = now_comoros()
         transfer.processed_by = user.id
         transfer.notes = notes
-        
+
         # Update vehicle owner information
         vehicle.owner_name = transfer.new_owner_name
         vehicle.owner_phone = transfer.new_owner_phone
         vehicle.updated_at = now_comoros()
-        
-        # Force-logout current owner: bump session_version so their JWT is rejected
+
+        # Save old owner push token before we hand the VehicleOwner record to the new owner
         current_owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
+        old_push_token = current_owner.expo_push_token if current_owner else None
+
+        # Force-logout current owner: bump session_version so their JWT is rejected
         if current_owner:
             current_owner.session_version = (current_owner.session_version or 0) + 1
             current_owner.current_device_id = None
+            current_owner.expo_push_token = None  # new owner registers their own token
 
         # Force-logout new owner: they may have an account on another vehicle
         for acct in VehicleOwner.query.filter_by(phone=transfer.new_owner_phone).all():
@@ -2465,10 +2474,33 @@ def approve_vehicle_transfer():
             vehicle_owner.phone = transfer.new_owner_phone
             vehicle_owner.updated_at = now_comoros()
 
+        # Record the transfer approval in the vehicle history so the track page shows it
+        approver_name = getattr(user, 'full_name', None) or getattr(user, 'username', None) or str(user.id)
+        history_notes = (
+            f"Nouveau propriétaire : {transfer.new_owner_name} ({transfer.new_owner_phone}). "
+            f"Ancien propriétaire : {old_owner_name} ({old_owner_phone}). "
+            f"Type : {transfer.transfer_type}."
+        )
+        if notes:
+            history_notes += f" Notes : {notes}"
+        db.session.add(VehicleHistory(
+            vehicle_id=vehicle.id,
+            action='Transfert de propriété approuvé',
+            officer=approver_name,
+            notes=history_notes,
+        ))
+
         db.session.commit()
-        
+
+        # Notify old owner that the transfer was approved (token saved before reassignment)
+        try:
+            from app.push_notifications import send_transfer_approved_notification
+            send_transfer_approved_notification(old_push_token, vehicle.license_plate)
+        except Exception as notif_err:
+            print(f"⚠️ Transfer approval notification failed: {notif_err}")
+
         print(f"✅ Transfer approved: {vehicle.license_plate} to {transfer.new_owner_name}")
-        
+
         return jsonify({
             'message': 'Transfer approved and vehicle owner updated',
             'transfer': transfer.to_dict(),
@@ -2517,11 +2549,35 @@ def reject_vehicle_transfer():
         transfer.processed_at = now_comoros()
         transfer.processed_by = user.id
         transfer.notes = notes
-        
+
+        # Record the rejection in the vehicle history
+        rejecter_name = getattr(user, 'full_name', None) or getattr(user, 'username', None) or str(user.id)
+        rejection_notes = (
+            f"Demande de transfert vers {transfer.new_owner_name} ({transfer.new_owner_phone}) refusée. "
+            f"Type : {transfer.transfer_type}."
+        )
+        if notes:
+            rejection_notes += f" Motif : {notes}"
+        if transfer.vehicle:
+            db.session.add(VehicleHistory(
+                vehicle_id=transfer.vehicle_id,
+                action='Transfert de propriété refusé',
+                officer=rejecter_name,
+                notes=rejection_notes,
+            ))
+
         db.session.commit()
-        
+
+        # Notify the owner that their transfer request was rejected
+        try:
+            from app.push_notifications import send_transfer_rejected_notification
+            if transfer.vehicle:
+                send_transfer_rejected_notification(transfer.vehicle, notes)
+        except Exception as notif_err:
+            print(f"⚠️ Transfer rejection notification failed: {notif_err}")
+
         print(f"✅ Transfer rejected: {transfer.vehicle.license_plate if transfer.vehicle else 'Unknown'}")
-        
+
         return jsonify({
             'message': 'Transfer rejected',
             'transfer': transfer.to_dict()

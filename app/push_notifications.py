@@ -1,10 +1,8 @@
 import json
-import time
 import urllib.error
 import urllib.request
 
 EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send'
-EXPO_RECEIPT_ENDPOINT = 'https://exp.host/--/api/v2/push/getReceipts'
 
 
 def _get_vehicle_tokens(vehicle):
@@ -168,36 +166,28 @@ def send_expo_push_notification(push_token, title, body, data=None):
         }
 
 
-def check_push_receipt(ticket_id, wait_seconds=5):
-    """Check Expo's push receipt for a ticket to confirm FCM/APNs delivery.
-    Returns the receipt dict with 'status': 'ok' | 'error' and any error details.
-    """
-    if not ticket_id:
-        return {'status': 'unknown', 'message': 'No ticket id'}
-
-    time.sleep(wait_seconds)  # Expo receipts are ready ~5 s after sending
-
-    payload = {'ids': [ticket_id]}
-    req = urllib.request.Request(
-        EXPO_RECEIPT_ENDPOINT,
-        data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
-        method='POST',
+def send_transfer_approved_notification(push_token, license_plate):
+    """Notify the previous owner that their transfer request was approved."""
+    if not push_token:
+        return {'success': False, 'message': 'No push token'}
+    return send_expo_push_notification(
+        push_token,
+        '✅ Transfert approuvé',
+        f"Votre demande de transfert du véhicule {license_plate} a été approuvée.",
+        {'type': 'transfer_approved', 'license_plate': license_plate},
     )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            parsed = json.loads(response.read().decode('utf-8'))
-            receipt = (parsed.get('data') or {}).get(ticket_id, {})
-            status = receipt.get('status', 'unknown')
-            if status == 'error':
-                details = receipt.get('details', {})
-                print(f"❌ FCM receipt error for {ticket_id}: {receipt.get('message')} | {details}")
-            else:
-                print(f"✅ FCM receipt ok for {ticket_id}")
-            return receipt
-    except Exception as e:
-        print(f"⚠️ Could not fetch push receipt: {e}")
-        return {'status': 'unknown', 'message': str(e)}
+
+
+def send_transfer_rejected_notification(vehicle, notes=None):
+    """Notify the owner that their transfer request was rejected."""
+    plate = vehicle.license_plate
+    body = f"Votre demande de transfert du véhicule {plate} a été refusée."
+    if notes:
+        body += f" Motif : {notes}"
+    return _send_to_vehicle(vehicle, '❌ Transfert refusé', body, {
+        'type': 'transfer_rejected',
+        'license_plate': plate,
+    })
 
 
 def send_fine_push_notification(vehicle, fine):

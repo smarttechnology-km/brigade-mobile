@@ -536,62 +536,6 @@ def register_push_token():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@citizen_auth_bp.route('/test-push', methods=['POST'])
-@jwt_required()
-def test_push_notification():
-    """Send a test push notification to the logged-in citizen's device.
-    Used to verify that the push token is stored and the FCM/APNs pipeline works.
-    Returns the stored token (partially masked) so the caller can confirm it exists.
-    """
-    try:
-        identity = get_jwt_identity()
-        vehicle_id = int(identity) if not isinstance(identity, dict) else int(identity.get('vehicle_id'))
-
-        vehicle = Vehicle.query.get(vehicle_id)
-        if not vehicle:
-            return jsonify({'error': 'Vehicle not found'}), 404
-
-        owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
-        if not owner or not owner.expo_push_token:
-            return jsonify({
-                'success': False,
-                'error': 'No push token registered for this device. Open the app, log in, and try again.',
-                'token_stored': False,
-            }), 200
-
-        token = owner.expo_push_token
-        result = send_expo_push_notification(
-            token,
-            '🔔 Test Notification',
-            f"Les notifications fonctionnent pour le véhicule {vehicle.license_plate} !",
-            {'type': 'test', 'vehicle_id': vehicle.id}
-        )
-
-        # If Expo accepted the ticket, wait briefly and check the FCM receipt
-        # to confirm the notification actually reached the device via FCM/APNs.
-        receipt = {}
-        ticket_id = result.get('ticket_id')
-        if result.get('success') and ticket_id:
-            from app.push_notifications import check_push_receipt
-            receipt = check_push_receipt(ticket_id, wait_seconds=5)
-
-        fcm_ok = receipt.get('status') == 'ok'
-        fcm_error = receipt.get('message') or (receipt.get('details') or {}).get('error', '')
-
-        return jsonify({
-            'success': result.get('success', False),
-            'fcm_delivered': fcm_ok,
-            'fcm_error': fcm_error if not fcm_ok else None,
-            'token_stored': True,
-            'token_preview': f"{token[:20]}...{token[-6:]}",
-            'push_result': result,
-            'receipt': receipt,
-        }), 200
-    except Exception as e:
-        print(f"❌ Test push error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
 @citizen_auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 def get_current_user():
