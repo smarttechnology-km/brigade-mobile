@@ -175,7 +175,12 @@ function renderTransfersTable(transfers) {
   tbody.innerHTML = transfers.map(transfer => `
     <tr style="cursor: pointer;" onclick="showTransferModal(${transfer.id})">
       <td class="ps-4">${transfer.id}</td>
-      <td><strong>${transfer.vehicle?.license_plate || 'N/A'}</strong></td>
+      <td>
+        ${transfer.status === 'approved' && transfer.vehicle?.track_token
+          ? `<a href="/track/${transfer.vehicle.track_token}" onclick="event.stopPropagation();" class="fw-bold text-decoration-none" title="Voir le suivi du véhicule"><i class="fas fa-external-link-alt me-1 small"></i>${transfer.vehicle.license_plate}</a>`
+          : `<strong>${transfer.vehicle?.license_plate || 'N/A'}</strong>`
+        }
+      </td>
       <td>
         <span class="badge" style="background-color: ${getTypeColor(transfer.transfer_type)};">
           ${getTypeLabel(transfer.transfer_type)}
@@ -214,9 +219,10 @@ async function showTransferModal(transferId) {
     // Header meta
     document.getElementById('modal-header-meta').innerHTML = `
       <div class="d-flex align-items-center gap-2 flex-wrap">
-        <span class="badge bg-white text-dark fw-semibold fs-6">
-          <i class="fas fa-car me-1"></i>${plate}
-        </span>
+        ${transfer.status === 'approved' && transfer.vehicle?.track_token
+          ? `<a href="/track/${transfer.vehicle.track_token}" target="_blank" class="badge bg-white text-dark fw-semibold fs-6 text-decoration-none" title="Voir le suivi du véhicule"><i class="fas fa-car me-1"></i>${plate} <i class="fas fa-external-link-alt ms-1 small opacity-75"></i></a>`
+          : `<span class="badge bg-white text-dark fw-semibold fs-6"><i class="fas fa-car me-1"></i>${plate}</span>`
+        }
         <span class="badge" style="background-color:${getTypeColor(transfer.transfer_type)}; font-size:0.85rem;">
           ${getTypeLabel(transfer.transfer_type)}
         </span>
