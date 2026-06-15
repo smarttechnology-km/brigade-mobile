@@ -1044,9 +1044,14 @@ function renderTransfersTable(transfers) {
     }
 
     tbody.innerHTML = transfers.map(transfer => `
-        <tr style="cursor: pointer;" onclick="showTransferModal(${transfer.id})">
+        <tr>
             <td class="ps-4">${transfer.id}</td>
-            <td><strong>${transfer.vehicle?.license_plate || 'N/A'}</strong></td>
+            <td>
+                ${transfer.status === 'approved' && transfer.vehicle?.id
+                  ? `<a href="${transfer.vehicle.track_token ? `/track/${transfer.vehicle.track_token}` : `/vehicles/${transfer.vehicle.id}/track`}" class="fw-bold text-decoration-none" title="Voir le suivi du véhicule">${transfer.vehicle.license_plate}</a>`
+                  : `<strong>${transfer.vehicle?.license_plate || 'N/A'}</strong>`
+                }
+            </td>
             <td>
                 <span class="badge" style="background-color: ${getTypeColor(transfer.transfer_type)};">
                     ${getTypeLabel(transfer.transfer_type)}
@@ -1061,10 +1066,10 @@ function renderTransfersTable(transfers) {
                 </span>
             </td>
             <td class="text-end pe-4">
-                <button class="btn btn-sm btn-primary me-1" title="Voir détails" onclick="event.stopPropagation(); showTransferModal(${transfer.id})">
+                <button class="btn btn-sm btn-primary me-1" title="Voir détails" onclick="showTransferModal(${transfer.id})">
                     <i class="fas fa-eye"></i>
                 </button>
-                <button class="btn btn-sm btn-danger" title="Supprimer" onclick="event.stopPropagation(); deleteTransfer(${transfer.id})">
+                <button class="btn btn-sm btn-danger" title="Supprimer" onclick="deleteTransfer(${transfer.id})">
                     <i class="fas fa-trash"></i>
                 </button>
             </td>
@@ -1132,7 +1137,7 @@ async function showTransferModal(transferId) {
                     <div class="card-body">
                         <h6 class="card-title mb-3">Informations</h6>
                         <div class="small text-muted">
-                            <p><strong>Plaque :</strong> ${plate}</p>
+                            <p><strong>Plaque :</strong> ${transfer.status === 'approved' && transfer.vehicle?.id ? `<a href="${transfer.vehicle.track_token ? `/track/${transfer.vehicle.track_token}` : `/vehicles/${transfer.vehicle.id}/track`}" target="_blank" class="fw-bold text-decoration-none">${plate} </a>` : plate}</p>
                             <p><strong>Type :</strong> ${getTypeLabel(transfer.transfer_type)}</p>
                             <p><strong>Statut :</strong>
                                 <span class="badge" style="background-color:${getStatusColor(transfer.status)};">
@@ -1157,7 +1162,10 @@ async function showTransferModal(transferId) {
             <div class="row mb-3">
                 <div class="col-md-6">
                     <label class="form-label">Plaque d'immatriculation</label>
-                    <input type="text" class="form-control" value="${plate}" readonly style="background-color:#e9ecef;">
+                    ${transfer.status === 'approved' && transfer.vehicle?.id
+                      ? `<div class="form-control d-flex align-items-center" style="background-color:#e9ecef;"><a href="${transfer.vehicle.track_token ? `/track/${transfer.vehicle.track_token}` : `/vehicles/${transfer.vehicle.id}/track`}" target="_blank" class="fw-bold text-decoration-none">${plate} </a></div>`
+                      : `<input type="text" class="form-control" value="${plate}" readonly style="background-color:#e9ecef;">`
+                    }
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Type de transfert</label>
