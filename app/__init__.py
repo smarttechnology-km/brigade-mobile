@@ -274,6 +274,7 @@ def create_app():
                             row[1] for row in conn.execute(text("PRAGMA table_info(vehicles)" )).fetchall()
                         }
                         vehicle_column_definitions = {
+                            'track_token': "ALTER TABLE vehicles ADD COLUMN track_token VARCHAR(36)",
                             'vignette_payment_approved': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved BOOLEAN NOT NULL DEFAULT 0",
                             'vignette_payment_approved_at': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved_at DATETIME",
                             'vignette_payment_approved_by': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved_by VARCHAR(80)",
@@ -294,6 +295,20 @@ def create_app():
                             if column_name not in vehicle_columns:
                                 conn.execute(text(alter_sql))
                                 logger.info(f"Added missing vehicles.{column_name} column for SQLite compatibility")
+
+                        # Backfill track_token for vehicles that have NULL (created before the column existed)
+                        if 'track_token' in vehicle_columns or 'track_token' not in vehicle_columns:
+                            import uuid as _uuid
+                            null_tokens = conn.execute(
+                                text("SELECT id FROM vehicles WHERE track_token IS NULL OR track_token = ''")
+                            ).fetchall()
+                            for (vid,) in null_tokens:
+                                conn.execute(
+                                    text("UPDATE vehicles SET track_token = :token WHERE id = :id"),
+                                    {'token': str(_uuid.uuid4()), 'id': vid}
+                                )
+                            if null_tokens:
+                                logger.info(f"Backfilled track_token for {len(null_tokens)} vehicle(s)")
                     st_subs_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_subscriptions'")
                     ).first() is not None
