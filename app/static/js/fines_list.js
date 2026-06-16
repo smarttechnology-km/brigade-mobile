@@ -284,7 +284,12 @@ function displayFinesPage() {
         return `<tr class="fines-table-row">
             <td>${startIdx + i + 1}</td>
             <td><strong>${f.license_plate || f.vehicle_id}</strong></td>
-            <td>${Math.round(f.amount)} KMF</td>
+            <td>
+              ${f.base_amount && Math.round(f.base_amount) !== Math.round(f.amount)
+                ? `<span class="text-decoration-line-through text-muted me-1 small">${Math.round(f.base_amount)} KMF</span><strong class="text-danger">${Math.round(f.amount)} KMF</strong>`
+                : `${Math.round(f.amount)} KMF`
+              }
+            </td>
             <td class="fine-reason-cell" data-fine-id="${f.id}">${f.reason}${editBtn}</td>
             <td>${f.officer||''}</td>
             <td>${formatDateTime(f.issued_at)}</td>
