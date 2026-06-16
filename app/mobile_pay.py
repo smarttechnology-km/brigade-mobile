@@ -210,12 +210,10 @@ def lookup():
 
     q_normalized = q.upper().strip()
 
-    # Try track_token first
+    # Try track_token first (exact), then exact plate match only — no partial search
     vehicle = Vehicle.query.filter_by(track_token=q).first()
     if not vehicle:
         vehicle = Vehicle.query.filter_by(license_plate=q_normalized).first()
-    if not vehicle:
-        vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{q_normalized}%')).first()
 
     if not vehicle:
         return jsonify({'fines': [], 'vehicle': None})
@@ -717,13 +715,13 @@ def last_receipt_by_plate():
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
-    # Find vehicle by license plate
-    vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{plate}%')).first()
+    # Find vehicle by exact plate only — no partial search
+    vehicle = Vehicle.query.filter_by(license_plate=plate.upper().strip()).first()
     if not vehicle:
-        return jsonify({'error': 'Véhicule non trouvé'}), 404
-    
+        return jsonify({'error': 'Immatriculation introuvable. Veuillez entrer l\'immatriculation complète.'}), 404
+
     from sqlalchemy import or_, and_
-    
+
     payment_query = Payment.query.filter(
         Payment.license_plate.ilike(f'%{vehicle.license_plate}%')
     )
@@ -815,13 +813,13 @@ def receipts_by_date():
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
-    # Find vehicle by license plate
-    vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{plate}%')).first()
+    # Find vehicle by exact plate only — no partial search
+    vehicle = Vehicle.query.filter_by(license_plate=plate.upper().strip()).first()
     if not vehicle:
-        return jsonify({'error': 'Véhicule non trouvé'}), 404
-    
+        return jsonify({'error': 'Immatriculation introuvable. Veuillez entrer l\'immatriculation complète.'}), 404
+
     from sqlalchemy import or_, and_
-    
+
     # Get all payments for this vehicle on the selected date
     payments = Payment.query.filter(
         Payment.license_plate.ilike(f'%{vehicle.license_plate}%')
