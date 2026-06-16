@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -245,6 +245,113 @@ def api_fine_types_list():
             "default_amount": float(ft.amount)
         } for ft in fine_types]
     })
+
+
+# Fine Late Rate Routes
+@api_bp.route('/fine-late-rates', methods=['GET'])
+def get_fine_late_rates():
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire', 'policier']:
+        return jsonify({'error': 'Access denied'}), 403
+    rates = FineLateRate.query.order_by(FineLateRate.months).all()
+    return jsonify([r.to_dict() for r in rates]), 200
+
+
+@api_bp.route('/fine-late-rates', methods=['POST'])
+def create_fine_late_rate():
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire']:
+        return jsonify({'error': 'Access denied'}), 403
+    data = request.get_json() or {}
+    months = data.get('months')
+    percentage = data.get('percentage')
+    if months is None or percentage is None:
+        return jsonify({'error': 'months et percentage requis'}), 400
+    try:
+        months = int(months)
+        percentage = float(percentage)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Valeurs invalides'}), 400
+    if months < 1:
+        return jsonify({'error': 'Le nombre de mois doit être ≥ 1'}), 400
+    if percentage <= 0:
+        return jsonify({'error': 'Le pourcentage doit être positif'}), 400
+    if FineLateRate.query.filter_by(months=months).first():
+        return jsonify({'error': f'Une règle pour {months} mois existe déjà'}), 409
+    rate = FineLateRate(months=months, percentage=percentage)
+    db.session.add(rate)
+    db.session.commit()
+
+    # Apply immediately — no need to wait for the 09:00 cron
+    try:
+        from app.tasks import apply_fine_late_rates
+        apply_fine_late_rates()
+    except Exception as e:
+        print(f"⚠️ apply_fine_late_rates after create: {e}")
+
+    return jsonify(rate.to_dict()), 201
+
+
+@api_bp.route('/fine-late-rates/<int:rate_id>', methods=['DELETE'])
+def delete_fine_late_rate(rate_id):
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire']:
+        return jsonify({'error': 'Access denied'}), 403
+    rate = FineLateRate.query.get_or_404(rate_id)
+    db.session.delete(rate)
+    db.session.commit()
+
+    # Re-apply remaining rules immediately after deletion
+    try:
+        from app.tasks import apply_fine_late_rates
+        apply_fine_late_rates()
+    except Exception as e:
+        print(f"⚠️ apply_fine_late_rates after delete: {e}")
+
+    return jsonify({'message': 'Règle supprimée'}), 200
+
+
+@api_bp.route('/fine-late-rates/<int:rate_id>', methods=['PUT'])
+def update_fine_late_rate(rate_id):
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire']:
+        return jsonify({'error': 'Access denied'}), 403
+    rate = FineLateRate.query.get_or_404(rate_id)
+    data = request.get_json() or {}
+    try:
+        months = int(data['months'])
+        percentage = float(data['percentage'])
+    except (KeyError, ValueError, TypeError):
+        return jsonify({'error': 'months et percentage requis'}), 400
+    if months < 1:
+        return jsonify({'error': 'Le nombre de mois doit être ≥ 1'}), 400
+    if percentage <= 0:
+        return jsonify({'error': 'Le pourcentage doit être positif'}), 400
+    conflict = FineLateRate.query.filter(FineLateRate.months == months, FineLateRate.id != rate_id).first()
+    if conflict:
+        return jsonify({'error': f'Une règle pour {months} mois existe déjà'}), 409
+    rate.months = months
+    rate.percentage = percentage
+    db.session.commit()
+    try:
+        from app.tasks import apply_fine_late_rates
+        apply_fine_late_rates()
+    except Exception as e:
+        print(f"⚠️ apply_fine_late_rates after update: {e}")
+    return jsonify(rate.to_dict()), 200
+
+
+@api_bp.route('/fine-late-rates/apply-now', methods=['POST'])
+def apply_fine_late_rates_now():
+    user = get_current_user()
+    if not user or user.role not in ['administrateur', 'judiciaire']:
+        return jsonify({'error': 'Access denied'}), 403
+    try:
+        from app.tasks import apply_fine_late_rates
+        apply_fine_late_rates()
+        return jsonify({'message': 'Majorations appliquées'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # Insurance Management Routes
@@ -707,6 +814,7 @@ def api_fines_create():
     fine = Fine(
         vehicle_id=vehicle_id,
         amount=amount,
+        base_amount=amount,
         reason=reason,
         officer=user.username,
         issued_at=now_comoros(),
@@ -2475,14 +2583,16 @@ def approve_vehicle_transfer():
             vehicle_owner.updated_at = now_comoros()
 
         # Record the transfer approval in the vehicle history so the track page shows it
-        approver_name = getattr(user, 'full_name', None) or getattr(user, 'username', None) or str(user.id)
+        approver_name = getattr(user, 'username', None) or str(user.id)
+        _type_labels = {'sale': 'Vente', 'gift': 'Donation', 'inheritance': 'Héritage', 'other': 'Autre'}
+        _type_label = _type_labels.get(transfer.transfer_type, transfer.transfer_type)
         history_notes = (
-            f"Nouveau propriétaire : {transfer.new_owner_name} ({transfer.new_owner_phone}). "
-            f"Ancien propriétaire : {old_owner_name} ({old_owner_phone}). "
-            f"Type : {transfer.transfer_type}."
+            f"Ancien: {old_owner_name} ({old_owner_phone}) → "
+            f"Nouveau: {transfer.new_owner_name} ({transfer.new_owner_phone}) | "
+            f"Type: {_type_label}"
         )
         if notes:
-            history_notes += f" Notes : {notes}"
+            history_notes += f" | Notes: {notes}"
         db.session.add(VehicleHistory(
             vehicle_id=vehicle.id,
             action='Transfert de propriété approuvé',
@@ -2551,13 +2661,15 @@ def reject_vehicle_transfer():
         transfer.notes = notes
 
         # Record the rejection in the vehicle history
-        rejecter_name = getattr(user, 'full_name', None) or getattr(user, 'username', None) or str(user.id)
+        rejecter_name = getattr(user, 'username', None) or str(user.id)
+        _type_labels = {'sale': 'Vente', 'gift': 'Donation', 'inheritance': 'Héritage', 'other': 'Autre'}
+        _type_label = _type_labels.get(transfer.transfer_type, transfer.transfer_type)
         rejection_notes = (
-            f"Demande de transfert vers {transfer.new_owner_name} ({transfer.new_owner_phone}) refusée. "
-            f"Type : {transfer.transfer_type}."
+            f"Vers: {transfer.new_owner_name} ({transfer.new_owner_phone}) | "
+            f"Type: {_type_label}"
         )
         if notes:
-            rejection_notes += f" Motif : {notes}"
+            rejection_notes += f" | Motif: {notes}"
         if transfer.vehicle:
             db.session.add(VehicleHistory(
                 vehicle_id=transfer.vehicle_id,

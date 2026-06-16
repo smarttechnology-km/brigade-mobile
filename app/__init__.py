@@ -181,7 +181,7 @@ def create_app():
         tasks_set_app(app)
 
         # Add the exoneration task to run every hour
-        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications
+        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_late_rates
         scheduler.add_job(
             func=process_exonerated_fines,
             trigger=IntervalTrigger(hours=1),
@@ -214,6 +214,15 @@ def create_app():
             trigger=CronTrigger(hour=8, minute=0),
             id='send_expiry_notifications',
             name='Send vignette and insurance expiry push notifications daily at 08:00 AM',
+            replace_existing=True
+        )
+
+        # Apply fine late-rate increases to unpaid fines daily at 09:00 AM
+        scheduler.add_job(
+            func=apply_fine_late_rates,
+            trigger=CronTrigger(hour=9, minute=0),
+            id='apply_fine_late_rates',
+            name='Apply late-rate percentage increases to unpaid fines daily at 09:00 AM',
             replace_existing=True
         )
 
@@ -273,6 +282,17 @@ def create_app():
                         vehicle_columns = {
                             row[1] for row in conn.execute(text("PRAGMA table_info(vehicles)" )).fetchall()
                         }
+                        # Patch fines table
+                        fines_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='fines'")
+                        ).first() is not None
+                        if fines_table_exists:
+                            fine_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(fines)")).fetchall()}
+                            if 'base_amount' not in fine_columns:
+                                conn.execute(text("ALTER TABLE fines ADD COLUMN base_amount NUMERIC(10,2)"))
+                                conn.execute(text("UPDATE fines SET base_amount = amount WHERE base_amount IS NULL"))
+                                logger.info("Added fines.base_amount column and backfilled from amount")
+
                         vehicle_column_definitions = {
                             'track_token': "ALTER TABLE vehicles ADD COLUMN track_token VARCHAR(36)",
                             'vignette_payment_approved': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved BOOLEAN NOT NULL DEFAULT 0",

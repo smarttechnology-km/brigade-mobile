@@ -261,3 +261,59 @@ def send_expiry_notifications():
             logger.error(f"Error in send_expiry_notifications: {e}")
             import traceback
             traceback.print_exc()
+
+
+def apply_fine_late_rates():
+    """
+    Daily job (09:00) — for every unpaid fine, check how many full months have
+    elapsed since issue and apply the matching FineLateRate percentage to the
+    base_amount.  Only the highest matching rule is applied (not cumulative).
+    """
+    app = get_app()
+    with app.app_context():
+        try:
+            from app.models import FineLateRate
+            from app.timezone_utils import ensure_comoros
+
+            rates = FineLateRate.query.order_by(FineLateRate.months.desc()).all()
+            if not rates:
+                logger.info("No FineLateRate rules configured — skipping")
+                return
+
+            unpaid_fines = Fine.query.filter_by(paid=False).all()
+            now = ensure_comoros(now_comoros())
+            updated = 0
+
+            for fine in unpaid_fines:
+                if not fine.issued_at:
+                    continue
+
+                issued = ensure_comoros(fine.issued_at)
+                # Full months elapsed (approximate: 30 days = 1 month)
+                months_elapsed = int((now - issued).days // 30)
+                if months_elapsed < 1:
+                    continue
+
+                # Ensure base_amount is set (backfill guard)
+                if not fine.base_amount:
+                    fine.base_amount = fine.amount
+
+                # Find the highest matching rule
+                applicable = next(
+                    (r for r in rates if r.months <= months_elapsed), None
+                )
+                if not applicable:
+                    continue
+
+                # Cumulative: +Y% per month elapsed (e.g. 50%/month × 2 months = +100%)
+                new_amount = round(float(fine.base_amount) * (1 + float(applicable.percentage) / 100 * months_elapsed), 2)
+                if abs(float(fine.amount) - new_amount) >= 0.01:
+                    fine.amount = new_amount
+                    updated += 1
+
+            db.session.commit()
+            logger.info(f"apply_fine_late_rates: updated {updated} fine(s)")
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error in apply_fine_late_rates: {e}")

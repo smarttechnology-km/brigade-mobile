@@ -291,6 +291,7 @@ class Fine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
     amount = db.Column(db.Numeric(10,2), nullable=False)
+    base_amount = db.Column(db.Numeric(10,2), nullable=True)  # original amount before late-rate increases
     reason = db.Column(db.String(255), nullable=False)
     officer = db.Column(db.String(100))
     paid = db.Column(db.Boolean, default=False)
@@ -307,6 +308,7 @@ class Fine(db.Model):
             'id': self.id,
             'vehicle_id': self.vehicle_id,
             'amount': float(self.amount),
+            'base_amount': float(self.base_amount) if self.base_amount else float(self.amount),
             'reason': self.reason,
             'officer': self.officer,
             'paid': self.paid,
@@ -338,6 +340,24 @@ class FineType(db.Model):
             'label': self.label,
             'amount': float(self.amount),
             'created_at': self.created_at.isoformat()
+        }
+
+
+class FineLateRate(db.Model):
+    """Penalty percentage applied to unpaid fines based on overdue duration (months)."""
+    __tablename__ = 'fine_late_rates'
+    id = db.Column(db.Integer, primary_key=True)
+    months = db.Column(db.Integer, nullable=False, unique=True)
+    percentage = db.Column(db.Numeric(10, 2), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'months': self.months,
+            'percentage': float(self.percentage),
+            'created_at': self.created_at.isoformat(),
         }
 
 

@@ -1208,7 +1208,7 @@ def create_fine(vehicle_id):
     exonerated = ExoneratedVehicle.query.filter_by(vehicle_id=vehicle.id).first()
     is_exonerated = exonerated is not None
     
-    fine = Fine(vehicle_id=vehicle.id, amount=amount, reason=reason, officer=officer, notes=notes)
+    fine = Fine(vehicle_id=vehicle.id, amount=amount, base_amount=amount, reason=reason, officer=officer, notes=notes)
     
     # If vehicle is exonerated, mark it for automatic deletion after 60 minutes
     # (will be deleted automatically by background task - no trace left)
@@ -2072,6 +2072,16 @@ def renew_vehicle_qrcode(vehicle_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@main_bp.route('/vehicles/<int:vehicle_id>/track')
+@login_required
+def vehicle_track_redirect(vehicle_id):
+    """Redirect from vehicle ID to its public track page (used when track_token is unknown client-side)."""
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    if not vehicle.track_token:
+        abort(404)
+    return redirect(url_for('main_bp.public_track', token=vehicle.track_token))
 
 
 @main_bp.route('/track/<token>')

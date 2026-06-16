@@ -591,8 +591,35 @@ def get_current_user():
 @citizen_auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
-    """Logout user (token cleanup happens on client side)"""
+    """Logout: clear push token so the device stops receiving notifications."""
+    try:
+        identity = get_jwt_identity()
+        vehicle_id = int(identity) if not isinstance(identity, dict) else int(identity.get('vehicle_id'))
+        owner = VehicleOwner.query.filter_by(vehicle_id=vehicle_id).first()
+        if owner and owner.expo_push_token:
+            owner.expo_push_token = None
+            db.session.commit()
+    except Exception as e:
+        print(f"⚠️ Could not clear push token on logout: {e}")
     return jsonify({'message': 'Logged out successfully'}), 200
+
+
+@citizen_auth_bp.route('/unregister-push-token', methods=['POST'])
+def unregister_push_token():
+    """Remove a push token without requiring JWT — used on forced logout (expired session)."""
+    data = request.get_json() or {}
+    push_token = (data.get('push_token') or '').strip()
+    if not push_token:
+        return jsonify({'message': 'No token provided'}), 200
+    try:
+        owners = VehicleOwner.query.filter_by(expo_push_token=push_token).all()
+        for owner in owners:
+            owner.expo_push_token = None
+        if owners:
+            db.session.commit()
+    except Exception as e:
+        print(f"⚠️ Could not unregister push token: {e}")
+    return jsonify({'message': 'Token unregistered'}), 200
 
 
 @citizen_auth_bp.route('/delete-account/request-otp', methods=['POST'])
