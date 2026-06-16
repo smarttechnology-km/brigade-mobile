@@ -866,12 +866,11 @@ def query_vehicles():
             query = query.filter(Vehicle.created_at <= ed)
         except Exception:
             pass
-    # filter by expired registration (vignette) if requested
+    # filter by expired vignette if requested
     if expired is not None:
         try:
             if expired.lower() in ('1','true','yes'):
-                # include vehicles with registration_expiry set and before now
-                query = query.filter(Vehicle.registration_expiry != None).filter(Vehicle.registration_expiry <= now_comoros())
+                query = query.filter(Vehicle.vignette_expiry != None).filter(Vehicle.vignette_expiry <= now_comoros())
         except Exception:
             pass
     

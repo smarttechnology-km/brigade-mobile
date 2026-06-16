@@ -501,15 +501,14 @@ def api_vehicles_search():
     if not q:
         return jsonify({"vehicles": []})
     
+    # Exact plate match only — no partial search
     vehicles_query = Vehicle.query.filter(
-        Vehicle.license_plate.ilike(f'%{q}%')
+        Vehicle.license_plate == q.upper().strip()
     )
-    
-    # Note: Policiers can search vehicles from any island (patrol can happen anywhere)
-    # Island filtering only applies to judiciaire users
+
     if user.role == 'judiciaire' and user.country:
         vehicles_query = vehicles_query.filter(Vehicle.owner_island == user.country)
-    
+
     vehicles = vehicles_query.limit(10).all()
 
     setting = VignetteSetting.get()
