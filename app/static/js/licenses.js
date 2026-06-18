@@ -101,7 +101,9 @@
                     <button class="btn btn-sm btn-outline-primary" title="Détails" onclick="viewLicense(${l.id})"><i class="fas fa-eye"></i></button>
                     <button class="btn btn-sm btn-outline-warning" title="Modifier" onclick="editLicense(${l.id})"><i class="fas fa-edit"></i></button>
                     ${l.status === 'revoque'
-                        ? `<button class="btn btn-sm btn-outline-success" title="Réinitialiser les points" onclick="resetPoints(${l.id}, '${esc(l.license_number)}')"><i class="fas fa-redo"></i></button>`
+                        ? (window.CURRENT_USER_ROLE === 'administrateur'
+                            ? `<button class="btn btn-sm btn-outline-success" title="Réinitialiser les points" onclick="resetPoints(${l.id}, '${esc(l.license_number)}')"><i class="fas fa-redo"></i></button>`
+                            : `<button class="btn btn-sm btn-outline-secondary" title="Réservé à l'administrateur" disabled><i class="fas fa-lock"></i></button>`)
                         : `<button class="btn btn-sm btn-outline-danger" title="Réduire les points" onclick="openReductionModal(${l.id}, '${esc(l.license_number)}', ${l.points ?? 0})"><i class="fas fa-minus-circle"></i></button>`
                     }
                     <button class="btn btn-sm btn-outline-danger" title="Supprimer" onclick="deleteLicense(${l.id}, '${esc(l.license_number)}')"><i class="fas fa-trash"></i></button>
