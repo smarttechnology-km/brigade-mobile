@@ -3191,6 +3191,21 @@ def api_licenses_get(license_id):
     return jsonify(lic.to_dict())
 
 
+@api_bp.route('/licenses/<int:license_id>/scan', methods=['GET'])
+@jwt_required()
+def api_licenses_scan(license_id):
+    """JWT-protected license lookup for police mobile app."""
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur', 'judiciaire']:
+        return jsonify({'error': 'Accès refusé'}), 403
+    lic = DriverLicense.query.get_or_404(license_id)
+    return jsonify(lic.to_dict())
+
+
 @api_bp.route('/licenses/<int:license_id>', methods=['PUT'])
 @login_required
 def api_licenses_update(license_id):
