@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Permis {{ lic.license_number }}</title>
+  <style>
+    html { color-scheme: light; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Arial', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; padding: 32px 16px; }
+
+    /* ── Toolbar ── */
+    .toolbar { max-width: 780px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+    .toolbar-title { font-size: 13px; color: #666; }
+    .btn-print { display: flex; align-items: center; gap: 8px; padding: 9px 20px; background: #1a56db; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s; }
+    .btn-print:hover { background: #1240a0; }
+
+    /* ── Document card ── */
+    .document { max-width: 780px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.12); }
+
+    /* ── Header band ── */
+    .doc-header { background: linear-gradient(135deg, #1a3a6c 0%, #1a56db 100%); color: #fff; padding: 22px 28px; display: flex; align-items: center; justify-content: space-between; }
+    .doc-header-left { display: flex; align-items: center; gap: 14px; }
+    .doc-header-emblem { width: 52px; height: 52px; background: rgba(255,255,255,.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; border: 2px solid rgba(255,255,255,.3); }
+    .doc-header-text h1 { font-size: 16px; font-weight: 700; letter-spacing: .03em; }
+    .doc-header-text p { font-size: 11px; opacity: .8; margin-top: 2px; letter-spacing: .08em; text-transform: uppercase; }
+    .doc-header-right { text-align: right; }
+    .doc-header-right .license-num { font-family: 'Courier New', monospace; font-size: 18px; font-weight: 700; letter-spacing: .1em; }
+    .doc-header-right .license-type { font-size: 11px; opacity: .75; margin-top: 4px; }
+
+    /* ── Body ── */
+    .doc-body { padding: 28px; }
+
+    /* ── Identity row ── */
+    .identity { display: flex; gap: 24px; margin-bottom: 28px; }
+    .identity-photo { flex-shrink: 0; }
+    .identity-photo img,
+    .identity-photo .photo-placeholder {
+      width: 110px; height: 135px; object-fit: cover;
+      border-radius: 8px; border: 3px solid #e8edf5;
+      display: flex; align-items: center; justify-content: center;
+      background: #f5f7fb; color: #c0c8d8; font-size: 3.5rem;
+    }
+    .identity-info { flex: 1; }
+    .identity-name { font-size: 22px; font-weight: 700; color: #1a3a6c; line-height: 1.2; }
+    .identity-sub { font-size: 13px; color: #666; margin-top: 4px; }
+    .badges { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .03em; }
+    .badge-success { background: #d1fae5; color: #065f46; }
+    .badge-warning { background: #fef3c7; color: #92400e; }
+    .badge-danger  { background: #fee2e2; color: #991b1b; }
+    .badge-secondary { background: #f1f5f9; color: #475569; }
+    .badge-blue    { background: #dbeafe; color: #1e40af; }
+    .badge-purple  { background: #ede9fe; color: #5b21b6; }
+
+    /* ── Sections ── */
+    .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .section { background: #f8faff; border: 1px solid #e8edf5; border-radius: 8px; padding: 16px 18px; }
+    .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #1a56db; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #dbeafe; }
+    .field { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #e8edf5; }
+    .field:last-child { border-bottom: none; }
+    .field-label { font-size: 11px; color: #6b7280; }
+    .field-value { font-size: 12px; font-weight: 600; color: #1a1a2e; text-align: right; max-width: 55%; }
+
+    /* ── Categories ── */
+    .cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .cat { background: #1a56db; color: #fff; border-radius: 4px; padding: 3px 9px; font-size: 12px; font-weight: 700; }
+
+    /* ── Points bar ── */
+    .points-section { margin-top: 20px; background: #f8faff; border: 1px solid #e8edf5; border-radius: 8px; padding: 16px 18px; }
+    .points-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .points-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #1a56db; }
+    .points-value { font-size: 14px; font-weight: 700; }
+    .points-bar-bg { height: 10px; background: #e8edf5; border-radius: 10px; overflow: hidden; }
+    .points-bar-fill { height: 100%; border-radius: 10px; transition: width .3s; }
+
+    /* ── Footer ── */
+    .doc-footer { border-top: 1px solid #e8edf5; padding: 14px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafbff; }
+    .doc-footer-left { font-size: 10px; color: #9ca3af; }
+    .doc-footer-right { font-size: 10px; color: #9ca3af; text-align: right; }
+
+    @media print {
+      body { background: #fff; padding: 0; }
+      .toolbar { display: none; }
+      .document { box-shadow: none; border-radius: 0; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="toolbar">
+  <span class="toolbar-title">Aperçu avant impression</span>
+  <button class="btn-print" onclick="window.print()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    Imprimer
+  </button>
+</div>
+
+<div class="document">
+
+  <!-- Header -->
+  <div class="doc-header">
+    <div class="doc-header-left">
+      <div class="doc-header-emblem">🪪</div>
+      <div class="doc-header-text">
+        <h1>Permis de Conduire</h1>
+        <p>République des Comores — Direction Générale de la Police</p>
+      </div>
+    </div>
+    <div class="doc-header-right">
+      <div class="license-num">{{ lic.license_number }}</div>
+      <div class="license-type">{{ 'TEMPORAIRE' if lic.type_permis == 'temporaire' else 'PERMANENT' }}</div>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="doc-body">
+
+    <!-- Identity -->
+    <div class="identity">
+      <div class="identity-photo">
+        {% if lic.photo_filename %}
+          <img src="/static/uploads/license_photos/{{ lic.photo_filename }}" alt="Photo">
+        {% else %}
+          <div class="photo-placeholder">👤</div>
+        {% endif %}
+      </div>
+      <div class="identity-info">
+        <div class="identity-name">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
+        <div class="identity-sub">{{ lic.holder_island or '—' }}{% if lic.holder_phone %} · {{ lic.holder_phone }}{% endif %}</div>
+        <div class="badges">
+          {% if lic.type_permis == 'temporaire' %}
+            <span class="badge badge-purple">⏱ Temporaire</span>
+          {% else %}
+            <span class="badge badge-blue">∞ Permanent</span>
+          {% endif %}
+          {% if lic.categories %}
+            {% for cat in lic.categories.split(',') %}
+              <span class="cat">{{ cat.strip() }}</span>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+      <div style="flex-shrink:0;text-align:center;">
+        <img src="/licenses/{{ lic.id }}/qrcode" alt="QR Code" style="width:140px;height:140px;border:1px solid #e8edf5;border-radius:6px;padding:4px;">
+      </div>
+    </div>
+
+    <!-- Info sections -->
+    <div class="sections">
+
+      <div class="section">
+        <div class="section-title">Informations personnelles</div>
+        <div class="field"><span class="field-label">Date de naissance</span><span class="field-value">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span></div>
+        <div class="field"><span class="field-label">Lieu de naissance</span><span class="field-value">{{ lic.lieu_naissance or '—' }}</span></div>
+        <div class="field"><span class="field-label">Sexe</span><span class="field-value">{{ 'Masculin' if lic.sexe == 'masculin' else ('Féminin' if lic.sexe == 'feminin' else '—') }}</span></div>
+        <div class="field"><span class="field-label">Nationalité</span><span class="field-value">{{ lic.nationalite or '—' }}</span></div>
+        <div class="field"><span class="field-label">Adresse</span><span class="field-value">{{ lic.holder_address or '—' }}</span></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Détails du permis</div>
+        <div class="field">
+          <span class="field-label">{{ 'Depuis le' if lic.type_permis == 'temporaire' else 'Date de début' }}</span>
+          <span class="field-value">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
+        </div>
+        {% if lic.type_permis == 'temporaire' %}
+        <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ lic.expiry_date.strftime('%d/%m/%Y') if lic.expiry_date else '—' }}</span></div>
+        {% endif %}
+        <div class="field"><span class="field-label">Centre d'immatriculation</span><span class="field-value">{{ lic.centre_immatriculation or '—' }}</span></div>
+        {% if lic.notes %}
+        <div class="field"><span class="field-label">Notes</span><span class="field-value">{{ lic.notes }}</span></div>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <!-- Points bar -->
+    {% set pts = lic.points if lic.points is not none else settings.initial_points %}
+    {% set max_pts = settings.initial_points %}
+    {% set pct = ((pts / max_pts) * 100)|int if max_pts > 0 else 0 %}
+    {% set bar_color = '#10b981' if pct >= 75 else ('#f59e0b' if pct >= 40 else '#ef4444') %}
+    <div class="points-section">
+      <div class="points-header">
+        <span class="points-label">Solde de points</span>
+        <span class="points-value" style="color:{{ bar_color }}">{{ pts }} / {{ max_pts }} pts</span>
+      </div>
+      <div class="points-bar-bg">
+        <div class="points-bar-fill" style="width:{{ pct }}%; background:{{ bar_color }};"></div>
+      </div>
+    </div>
+
+  </div><!-- /doc-body -->
+
+  <!-- Footer -->
+  <div class="doc-footer">
+    <div class="doc-footer-left">
+      Émis par : <strong>{{ lic.created_by or '—' }}</strong>
+      {% if lic.created_at %} · {{ lic.created_at.strftime('%d/%m/%Y') }}{% endif %}
+    </div>
+    <div class="doc-footer-right">
+      Document généré le {{ '' }}
+      <script>document.write(new Date().toLocaleDateString('fr-FR'));</script>
+    </div>
+  </div>
+
+</div><!-- /document -->
+
+<script>setTimeout(function() { window.print(); }, 400);</script>
+</body>
+</html>

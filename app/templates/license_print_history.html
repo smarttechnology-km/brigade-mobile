@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Historique points — {{ lic.license_number }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { color-scheme: light; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #fff; padding: 24px; }
+
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .top-bar h2 { font-size: 15px; }
+    .print-btn { padding: 6px 18px; background: #0d6efd; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .print-btn:hover { background: #0b5ed7; }
+
+    .info-bar { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; display: flex; gap: 32px; }
+    .info-bar span { font-size: 11px; color: #555; }
+    .info-bar strong { font-size: 13px; color: #111; display: block; margin-top: 2px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #f0f0f0; }
+    th { padding: 7px 8px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #555; border-bottom: 2px solid #ddd; }
+    td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+    tr:nth-child(even) td { background: #fafafa; }
+
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; font-weight: bold; color: #fff; }
+    .badge-danger    { background: #dc3545; }
+    .badge-secondary { background: #6c757d; }
+
+    .empty { text-align: center; color: #aaa; padding: 24px; }
+    .footer { margin-top: 20px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 6px; }
+
+    @media print {
+      .print-btn, .top-bar { display: none; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h2>Historique des points — {{ lic.license_number }}</h2>
+  <button class="print-btn" onclick="window.print()">🖨️ Imprimer</button>
+</div>
+
+<div class="info-bar">
+  <div>
+    <span>Titulaire</span>
+    <strong>{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</strong>
+  </div>
+  <div>
+    <span>Numéro de permis</span>
+    <strong>{{ lic.license_number }}</strong>
+  </div>
+  <div>
+    <span>Île</span>
+    <strong>{{ lic.holder_island or '—' }}</strong>
+  </div>
+  <div>
+    <span>Points actuels</span>
+    <strong>{{ lic.points if lic.points is not none else settings.initial_points }} / {{ settings.initial_points }}</strong>
+  </div>
+</div>
+
+{% if history %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Date</th>
+      <th>Motif</th>
+      <th>Avant</th>
+      <th>Déduction</th>
+      <th>Après</th>
+      <th>Agent</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in history %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ h.created_at.strftime('%d/%m/%Y %H:%M') if h.created_at else '—' }}</td>
+      <td>{{ h.reason_label }}</td>
+      <td><span class="badge badge-secondary">{{ h.points_before }}/{{ settings.initial_points }}</span></td>
+      <td>
+        {% if h.points_after > h.points_before %}
+          <span class="badge" style="background:#28a745;">↺ Réinitialisation</span>
+        {% else %}
+          <span class="badge badge-danger">−{{ h.points_deducted }}</span>
+        {% endif %}
+      </td>
+      <td><span class="badge badge-{{ 'danger' if h.points_after == 0 else 'secondary' }}">{{ h.points_after }}/{{ settings.initial_points }}</span></td>
+      <td>{{ h.created_by or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="empty">Aucun retrait de points enregistré pour ce permis.</div>
+{% endif %}
+
+<div class="footer">
+  Permis créé par {{ lic.created_by or '—' }}
+  {% if lic.created_at %} · {{ lic.created_at.strftime('%d/%m/%Y') }}{% endif %}
+</div>
+
+<script>setTimeout(function() { window.print(); }, 400);</script>
+</body>
+</html>

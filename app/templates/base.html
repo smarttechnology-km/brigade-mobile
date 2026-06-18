@@ -113,6 +113,7 @@
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
             <a class="nav-link text-white {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard"><i class="fas fa-chart-line me-2"></i> Dashboard</a>
             <a class="nav-link text-white {% if request.path.startswith('/vehicles') %}active{% endif %}" href="/vehicles"><i class="fas fa-car-side me-2"></i> Véhicules</a>
+            <a class="nav-link text-white {% if request.path.startswith('/licenses') %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}
@@ -158,56 +159,48 @@
             {% endif %}
 
             {% if current_user.is_authenticated %}
-            <div class="px-3 mt-3">
-                        <div class="d-grid gap-2">
-                            {% if not current_user.is_insurance_account %}
-                            <a href="/profile" class="btn btn-light btn-sm">Mon profil</a>
-                            {% endif %}
-                            <button onclick="toggleTheme()" class="btn btn-outline-light btn-sm" id="themeToggle" title="Basculer thème sombre/clair">
-                                <i class="fas fa-moon"></i>
-                            </button>
-                            <script>
-                                (function() {
-                                    const html = document.documentElement;
-                                    const currentTheme = html.getAttribute('data-bs-theme') || 'light';
-                                    const themeBtn = document.getElementById('themeToggle');
-                                    if (themeBtn) {
-                                        themeBtn.innerHTML = currentTheme === 'dark' ?
-                                            '<i class="fas fa-sun"></i>' :
-                                            '<i class="fas fa-moon"></i>';
-                                    }
-                                })();
-                            </script>
-                            <script>
-                                // Load pending photo submissions count
-                                function updatePhotoCount() {
-                                    fetch('/api/photo-submissions/count-pending')
-                                        .then(r => r.json())
-                                        .then(data => {
-                                            const badge = document.getElementById('photo-count-badge');
-                                            if (badge) {
-                                                const count = data.pending_count || 0;
-                                                if (count > 0) {
-                                                    badge.textContent = count;
-                                                    badge.style.display = 'inline-block';
-                                                } else {
-                                                    badge.style.display = 'none';
-                                                }
-                                            }
-                                        })
-                                        .catch(err => console.error('Error loading photo count:', err));
-                                }
-                                
-                                // Load count on page load
-                                document.addEventListener('DOMContentLoaded', updatePhotoCount);
-                                
-                                // Refresh count every 30 seconds
-                                setInterval(updatePhotoCount, 30000);
-                            </script>
-                            <a href="/auth/logout" class="btn btn-outline-light btn-sm w-100">Se déconnecter</a>
-                        </div>
+            <div class="px-2 mt-2 pb-2 border-top border-secondary pt-2">
+                {% if not current_user.is_insurance_account %}
+                <a href="/profile" class="btn btn-light btn-sm w-100 mb-1">Mon profil</a>
+                {% endif %}
+                <div class="d-flex gap-1">
+                    <button onclick="toggleTheme()" class="btn btn-outline-light btn-sm flex-fill" id="themeToggle" title="Thème sombre / clair" style="padding:6px 0;">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <a href="/auth/logout" class="btn btn-outline-danger btn-sm flex-fill" title="Se déconnecter" style="padding:6px 0;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </a>
                 </div>
             </div>
+            <script>
+                (function() {
+                    const html = document.documentElement;
+                    const currentTheme = html.getAttribute('data-bs-theme') || 'light';
+                    const themeBtn = document.getElementById('themeToggle');
+                    if (themeBtn) {
+                        themeBtn.innerHTML = currentTheme === 'dark' ?
+                            '<i class="fas fa-sun"></i>' :
+                            '<i class="fas fa-moon"></i>';
+                    }
+                })();
+            </script>
+            <script>
+                function updatePhotoCount() {
+                    fetch('/api/photo-submissions/count-pending')
+                        .then(r => r.json())
+                        .then(data => {
+                            const badge = document.getElementById('photo-count-badge');
+                            if (badge) {
+                                const count = data.pending_count || 0;
+                                badge.textContent = count;
+                                badge.style.display = count > 0 ? 'inline-block' : 'none';
+                            }
+                        })
+                        .catch(() => {});
+                }
+                document.addEventListener('DOMContentLoaded', updatePhotoCount);
+                setInterval(updatePhotoCount, 30000);
+            </script>
             {% else %}
             <a class="nav-link text-white mt-3" href="/auth/login"><i class="fas fa-sign-in-alt me-2"></i> Se connecter</a>
             {% endif %}

@@ -1,0 +1,553 @@
+{% extends "base.html" %}
+
+{% block title %}Licences — Permis de Conduire{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h2><i class="fas fa-id-card me-2"></i>Licences</h2>
+      <p class="text-muted mb-0">Gestion des permis de conduire</p>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
+      <button class="btn btn-outline-secondary" onclick="openSettingsModal()" title="Paramètres">
+        <i class="fas fa-cog me-2"></i>Paramètres
+      </button>
+      <button class="btn btn-primary" onclick="openAddModal()">
+        <i class="fas fa-plus me-2"></i>Ajouter un permis
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats cards -->
+  <div class="row mb-4 g-3" id="stats-row">
+    <div class="col-6 col-md-2">
+      <div class="card h-100 border-left-primary">
+        <div class="card-body py-3 px-3">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Total</div>
+              <h3 class="mb-0 fw-bold" id="stat-total">—</h3>
+            </div>
+            <i class="fas fa-id-card text-primary" style="font-size:1.6rem;opacity:.7;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100 border-left-success">
+        <div class="card-body py-3 px-3">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Actifs</div>
+              <h3 class="mb-0 fw-bold" id="stat-actif">—</h3>
+            </div>
+            <i class="fas fa-check-circle text-success" style="font-size:1.6rem;opacity:.7;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100 border-left-warning">
+        <div class="card-body py-3 px-3">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Suspendus</div>
+              <h3 class="mb-0 fw-bold" id="stat-suspendu">—</h3>
+            </div>
+            <i class="fas fa-pause-circle text-warning" style="font-size:1.6rem;opacity:.7;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100 border-left-danger">
+        <div class="card-body py-3 px-3">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Révoqués</div>
+              <h3 class="mb-0 fw-bold" id="stat-revoque">—</h3>
+            </div>
+            <i class="fas fa-ban text-danger" style="font-size:1.6rem;opacity:.7;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100" style="border-left:4px solid #0dcaf0;">
+        <div class="card-body py-3 px-3">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Temporaires</div>
+              <h3 class="mb-0 fw-bold" id="stat-temporaire">—</h3>
+            </div>
+            <i class="fas fa-clock" style="font-size:1.6rem;opacity:.7;color:#0dcaf0;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100" style="border-left:4px solid #198754;">
+        <div class="card-body py-3 px-3">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Permanents</div>
+              <h3 class="mb-0 fw-bold" id="stat-permanent">—</h3>
+            </div>
+            <i class="fas fa-infinity" style="font-size:1.6rem;opacity:.7;color:#198754;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="row mb-3 g-2">
+    <div class="col-md-6">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input id="search-input" type="text" class="form-control" placeholder="Numéro, nom, téléphone…">
+      </div>
+    </div>
+    <div class="col-md-3">
+      <select id="status-filter" class="form-select">
+        <option value="">Tous les statuts</option>
+        <option value="actif">Actif</option>
+        <option value="suspendu">Suspendu</option>
+        <option value="revoque">Révoqué</option>
+        <option value="expire">Expiré</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <select id="type-filter" class="form-select">
+        <option value="">Tous les types</option>
+        <option value="permanent">Permanent</option>
+        <option value="temporaire">Temporaire</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="licenses-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Numéro</th>
+              <th>Titulaire</th>
+              <th>Île</th>
+              <th>Catégories</th>
+              <th>Type</th>
+              <th>Expiration</th>
+              <th>Points</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="licenses-tbody">
+            <tr><td colspan="10" class="text-center text-muted py-4">
+              <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div id="pagination-wrap" class="d-flex align-items-center justify-content-between mt-3" style="display:none!important;">
+    <span id="pagination-info" class="text-muted small"></span>
+    <div id="pagination-btns" class="d-flex gap-1"></div>
+  </div>
+
+</div>
+
+<!-- ── Add / Edit Modal ── -->
+<div class="modal fade" id="licenseModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-title"><i class="fas fa-id-card me-2"></i>Ajouter un permis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="f-id">
+
+        <!-- Photo + numéro / nom -->
+        <div class="row g-3 mb-3">
+          <div class="col-auto">
+            <div id="photo-preview-wrap" style="width:90px;height:110px;border:2px dashed #ccc;border-radius:8px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;background:#f8f9fa;" onclick="document.getElementById('f-photo').click()" title="Cliquer pour choisir une photo">
+              <img id="photo-preview-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;">
+              <span id="photo-preview-icon" class="text-muted" style="font-size:2rem;"><i class="fas fa-user-circle"></i></span>
+            </div>
+            <input type="file" id="f-photo" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="previewPhoto(this)">
+            <div class="text-muted text-center" style="font-size:0.7rem;margin-top:4px;">Photo</div>
+          </div>
+          <div class="col">
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Numéro de permis <span class="text-danger">*</span></label>
+                <input type="text" id="f-license_number" class="form-control text-uppercase" placeholder="Ex : PC-2024-00123" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Statut</label>
+                <select id="f-status" class="form-select">
+                  <option value="actif">Actif</option>
+                  <option value="suspendu">Suspendu</option>
+                  <option value="revoque">Révoqué</option>
+                  <option value="expire">Expiré</option>
+                </select>
+              </div>
+              <div class="col-md-2" id="points-wrap" style="display:none;">
+                <label class="form-label fw-semibold">Points</label>
+                <input type="number" id="f-points" class="form-control" min="0" max="20" value="12">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
+                <input type="text" id="f-holder_name" class="form-control text-uppercase" placeholder="Nom de famille" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Prénom</label>
+                <input type="text" id="f-holder_firstname" class="form-control" placeholder="Prénom">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr>
+
+        <!-- Infos personnelles -->
+        <h6 class="text-muted text-uppercase" style="font-size:0.72rem;letter-spacing:.5px;">Informations personnelles</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Date de naissance</label>
+            <input type="date" id="f-date_of_birth" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Lieu de naissance</label>
+            <input type="text" id="f-lieu_naissance" class="form-control" placeholder="Ville, pays…">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Sexe</label>
+            <select id="f-sexe" class="form-select">
+              <option value="">— Sélectionner —</option>
+              <option value="masculin">Masculin</option>
+              <option value="feminin">Féminin</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Nationalité</label>
+            <input type="text" id="f-nationalite" class="form-control" placeholder="Ex : Comorien">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Téléphone</label>
+            <input type="tel" id="f-holder_phone" class="form-control" placeholder="Ex : 3321234">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Île</label>
+            <select id="f-holder_island" class="form-select">
+              <option value="">— Sélectionner —</option>
+              <option value="Grande Comores">Grande Comores</option>
+              <option value="Anjouan">Anjouan</option>
+              <option value="Moheli">Moheli</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Adresse</label>
+            <input type="text" id="f-holder_address" class="form-control" placeholder="Quartier, ville…">
+          </div>
+        </div>
+
+        <hr>
+
+        <!-- Permis -->
+        <h6 class="text-muted text-uppercase" style="font-size:0.72rem;letter-spacing:.5px;">Détails du permis</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Type de permis</label>
+            <select id="f-type_permis" class="form-select" onchange="onTypePermisChange()">
+              <option value="permanent">Permanent</option>
+              <option value="temporaire">Temporaire</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" id="issue-date-label">Date de début</label>
+            <input type="date" id="f-issue_date" class="form-control">
+          </div>
+          <div class="col-md-4" id="expiry-date-wrap" style="display:none;">
+            <label class="form-label">Jusqu'au</label>
+            <input type="date" id="f-expiry_date" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Centre d'immatriculation</label>
+            <input type="text" id="f-centre_immatriculation" class="form-control" placeholder="Ex : Centre de Moroni">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Catégories</label>
+            <div class="d-flex flex-wrap gap-2 mt-1" id="categories-checkboxes">
+              {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F'] %}
+              <div class="form-check form-check-inline">
+                <input class="form-check-input cat-checkbox" type="checkbox" id="cat-{{ cat }}" value="{{ cat }}">
+                <label class="form-check-label" for="cat-{{ cat }}">{{ cat }}</label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <hr>
+
+        <div>
+          <label class="form-label">Notes</label>
+          <textarea id="f-notes" class="form-control" rows="2" placeholder="Observations…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="save-btn" onclick="saveLicense()">
+          <i class="fas fa-save me-1"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── View Modal ── -->
+<div class="modal fade" id="viewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-id-card me-2"></i>Détails du permis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-tabs mb-3" id="view-tabs">
+          <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#view-tab-details" type="button">
+              <i class="fas fa-id-card me-1"></i>Détails
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" id="view-tab-history-btn" data-bs-toggle="tab" data-bs-target="#view-tab-history" type="button">
+              <i class="fas fa-history me-1"></i>Historique des points
+            </button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane show active" id="view-tab-details">
+            <div id="view-body"><!-- filled by JS --></div>
+          </div>
+          <div class="tab-pane" id="view-tab-history">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Motif</th>
+                    <th>Avant</th>
+                    <th>Déduction</th>
+                    <th>Après</th>
+                    <th>Par</th>
+                  </tr>
+                </thead>
+                <tbody id="view-history-tbody">
+                  <tr><td colspan="6" class="text-center text-muted">Chargement…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" onclick="printLicenseDetails()">
+          <i class="fas fa-print me-1"></i>Imprimer
+        </button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Paramètres Modal ── -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-cog me-2"></i>Paramètres des licences</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+
+        <ul class="nav nav-tabs mb-3" id="settings-tabs">
+          <li class="nav-item">
+            <button class="nav-link active" id="tab-general-btn" data-bs-toggle="tab" data-bs-target="#tab-general" type="button">
+              <i class="fas fa-sliders-h me-1"></i>Général
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" id="tab-reasons-btn" data-bs-toggle="tab" data-bs-target="#tab-reasons" type="button" onclick="loadReasons()">
+              <i class="fas fa-minus-circle me-1"></i>Motifs de réduction
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content">
+
+          <!-- Général -->
+          <div class="tab-pane show active" id="tab-general">
+            <div class="row g-2 align-items-end mb-3">
+              <div class="col-md-4">
+                <label class="form-label small">Points initiaux par permis</label>
+                <div class="input-group">
+                  <input type="number" id="s-initial_points" class="form-control" min="0" max="20">
+                  <span class="input-group-text">pts</span>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">Validité temporaire par défaut</label>
+                <div class="input-group">
+                  <input type="number" id="s-temp_months" class="form-control" min="1" max="120">
+                  <span class="input-group-text">mois</span>
+                </div>
+              </div>
+              <div class="col-md-4 text-end">
+                <button type="button" class="btn btn-outline-primary" id="settings-save-btn" onclick="saveSettings()">
+                  <i class="fas fa-save me-1"></i>Enregistrer
+                </button>
+              </div>
+            </div>
+            <p class="text-muted small mb-3">
+              <i class="fas fa-info-circle me-1"></i>Modifier les points initiaux met à jour <strong>tous</strong> les permis existants.
+            </p>
+
+            <hr>
+
+            <p class="fw-semibold small mb-2">Changement de statut automatique</p>
+            <p class="text-muted small mb-3">Le statut du permis change automatiquement quand les points atteignent un seuil défini.</p>
+
+            <div class="row g-2 align-items-end mb-3">
+              <div class="col-md-4">
+                <label class="form-label small">Statut à appliquer</label>
+                <select id="s-rule-status" class="form-select">
+                  <option value="suspendu">Suspendu</option>
+                  <option value="revoque">Révoqué</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small">Condition</label>
+                <select id="s-rule-operator" class="form-select">
+                  <option value="lt">&lt; (inférieur à)</option>
+                  <option value="eq">= (égal à)</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">Points</label>
+                <input type="number" id="s-rule-threshold" class="form-control" min="0" max="20" value="0">
+              </div>
+              <div class="col-md-3 text-end">
+                <button class="btn btn-outline-primary" onclick="addStatusRule()">
+                  <i class="fas fa-plus me-1"></i>Ajouter
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr><th>Condition</th><th>Statut appliqué</th><th></th></tr>
+                </thead>
+                <tbody id="status-rules-list">
+                  <tr><td colspan="3" class="text-center text-muted">Chargement…</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="text-end mt-2">
+              <button class="btn btn-sm btn-outline-warning" onclick="applyStatusRules()">
+                <i class="fas fa-sync-alt me-1"></i>Appliquer aux permis existants
+              </button>
+            </div>
+          </div>
+
+          <!-- Motifs de réduction -->
+          <div class="tab-pane" id="tab-reasons">
+            <div class="row g-2 align-items-end mb-3">
+              <input type="hidden" id="s-reason-editing-id">
+              <div class="col-md-6">
+                <label class="form-label small">Libellé du motif</label>
+                <input type="text" id="s-reason-label" class="form-control" placeholder="Ex : Excès de vitesse">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small">Points à déduire</label>
+                <div class="input-group">
+                  <input type="number" id="s-reason-pts" class="form-control" min="1" max="20" value="1">
+                  <span class="input-group-text">pts</span>
+                </div>
+              </div>
+              <div class="col-md-3 text-end">
+                <button type="button" class="btn btn-outline-secondary me-1 d-none" id="s-reason-cancel-btn" onclick="cancelEditReason()">Annuler</button>
+                <button type="button" class="btn btn-outline-primary" id="s-reason-submit-btn" onclick="addReason()">
+                  <i class="fas fa-plus me-1"></i>Ajouter
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Motif</th>
+                    <th>Points déduits</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="reasons-list">
+                  <tr><td colspan="4" class="text-center text-muted">Chargement…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Réduction Points Modal ── -->
+<div class="modal fade" id="reductionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-minus-circle text-danger me-2"></i>Réduire les points</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3" id="reduction-info"></p>
+        <label class="form-label fw-semibold">Motif</label>
+        <select id="reduction-reason-select" class="form-select mb-2" onchange="updateReductionPreview()"></select>
+        <div id="reduction-preview" class="text-muted small"></div>
+        <input type="hidden" id="reduction-license-id">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger" id="reduction-confirm-btn" onclick="applyReduction()">
+          <i class="fas fa-minus-circle me-1"></i>Appliquer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/licenses.js"></script>
+{% endblock %}
