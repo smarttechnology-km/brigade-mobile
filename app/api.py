@@ -2959,7 +2959,7 @@ def api_status_rules_create():
 def api_status_rules_apply():
     if not current_user.is_admin:
         return jsonify({'error': 'Réservé à l\'administrateur'}), 403
-    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.desc()).all()
+    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.asc()).all()
     updated = 0
     for lic in DriverLicense.query.all():
         pts = lic.points if lic.points is not None else 0
@@ -3002,9 +3002,10 @@ def api_licenses_reduce_points(license_id):
     lic.points = after
 
     # Apply status rules
-    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.desc()).all()
+    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.asc()).all()
     for rule in rules:
-        matched = (rule.operator == 'lte' and after <= rule.threshold) or \
+        matched = (rule.operator == 'lt'  and after <  rule.threshold) or \
+                  (rule.operator == 'lte' and after <= rule.threshold) or \
                   (rule.operator == 'eq'  and after == rule.threshold)
         if matched:
             lic.status = rule.status
@@ -3240,7 +3241,7 @@ def api_mobile_reduce_points(license_id):
     after     = max(0, before - reason.points_to_deduct)
     lic.points = after
 
-    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.desc()).all()
+    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.asc()).all()
     for rule in rules:
         matched = (rule.operator == 'lt'  and after <  rule.threshold) or \
                   (rule.operator == 'lte' and after <= rule.threshold) or \
