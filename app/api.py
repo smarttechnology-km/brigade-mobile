@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -534,6 +534,40 @@ def api_vehicles_search():
 
     return jsonify({
         "vehicles": [vehicle_dict_with_renewal(v) for v in vehicles]
+    })
+
+
+@api_bp.route('/vehicles/<int:vehicle_id>/qrcode/renew', methods=['POST'])
+@login_required
+def api_vehicle_qrcode_renew(vehicle_id):
+    """Renew QR code for a vehicle and record a SmartTech payment."""
+    from app.models import QRCodePayment, SmartTechSetting
+    from datetime import timedelta
+
+    vehicle = Vehicle.query.get(vehicle_id)
+    if not vehicle:
+        return jsonify({'error': 'Véhicule introuvable.'}), 404
+
+    now = now_comoros()
+    vehicle.qr_code_expiry = now + timedelta(days=365)
+    vehicle.status = 'active'
+
+    amount = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
+    payment = QRCodePayment(
+        vehicle_id=vehicle.id,
+        payment_type='renewal',
+        amount=amount,
+        status='paid',
+        paid_at=now,
+        recorded_by=current_user.username,
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'QR Code renouvelé pour {vehicle.license_plate}.',
+        'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y'),
     })
 
 
@@ -2813,3 +2847,432 @@ def delete_photo_submission_reason(reason_id):
     db.session.delete(reason)
     db.session.commit()
     return jsonify({'ok': True})
+
+
+# ── Driver Licenses ──────────────────────────────────────────────────────────
+
+@api_bp.route('/licenses/settings', methods=['GET'])
+@login_required
+def api_licenses_settings_get():
+    return jsonify(LicenseSetting.get().to_dict())
+
+
+@api_bp.route('/licenses/settings', methods=['PUT'])
+@login_required
+def api_licenses_settings_put():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    data = request.get_json() or {}
+    s = LicenseSetting.get()
+    if 'initial_points' in data:
+        try:
+            s.initial_points = max(0, min(20, int(data['initial_points'])))
+        except (ValueError, TypeError):
+            pass
+    if 'temp_validity_months' in data:
+        try:
+            s.temp_validity_months = max(1, min(120, int(data['temp_validity_months'])))
+        except (ValueError, TypeError):
+            pass
+    # Propagate new initial_points to all existing licenses
+    DriverLicense.query.update({'points': s.initial_points})
+    db.session.commit()
+    return jsonify(s.to_dict())
+
+
+@api_bp.route('/licenses/point-reasons', methods=['GET'])
+@login_required
+def api_point_reasons_list():
+    reasons = PointReductionReason.query.order_by(PointReductionReason.created_at).all()
+    return jsonify([r.to_dict() for r in reasons])
+
+
+@api_bp.route('/licenses/point-reasons', methods=['POST'])
+@login_required
+def api_point_reasons_create():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    data  = request.get_json() or {}
+    label = (data.get('label') or '').strip()
+    if not label:
+        return jsonify({'error': 'Libellé obligatoire'}), 400
+    try:
+        pts = max(1, int(data.get('points_to_deduct', 1)))
+    except (ValueError, TypeError):
+        pts = 1
+    r = PointReductionReason(label=label, points_to_deduct=pts)
+    db.session.add(r)
+    db.session.commit()
+    return jsonify(r.to_dict()), 201
+
+
+@api_bp.route('/licenses/point-reasons/<int:reason_id>', methods=['PUT'])
+@login_required
+def api_point_reasons_update(reason_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    r = PointReductionReason.query.get_or_404(reason_id)
+    data = request.get_json() or {}
+    if 'label' in data:
+        r.label = data['label'].strip()
+    if 'points_to_deduct' in data:
+        r.points_to_deduct = int(data['points_to_deduct'])
+    db.session.commit()
+    return jsonify(r.to_dict())
+
+
+@api_bp.route('/licenses/point-reasons/<int:reason_id>', methods=['DELETE'])
+@login_required
+def api_point_reasons_delete(reason_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    r = PointReductionReason.query.get_or_404(reason_id)
+    db.session.delete(r)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/licenses/status-rules', methods=['GET'])
+@login_required
+def api_status_rules_list():
+    return jsonify([r.to_dict() for r in LicenseStatusRule.query.order_by(LicenseStatusRule.threshold).all()])
+
+
+@api_bp.route('/licenses/status-rules', methods=['POST'])
+@login_required
+def api_status_rules_create():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    data = request.get_json() or {}
+    rule = LicenseStatusRule(
+        status    = data.get('status', 'revoque'),
+        operator  = data.get('operator', 'lt'),
+        threshold = int(data.get('threshold', 0)),
+    )
+    db.session.add(rule)
+    db.session.commit()
+    return jsonify(rule.to_dict()), 201
+
+
+@api_bp.route('/licenses/status-rules/apply', methods=['POST'])
+@login_required
+def api_status_rules_apply():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.desc()).all()
+    updated = 0
+    for lic in DriverLicense.query.all():
+        pts = lic.points if lic.points is not None else 0
+        for rule in rules:
+            matched = (rule.operator == 'lt'  and pts <  rule.threshold) or \
+                      (rule.operator == 'lte' and pts <= rule.threshold) or \
+                      (rule.operator == 'eq'  and pts == rule.threshold)
+            if matched:
+                if lic.status != rule.status:
+                    lic.status = rule.status
+                    updated += 1
+                break
+    db.session.commit()
+    return jsonify({'updated': updated})
+
+
+@api_bp.route('/licenses/status-rules/<int:rule_id>', methods=['DELETE'])
+@login_required
+def api_status_rules_delete(rule_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    r = LicenseStatusRule.query.get_or_404(rule_id)
+    db.session.delete(r)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/licenses/<int:license_id>/reduce-points', methods=['POST'])
+@login_required
+def api_licenses_reduce_points(license_id):
+    lic = DriverLicense.query.get_or_404(license_id)
+    err = check_island_access(lic.holder_island)
+    if err:
+        return err
+    data      = request.get_json() or {}
+    reason_id = data.get('reason_id')
+    reason    = PointReductionReason.query.get_or_404(reason_id)
+    before     = lic.points or 0
+    after      = max(0, before - reason.points_to_deduct)
+    lic.points = after
+
+    # Apply status rules
+    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.desc()).all()
+    for rule in rules:
+        matched = (rule.operator == 'lte' and after <= rule.threshold) or \
+                  (rule.operator == 'eq'  and after == rule.threshold)
+        if matched:
+            lic.status = rule.status
+            break
+
+    history = PointReductionHistory(
+        license_id      = lic.id,
+        reason_label    = reason.label,
+        points_deducted = reason.points_to_deduct,
+        points_before   = before,
+        points_after    = after,
+        created_by      = current_user.username,
+    )
+    db.session.add(history)
+    db.session.commit()
+    return jsonify(lic.to_dict())
+
+
+@api_bp.route('/licenses/<int:license_id>/reset-points', methods=['POST'])
+@login_required
+def api_licenses_reset_points(license_id):
+    lic = DriverLicense.query.get_or_404(license_id)
+    err = check_island_access(lic.holder_island)
+    if err:
+        return err
+    s = LicenseSetting.get()
+    before       = lic.points or 0
+    lic.points   = s.initial_points
+    lic.status   = 'actif'
+    history = PointReductionHistory(
+        license_id      = lic.id,
+        reason_label    = 'Réinitialisation des points',
+        points_deducted = 0,
+        points_before   = before,
+        points_after    = s.initial_points,
+        created_by      = current_user.username,
+    )
+    db.session.add(history)
+    db.session.commit()
+    return jsonify(lic.to_dict())
+
+
+@api_bp.route('/licenses/<int:license_id>/point-history', methods=['GET'])
+@login_required
+def api_licenses_point_history(license_id):
+    lic = DriverLicense.query.get_or_404(license_id)
+    err = check_island_access(lic.holder_island)
+    if err:
+        return err
+    rows = PointReductionHistory.query.filter_by(license_id=license_id)\
+        .order_by(PointReductionHistory.created_at.desc()).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@api_bp.route('/licenses/stats', methods=['GET'])
+@login_required
+def api_licenses_stats():
+    country = request.args.get('country', '').strip()
+    base_q  = apply_island_filter(DriverLicense.query, DriverLicense.holder_island, force_country=country)
+
+    total      = base_q.count()
+    actif      = base_q.filter_by(status='actif').count()
+    suspendu   = base_q.filter_by(status='suspendu').count()
+    revoque    = base_q.filter_by(status='revoque').count()
+    temporaire = base_q.filter_by(type_permis='temporaire').count()
+    permanent  = base_q.filter_by(type_permis='permanent').count()
+
+    return jsonify({
+        'total':      total,
+        'actif':      actif,
+        'suspendu':   suspendu,
+        'revoque':    revoque,
+        'temporaire': temporaire,
+        'permanent':  permanent,
+    })
+
+
+@api_bp.route('/licenses/last-update', methods=['GET'])
+@login_required
+def api_licenses_last_update():
+    from sqlalchemy import func
+    country = request.args.get('country', '').strip()
+    q = apply_island_filter(DriverLicense.query, DriverLicense.holder_island, force_country=country)
+    result = db.session.query(
+        func.max(DriverLicense.updated_at).label('last_update'),
+        func.count(DriverLicense.id).label('total'),
+    ).select_from(q.subquery()).one()
+    ts = result.last_update.strftime('%Y-%m-%d %H:%M:%S') if result.last_update else ''
+    return jsonify({'key': f'{ts}|{result.total}'})
+
+
+@api_bp.route('/licenses', methods=['GET'])
+@login_required
+def api_licenses_list():
+    search   = request.args.get('q', '').strip()
+    status_f = request.args.get('status', '').strip()
+    type_f   = request.args.get('type', '').strip()
+    country  = request.args.get('country', '').strip()
+    page     = request.args.get('page', 1, type=int)
+    per_page = 50
+
+    query = apply_island_filter(DriverLicense.query, DriverLicense.holder_island, force_country=country)
+    if search:
+        term  = f'%{search}%'
+        query = query.filter(
+            db.or_(
+                DriverLicense.license_number.ilike(term),
+                DriverLicense.holder_name.ilike(term),
+                DriverLicense.holder_firstname.ilike(term),
+                DriverLicense.holder_phone.ilike(term),
+            )
+        )
+    if status_f:
+        query = query.filter(DriverLicense.status == status_f)
+    if type_f:
+        query = query.filter(DriverLicense.type_permis == type_f)
+
+    total   = query.count()
+    items   = query.order_by(DriverLicense.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    return jsonify({
+        'items': [l.to_dict() for l in items],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': max(1, (total + per_page - 1) // per_page),
+    })
+
+
+@api_bp.route('/licenses', methods=['POST'])
+@login_required
+def api_licenses_create():
+    if not (current_user.is_admin or getattr(current_user, 'role', '') in ['administrateur', 'judiciaire']):
+        return jsonify({'error': 'Accès refusé'}), 403
+    data = request.get_json() or {}
+    num = (data.get('license_number') or '').strip().upper()
+    name = (data.get('holder_name') or '').strip()
+    if not num or not name:
+        return jsonify({'error': 'Numéro de permis et nom obligatoires'}), 400
+    if DriverLicense.query.filter_by(license_number=num).first():
+        return jsonify({'error': 'Ce numéro de permis existe déjà'}), 400
+
+    # Judiciaire can only create licenses for their assigned island
+    if getattr(current_user, 'role', '') == 'judiciaire' and getattr(current_user, 'country', None):
+        data['holder_island'] = current_user.country
+
+    lic = DriverLicense(
+        license_number        = num,
+        holder_name           = name,
+        holder_firstname      = (data.get('holder_firstname') or '').strip() or None,
+        holder_phone          = (data.get('holder_phone') or '').strip() or None,
+        holder_island         = data.get('holder_island') or None,
+        holder_address        = (data.get('holder_address') or '').strip() or None,
+        nationalite           = (data.get('nationalite') or '').strip() or None,
+        sexe                  = data.get('sexe') or None,
+        points                = LicenseSetting.get().initial_points,
+        lieu_naissance        = (data.get('lieu_naissance') or '').strip() or None,
+        centre_immatriculation= (data.get('centre_immatriculation') or '').strip() or None,
+        type_permis           = data.get('type_permis') or 'permanent',
+        categories            = (data.get('categories') or '').strip() or None,
+        status                = data.get('status') or 'actif',
+        notes                 = (data.get('notes') or '').strip() or None,
+        created_by            = current_user.username,
+    )
+    for field, fmt in [('date_of_birth', '%Y-%m-%d'), ('issue_date', '%Y-%m-%d'), ('expiry_date', '%Y-%m-%d')]:
+        val = data.get(field)
+        if val:
+            try:
+                from datetime import date
+                setattr(lic, field, datetime.strptime(val, fmt).date())
+            except ValueError:
+                pass
+    db.session.add(lic)
+    db.session.commit()
+    return jsonify(lic.to_dict()), 201
+
+
+@api_bp.route('/licenses/<int:license_id>', methods=['GET'])
+@login_required
+def api_licenses_get(license_id):
+    lic = DriverLicense.query.get_or_404(license_id)
+    err = check_island_access(lic.holder_island)
+    if err:
+        return err
+    return jsonify(lic.to_dict())
+
+
+@api_bp.route('/licenses/<int:license_id>', methods=['PUT'])
+@login_required
+def api_licenses_update(license_id):
+    if not (current_user.is_admin or getattr(current_user, 'role', '') in ['administrateur', 'judiciaire']):
+        return jsonify({'error': 'Accès refusé'}), 403
+    lic  = DriverLicense.query.get_or_404(license_id)
+    err = check_island_access(lic.holder_island)
+    if err:
+        return err
+    data = request.get_json() or {}
+
+    num = (data.get('license_number') or '').strip().upper()
+    if num and num != lic.license_number:
+        if DriverLicense.query.filter(DriverLicense.license_number == num, DriverLicense.id != lic.id).first():
+            return jsonify({'error': 'Ce numéro de permis existe déjà'}), 400
+        lic.license_number = num
+
+    if 'points' in data:
+        try:
+            lic.points = max(0, min(12, int(data['points'])))
+        except (ValueError, TypeError):
+            pass
+    for field in ['holder_name', 'holder_firstname', 'holder_phone', 'holder_island', 'holder_address',
+                  'nationalite', 'sexe', 'lieu_naissance', 'centre_immatriculation', 'type_permis', 'categories', 'status', 'notes']:
+        if field in data:
+            setattr(lic, field, (data[field] or '').strip() or None)
+    if 'holder_name' in data and not (data['holder_name'] or '').strip():
+        return jsonify({'error': 'Nom obligatoire'}), 400
+
+    for field, fmt in [('date_of_birth', '%Y-%m-%d'), ('issue_date', '%Y-%m-%d'), ('expiry_date', '%Y-%m-%d')]:
+        if field in data:
+            val = data[field]
+            if val:
+                try:
+                    setattr(lic, field, datetime.strptime(val, fmt).date())
+                except ValueError:
+                    pass
+            else:
+                setattr(lic, field, None)
+
+    db.session.commit()
+    return jsonify(lic.to_dict())
+
+
+@api_bp.route('/licenses/<int:license_id>', methods=['DELETE'])
+@login_required
+def api_licenses_delete(license_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    lic = DriverLicense.query.get_or_404(license_id)
+    if PointReductionHistory.query.filter_by(license_id=lic.id).first():
+        return jsonify({'error': 'Ce permis a un historique de points et ne peut pas être supprimé.'}), 400
+    if lic.photo_filename:
+        try:
+            photo_path = os.path.join('app', 'static', 'uploads', 'license_photos', lic.photo_filename)
+            if os.path.exists(photo_path):
+                os.remove(photo_path)
+        except Exception:
+            pass
+    db.session.delete(lic)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/licenses/<int:license_id>/photo', methods=['POST'])
+@login_required
+def api_licenses_photo(license_id):
+    lic  = DriverLicense.query.get_or_404(license_id)
+    file = request.files.get('photo')
+    if not file or not file.filename:
+        return jsonify({'error': 'Aucun fichier reçu'}), 400
+    ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+        return jsonify({'error': 'Format non autorisé (jpg, png, webp)'}), 400
+    upload_dir = os.path.join('app', 'static', 'uploads', 'license_photos')
+    os.makedirs(upload_dir, exist_ok=True)
+    if lic.photo_filename:
+        old_path = os.path.join(upload_dir, lic.photo_filename)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    filename = f'{uuid.uuid4().hex}{ext}'
+    file.save(os.path.join(upload_dir, filename))
+    lic.photo_filename = filename
+    db.session.commit()
+    return jsonify({'photo_url': f'/static/uploads/license_photos/{filename}'})

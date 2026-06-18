@@ -1082,3 +1082,136 @@ class PhotoSubmissionReason(db.Model):
             'is_active': self.is_active,
             'sort_order': self.sort_order,
         }
+
+
+class DriverLicense(db.Model):
+    __tablename__ = 'driver_licenses'
+    id = db.Column(db.Integer, primary_key=True)
+    license_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    holder_name = db.Column(db.String(150), nullable=False)   # nom de famille
+    holder_firstname = db.Column(db.String(100))              # prénom
+    holder_phone = db.Column(db.String(30))
+    holder_island = db.Column(db.String(50))
+    holder_address = db.Column(db.String(255))
+    nationalite = db.Column(db.String(100))
+    sexe = db.Column(db.String(10))  # 'masculin' | 'feminin'
+    points = db.Column(db.Integer, nullable=False, default=12)
+    date_of_birth = db.Column(db.Date)
+    lieu_naissance = db.Column(db.String(150))
+    centre_immatriculation = db.Column(db.String(150))
+    type_permis = db.Column(db.String(20), nullable=False, default='permanent')  # 'permanent' | 'temporaire'
+    categories = db.Column(db.String(100))  # comma-separated: "A,B,C"
+    issue_date = db.Column(db.Date)
+    expiry_date = db.Column(db.Date)
+    status = db.Column(db.String(20), nullable=False, default='actif')  # actif, suspendu, revoque, expire
+    photo_filename = db.Column(db.String(255))
+    notes = db.Column(db.Text)
+    created_by = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+
+    @property
+    def is_expired(self):
+        if not self.expiry_date:
+            return False
+        return self.expiry_date < now_comoros().date()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'license_number': self.license_number,
+            'holder_name': self.holder_name,
+            'holder_firstname': self.holder_firstname or '',
+            'holder_phone': self.holder_phone or '',
+            'holder_island': self.holder_island or '',
+            'holder_address': self.holder_address or '',
+            'nationalite': self.nationalite or '',
+            'sexe': self.sexe or '',
+            'points': self.points if self.points is not None else 12,
+            'date_of_birth': self.date_of_birth.strftime('%Y-%m-%d') if self.date_of_birth else '',
+            'lieu_naissance': self.lieu_naissance or '',
+            'centre_immatriculation': self.centre_immatriculation or '',
+            'type_permis': self.type_permis or 'permanent',
+            'categories': self.categories or '',
+            'issue_date': self.issue_date.strftime('%Y-%m-%d') if self.issue_date else '',
+            'expiry_date': self.expiry_date.strftime('%Y-%m-%d') if self.expiry_date else '',
+            'status': self.status,
+            'photo_filename': self.photo_filename or '',
+            'notes': self.notes or '',
+            'created_by': self.created_by or '',
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else '',
+            'updated_at': self.updated_at.strftime('%d/%m/%Y %H:%M') if self.updated_at else '',
+            'is_expired': self.is_expired,
+        }
+
+
+class PointReductionReason(db.Model):
+    __tablename__ = 'point_reduction_reasons'
+    id               = db.Column(db.Integer, primary_key=True)
+    label            = db.Column(db.String(200), nullable=False)
+    points_to_deduct = db.Column(db.Integer, nullable=False, default=1)
+    created_at       = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'label': self.label,
+            'points_to_deduct': self.points_to_deduct,
+        }
+
+
+class LicenseStatusRule(db.Model):
+    __tablename__ = 'license_status_rules'
+    id        = db.Column(db.Integer, primary_key=True)
+    status    = db.Column(db.String(20), nullable=False)   # 'suspendu' | 'revoque'
+    operator  = db.Column(db.String(5),  nullable=False, default='lte')  # 'lte' | 'eq'
+    threshold = db.Column(db.Integer,    nullable=False)
+
+    def to_dict(self):
+        return {'id': self.id, 'status': self.status, 'operator': self.operator, 'threshold': self.threshold}
+
+
+class PointReductionHistory(db.Model):
+    __tablename__ = 'point_reduction_history'
+    id              = db.Column(db.Integer, primary_key=True)
+    license_id      = db.Column(db.Integer, db.ForeignKey('driver_licenses.id', ondelete='CASCADE'), nullable=False)
+    reason_label    = db.Column(db.String(200), nullable=False)
+    points_deducted = db.Column(db.Integer, nullable=False)
+    points_before   = db.Column(db.Integer, nullable=False)
+    points_after    = db.Column(db.Integer, nullable=False)
+    created_by      = db.Column(db.String(100))
+    created_at      = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id':              self.id,
+            'reason_label':    self.reason_label,
+            'points_deducted': self.points_deducted,
+            'points_before':   self.points_before,
+            'points_after':    self.points_after,
+            'created_by':      self.created_by,
+            'created_at':      self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else None,
+        }
+
+
+class LicenseSetting(db.Model):
+    __tablename__ = 'license_settings'
+    id                   = db.Column(db.Integer, primary_key=True)
+    initial_points       = db.Column(db.Integer, nullable=False, default=12)
+    temp_validity_months = db.Column(db.Integer, nullable=False, default=12)
+
+    @staticmethod
+    def get():
+        s = LicenseSetting.query.first()
+        if not s:
+            s = LicenseSetting()
+            db.session.add(s)
+            db.session.commit()
+        return s
+
+    def to_dict(self):
+        return {
+            'initial_points':       self.initial_points,
+            'temp_validity_months': self.temp_validity_months,
+        }
+

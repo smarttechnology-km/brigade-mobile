@@ -744,6 +744,49 @@ def vehicles_page():
     return render_template('vehicles.html')
 
 
+@main_bp.route('/licenses')
+@roles_required('administrateur', 'judiciaire')
+def licenses_page():
+    return render_template('licenses.html')
+
+
+@main_bp.route('/licenses/<int:license_id>/qrcode')
+@roles_required('administrateur', 'judiciaire')
+def license_qrcode(license_id):
+    from app.models import DriverLicense
+    lic = DriverLicense.query.get_or_404(license_id)
+    # QR links to the print page (already login-protected)
+    url = f"{request.host_url.rstrip('/')}/licenses/{lic.id}/print"
+    qr = qrcode.QRCode(box_size=6, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color='black', back_color='white')
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png')
+
+
+@main_bp.route('/licenses/<int:license_id>/print')
+@roles_required('administrateur', 'judiciaire')
+def license_print(license_id):
+    from app.models import DriverLicense, LicenseSetting
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    return render_template('license_print.html', lic=lic, settings=settings)
+
+
+@main_bp.route('/licenses/<int:license_id>/print-history')
+@roles_required('administrateur', 'judiciaire')
+def license_print_history(license_id):
+    from app.models import DriverLicense, LicenseSetting, PointReductionHistory
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    history = PointReductionHistory.query.filter_by(license_id=license_id)\
+        .order_by(PointReductionHistory.created_at.desc()).all()
+    return render_template('license_print_history.html', lic=lic, settings=settings, history=history)
+
+
 @main_bp.route('/reports')
 @roles_required('administrateur','judiciaire')
 def reports_page():
@@ -2057,20 +2100,81 @@ def renew_vehicle_qrcode(vehicle_id):
         db.session.commit()
         _record_qr_payment(vehicle, 'renewal', current_user.username)
 
+        from app.models import SmartTechSetting
+        renewal_amount = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
         return jsonify({
             'success': True,
             'message': f'Code QR renouvelé pour {vehicle.license_plate}',
             'track_token': vehicle.track_token,
             'token_unchanged': True,
             'old_expiry': old_expiry,
-            'new_expiry': vehicle.qr_code_expiry.strftime('%Y-%m-%d'),
+            'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y'),
             'old_status': old_status,
             'new_status': vehicle.status,
-            'generated_at': vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S')
+            'generated_at': vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'owner_name': vehicle.owner_name or '',
+            'amount': renewal_amount,
+            'payment_type': 'renewal',
+            'recorded_by': current_user.username,
+            'paid_at': now_comoros().strftime('%d/%m/%Y %H:%M'),
         }), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/qrcode/activate', methods=['POST'])
+@login_required
+def activate_vehicle_qrcode(vehicle_id):
+    """Activate QR code for a vehicle (first time) and return receipt data."""
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+    try:
+        already_active = bool(vehicle.qr_code_expiry and not vehicle.is_qr_expired)
+        if not vehicle.qr_code_expiry:
+            vehicle.generate_qr_code_with_expiry()
+            db.session.commit()
+        _record_qr_payment(vehicle, 'activation', current_user.username)
+        from app.models import SmartTechSetting
+        activation_amount = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000)
+        return jsonify({
+            'success': True,
+            'already_active': already_active,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name or '',
+            'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y'),
+            'amount': activation_amount,
+            'payment_type': 'activation',
+            'recorded_by': current_user.username,
+            'paid_at': now_comoros().strftime('%d/%m/%Y %H:%M'),
+            'pdf_url': f'/api/vehicles/{vehicle.id}/qrcode/pdf',
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/qrcode/last-receipt', methods=['GET'])
+@login_required
+def vehicle_qrcode_last_receipt(vehicle_id):
+    """Return the latest QR payment receipt data for a vehicle."""
+    from app.models import QRCodePayment
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+    payment = QRCodePayment.query.filter_by(
+        vehicle_id=vehicle.id, status='paid'
+    ).order_by(QRCodePayment.paid_at.desc()).first()
+    if not payment:
+        return jsonify({'error': 'Aucun paiement enregistré pour ce véhicule.'}), 404
+    return jsonify({
+        'license_plate': vehicle.license_plate,
+        'owner_name': vehicle.owner_name or '',
+        'payment_type': payment.payment_type,
+        'amount': float(payment.amount),
+        'paid_at': payment.paid_at.strftime('%d/%m/%Y %H:%M') if payment.paid_at else '—',
+        'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y') if vehicle.qr_code_expiry else '—',
+        'recorded_by': payment.recorded_by or '—',
+    })
 
 
 @main_bp.route('/vehicles/<int:vehicle_id>/track')

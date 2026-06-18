@@ -402,9 +402,24 @@ def create_app():
                         ))
                         logger.info("Created st_employees table")
 
+                    dl_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(driver_licenses)")).fetchall()}
+                    dl_col_defs = {
+                        'nationalite':           "ALTER TABLE driver_licenses ADD COLUMN nationalite VARCHAR(100)",
+                        'sexe':                  "ALTER TABLE driver_licenses ADD COLUMN sexe VARCHAR(10)",
+                        'points':                "ALTER TABLE driver_licenses ADD COLUMN points INTEGER NOT NULL DEFAULT 12",
+                        'holder_firstname':      "ALTER TABLE driver_licenses ADD COLUMN holder_firstname VARCHAR(100)",
+                        'lieu_naissance':        "ALTER TABLE driver_licenses ADD COLUMN lieu_naissance VARCHAR(150)",
+                        'centre_immatriculation':"ALTER TABLE driver_licenses ADD COLUMN centre_immatriculation VARCHAR(150)",
+                        'type_permis':           "ALTER TABLE driver_licenses ADD COLUMN type_permis VARCHAR(20) NOT NULL DEFAULT 'permanent'",
+                    }
+                    for col, sql in dl_col_defs.items():
+                        if col not in dl_cols:
+                            conn.execute(text(sql))
+                            logger.info(f"Added missing driver_licenses.{col} column")
+
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
-        
+
         # Initialize QR codes for all phones that don't have one
         from app.models import Phone, User
         try:

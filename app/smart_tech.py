@@ -753,6 +753,23 @@ def api_qr_table():
     })
 
 
+# ── Gestion des Véhicules ──────────────────────────────────────────────────────
+
+@smart_tech_bp.route('/gestion-vehicules')
+@smart_tech_required
+def gestion_vehicules_page():
+    return render_template('smart_tech_gestion_vehicules.html')
+
+
+# ── Renouvellement QR ──────────────────────────────────────────────────────────
+
+@smart_tech_bp.route('/renouvellement')
+@smart_tech_required
+def renouvellement_page():
+    renewal_price = int(SmartTechSetting.get('qr_renewal_price', 3000))
+    return render_template('smart_tech_renouvellement.html', renewal_price=renewal_price)
+
+
 # ── Subscriptions ──────────────────────────────────────────────────────────────
 
 @smart_tech_bp.route('/subscriptions')
