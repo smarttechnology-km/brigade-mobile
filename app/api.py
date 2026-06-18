@@ -3206,6 +3206,62 @@ def api_licenses_scan(license_id):
     return jsonify(lic.to_dict())
 
 
+@api_bp.route('/licenses/mobile/point-reasons', methods=['GET'])
+@jwt_required()
+def api_mobile_point_reasons():
+    """JWT-protected: list reduction reasons for mobile police app."""
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur', 'judiciaire']:
+        return jsonify({'error': 'Accès refusé'}), 403
+    reasons = PointReductionReason.query.order_by(PointReductionReason.created_at).all()
+    return jsonify([r.to_dict() for r in reasons])
+
+
+@api_bp.route('/licenses/<int:license_id>/mobile/reduce-points', methods=['POST'])
+@jwt_required()
+def api_mobile_reduce_points(license_id):
+    """JWT-protected: reduce license points from mobile police app."""
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur', 'judiciaire']:
+        return jsonify({'error': 'Accès refusé'}), 403
+    lic = DriverLicense.query.get_or_404(license_id)
+    data      = request.get_json() or {}
+    reason_id = data.get('reason_id')
+    reason    = PointReductionReason.query.get_or_404(reason_id)
+    before    = lic.points or 0
+    after     = max(0, before - reason.points_to_deduct)
+    lic.points = after
+
+    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.desc()).all()
+    for rule in rules:
+        matched = (rule.operator == 'lt'  and after <  rule.threshold) or \
+                  (rule.operator == 'lte' and after <= rule.threshold) or \
+                  (rule.operator == 'eq'  and after == rule.threshold)
+        if matched:
+            lic.status = rule.status
+            break
+
+    history = PointReductionHistory(
+        license_id      = lic.id,
+        reason_label    = reason.label,
+        points_deducted = reason.points_to_deduct,
+        points_before   = before,
+        points_after    = after,
+        created_by      = user.username,
+    )
+    db.session.add(history)
+    db.session.commit()
+    return jsonify(lic.to_dict())
+
+
 @api_bp.route('/licenses/<int:license_id>', methods=['PUT'])
 @login_required
 def api_licenses_update(license_id):
