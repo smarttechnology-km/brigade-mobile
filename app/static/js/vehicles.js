@@ -198,6 +198,23 @@ document.addEventListener('DOMContentLoaded', function() {
         // we're on the vehicles management page — load and bind add button
         console.log('Loading vehicles...');
         loadVehicles();
+
+        // ── Real-time sync via lightweight last-update polling ──
+        let _lastKey = null;
+        function _checkVehicleUpdates() {
+            if (document.hidden) return;
+            fetch('/api/vehicles/last-update', { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (!d) return;
+                    const key = d.last_update + '|' + d.total;
+                    if (_lastKey === null) { _lastKey = key; return; }
+                    if (key !== _lastKey) { _lastKey = key; loadVehicles(); }
+                })
+                .catch(() => {});
+        }
+        setInterval(_checkVehicleUpdates, 5000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) _checkVehicleUpdates(); });
         
         // Load insurances for the vehicle form
         if (typeof loadInsurances === 'function') {
