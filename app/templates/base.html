@@ -160,14 +160,16 @@
 
             {% if current_user.is_authenticated %}
             <div class="px-2 mt-2 pb-2 border-top border-secondary pt-2">
-                {% if not current_user.is_insurance_account %}
-                <a href="/profile" class="btn btn-light btn-sm w-100 mb-1">Mon profil</a>
-                {% endif %}
                 <div class="d-flex gap-1">
-                    <button onclick="toggleTheme()" class="btn btn-outline-light flex-fill" id="themeToggle" title="Thème sombre / clair" style="padding:3px 0;font-size:11px;">
+                    {% if not current_user.is_insurance_account %}
+                    <a href="/profile" class="btn btn-light btn-sm flex-fill" title="Mon profil">
+                        <i class="fas fa-user"></i>
+                    </a>
+                    {% endif %}
+                    <button onclick="toggleTheme()" class="btn btn-outline-light btn-sm flex-fill" id="themeToggle" title="Thème sombre / clair" style="padding:6px 0;">
                         <i class="fas fa-moon"></i>
                     </button>
-                    <a href="/auth/logout" class="btn btn-outline-danger flex-fill" title="Se déconnecter" style="padding:3px 0;font-size:11px;">
+                    <a href="/auth/logout" class="btn btn-outline-danger btn-sm flex-fill" title="Se déconnecter" style="padding:6px 0;">
                         <i class="fas fa-sign-out-alt"></i>
                     </a>
                 </div>
