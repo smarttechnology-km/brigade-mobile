@@ -12,9 +12,11 @@
       <p class="text-muted mb-0">Gestion des permis de conduire</p>
     </div>
     <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
+      {% if current_user.role == 'administrateur' %}
       <button class="btn btn-outline-secondary" onclick="openSettingsModal()" title="Paramètres">
         <i class="fas fa-cog me-2"></i>Paramètres
       </button>
+      {% endif %}
       <button class="btn btn-primary" onclick="openAddModal()">
         <i class="fas fa-plus me-2"></i>Ajouter un permis
       </button>
@@ -549,5 +551,6 @@
   </div>
 </div>
 
+<script>window.CURRENT_USER_ROLE = {{ current_user.role | tojson }};</script>
 <script src="/static/js/licenses.js"></script>
 {% endblock %}
