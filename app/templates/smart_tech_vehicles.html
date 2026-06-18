@@ -243,6 +243,12 @@
         <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item active">
             <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
         </a>
+        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
+        </a>
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
@@ -394,9 +400,12 @@
                             <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td style="white-space:nowrap;">
                             <button class="btn-history" onclick="openHistory({{ row.vehicle_id }}, '{{ row.license_plate | e }}')">
                                 <i class="fas fa-history me-1"></i>Historique
+                            </button>
+                            <button class="btn-history" style="margin-left:6px;background:rgba(240,180,41,0.08);border-color:rgba(240,180,41,0.25);color:#f0b429;" onclick="downloadReceipt({{ row.vehicle_id }})">
+                                <i class="fas fa-receipt me-1"></i>Reçu
                             </button>
                         </td>
                     </tr>
@@ -435,6 +444,67 @@
     </div>
 
 </main>
+
+<!-- ── Receipt Modal ── -->
+<div class="modal fade" id="qrReceiptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+    <div class="modal-content border-0 shadow-lg" style="background:var(--st-surface);color:#e6edf3;border:1px solid var(--st-border)!important;">
+      <div class="modal-header border-0 pb-0">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <span style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.6px;color:var(--st-cyan);font-weight:600;" id="receipt-type-label">Reçu</span>
+          <h5 class="modal-title" style="font-weight:700;color:#fff;margin:0;">Reçu de Paiement</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="receipt-printable">
+        <div style="text-align:center;padding:0.75rem 0 1rem;border-bottom:1px dashed rgba(255,255,255,0.12);margin-bottom:1rem;">
+          <div style="font-size:1.6rem;margin-bottom:4px;">🧾</div>
+          <div style="font-weight:700;font-size:0.95rem;color:#fff;">Brigade Mobile — Comores</div>
+          <div style="font-size:0.74rem;color:rgba(255,255,255,0.45);">Smart Technology · Véhicules</div>
+        </div>
+        <div style="text-align:center;margin-bottom:1rem;">
+          <div id="receipt-amount" style="font-size:2rem;font-weight:800;color:var(--st-green);">—</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.4);">Montant payé</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:0.9rem 1rem;font-size:0.83rem;">
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span style="color:rgba(255,255,255,0.5);">Immatriculation</span>
+            <strong id="receipt-plate" style="color:var(--st-cyan);font-family:monospace;letter-spacing:1px;">—</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span style="color:rgba(255,255,255,0.5);">Propriétaire</span>
+            <span id="receipt-owner">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span style="color:rgba(255,255,255,0.5);">Type</span>
+            <span id="receipt-type">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span style="color:rgba(255,255,255,0.5);">Date</span>
+            <span id="receipt-date">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span style="color:rgba(255,255,255,0.5);">Expiration QR</span>
+            <span id="receipt-expiry" style="color:var(--st-green);">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;">
+            <span style="color:rgba(255,255,255,0.5);">Enregistré par</span>
+            <span id="receipt-agent">—</span>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:1rem;font-size:0.72rem;color:rgba(255,255,255,0.25);">Reçu généré automatiquement</div>
+      </div>
+      <div class="modal-footer border-0 pt-0" style="justify-content:space-between;">
+        <button class="btn btn-sm btn-outline-secondary" onclick="printQRReceipt()" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);">
+          <i class="fas fa-print me-1"></i>Imprimer
+        </button>
+        <button class="btn btn-sm" data-bs-dismiss="modal" style="background:var(--st-cyan);color:#000;font-weight:600;">
+          <i class="fas fa-check me-1"></i>Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ── History modal ── -->
 <div class="st-modal-backdrop" id="history-modal">
@@ -597,8 +667,10 @@
                         + '<td>' + escHtml(row.recorded_by || '—') + '</td>'
                         + '<td class="text-muted">' + (row.date || '—') + '</td>'
                         + '<td>' + expCell + '</td>'
-                        + '<td><button class="btn-history" onclick="openHistory(' + row.vehicle_id + ',\'' + escHtml(row.license_plate) + '\')">'
-                        + '<i class="fas fa-history me-1"></i>Historique</button></td>'
+                        + '<td style="white-space:nowrap;"><button class="btn-history" onclick="openHistory(' + row.vehicle_id + ',\'' + escHtml(row.license_plate) + '\')">'
+                        + '<i class="fas fa-history me-1"></i>Historique</button>'
+                        + '<button class="btn-history" style="margin-left:6px;background:rgba(240,180,41,0.08);border-color:rgba(240,180,41,0.25);color:#f0b429;" onclick="downloadReceipt(' + row.vehicle_id + ')">'
+                        + '<i class="fas fa-receipt me-1"></i>Reçu</button></td>'
                         + '</tr>';
                 }).join('');
 
@@ -700,6 +772,115 @@
 
     window.closeHistory = function () {
         document.getElementById('history-modal').classList.remove('open');
+    };
+
+    /* ── Receipt ── */
+    let _receiptData = {};
+
+    function showQRReceipt(data) {
+        _receiptData = data;
+        const typeLabel = data.payment_type === 'activation' ? 'Activation QR Code' : 'Renouvellement QR Code';
+        document.getElementById('receipt-type-label').textContent = data.payment_type === 'activation' ? 'Reçu d\'activation' : 'Reçu de renouvellement';
+        document.getElementById('receipt-amount').textContent = Number(data.amount).toLocaleString('fr-FR') + ' KMF';
+        document.getElementById('receipt-plate').textContent  = data.license_plate || '—';
+        document.getElementById('receipt-owner').textContent  = data.owner_name || '—';
+        document.getElementById('receipt-type').textContent   = typeLabel;
+        document.getElementById('receipt-date').textContent   = data.paid_at || '—';
+        document.getElementById('receipt-expiry').textContent = data.new_expiry || '—';
+        document.getElementById('receipt-agent').textContent  = data.recorded_by || '—';
+        new bootstrap.Modal(document.getElementById('qrReceiptModal')).show();
+    }
+
+    window.printQRReceipt = function() {
+        const d = _receiptData;
+        const typeLabel = d.payment_type === 'activation' ? 'Activation QR Code' : 'Renouvellement QR Code';
+        const amount = Number(d.amount).toLocaleString('fr-FR') + ' KMF';
+
+        function receiptBlock(copy) {
+            return `
+<div class="receipt">
+  <div class="copy-label">${copy}</div>
+  <div class="receipt-header">
+    <div class="org">Brigade Mobile — Comores</div>
+    <div class="sub">Smart Technology · Véhicules</div>
+    <span class="receipt-type">${typeLabel}</span>
+  </div>
+  <div class="amount-block">
+    <div class="amount-value">${amount}</div>
+    <div class="amount-label">Montant payé</div>
+  </div>
+  <div class="details">
+    <div class="row"><span class="label">Immatriculation</span><span class="value plate">${d.license_plate || '—'}</span></div>
+    <div class="row"><span class="label">Propriétaire</span><span class="value">${d.owner_name || '—'}</span></div>
+    <div class="row"><span class="label">Type</span><span class="value">${typeLabel}</span></div>
+    <div class="row"><span class="label">Date</span><span class="value">${d.paid_at || '—'}</span></div>
+    <div class="row"><span class="label">Expiration QR</span><span class="value green">${d.new_expiry || '—'}</span></div>
+    <div class="row"><span class="label">Enregistré par</span><span class="value">${d.recorded_by || '—'}</span></div>
+  </div>
+  <div class="sig-row">
+    <div class="sig-box"><div class="sig-label">Signature agent</div><div class="sig-line"></div></div>
+    <div class="sig-box"><div class="sig-label">Signature client</div><div class="sig-line"></div></div>
+  </div>
+  <div class="receipt-footer">Reçu généré automatiquement — Brigade Mobile des Comores</div>
+</div>`;
+        }
+
+        const w = window.open('', '_blank', 'width=794,height=1123');
+        w.document.write(`<!DOCTYPE html><html lang="fr"><head>
+<meta charset="UTF-8">
+<title>Reçu — ${d.license_plate || ''}</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #1a1a2e; font-size: 13px; }
+  .page { width: 100%; display: flex; flex-direction: column; gap: 0; }
+  .receipt { width: 100%; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; margin-bottom: 2mm; }
+  .copy-label { background: #f5f5f5; text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #555; padding: 5px; border-bottom: 1px solid #e0e0e0; }
+  .receipt-header { background: #1a3a5c; color: #fff; text-align: center; padding: 14px 16px 12px; }
+  .receipt-header .org { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+  .receipt-header .sub { font-size: 10px; color: rgba(255,255,255,0.65); }
+  .receipt-type { display: inline-block; margin-top: 8px; background: rgba(255,255,255,0.15); border-radius: 20px; padding: 2px 12px; font-size: 11px; font-weight: 600; }
+  .amount-block { background: #f0faf4; text-align: center; padding: 12px 16px; border-bottom: 1px dashed #c8e6c9; }
+  .amount-value { font-size: 24px; font-weight: 800; color: #2e7d32; }
+  .amount-label { font-size: 10px; color: #888; margin-top: 1px; }
+  .details { padding: 8px 16px; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+  .row:last-child { border-bottom: none; }
+  .row .label { color: #777; }
+  .row .value { font-weight: 600; text-align: right; }
+  .plate { color: #1a3a5c; font-family: monospace; letter-spacing: 1px; }
+  .green { color: #2e7d32; }
+  .sig-row { display: flex; gap: 16px; padding: 10px 16px 8px; border-top: 1px solid #f0f0f0; }
+  .sig-box { flex: 1; }
+  .sig-label { font-size: 10px; color: #aaa; margin-bottom: 4px; }
+  .sig-line { border-bottom: 1px solid #ccc; height: 22px; }
+  .receipt-footer { text-align: center; padding: 6px 16px 8px; font-size: 9px; color: #bbb; background: #fafafa; border-top: 1px solid #eee; }
+  .cut-line { display: flex; align-items: center; gap: 8px; margin: 4mm 0; color: #aaa; font-size: 10px; }
+  .cut-line::before, .cut-line::after { content: ''; flex: 1; border-top: 1px dashed #ccc; }
+  .no-print { text-align: center; padding: 16px; }
+  .btn-print { background: #1a3a5c; color: #fff; border: none; padding: 9px 28px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600; }
+  @media print { .no-print { display: none; } }
+</style></head><body>
+<div class="page">
+  ${receiptBlock('✂ Exemplaire Client')}
+  <div class="cut-line">✂ &nbsp; Couper ici</div>
+  ${receiptBlock('📁 Exemplaire Archives')}
+</div>
+<div class="no-print"><button class="btn-print" onclick="window.print()">🖨️ Imprimer</button></div>
+</body></html>`);
+        w.document.close();
+        setTimeout(() => w.print(), 600);
+    };
+
+    window.downloadReceipt = async function(vid) {
+        try {
+            const r = await fetch('/api/vehicles/' + vid + '/qrcode/last-receipt', { credentials: 'same-origin' });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || 'Aucun reçu disponible');
+            showQRReceipt(data);
+        } catch (e) {
+            alert(e.message);
+        }
     };
 
     document.getElementById('history-modal').addEventListener('click', function (e) {
