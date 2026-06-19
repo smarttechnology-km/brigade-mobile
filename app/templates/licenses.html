@@ -210,11 +210,11 @@
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
-                <input type="text" id="f-holder_name" class="form-control text-uppercase" placeholder="Nom de famille" required>
+                <input type="text" id="f-holder_firstname" class="form-control text-uppercase" placeholder="Ex : IBRAHIM" required>
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-semibold">Prénom</label>
-                <input type="text" id="f-holder_firstname" class="form-control" placeholder="Prénom">
+                <input type="text" id="f-holder_name" class="form-control" placeholder="Ex : Ahmed">
               </div>
             </div>
           </div>
@@ -286,7 +286,12 @@
           </div>
           <div class="col-12">
             <label class="form-label">Centre d'immatriculation</label>
-            <input type="text" id="f-centre_immatriculation" class="form-control" placeholder="Ex : Centre de Moroni">
+            <select id="f-centre_immatriculation" class="form-select">
+              <option value="">— Sélectionner un centre —</option>
+              <option value="Centre de Moroni">Centre de Moroni</option>
+              <option value="Centre de Mutsamudu">Centre de Mutsamudu</option>
+              <option value="Centre de Fomboni">Centre de Fomboni</option>
+            </select>
           </div>
           <div class="col-12">
             <label class="form-label">Catégories</label>
@@ -367,6 +372,9 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" onclick="printLicenseDetails()">
           <i class="fas fa-print me-1"></i>Imprimer
+        </button>
+        <button type="button" id="btn-carte-digitale" class="btn btn-outline-primary" onclick="printLicenseCard()" style="display:none;">
+          <i class="fas fa-id-card me-1"></i>Carte digitale
         </button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
       </div>
