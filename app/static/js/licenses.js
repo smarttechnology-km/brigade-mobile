@@ -625,6 +625,11 @@
         window.open(`/licenses/${_currentLicense.id}/${route}`, '_blank');
     };
 
+    window.printLicenseCard = function () {
+        if (!_currentLicense) return;
+        window.open(`/licenses/${_currentLicense.id}/print-card`, '_blank');
+    };
+
     window.viewLicense = function (id) {
         // Reset to details tab and wire up history tab
         const detailsTab = document.querySelector('[data-bs-target="#view-tab-details"]');
@@ -639,6 +644,8 @@
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(l => {
                 _currentLicense = l;
+                const btnCarte = document.getElementById('btn-carte-digitale');
+                if (btnCarte) btnCarte.style.display = l.type_permis === 'permanent' ? '' : 'none';
                 const cats = l.categories
                     ? l.categories.split(',').map(c => `<span class="badge bg-info text-dark me-1">${esc(c.trim())}</span>`).join('')
                     : '—';
