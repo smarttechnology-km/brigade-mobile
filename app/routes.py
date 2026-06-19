@@ -755,10 +755,8 @@ def licenses_page():
 def license_qrcode(license_id):
     from app.models import DriverLicense
     lic = DriverLicense.query.get_or_404(license_id)
-    # QR links to the print page (already login-protected)
-    url = f"{request.host_url.rstrip('/')}/licenses/{lic.id}/print"
     qr = qrcode.QRCode(box_size=6, border=2)
-    qr.add_data(url)
+    qr.add_data(lic.license_number)
     qr.make(fit=True)
     img = qr.make_image(fill_color='black', back_color='white')
     buf = io.BytesIO()
@@ -774,6 +772,15 @@ def license_print(license_id):
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
     return render_template('license_print.html', lic=lic, settings=settings)
+
+
+@main_bp.route('/licenses/<int:license_id>/print-card')
+@roles_required('administrateur', 'judiciaire')
+def license_print_card(license_id):
+    from app.models import DriverLicense, LicenseSetting
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    return render_template('license_card.html', lic=lic, settings=settings, now_comoros=now_comoros)
 
 
 @main_bp.route('/licenses/<int:license_id>/print-history')
