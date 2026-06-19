@@ -3192,6 +3192,26 @@ def api_licenses_get(license_id):
     return jsonify(lic.to_dict())
 
 
+@api_bp.route('/licenses/scan-by-number', methods=['GET'])
+@jwt_required()
+def api_licenses_scan_by_number():
+    """JWT-protected: find a license by its license_number (from QR code)."""
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur', 'judiciaire']:
+        return jsonify({'error': 'Accès refusé'}), 403
+    number = request.args.get('number', '').strip().upper()
+    if not number:
+        return jsonify({'error': 'Numéro manquant'}), 400
+    lic = DriverLicense.query.filter_by(license_number=number).first()
+    if not lic:
+        return jsonify({'error': 'Permis introuvable'}), 404
+    return jsonify(lic.to_dict())
+
+
 @api_bp.route('/licenses/<int:license_id>/scan', methods=['GET'])
 @jwt_required()
 def api_licenses_scan(license_id):

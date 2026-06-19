@@ -1804,7 +1804,7 @@ def get_vehicle_qrcode(vehicle_id):
         _record_qr_payment(vehicle, 'activation', current_user.username)
 
     # URL publique de suivi
-    track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+    track_url = vehicle.license_plate
     # Générer QR code PNG
     qr = qrcode.QRCode(box_size=6, border=2)
     qr.add_data(track_url)
@@ -1841,7 +1841,7 @@ def get_vehicle_qrcode_pdf(vehicle_id):
             _record_qr_payment(vehicle, 'activation', current_user.username)
 
         # Générer QR code
-        track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+        track_url = vehicle.license_plate
         qr = qrcode.QRCode(box_size=6, border=2)
         qr.add_data(track_url)
         qr.make(fit=True)
@@ -1933,7 +1933,7 @@ def vehicle_sheet_pdf(vehicle_id):
             db.session.commit()
             _record_qr_payment(vehicle, 'activation', current_user.username)
 
-        track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+        track_url = vehicle.license_plate
         qr = qrcode.QRCode(box_size=6, border=2)
         qr.add_data(track_url)
         qr.make(fit=True)
@@ -3034,7 +3034,7 @@ def public_track_qrcode(token):
         abort(403)
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
     # point the QR to the public tracking page itself
-    track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+    track_url = vehicle.license_plate
     qr = qrcode.QRCode(box_size=6, border=2)
     qr.add_data(track_url)
     qr.make(fit=True)
@@ -3071,7 +3071,7 @@ def public_track_qrcode_pdf(token):
             _record_qr_payment(vehicle, 'activation', current_user.username)
 
         # Générer QR code
-        track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+        track_url = vehicle.license_plate
         qr = qrcode.QRCode(box_size=6, border=2)
         qr.add_data(track_url)
         qr.make(fit=True)
