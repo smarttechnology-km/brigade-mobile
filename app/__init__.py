@@ -417,6 +417,15 @@ def create_app():
                             conn.execute(text(sql))
                             logger.info(f"Added missing driver_licenses.{col} column")
 
+                    lpr_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='license_print_requests'")
+                    ).first() is not None
+                    if lpr_exists:
+                        lpr_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(license_print_requests)")).fetchall()}
+                        if 'unit_price' not in lpr_cols:
+                            conn.execute(text("ALTER TABLE license_print_requests ADD COLUMN unit_price FLOAT NOT NULL DEFAULT 0"))
+                            logger.info("Added missing license_print_requests.unit_price column")
+
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
 

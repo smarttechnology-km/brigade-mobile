@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -3368,3 +3368,74 @@ def api_licenses_photo(license_id):
     lic.photo_filename = filename
     db.session.commit()
     return jsonify({'photo_url': f'/static/uploads/license_photos/{filename}'})
+
+
+# ── License print requests ────────────────────────────────────────────────────
+
+@api_bp.route('/licenses/<int:license_id>/print-request', methods=['POST'])
+@login_required
+def api_license_print_request_create(license_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    lic = DriverLicense.query.get_or_404(license_id)
+    data  = request.get_json(silent=True) or {}
+    notes = (data.get('notes') or '').strip() or None
+
+    existing = LicensePrintRequest.query.filter_by(license_id=lic.id, status='pending').first()
+    if existing:
+        return jsonify({'error': 'Une demande d\'impression est déjà en attente pour ce permis.'}), 409
+
+    req = LicensePrintRequest(
+        license_id=lic.id,
+        requested_by=current_user.username,
+        notes=notes,
+    )
+    db.session.add(req)
+    db.session.commit()
+    return jsonify({'ok': True, 'request': req.to_dict()}), 201
+
+
+@api_bp.route('/licenses/<int:license_id>/print-requests', methods=['GET'])
+@login_required
+def api_license_print_requests_list(license_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    DriverLicense.query.get_or_404(license_id)
+    reqs = (LicensePrintRequest.query
+            .filter_by(license_id=license_id)
+            .order_by(LicensePrintRequest.requested_at.desc())
+            .all())
+    return jsonify([r.to_dict() for r in reqs])
+
+
+@api_bp.route('/licenses/print-requests/<int:req_id>', methods=['DELETE'])
+@login_required
+def api_license_print_request_cancel(req_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = LicensePrintRequest.query.get_or_404(req_id)
+    req.status = 'cancelled'
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/licenses/print-requests/pending-count', methods=['GET'])
+@login_required
+def api_license_print_requests_pending_count():
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    count = LicensePrintRequest.query.filter_by(status='pending').count()
+    return jsonify({'count': count})
+
+
+@api_bp.route('/licenses/print-requests', methods=['GET'])
+@login_required
+def api_license_print_requests_all():
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    status_filter = request.args.get('status')
+    q = LicensePrintRequest.query
+    if status_filter:
+        q = q.filter_by(status=status_filter)
+    reqs = q.order_by(LicensePrintRequest.requested_at.desc()).all()
+    return jsonify([r.to_dict() for r in reqs])

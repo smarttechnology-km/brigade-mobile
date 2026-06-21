@@ -1145,6 +1145,41 @@ class DriverLicense(db.Model):
         }
 
 
+class LicensePrintRequest(db.Model):
+    __tablename__ = 'license_print_requests'
+    id           = db.Column(db.Integer, primary_key=True)
+    license_id   = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False)
+    requested_by = db.Column(db.String(100), nullable=False)
+    requested_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    status       = db.Column(db.String(20), nullable=False, default='pending')  # pending | printed | cancelled
+    printed_by   = db.Column(db.String(100))
+    printed_at   = db.Column(db.DateTime)
+    unit_price   = db.Column(db.Float, nullable=False, default=0)
+    notes        = db.Column(db.Text)
+
+    license = db.relationship('DriverLicense', backref=db.backref('print_requests', lazy='dynamic'))
+
+    def to_dict(self):
+        lic = self.license
+        return {
+            'id':           self.id,
+            'license_id':   self.license_id,
+            'license_number': lic.license_number if lic else '',
+            'holder_name':    lic.holder_name    if lic else '',
+            'holder_firstname': lic.holder_firstname if lic else '',
+            'type_permis':  lic.type_permis      if lic else '',
+            'categories':   lic.categories       if lic else '',
+            'photo_filename': lic.photo_filename  if lic else '',
+            'requested_by': self.requested_by,
+            'requested_at': self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else '',
+            'status':       self.status,
+            'printed_by':   self.printed_by or '',
+            'printed_at':   self.printed_at.strftime('%d/%m/%Y %H:%M') if self.printed_at else '',
+            'unit_price':   self.unit_price or 0,
+            'notes':        self.notes or '',
+        }
+
+
 class PointReductionReason(db.Model):
     __tablename__ = 'point_reduction_reasons'
     id               = db.Column(db.Integer, primary_key=True)

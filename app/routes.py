@@ -771,7 +771,14 @@ def license_print(license_id):
     from app.models import DriverLicense, LicenseSetting
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
-    return render_template('license_print.html', lic=lic, settings=settings)
+    force_temporaire = request.args.get('temporaire') == '1'
+    computed_expiry = None
+    if force_temporaire and not lic.expiry_date and lic.issue_date:
+        months = settings.temp_validity_months or 12
+        from dateutil.relativedelta import relativedelta
+        computed_expiry = lic.issue_date + relativedelta(months=months)
+    return render_template('license_print.html', lic=lic, settings=settings,
+                           force_temporaire=force_temporaire, computed_expiry=computed_expiry)
 
 
 @main_bp.route('/licenses/<int:license_id>/print-card')
@@ -781,6 +788,12 @@ def license_print_card(license_id):
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
     return render_template('license_card.html', lic=lic, settings=settings, now_comoros=now_comoros)
+
+
+@main_bp.route('/licenses/print-requests')
+@roles_required('administrateur', 'judiciaire')
+def license_print_requests_page():
+    return render_template('license_print_requests.html')
 
 
 @main_bp.route('/licenses/<int:license_id>/print-history')
@@ -3205,6 +3218,12 @@ def update_vehicle(vehicle_id):
             qr_expired = False
         if vehicle.status == 'inactive' or qr_expired:
             return jsonify({'error': "Impossible de modifier l'assurance: le véhicule est inactif ou le QR code est expiré."}), 400
+        # Block modification when the current insurance is still active
+        if vehicle.insurance_expiry:
+            ins_exp = ensure_comoros(vehicle.insurance_expiry)
+            if ins_exp > now_comoros():
+                return jsonify({'error': "Impossible de modifier l'assurance: l'assurance actuelle est encore active jusqu'au "
+                                         + ins_exp.strftime('%d/%m/%Y') + "."}), 400
 
     # Tax agents can renew vignette only when vehicle QR code is active.
     vignette_update_requested = 'vignette_expiry' in data
@@ -3901,13 +3920,35 @@ def get_insurance_vehicles():
             if v.id not in existing_ids:
                 vehicles.append(v)
 
+    from app.models import QRCodePayment
+    # Most recent QR payment per vehicle (for sort order)
+    vehicle_ids_all = [v.id for v in vehicles]
+    last_payments = {}
+    if vehicle_ids_all:
+        rows = QRCodePayment.query.filter(
+            QRCodePayment.vehicle_id.in_(vehicle_ids_all),
+            QRCodePayment.status == 'paid',
+        ).order_by(QRCodePayment.paid_at.desc()).all()
+        for p in rows:
+            if p.vehicle_id not in last_payments:
+                last_payments[p.vehicle_id] = p.paid_at
+
     vehicles_payload = []
     for vehicle in vehicles:
         vehicle_data = vehicle.to_dict()
         vehicle_data['has_unpaid_fines'] = vehicle_has_unpaid_fines(vehicle.id)
         vehicle_data['block_reason'] = get_vehicle_block_reason_for_insurance(vehicle)
         vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
+        lp = last_payments.get(vehicle.id)
+        vehicle_data['last_payment_at'] = lp.isoformat() if lp else None
         vehicles_payload.append(vehicle_data)
+
+    # Sort: vehicles with recent QR payments first (most recent on top), then others by license plate
+    from datetime import datetime as _dt
+    vehicles_payload.sort(
+        key=lambda v: v['last_payment_at'] or '0000',
+        reverse=True,
+    )
 
     return jsonify({
         "vehicles": vehicles_payload
@@ -4973,51 +5014,78 @@ def get_all_vehicles_report():
 @vehicle_bp.route('/reports/activity', methods=['GET'])
 @login_required
 def get_activity_report():
-    """Get activity report for a date range (insurance accounts only)"""
+    """Activity report by month: QR activations and renewals for insurance account vehicles."""
     if not isinstance(current_user, InsuranceAccount):
         return jsonify({"error": "Not an insurance account"}), 403
-    
+
+    import calendar as _cal
     from datetime import datetime
-    
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
-    if not start_date or not end_date:
-        return jsonify({"error": "start_date and end_date are required"}), 400
-    
+    from app.timezone_utils import COMOROS_TZ
+    from app.models import QRCodePayment
+
+    month_param = request.args.get('month')
+    if not month_param:
+        from app.timezone_utils import now_comoros
+        month_param = now_comoros().strftime('%Y-%m')
+
     try:
-        start = datetime.strptime(start_date, '%Y-%m-%d').date()
-        end = datetime.strptime(end_date, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
-    
-    # Get vehicles added/modified in this date range
-    assignments = VehicleInsuranceAssignment.query.filter(
-        VehicleInsuranceAssignment.insurance_account_id == current_user.id,
-        VehicleInsuranceAssignment.assigned_at >= start,
-        VehicleInsuranceAssignment.assigned_at <= end
-    ).order_by(VehicleInsuranceAssignment.assigned_at.desc()).all()
-    
+        year, month = map(int, month_param.split('-'))
+    except (ValueError, AttributeError):
+        return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
+
+    last_day = _cal.monthrange(year, month)[1]
+    start_dt = datetime(year, month, 1, 0, 0, 0, tzinfo=COMOROS_TZ)
+    end_dt   = datetime(year, month, last_day, 23, 59, 59, tzinfo=COMOROS_TZ)
+
+    # Vehicles belonging to this insurance account
+    assignments = VehicleInsuranceAssignment.query.filter_by(
+        insurance_account_id=current_user.id
+    ).all()
+    vehicle_ids = [a.vehicle_id for a in assignments]
+
+    if not vehicle_ids:
+        payments = []
+    else:
+        payments = QRCodePayment.query.filter(
+            QRCodePayment.vehicle_id.in_(vehicle_ids),
+            QRCodePayment.status == 'paid',
+            QRCodePayment.paid_at >= start_dt,
+            QRCodePayment.paid_at <= end_dt,
+        ).order_by(QRCodePayment.paid_at.desc()).all()
+
+    # Deduplicate: keep only the most recent payment per vehicle (payments already sorted desc)
+    seen = set()
     vehicles_data = []
-    for assignment in assignments:
-        vehicle = Vehicle.query.get(assignment.vehicle_id)
-        if vehicle:
-            v_dict = vehicle.to_dict()
-            v_dict['assigned_at'] = assignment.assigned_at.isoformat()
-            v_dict['assigned_by'] = assignment.assigned_by
-            vehicles_data.append(v_dict)
-    
-    result = {
-        "report_type": "Rapport d'Activité",
-        "generated_at": datetime.now().isoformat(),
+    for p in payments:
+        if p.vehicle_id in seen or not p.vehicle:
+            continue
+        seen.add(p.vehicle_id)
+        v = p.vehicle
+        vehicles_data.append({
+            'license_plate': v.license_plate,
+            'owner_name':    v.owner_name or '—',
+            'vehicle_type':  v.vehicle_type or '—',
+            'owner_island':  v.owner_island or '—',
+            'owner_phone':   v.owner_phone or '—',
+            'usage_type':    v.usage_type or '—',
+            'payment_type':  p.payment_type,
+            'paid_at':       p.paid_at.strftime('%d/%m/%Y %H:%M') if p.paid_at else '—',
+        })
+
+    activation_count = sum(1 for v in vehicles_data if v['payment_type'] == 'activation')
+    renewal_count    = sum(1 for v in vehicles_data if v['payment_type'] == 'renewal')
+
+    from app.timezone_utils import now_comoros
+    return jsonify({
+        "report_type":       "Rapport d'Activité",
+        "generated_at":      now_comoros().isoformat(),
         "insurance_company": current_user.insurance.company_name,
-        "start_date": start_date,
-        "end_date": end_date,
-        "count": len(vehicles_data),
-        "vehicles": vehicles_data
-    }
-    
-    return jsonify(result), 200
+        "month":             month_param,
+        "activation_count":  activation_count,
+        "renewal_count":     renewal_count,
+        "count":             len(vehicles_data),
+        "vehicles":          vehicles_data,
+    }), 200
 
 
 @vehicle_bp.route('/reports/statistics', methods=['GET'])

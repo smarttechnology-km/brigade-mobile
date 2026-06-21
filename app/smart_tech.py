@@ -1,10 +1,19 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_login import login_user, logout_user, login_required, current_user
 from functools import wraps
-from app.models import SmartTechAccount, QRCodePayment, Vehicle, Subscription, Expense, Employee, SmartTechSetting
+from app.models import SmartTechAccount, QRCodePayment, Vehicle, Subscription, Expense, Employee, SmartTechSetting, LicensePrintRequest, Insurance, InsuranceAccount, VehicleInsuranceAssignment
 from app import db
 
 smart_tech_bp = Blueprint('smart_tech', __name__, url_prefix='/smart-tech')
+
+
+@smart_tech_bp.context_processor
+def inject_licences_pending_count():
+    try:
+        count = LicensePrintRequest.query.filter_by(status='pending').count()
+    except Exception:
+        count = 0
+    return {'pending_count': count}
 
 
 def smart_tech_required(f):
@@ -58,11 +67,15 @@ def logout():
 @smart_tech_bp.route('/parametres')
 @st_admin_required
 def parametres_page():
-    activation_price = SmartTechSetting.get('qr_activation_price', 5000)
-    renewal_price    = SmartTechSetting.get('qr_renewal_price', 3000)
+    activation_price  = SmartTechSetting.get('qr_activation_price', 5000)
+    renewal_price     = SmartTechSetting.get('qr_renewal_price', 3000)
+    license_print_price  = SmartTechSetting.get('license_print_price', 0)
+    insurance_commission = SmartTechSetting.get('insurance_commission', 0)
     return render_template('smart_tech_parametres.html',
                            activation_price=int(activation_price),
                            renewal_price=int(renewal_price),
+                           license_print_price=int(license_print_price),
+                           insurance_commission=int(insurance_commission),
                            app_name=SmartTechSetting.get('app_name', 'SmartTech Brigade'),
                            app_island=SmartTechSetting.get('app_island', 'Nationale'),
                            app_contact=SmartTechSetting.get('app_contact', ''),
@@ -79,8 +92,10 @@ def parametres_page():
 @st_admin_required
 def api_parametres_get():
     return jsonify({
-        'qr_activation_price': SmartTechSetting.get('qr_activation_price', 5000),
-        'qr_renewal_price':    SmartTechSetting.get('qr_renewal_price', 3000),
+        'qr_activation_price':   SmartTechSetting.get('qr_activation_price', 5000),
+        'qr_renewal_price':      SmartTechSetting.get('qr_renewal_price', 3000),
+        'license_print_price':   SmartTechSetting.get('license_print_price', 0),
+        'insurance_commission':  SmartTechSetting.get('insurance_commission', 0),
         'app_name':    SmartTechSetting.get('app_name', 'SmartTech Brigade'),
         'app_island':  SmartTechSetting.get('app_island', 'Nationale'),
         'app_contact': SmartTechSetting.get('app_contact', ''),
@@ -94,7 +109,7 @@ _VALID_ISLANDS = {'Nationale', 'Grande Comore', 'Anjouan', 'Moheli'}
 def api_parametres_update():
     data = request.get_json(silent=True) or {}
     errors = []
-    for key in ('qr_activation_price', 'qr_renewal_price'):
+    for key in ('qr_activation_price', 'qr_renewal_price', 'license_print_price', 'insurance_commission'):
         val = data.get(key)
         if val is None:
             continue
@@ -1108,36 +1123,107 @@ def _build_report(period_type, period_value):
         Expense.expense_date <= end_d,
     ).order_by(Expense.expense_date).all()
 
+    # Printed licenses in period — use the price stored at print time
+    license_print_price = float(SmartTechSetting.get('license_print_price', 0))
+    licenses_printed = LicensePrintRequest.query.filter(
+        LicensePrintRequest.status == 'printed',
+        LicensePrintRequest.printed_at >= start_dt,
+        LicensePrintRequest.printed_at <= end_dt,
+    ).order_by(LicensePrintRequest.printed_at.desc()).all()
+    license_total = sum(lr.unit_price for lr in licenses_printed)
+
     act_total   = sum(q.amount for q in activations)
     ren_total   = sum(q.amount for q in renewals)
     man_total   = sum(s.amount for s in manual_paid)
     auto_total  = sum(s.amount for s in auto_due)
     sub_total   = man_total + auto_total
     exp_total   = sum(e.amount for e in expenses)
-    revenue     = act_total + ren_total
+    revenue     = act_total + ren_total + license_total
     net         = revenue - sub_total - exp_total
 
+    # Commission Assurance
+    # Commission is a monthly concept: always aggregate per-month so the Rapport
+    # matches the Mouvements tab regardless of whether the user selected a day or a month.
+    commission_rate = int(SmartTechSetting.get('insurance_commission', 0))
+    is_monthly = (period_type == 'monthly')
+    if period_type == 'daily':
+        receipt_month = period_value[:7]           # "2026-06-21" → "2026-06"
+        comm_start_dt, comm_end_dt = _period_bounds('monthly', receipt_month)
+    elif period_type == 'monthly':
+        receipt_month = period_value
+        comm_start_dt, comm_end_dt = start_dt, end_dt
+    else:
+        receipt_month = None                       # annual — no single-month receipt
+        comm_start_dt, comm_end_dt = start_dt, end_dt
+    companies  = Insurance.query.order_by(Insurance.company_name).all()
+    insurance_commissions = []
+    commission_total = 0
+    for ins in companies:
+        account_ids = [acc.id for acc in ins.accounts]
+        if account_ids:
+            assignments = VehicleInsuranceAssignment.query.filter(
+                VehicleInsuranceAssignment.insurance_account_id.in_(account_ids)
+            ).all()
+            vids = list({a.vehicle_id for a in assignments})
+        else:
+            vids = []
+        if vids:
+            qr_q = QRCodePayment.query.filter(
+                QRCodePayment.vehicle_id.in_(vids),
+                QRCodePayment.status == 'paid',
+                QRCodePayment.paid_at >= comm_start_dt,
+                QRCodePayment.paid_at <= comm_end_dt,
+            )
+            payments = qr_q.all()
+            comp_acts = sum(1 for p in payments if p.payment_type == 'activation')
+            comp_rens = sum(1 for p in payments if p.payment_type == 'renewal')
+        else:
+            comp_acts = comp_rens = 0
+        comp_comm = (comp_acts + comp_rens) * commission_rate
+        confirmed = False
+        confirmed_at = None
+        if receipt_month:
+            rval = SmartTechSetting.get('commission_received_%s_%s' % (ins.id, receipt_month), '')
+            if rval and rval != '0':
+                confirmed = True
+                confirmed_at = str(rval)
+        insurance_commissions.append({
+            'id': ins.id, 'company_name': ins.company_name, 'island': ins.island or '',
+            'activations': comp_acts, 'renewals': comp_rens,
+            'commission': comp_comm, 'confirmed': confirmed, 'confirmed_at': confirmed_at,
+        })
+        commission_total += comp_comm
+
     return {
-        'period_type':    period_type,
-        'period_value':   period_value,
-        'start_dt':       start_dt,
-        'end_dt':         end_dt,
-        'activations':    activations,
-        'renewals':       renewals,
-        'active_subs':    active_subs,
-        'manual_paid_ids': manual_paid_ids,
-        'auto_due_ids':    auto_due_ids,
-        'manual_paid':    manual_paid,
-        'auto_due':       auto_due,
-        'expenses':       expenses,
-        'act_total':      act_total,
-        'ren_total':      ren_total,
-        'man_total':      man_total,
-        'auto_total':     auto_total,
-        'sub_total':      sub_total,
-        'exp_total':      exp_total,
-        'revenue':        revenue,
-        'net':            net,
+        'period_type':        period_type,
+        'period_value':       period_value,
+        'start_dt':           start_dt,
+        'end_dt':             end_dt,
+        'activations':        activations,
+        'renewals':           renewals,
+        'active_subs':        active_subs,
+        'manual_paid_ids':    manual_paid_ids,
+        'auto_due_ids':       auto_due_ids,
+        'manual_paid':        manual_paid,
+        'auto_due':           auto_due,
+        'expenses':           expenses,
+        'licenses_printed':   licenses_printed,
+        'license_print_price': license_print_price,
+        'license_total':      license_total,
+        'act_total':          act_total,
+        'ren_total':          ren_total,
+        'man_total':          man_total,
+        'auto_total':         auto_total,
+        'sub_total':          sub_total,
+        'exp_total':          exp_total,
+        'revenue':            revenue,
+        'net':                net,
+        'insurance_commissions': insurance_commissions,
+        'commission_total':   commission_total,
+        'commission_rate':    commission_rate,
+        'is_monthly':         is_monthly,
+        'has_receipt':        receipt_month is not None,
+        'receipt_month':      receipt_month,
     }
 
 
@@ -1207,7 +1293,10 @@ def api_rapport():
         'period_label':      _period_label(r['period_type'], r['period_value']),
         'activations':       [q.to_dict() for q in r['activations']],
         'renewals':          [q.to_dict() for q in r['renewals']],
-        'subscriptions':     [fmt_sub(s) for s in r['active_subs']],
+        'subscriptions':     [fmt_sub(s) for s in r['manual_paid'] + r['auto_due']],
+        'licenses_printed':  [lr.to_dict() for lr in r['licenses_printed']],
+        'license_price':     r['license_print_price'],
+        'license_total':     round(r['license_total'], 2),
         'manual_paid':       [fmt_sub(s) for s in r['manual_paid']],
         'auto_due':          [fmt_sub(s) for s in r['auto_due']],
         'expenses':          [e.to_dict() for e in r['expenses']],
@@ -1221,6 +1310,12 @@ def api_rapport():
         'net':               round(r['net'], 2),
         'activation_price':  int(SmartTechSetting.get('qr_activation_price', 5000)),
         'renewal_price':     int(SmartTechSetting.get('qr_renewal_price', 3000)),
+        'insurance_commissions': r['insurance_commissions'],
+        'commission_total':  round(r['commission_total'], 2),
+        'commission_rate':   r['commission_rate'],
+        'is_monthly':        r['is_monthly'],
+        'has_receipt':       r['has_receipt'],
+        'receipt_month':     r['receipt_month'],
     })
 
 
@@ -1259,7 +1354,7 @@ def rapport_pdf():
     return Response(
         pdf_bytes,
         mimetype='application/pdf',
-        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+        headers={'Content-Disposition': f'inline; filename="{filename}"'},
     )
 
 
@@ -1330,18 +1425,21 @@ def _generate_pdf(r):
     story.append(Paragraph('Résumé', section_style))
     auto_subs   = [s for s in r['active_subs'] if s.payment_mode == 'automatique']
     manuel_subs = [s for s in r['active_subs'] if s.payment_mode == 'manuel']
+    comm_companies = sum(1 for c in r['insurance_commissions'] if c['commission'] > 0)
     summary_data = [
         [ph('Catégorie'), ph('Quantité'), ph('Montant')],
-        [p('Activations QR Code'),       p(str(len(r['activations']))),  p(fmt(r['act_total']))],
-        [p('Renouvellements QR Code'),   p(str(len(r['renewals']))),     p(fmt(r['ren_total']))],
-        [p('Abonnements automatiques'),  p(str(len(auto_subs))),         p(fmt(sum(s.amount for s in auto_subs)))],
-        [p('Abonnements manuels'),       p(str(len(manuel_subs))),       p(fmt(sum(s.amount for s in manuel_subs)))],
-        [p('Dépenses'),                  p(str(len(r['expenses']))),     p(fmt(r['exp_total']))],
+        [p('Activations QR Code'),       p(str(len(r['activations']))),        p(fmt(r['act_total']))],
+        [p('Renouvellements QR Code'),   p(str(len(r['renewals']))),            p(fmt(r['ren_total']))],
+        [p('Licences imprimées'),        p(str(len(r['licenses_printed']))),    p(fmt(r['license_total']))],
+        [p('Commission Assurance'),      p(str(comm_companies) + ' compagnies'), p(fmt(r['commission_total']))],
+        [p('Abonnements automatiques'),  p(str(len(auto_subs))),                p(fmt(sum(s.amount for s in auto_subs)))],
+        [p('Abonnements manuels'),       p(str(len(manuel_subs))),              p(fmt(sum(s.amount for s in manuel_subs)))],
+        [p('Dépenses'),                  p(str(len(r['expenses']))),            p(fmt(r['exp_total']))],
     ]
     summary_data += [
-        [p('Revenus totaux (Activations + Renouvellements)'), p(''), p(fmt(r['revenue']))],
-        [p('Charges totales (Abonnements + Dépenses)'),       p(''), p(fmt(r['sub_total'] + r['exp_total']))],
-        [p('Résultat net'),                                    p(''), p(fmt(r['net']))],
+        [p('Revenus totaux (Activations + Renouvellements + Licences)'), p(''), p(fmt(r['revenue']))],
+        [p('Charges totales (Abonnements + Dépenses)'),                  p(''), p(fmt(r['sub_total'] + r['exp_total']))],
+        [p('Résultat net'),                                               p(''), p(fmt(r['net']))],
     ]
     summary_tbl = Table(summary_data, colWidths=[W*0.55, W*0.2, W*0.25])
     base = tbl_style(colors.HexColor('#0d3460'))
@@ -1388,6 +1486,26 @@ def _generate_pdf(r):
         tbl.setStyle(tbl_style(colors.HexColor('#00aa88')))
         story.append(tbl)
 
+    # ── Licenses printed ──
+    if r['licenses_printed']:
+        story.append(Paragraph(f"Licences imprimées ({len(r['licenses_printed'])})", section_style))
+        data = [[ph('N° Permis'), ph('Titulaire'), ph('Imprimé par'), ph('Date impression'), ph('Montant')]]
+        for lr in r['licenses_printed']:
+            lic = lr.license
+            holder = ''
+            if lic:
+                holder = ((lic.holder_firstname or '') + ' ' + (lic.holder_name or '')).strip()
+            data.append([
+                p(lr.license.license_number if lr.license else '—'),
+                p(holder or '—'),
+                p(lr.printed_by or '—'),
+                p(lr.printed_at.strftime('%d/%m/%Y %H:%M') if lr.printed_at else '—'),
+                p(fmt(lr.unit_price)),
+            ])
+        tbl = Table(data, colWidths=[W*0.2, W*0.25, W*0.2, W*0.2, W*0.15], repeatRows=1)
+        tbl.setStyle(tbl_style(colors.HexColor('#6e40c9')))
+        story.append(tbl)
+
     # ── All active subscriptions ──
     if r['active_subs']:
         paid_ids_pdf    = r['manual_paid_ids']
@@ -1431,6 +1549,50 @@ def _generate_pdf(r):
             ])
         tbl = Table(data, colWidths=[W*0.3, W*0.18, W*0.2, W*0.15, W*0.17], repeatRows=1)
         tbl.setStyle(tbl_style(colors.HexColor('#cc3333')))
+        story.append(tbl)
+
+    # ── Commission Assurance ──
+    comm_list = [c for c in r['insurance_commissions'] if c['activations'] or c['renewals'] or c['commission']]
+    if comm_list or r['commission_rate']:
+        story.append(Paragraph(f"Commission Assurance ({r['commission_rate']:,} KMF/abonnement)".replace(',', ' '), section_style))
+        has_receipt = r.get('has_receipt', r.get('is_monthly', False))
+        receipt_month = r.get('receipt_month') or ''
+        hdr = [ph('Compagnie'), ph('Île'), ph('Activations'), ph('Renouvellements'), ph('Commission')]
+        if has_receipt:
+            hdr.append(ph('Réception'))
+        data = [hdr]
+        for c in r['insurance_commissions']:
+            row = [
+                p(c['company_name']), p(c['island'] or '—'),
+                p(str(c['activations'])), p(str(c['renewals'])),
+                p(fmt(c['commission'])),
+            ]
+            if has_receipt:
+                if c['confirmed'] and c['confirmed_at']:
+                    try:
+                        from datetime import datetime as _dt
+                        dt = _dt.fromisoformat(c['confirmed_at'])
+                        rcpt_txt = 'Reçue le ' + dt.strftime('%d/%m/%Y')
+                    except Exception:
+                        rcpt_txt = 'Reçue'
+                else:
+                    rcpt_txt = 'Non confirmée'
+                row.append(p(rcpt_txt))
+            data.append(row)
+        # Total row
+        total_row = [p('Total'), p(''), p(''), p(''), p(fmt(r['commission_total']))]
+        if has_receipt:
+            confirmed_count = sum(1 for c in r['insurance_commissions'] if c['confirmed'])
+            total_row.append(p(f'{confirmed_count}/{len(r["insurance_commissions"])} reçues'))
+        data.append(total_row)
+        col_widths = [W*0.28, W*0.14, W*0.14, W*0.16, W*0.14]
+        if has_receipt:
+            col_widths.append(W*0.14)
+        tbl = Table(data, colWidths=col_widths, repeatRows=1)
+        s = tbl_style(colors.HexColor('#b07a00'))
+        s.add('BACKGROUND', (0, len(data)-1), (-1, len(data)-1), colors.HexColor('#fff3cd'))
+        s.add('FONTNAME',   (0, len(data)-1), (-1, len(data)-1), 'Helvetica-Bold')
+        tbl.setStyle(s)
         story.append(tbl)
 
     story.append(Spacer(1, 1*cm))
@@ -1561,6 +1723,184 @@ def api_stats_iles():
     return jsonify(data)
 
 
+# ── Licences (cartes biométriques) ────────────────────────────────────────────
+
+@smart_tech_bp.route('/licences')
+@smart_tech_required
+def licences_page():
+    pending_count = LicensePrintRequest.query.filter_by(status='pending').count()
+    return render_template('smart_tech_licences.html', pending_count=pending_count)
+
+
+@smart_tech_bp.route('/api/licences/last-update')
+@smart_tech_required
+def api_licences_last_update():
+    """Lightweight change-detection key for print requests."""
+    from sqlalchemy import func
+    result = db.session.query(
+        func.max(LicensePrintRequest.requested_at).label('last_req'),
+        func.max(LicensePrintRequest.printed_at).label('last_print'),
+        func.count(LicensePrintRequest.id).label('total'),
+    ).one()
+    last_req   = result.last_req.strftime('%Y-%m-%d %H:%M:%S')   if result.last_req   else ''
+    last_print = result.last_print.strftime('%Y-%m-%d %H:%M:%S') if result.last_print else ''
+    return jsonify({'key': f'{last_req}|{last_print}|{result.total}'})
+
+
+@smart_tech_bp.route('/api/licences/requests')
+@smart_tech_required
+def api_licences_requests():
+    """All pending print requests, newest first."""
+    reqs = (LicensePrintRequest.query
+            .filter_by(status='pending')
+            .order_by(LicensePrintRequest.requested_at.asc())
+            .all())
+    return jsonify([r.to_dict() for r in reqs])
+
+
+@smart_tech_bp.route('/api/licences/requests/<int:req_id>/validate', methods=['POST'])
+@smart_tech_required
+def api_licences_request_validate(req_id):
+    from app.timezone_utils import now_comoros
+    req = LicensePrintRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': 'Cette demande n\'est plus en attente.'}), 409
+    req.status     = 'printed'
+    req.printed_by = current_user.username
+    req.printed_at = now_comoros()
+    req.unit_price = float(SmartTechSetting.get('license_print_price', 0))
+    db.session.commit()
+    return jsonify({'ok': True, 'request': req.to_dict()})
+
+
+@smart_tech_bp.route('/api/licences/requests/<int:req_id>/cancel', methods=['POST'])
+@smart_tech_required
+def api_licences_request_cancel(req_id):
+    req = LicensePrintRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': 'Cette demande n\'est plus en attente.'}), 409
+    req.status = 'cancelled'
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@smart_tech_bp.route('/api/licences/requests/stats')
+@smart_tech_required
+def api_licences_requests_stats():
+    from datetime import datetime, timedelta
+    from app.timezone_utils import now_comoros
+    now   = now_comoros()
+    today = now.date()
+    first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    pending_count   = LicensePrintRequest.query.filter_by(status='pending').count()
+    printed_today   = LicensePrintRequest.query.filter(
+        LicensePrintRequest.status == 'printed',
+        LicensePrintRequest.printed_at >= datetime.combine(today, datetime.min.time())
+    ).count()
+    printed_month   = LicensePrintRequest.query.filter(
+        LicensePrintRequest.status == 'printed',
+        LicensePrintRequest.printed_at >= first_of_month
+    ).count()
+    printed_total   = LicensePrintRequest.query.filter_by(status='printed').count()
+    cancelled_total = LicensePrintRequest.query.filter_by(status='cancelled').count()
+
+    return jsonify({
+        'pending_count':   pending_count,
+        'printed_today':   printed_today,
+        'printed_month':   printed_month,
+        'printed_total':   printed_total,
+        'cancelled_total': cancelled_total,
+    })
+
+
+@smart_tech_bp.route('/api/licences/requests/history')
+@smart_tech_required
+def api_licences_requests_history():
+    """All printed requests, newest first. Supports ?from=dd/mm/yyyy&to=dd/mm/yyyy."""
+    from datetime import datetime
+    q = LicensePrintRequest.query.filter_by(status='printed')
+    date_from = request.args.get('from')
+    date_to   = request.args.get('to')
+    if date_from:
+        try:
+            q = q.filter(LicensePrintRequest.printed_at >= datetime.strptime(date_from, '%d/%m/%Y'))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import timedelta
+            end = datetime.strptime(date_to, '%d/%m/%Y') + timedelta(days=1)
+            q = q.filter(LicensePrintRequest.printed_at < end)
+        except ValueError:
+            pass
+    reqs = q.order_by(LicensePrintRequest.printed_at.desc()).all()
+    return jsonify([r.to_dict() for r in reqs])
+
+
+@smart_tech_bp.route('/api/licences')
+@smart_tech_required
+def api_licences_list():
+    import math
+    from app.models import DriverLicense
+    page         = request.args.get('page', 1, type=int)
+    per_page     = 50
+    search       = request.args.get('search', '').strip()
+    type_filter  = request.args.get('type_filter', '').strip()
+    status_filter = request.args.get('status_filter', '').strip()
+
+    query = DriverLicense.query
+    if search:
+        term  = f'%{search}%'
+        query = query.filter(
+            db.or_(
+                DriverLicense.license_number.ilike(term),
+                DriverLicense.holder_name.ilike(term),
+                DriverLicense.holder_firstname.ilike(term),
+            )
+        )
+    if type_filter:
+        query = query.filter(DriverLicense.type_permis == type_filter)
+    if status_filter:
+        query = query.filter(DriverLicense.status == status_filter)
+
+    total    = query.count()
+    licenses = (query.order_by(DriverLicense.created_at.desc())
+                .offset((page - 1) * per_page).limit(per_page).all())
+    pages    = max(1, math.ceil(total / per_page))
+
+    return jsonify({
+        'licenses': [l.to_dict() for l in licenses],
+        'total':    total,
+        'pages':    pages,
+        'page':     page,
+        'per_page': per_page,
+    })
+
+
+@smart_tech_bp.route('/licences/<int:license_id>/card')
+@smart_tech_required
+def licences_card(license_id):
+    import io, base64, qrcode as _qrcode
+    from app.models import DriverLicense, LicenseSetting
+    from app.timezone_utils import now_comoros as _nc
+
+    lic      = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+
+    # Generate QR inline — avoids the /licenses/<id>/qrcode route which requires police auth
+    qr = _qrcode.QRCode(box_size=6, border=2)
+    qr.add_data(lic.license_number)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color='black', back_color='white')
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    qr_data_uri = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+
+    return render_template('license_card.html', lic=lic, settings=settings,
+                           now_comoros=_nc, qr_data_uri=qr_data_uri)
+
+
 # ── Employés ──────────────────────────────────────────────────────────────────
 
 @smart_tech_bp.route('/employes')
@@ -1688,3 +2028,402 @@ def api_employe_delete(emp_id):
     db.session.delete(emp)
     db.session.commit()
     return jsonify({'ok': True})
+
+
+# ── Backup / Restore ─────────────────────────────────────────────────────────
+
+_st_restore_tasks = {}  # task_id -> {'status': 'running'|'done'|'error', 'message': ..., 'tables': ...}
+
+
+@smart_tech_bp.route('/api/backup')
+@st_admin_required
+def api_st_backup():
+    import zipfile, json, io, os
+    from sqlalchemy import inspect, text
+    from flask import current_app, send_file
+    from app.timezone_utils import now_comoros
+
+    timestamp = now_comoros().strftime('%Y%m%d_%H%M%S')
+    db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    zip_buf = io.BytesIO()
+
+    def default_serial(obj):
+        import datetime
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        raise TypeError(f'Type {type(obj)} not serializable')
+
+    with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        if db_uri.startswith('sqlite'):
+            db_path = db_uri.replace('sqlite:///', '')
+            if os.path.isfile(db_path):
+                zf.write(db_path, f'smarttech_backup_{timestamp}.db')
+
+        inspector = inspect(db.engine)
+        all_tables = inspector.get_table_names()
+        backup_data = {}
+        with db.engine.connect() as conn:
+            for table in all_tables:
+                try:
+                    rows = conn.execute(text(f'SELECT * FROM "{table}"')).mappings().all()
+                    backup_data[table] = [dict(r) for r in rows]
+                except Exception:
+                    backup_data[table] = []
+
+        manifest = {
+            'created_at': now_comoros().isoformat(),
+            'tables': {t: len(backup_data.get(t, [])) for t in all_tables},
+        }
+        zf.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
+        json_bytes = json.dumps(backup_data, ensure_ascii=False, indent=2, default=default_serial).encode('utf-8')
+        zf.writestr(f'smarttech_backup_{timestamp}.json', json_bytes)
+
+    zip_buf.seek(0)
+    return send_file(
+        zip_buf,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'smarttech_backup_{timestamp}.zip'
+    )
+
+
+@smart_tech_bp.route('/api/restore', methods=['POST'])
+@st_admin_required
+def api_st_restore():
+    import zipfile, json, uuid, threading, io
+    from flask import current_app
+
+    f = request.files.get('backup_file')
+    if not f:
+        return jsonify({'error': 'Aucun fichier fourni.'}), 400
+
+    try:
+        raw_zip = f.read()
+        with zipfile.ZipFile(io.BytesIO(raw_zip)) as zf:
+            json_names = [n for n in zf.namelist() if n.endswith('.json') and 'backup' in n]
+            if not json_names:
+                return jsonify({'error': 'Aucun fichier JSON de backup trouvé dans le ZIP.'}), 400
+            raw = zf.read(json_names[0])
+            backup_data = json.loads(raw.decode('utf-8'))
+    except Exception as e:
+        return jsonify({'error': f'Fichier ZIP invalide : {e}'}), 400
+
+    task_id = str(uuid.uuid4())
+    _st_restore_tasks[task_id] = {'status': 'running', 'message': 'Restauration en cours…'}
+
+    sorted_names = sorted(backup_data.keys())
+    app = current_app._get_current_object()
+
+    def do_restore():
+        from sqlalchemy import text, inspect
+        with app.app_context():
+            try:
+                inspector = inspect(db.engine)
+                existing_tables = set(inspector.get_table_names())
+                tables_to_restore = [n for n in sorted_names if n in backup_data and backup_data[n]]
+                stats = {}
+                with db.engine.begin() as conn:
+                    db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+                    if db_uri.startswith('sqlite'):
+                        conn.execute(text('PRAGMA foreign_keys = OFF'))
+                        for name in reversed(tables_to_restore):
+                            if name in existing_tables:
+                                conn.execute(text(f'DELETE FROM "{name}"'))
+                        for name in tables_to_restore:
+                            if name not in existing_tables:
+                                continue
+                            rows = backup_data[name]
+                            if not rows:
+                                stats[name] = 0
+                                continue
+                            cols = list(rows[0].keys())
+                            placeholders = ', '.join(f':{c}' for c in cols)
+                            col_list = ', '.join(f'"{c}"' for c in cols)
+                            for row in rows:
+                                conn.execute(text(f'INSERT OR IGNORE INTO "{name}" ({col_list}) VALUES ({placeholders})'), row)
+                            stats[name] = len(rows)
+                        conn.execute(text('PRAGMA foreign_keys = ON'))
+                    else:
+                        for name in reversed(tables_to_restore):
+                            if name in existing_tables:
+                                conn.execute(text(f'TRUNCATE TABLE "{name}" CASCADE'))
+                        for name in tables_to_restore:
+                            if name not in existing_tables:
+                                continue
+                            rows = backup_data[name]
+                            if not rows:
+                                stats[name] = 0
+                                continue
+                            cols = list(rows[0].keys())
+                            placeholders = ', '.join(f':{c}' for c in cols)
+                            col_list = ', '.join(f'"{c}"' for c in cols)
+                            for row in rows:
+                                conn.execute(text(f'INSERT INTO "{name}" ({col_list}) VALUES ({placeholders}) ON CONFLICT DO NOTHING'), row)
+                            stats[name] = len(rows)
+                        # Reset sequences so new inserts don't conflict with restored IDs
+                        for name in tables_to_restore:
+                            if name not in existing_tables:
+                                continue
+                            try:
+                                conn.execute(text(
+                                    f"SELECT setval(pg_get_serial_sequence('\"{ name }\"', 'id'), "
+                                    f"COALESCE((SELECT MAX(id) FROM \"{name}\"), 0) + 1, false)"
+                                ))
+                            except Exception:
+                                pass
+                _st_restore_tasks[task_id] = {'status': 'done', 'message': 'Restauration réussie.', 'tables': stats}
+            except Exception as e:
+                _st_restore_tasks[task_id] = {'status': 'error', 'message': f'Restauration échouée : {e}'}
+
+    threading.Thread(target=do_restore, daemon=True).start()
+    return jsonify({'task_id': task_id})
+
+
+@smart_tech_bp.route('/api/restore/status/<task_id>', methods=['GET'])
+@st_admin_required
+def api_st_restore_status(task_id):
+    task = _st_restore_tasks.get(task_id)
+    if not task:
+        return jsonify({'error': 'Tâche inconnue.'}), 404
+    return jsonify(task)
+
+
+# ── Agence Assurance ─────────────────────────────────────────────────────────
+
+@smart_tech_bp.route('/assurance')
+@st_admin_required
+def assurance_page():
+    return render_template('smart_tech_assurance.html')
+
+
+# --- Companies ---
+
+@smart_tech_bp.route('/api/assurance/companies', methods=['GET'])
+@st_admin_required
+def api_assurance_companies():
+    companies = Insurance.query.order_by(Insurance.company_name).all()
+    return jsonify([c.to_dict() for c in companies])
+
+
+@smart_tech_bp.route('/api/assurance/companies', methods=['POST'])
+@st_admin_required
+def api_assurance_company_create():
+    data = request.get_json() or {}
+    name = data.get('company_name', '').strip()
+    if not name:
+        return jsonify({'error': "Le nom de la compagnie est requis."}), 400
+    if Insurance.query.filter_by(company_name=name).first():
+        return jsonify({'error': "Cette compagnie existe déjà."}), 400
+    ins = Insurance(
+        company_name=name,
+        phone=data.get('phone', '').strip() or None,
+        island=data.get('island', '').strip() or None,
+        address=data.get('address', '').strip() or None,
+    )
+    db.session.add(ins)
+    db.session.commit()
+    return jsonify(ins.to_dict()), 201
+
+
+@smart_tech_bp.route('/api/assurance/companies/<int:ins_id>', methods=['PUT'])
+@st_admin_required
+def api_assurance_company_update(ins_id):
+    ins = Insurance.query.get_or_404(ins_id)
+    data = request.get_json() or {}
+    if 'company_name' in data:
+        name = data['company_name'].strip()
+        if not name:
+            return jsonify({'error': "Le nom ne peut pas être vide."}), 400
+        conflict = Insurance.query.filter_by(company_name=name).first()
+        if conflict and conflict.id != ins_id:
+            return jsonify({'error': "Ce nom existe déjà."}), 400
+        ins.company_name = name
+    ins.phone   = data.get('phone',   ins.phone   or '').strip() or None
+    ins.island  = data.get('island',  ins.island  or '').strip() or None
+    ins.address = data.get('address', ins.address or '').strip() or None
+    db.session.commit()
+    return jsonify(ins.to_dict())
+
+
+@smart_tech_bp.route('/api/assurance/companies/<int:ins_id>', methods=['DELETE'])
+@st_admin_required
+def api_assurance_company_delete(ins_id):
+    ins = Insurance.query.get_or_404(ins_id)
+    if ins.accounts:
+        return jsonify({'error': "Supprimez d'abord les comptes liés à cette compagnie."}), 400
+    db.session.delete(ins)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+# --- Accounts ---
+
+@smart_tech_bp.route('/api/assurance/accounts', methods=['GET'])
+@st_admin_required
+def api_assurance_accounts():
+    accounts = InsuranceAccount.query.order_by(InsuranceAccount.created_at.desc()).all()
+    return jsonify([a.to_dict() for a in accounts])
+
+
+@smart_tech_bp.route('/api/assurance/accounts', methods=['POST'])
+@st_admin_required
+def api_assurance_account_create():
+    from werkzeug.security import generate_password_hash
+    data = request.get_json() or {}
+    ins_id   = data.get('insurance_id')
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    if not ins_id or not username or not password:
+        return jsonify({'error': "Compagnie, nom d'utilisateur et mot de passe requis."}), 400
+    if not Insurance.query.get(ins_id):
+        return jsonify({'error': "Compagnie introuvable."}), 404
+    if InsuranceAccount.query.filter_by(username=username).first():
+        return jsonify({'error': "Ce nom d'utilisateur est déjà utilisé."}), 400
+    acc = InsuranceAccount(
+        insurance_id=ins_id,
+        username=username,
+        contact_person=data.get('contact_person', '').strip() or None,
+        contact_email=data.get('contact_email', '').strip() or None,
+        contact_phone=data.get('contact_phone', '').strip() or None,
+        is_active=bool(data.get('is_active', True)),
+    )
+    acc.set_password(password)
+    db.session.add(acc)
+    db.session.commit()
+    return jsonify(acc.to_dict()), 201
+
+
+@smart_tech_bp.route('/api/assurance/accounts/<int:acc_id>', methods=['PUT'])
+@st_admin_required
+def api_assurance_account_update(acc_id):
+    acc = InsuranceAccount.query.get_or_404(acc_id)
+    data = request.get_json() or {}
+    if 'insurance_id' in data:
+        if not Insurance.query.get(data['insurance_id']):
+            return jsonify({'error': "Compagnie introuvable."}), 404
+        acc.insurance_id = data['insurance_id']
+    if 'username' in data:
+        uname = data['username'].strip()
+        if not uname:
+            return jsonify({'error': "Le nom d'utilisateur ne peut pas être vide."}), 400
+        conflict = InsuranceAccount.query.filter_by(username=uname).first()
+        if conflict and conflict.id != acc_id:
+            return jsonify({'error': "Ce nom d'utilisateur est déjà utilisé."}), 400
+        acc.username = uname
+    if data.get('password', '').strip():
+        acc.set_password(data['password'].strip())
+    acc.contact_person = data.get('contact_person', acc.contact_person or '').strip() or None
+    acc.contact_email  = data.get('contact_email',  acc.contact_email  or '').strip() or None
+    acc.contact_phone  = data.get('contact_phone',  acc.contact_phone  or '').strip() or None
+    if 'is_active' in data:
+        acc.is_active = bool(data['is_active'])
+    db.session.commit()
+    return jsonify(acc.to_dict())
+
+
+@smart_tech_bp.route('/api/assurance/accounts/<int:acc_id>', methods=['DELETE'])
+@st_admin_required
+def api_assurance_account_delete(acc_id):
+    acc = InsuranceAccount.query.get_or_404(acc_id)
+    db.session.delete(acc)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+# --- Movements ---
+
+@smart_tech_bp.route('/api/assurance/movements')
+@st_admin_required
+def api_assurance_movements():
+    from datetime import datetime, timedelta
+    from app.timezone_utils import now_comoros, COMOROS_TZ
+
+    import re, calendar as _cal
+    period = request.args.get('period', 'month')
+    now = now_comoros()
+    since = until = None
+
+    if re.match(r'^\d{4}-\d{2}$', period):
+        year, month = map(int, period.split('-'))
+        last_day = _cal.monthrange(year, month)[1]
+        since = datetime(year, month, 1, 0, 0, 0, tzinfo=COMOROS_TZ)
+        until = datetime(year, month, last_day, 23, 59, 59, tzinfo=COMOROS_TZ)
+    elif period == 'year':
+        since = datetime(now.year, 1, 1, 0, 0, 0, tzinfo=COMOROS_TZ)
+    # 'all' → since/until remain None
+
+    commission_rate = int(SmartTechSetting.get('insurance_commission', 0))
+    companies = Insurance.query.order_by(Insurance.company_name).all()
+    result = []
+
+    for ins in companies:
+        account_ids = [acc.id for acc in ins.accounts]
+        if account_ids:
+            assignments = VehicleInsuranceAssignment.query.filter(
+                VehicleInsuranceAssignment.insurance_account_id.in_(account_ids)
+            ).all()
+            vehicle_ids = list({a.vehicle_id for a in assignments})
+        else:
+            vehicle_ids = []
+
+        if vehicle_ids:
+            qr_q = QRCodePayment.query.filter(
+                QRCodePayment.vehicle_id.in_(vehicle_ids),
+                QRCodePayment.status == 'paid'
+            )
+            if since:
+                qr_q = qr_q.filter(QRCodePayment.paid_at >= since)
+            if until:
+                qr_q = qr_q.filter(QRCodePayment.paid_at <= until)
+            payments = qr_q.all()
+            activations = sum(1 for p in payments if p.payment_type == 'activation')
+            renewals    = sum(1 for p in payments if p.payment_type == 'renewal')
+            vehicles    = Vehicle.query.filter(Vehicle.id.in_(vehicle_ids)).all()
+            active      = sum(1 for v in vehicles if v.status == 'active')
+            total       = len(vehicles)
+        else:
+            activations = renewals = active = total = 0
+
+        is_month = re.match(r'^\d{4}-\d{2}$', period)
+        confirmed = False
+        confirmed_at = None
+        if is_month:
+            rval = SmartTechSetting.get('commission_received_%s_%s' % (ins.id, period), '')
+            if rval and rval != '0':
+                confirmed = True
+                confirmed_at = str(rval)
+
+        result.append({
+            'insurance_id':    ins.id,
+            'company_name':    ins.company_name,
+            'island':          ins.island,
+            'activations':     activations,
+            'renewals':        renewals,
+            'active_vehicles': active,
+            'total_vehicles':  total,
+            'commission':      (activations + renewals) * commission_rate,
+            'confirmed':       confirmed,
+            'confirmed_at':    confirmed_at,
+        })
+
+    return jsonify(result)
+
+
+@smart_tech_bp.route('/api/assurance/commission-received', methods=['POST'])
+@st_admin_required
+def api_commission_received_toggle():
+    import re as _re
+    data = request.get_json(silent=True) or {}
+    period = data.get('period', '')
+    insurance_id = data.get('insurance_id')
+    if not _re.match(r'^\d{4}-\d{2}$', period) or not insurance_id:
+        return jsonify({'error': 'Invalid period or insurance_id'}), 400
+    key = 'commission_received_%s_%s' % (insurance_id, period)
+    current = SmartTechSetting.get(key, '')
+    if current and current != '0':
+        # Already confirmed — irreversible, return current state
+        return jsonify({'confirmed': True, 'confirmed_at': str(current)})
+    from app.timezone_utils import now_comoros
+    ts = now_comoros().strftime('%Y-%m-%dT%H:%M:%S')
+    SmartTechSetting.set(key, ts)
+    return jsonify({'confirmed': True, 'confirmed_at': ts})
