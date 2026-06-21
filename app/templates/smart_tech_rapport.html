@@ -110,11 +110,14 @@
         html[data-theme="light"] .period-tab{color:rgba(0,0,0,0.45);}
         html[data-theme="light"] .st-form-ctrl{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
         html[data-theme="light"] .table{color:#1a1a2e;}
+        .nav-badge { margin-left: auto; background: var(--st-yellow); color: #000; border-radius: 20px; font-size: 0.65rem; font-weight: 700; padding: 0.15em 0.55em; }
+        html[data-theme="light"] .nav-badge { background: #9a6700; color: #fff; }
         .text-muted{color:rgba(255,255,255,0.42) !important;}html[data-theme="light"] .table{--bs-table-color:#1a1a2e;}html[data-theme="light"] .table tbody tr:hover td{color:#1a1a2e;background:rgba(0,149,179,0.06);}html[data-theme="light"] .text-muted{color:rgba(0,0,0,0.45) !important;}html[data-theme="light"] .table thead th{background:#f6f8fa;color:rgba(0,0,0,0.5);border-color:rgba(0,0,0,0.08);}
         html[data-theme="light"] .table tbody td{border-color:rgba(0,0,0,0.05);}
         html[data-theme="light"] .st-section-header{border-bottom-color:rgba(0,0,0,0.08);}
         html[data-theme="light"] .st-section-title{color:#1a1a2e;}
         html[data-theme="light"] .st-stat-label{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] #comm-period-label{color:rgba(0,0,0,0.38);}
         html[data-theme="light"] .st-page-title{color:#1a1a2e;}
         html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.4);}
         html[data-theme="light"] .st-user-pill{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
@@ -125,6 +128,18 @@
         html[data-theme="light"] .net-sub{color:rgba(0,0,0,0.5);}
         html[data-theme="light"] .net-banner.positive{background:rgba(63,185,80,0.1);border-color:rgba(63,185,80,0.3);}
         html[data-theme="light"] .net-banner.negative{background:rgba(248,81,73,0.1);border-color:rgba(248,81,73,0.3);}
+        /* ── Detail tabs ── */
+        .detail-tabs{display:flex;flex-wrap:nowrap;list-style:none;padding:0;margin:0;border-bottom:none;overflow-x:auto;}
+        .detail-tabs .nav-link{color:rgba(255,255,255,0.5);border:none;border-bottom:2px solid transparent;background:none;border-radius:0;padding:.6rem .7rem;font-size:.78rem;transition:color .15s,background .15s,border-color .15s;white-space:nowrap;gap:5px!important;}
+        .detail-tabs .nav-link.active{color:#fff;border-bottom-color:var(--st-cyan);background:rgba(0,212,255,0.05);}
+        .detail-tabs .nav-link:hover:not(.active){color:rgba(255,255,255,0.8);background:rgba(255,255,255,0.04);}
+        .detail-tabs::-webkit-scrollbar{display:none;}
+        .detail-tabs{-ms-overflow-style:none;scrollbar-width:none;}
+        html[data-theme="light"] .detail-tabs .nav-link{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .detail-tabs .nav-link.active{color:#0095b3;border-bottom-color:#0095b3;background:rgba(0,149,179,0.06);}
+        html[data-theme="light"] .detail-tabs .nav-link:hover:not(.active){color:rgba(0,0,0,0.7);background:rgba(0,0,0,0.04);}
+        .tab-tarif-bar{font-size:.72rem;padding:.5rem 1rem;border-bottom:1px solid var(--st-border);display:flex;align-items:center;justify-content:space-between;}
+        html[data-theme="light"] .tab-tarif-bar{border-bottom-color:rgba(0,0,0,0.08);}
         /* ── Stat card sub-labels ── */
         .st-card-sub{font-size:.72rem;color:rgba(255,255,255,0.35);}
         html[data-theme="light"] .st-card-sub{color:rgba(0,0,0,0.45);}
@@ -179,6 +194,10 @@
         <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
+        </a>
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
@@ -188,6 +207,9 @@
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
         </a>
         {% endif %}
         {% if current_user.role == 'admin' %}
@@ -282,9 +304,10 @@
             </div>
             <div class="col-6 col-lg-2">
                 <div class="st-card">
-                    <div class="st-card-icon icon-green"><i class="fas fa-coins"></i></div>
-                    <div class="st-stat-label">Revenus</div>
-                    <div class="st-stat-val" style="color:var(--st-green);" id="s-revenue">—</div>
+                    <div class="st-card-icon" style="background:rgba(188,140,255,0.12);"><i class="fas fa-id-card" style="color:var(--st-purple);"></i></div>
+                    <div class="st-stat-label">Licences imprimées</div>
+                    <div class="st-stat-val" style="color:var(--st-purple);" id="s-lic-count">—</div>
+                    <div class="st-card-sub" id="s-lic-amt">—</div>
                 </div>
             </div>
             <div class="col-6 col-lg-2">
@@ -303,56 +326,138 @@
                     <div class="st-card-sub" id="s-exp-amt">—</div>
                 </div>
             </div>
-            <div class="col-6 col-lg-2">
+            <div class="col-6 col-lg-2" id="s-comm-card" style="display:none;">
                 <div class="st-card">
-                    <div class="st-card-icon icon-purple"><i class="fas fa-balance-scale"></i></div>
-                    <div class="st-stat-label">Net</div>
-                    <div class="st-stat-val" id="s-net">—</div>
+                    <div class="st-card-icon icon-yellow"><i class="fas fa-coins"></i></div>
+                    <div class="st-stat-label">Commission assurance</div>
+                    <div class="st-stat-val" style="color:var(--st-yellow);" id="s-comm-total">—</div>
+                    <div class="st-card-sub" id="s-comm-sub">—</div>
                 </div>
             </div>
         </div>
 
-        <!-- Detail tables -->
-        <div id="section-activations" class="st-section" style="display:none;">
-            <div class="st-section-header">
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <div class="st-section-title"><i class="fas fa-qrcode me-2" style="color:var(--st-blue);"></i>Activations QR Code<span class="badge-count" id="cnt-act">0</span></div>
-                    <span class="pill pill-activation" style="font-size:.68rem;" id="tarif-act-ref" title="Tarif unitaire activation">{{ "{:,}".format(activation_price) }} KMF/unité</span>
+        <!-- Detail tables as tabs -->
+        <div class="st-section">
+            <div style="border-bottom:1px solid var(--st-border);">
+                <ul class="nav detail-tabs" id="detail-nav-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-act" type="button" role="tab">
+                            <i class="fas fa-qrcode" style="color:var(--st-blue);"></i>
+                            Activations QR Code
+                            <span class="badge-count" id="cnt-act">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-ren" type="button" role="tab">
+                            <i class="fas fa-redo" style="color:var(--st-cyan);"></i>
+                            Renouvellements QR Code
+                            <span class="badge-count" id="cnt-ren">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-lic" type="button" role="tab">
+                            <i class="fas fa-id-card" style="color:var(--st-purple);"></i>
+                            Licences imprimées
+                            <span class="badge-count" id="cnt-lic">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-sub" type="button" role="tab">
+                            <i class="fas fa-file-invoice-dollar" style="color:var(--st-yellow);"></i>
+                            Abonnements actifs
+                            <span class="badge-count" id="cnt-sub">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-exp" type="button" role="tab">
+                            <i class="fas fa-receipt" style="color:var(--st-red);"></i>
+                            Dépenses
+                            <span class="badge-count" id="cnt-exp">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" id="tab-comm-nav" role="presentation" style="display:none;">
+                        <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-comm" type="button" role="tab">
+                            <i class="fas fa-coins" style="color:var(--st-yellow);"></i>
+                            Commission
+                            <span class="badge-count" id="cnt-comm">0</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="tab-content">
+                <!-- Activations -->
+                <div class="tab-pane show active" id="tab-act" role="tabpanel">
+                    <div class="tab-tarif-bar">
+                        <span class="pill pill-activation" id="tarif-act-ref">{{ "{:,}".format(activation_price) }} KMF/unité</span>
+                        <span class="badge-amount" style="color:var(--st-blue);" id="amt-act"></span>
+                    </div>
+                    <div id="act-empty" class="empty-state d-none"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune activation pour cette période.</div>
+                    <div class="table-responsive" id="act-table-wrap">
+                        <table class="table"><thead><tr><th>Véhicule</th><th>Propriétaire</th><th>Montant</th><th>Enregistré par</th><th>Date</th></tr></thead><tbody id="tbody-act"></tbody></table>
+                    </div>
                 </div>
-                <span class="badge-amount" style="color:var(--st-blue);" id="amt-act">0 KMF</span>
-            </div>
-            <div class="table-responsive"><table class="table"><thead><tr><th>Véhicule</th><th>Propriétaire</th><th>Montant</th><th>Enregistré par</th><th>Date</th></tr></thead><tbody id="tbody-act"></tbody></table></div>
-        </div>
-
-        <div id="section-renewals" class="st-section" style="display:none;">
-            <div class="st-section-header">
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <div class="st-section-title"><i class="fas fa-redo me-2" style="color:var(--st-cyan);"></i>Renouvellements QR Code<span class="badge-count" id="cnt-ren">0</span></div>
-                    <span class="pill pill-renewal" style="font-size:.68rem;" id="tarif-ren-ref" title="Tarif unitaire renouvellement">{{ "{:,}".format(renewal_price) }} KMF/unité</span>
+                <!-- Renouvellements -->
+                <div class="tab-pane" id="tab-ren" role="tabpanel">
+                    <div class="tab-tarif-bar">
+                        <span class="pill pill-renewal" id="tarif-ren-ref">{{ "{:,}".format(renewal_price) }} KMF/unité</span>
+                        <span class="badge-amount" style="color:var(--st-cyan);" id="amt-ren"></span>
+                    </div>
+                    <div id="ren-empty" class="empty-state d-none"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucun renouvellement pour cette période.</div>
+                    <div class="table-responsive" id="ren-table-wrap">
+                        <table class="table"><thead><tr><th>Véhicule</th><th>Propriétaire</th><th>Montant</th><th>Enregistré par</th><th>Date</th></tr></thead><tbody id="tbody-ren"></tbody></table>
+                    </div>
                 </div>
-                <span class="badge-amount" style="color:var(--st-cyan);" id="amt-ren">0 KMF</span>
+                <!-- Licences -->
+                <div class="tab-pane" id="tab-lic" role="tabpanel">
+                    <div class="tab-tarif-bar">
+                        <span class="pill" style="background:rgba(188,140,255,0.12);color:var(--st-purple);border:1px solid rgba(188,140,255,0.28);" id="tarif-lic-ref">— KMF/unité</span>
+                        <span class="badge-amount" style="color:var(--st-purple);" id="amt-lic"></span>
+                    </div>
+                    <div id="lic-empty" class="empty-state d-none"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune licence imprimée pour cette période.</div>
+                    <div class="table-responsive" id="lic-table-wrap">
+                        <table class="table"><thead><tr><th>N° Permis</th><th>Titulaire</th><th>Demandé par</th><th>Date demande</th><th>Imprimé par</th><th>Date impression</th><th>Montant</th></tr></thead><tbody id="tbody-lic"></tbody></table>
+                    </div>
+                </div>
+                <!-- Abonnements -->
+                <div class="tab-pane" id="tab-sub" role="tabpanel">
+                    <div class="tab-tarif-bar">
+                        <span class="text-muted" style="font-size:.72rem;">Abonnements actifs sur la période</span>
+                        <span class="badge-amount" style="color:var(--st-yellow);" id="amt-sub"></span>
+                    </div>
+                    <div id="sub-empty" class="empty-state d-none"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucun abonnement pour cette période.</div>
+                    <div class="table-responsive" id="sub-table-wrap">
+                        <table class="table"><thead><tr><th>Nom</th><th>Type</th><th>Mode</th><th>Fréquence</th><th>Montant</th><th>Statut</th><th>Date / Validé par</th></tr></thead><tbody id="tbody-sub"></tbody></table>
+                    </div>
+                </div>
+                <!-- Dépenses -->
+                <div class="tab-pane" id="tab-exp" role="tabpanel">
+                    <div class="tab-tarif-bar">
+                        <span class="text-muted" style="font-size:.72rem;">Dépenses enregistrées sur la période</span>
+                        <span class="badge-amount" style="color:var(--st-red);" id="amt-exp"></span>
+                    </div>
+                    <div id="exp-empty" class="empty-state d-none"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune dépense pour cette période.</div>
+                    <div class="table-responsive" id="exp-table-wrap">
+                        <table class="table"><thead><tr><th>Description</th><th>Catégorie</th><th>Fournisseur</th><th>Montant</th><th>Date</th></tr></thead><tbody id="tbody-exp"></tbody></table>
+                    </div>
+                </div>
+                <!-- Commission Assurance -->
+                <div class="tab-pane" id="tab-comm" role="tabpanel">
+                    <div class="tab-tarif-bar">
+                        <span class="text-muted" style="font-size:.72rem;" id="comm-rate-label">Commission par abonnement</span>
+                        <span id="comm-period-label" style="display:none;font-size:.72rem;color:rgba(255,255,255,0.38);margin-left:.5rem;"></span>
+                        <span class="badge-amount" style="color:var(--st-yellow);" id="amt-comm"></span>
+                    </div>
+                    <div id="comm-empty" class="empty-state d-none"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune compagnie enregistrée.</div>
+                    <div class="table-responsive" id="comm-table-wrap">
+                        <table class="table" id="comm-table">
+                            <thead><tr id="comm-thead-tr">
+                                <th>Compagnie</th><th>Île</th><th>Activations</th><th>Renouvellements</th><th>Commission</th>
+                            </tr></thead>
+                            <tbody id="tbody-comm"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-            <div class="table-responsive"><table class="table"><thead><tr><th>Véhicule</th><th>Propriétaire</th><th>Montant</th><th>Enregistré par</th><th>Date</th></tr></thead><tbody id="tbody-ren"></tbody></table></div>
-        </div>
-
-        <div id="section-subs" class="st-section" style="display:none;">
-            <div class="st-section-header">
-                <div class="st-section-title"><i class="fas fa-file-invoice-dollar me-2" style="color:var(--st-yellow);"></i>Abonnements actifs<span class="badge-count" id="cnt-sub">0</span></div>
-                <span class="badge-amount" style="color:var(--st-yellow);" id="amt-sub">0 KMF</span>
-            </div>
-            <div class="table-responsive"><table class="table"><thead><tr><th>Nom</th><th>Type</th><th>Mode</th><th>Fréquence</th><th>Montant</th><th>Statut</th><th>Date / Validé par</th></tr></thead><tbody id="tbody-sub"></tbody></table></div>
-        </div>
-
-        <div id="section-expenses" class="st-section" style="display:none;">
-            <div class="st-section-header">
-                <div class="st-section-title"><i class="fas fa-receipt me-2" style="color:var(--st-red);"></i>Dépenses<span class="badge-count" id="cnt-exp">0</span></div>
-                <span class="badge-amount" style="color:var(--st-red);" id="amt-exp">0 KMF</span>
-            </div>
-            <div class="table-responsive"><table class="table"><thead><tr><th>Description</th><th>Catégorie</th><th>Fournisseur</th><th>Montant</th><th>Date</th></tr></thead><tbody id="tbody-exp"></tbody></table></div>
-        </div>
-
-        <div id="empty-msg" style="display:none;" class="empty-state">
-            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune activité pour cette période.
         </div>
 
     </div><!-- /report-content -->
@@ -427,7 +532,6 @@
         document.getElementById('s-act-amt').textContent   = fmt(d.act_total);
         document.getElementById('s-ren-count').textContent = d.renewals.length;
         document.getElementById('s-ren-amt').textContent   = fmt(d.ren_total);
-        document.getElementById('s-revenue').textContent   = fmt(d.revenue);
         document.getElementById('s-sub-total').textContent = fmt(d.sub_total);
         var autoCount   = d.subscriptions.filter(function(s){ return s.payment_mode === 'automatique'; }).length;
         var manuelCount = d.subscriptions.filter(function(s){ return s.payment_mode === 'manuel'; }).length;
@@ -435,13 +539,10 @@
         document.getElementById('s-exp-count').textContent = d.expenses.length;
         document.getElementById('s-exp-amt').textContent   = fmt(d.exp_total);
 
-        const netEl = document.getElementById('s-net');
         const netBanner = document.getElementById('net-banner');
         const netVal    = document.getElementById('net-val');
-        netEl.textContent  = fmt(d.net);
         netVal.textContent = fmt(d.net);
         const positive = d.net >= 0;
-        netEl.style.color = positive ? 'var(--st-green)' : 'var(--st-red)';
         netVal.style.color = positive ? 'var(--st-green)' : 'var(--st-red)';
         netBanner.className = 'net-banner ' + (positive ? 'positive' : 'negative');
 
@@ -455,26 +556,56 @@
             if (el) el.textContent = Number(d.renewal_price).toLocaleString('fr') + ' KMF/unité';
         }
 
+        // Licenses stat card
+        document.getElementById('s-lic-count').textContent = d.licenses_printed.length;
+        document.getElementById('s-lic-amt').textContent   = fmt(d.license_total);
+        const licRef = document.getElementById('tarif-lic-ref');
+        if (licRef) licRef.textContent = Number(d.license_price).toLocaleString('fr') + ' KMF/unité';
+
         // Section: Activations
-        renderQrSection('activations', d.activations, 'section-activations', 'cnt-act', 'amt-act', d.act_total);
+        renderQrSection('activations', d.activations, d.act_total);
         // Section: Renewals
-        renderQrSection('renewals', d.renewals, 'section-renewals', 'cnt-ren', 'amt-ren', d.ren_total);
+        renderQrSection('renewals', d.renewals, d.ren_total);
+        // Section: Licenses
+        renderLicSection(d.licenses_printed, d.license_total);
         // Section: Subscriptions
         renderSubSection(d.subscriptions, d.sub_total);
         // Section: Expenses
         renderExpSection(d.expenses, d.exp_total);
+        // Section: Commission
+        renderCommissionSection(d.insurance_commissions || [], d.commission_total || 0, d.commission_rate || 0, d.has_receipt || d.is_monthly || false, d.receipt_month || null);
 
-        // Empty message
-        const hasData = d.activations.length || d.renewals.length || d.subscriptions.length || d.expenses.length;
-        document.getElementById('empty-msg').style.display = hasData ? 'none' : 'block';
+        // Activate the tab with the most rows
+        var tabCounts = [
+            { target: '#tab-act', count: d.activations.length },
+            { target: '#tab-ren', count: d.renewals.length },
+            { target: '#tab-lic', count: d.licenses_printed.length },
+            { target: '#tab-sub', count: d.subscriptions.length },
+            { target: '#tab-exp', count: d.expenses.length },
+            { target: '#tab-comm', count: (d.commission_rate > 0) ? (d.insurance_commissions||[]).length : 0 },
+        ];
+        var maxTab = tabCounts.reduce(function(a, b) { return b.count > a.count ? b : a; });
+        if (maxTab.count > 0) {
+            var btn = document.querySelector('#detail-nav-tabs [data-bs-target="' + maxTab.target + '"]');
+            if (btn) new bootstrap.Tab(btn).show();
+        }
     }
 
-    function renderQrSection(type, rows, sectionId, cntId, amtId, total) {
-        document.getElementById(sectionId).style.display = rows.length ? '' : 'none';
-        if (!rows.length) return;
-        document.getElementById(cntId).textContent = rows.length;
-        document.getElementById(amtId).textContent = fmt(total);
-        const tbody = document.getElementById('tbody-' + (type === 'activations' ? 'act' : 'ren'));
+    function renderQrSection(type, rows, total) {
+        const prefix = type === 'activations' ? 'act' : 'ren';
+        document.getElementById('cnt-' + prefix).textContent = rows.length;
+        const amtEl = document.getElementById('amt-' + prefix);
+        amtEl.textContent = rows.length ? fmt(total) : '';
+        const empty     = document.getElementById(prefix + '-empty');
+        const tableWrap = document.getElementById(prefix + '-table-wrap');
+        if (!rows.length) {
+            empty.classList.remove('d-none');
+            tableWrap.classList.add('d-none');
+            return;
+        }
+        empty.classList.add('d-none');
+        tableWrap.classList.remove('d-none');
+        const tbody = document.getElementById('tbody-' + prefix);
         tbody.innerHTML = rows.map(function (q) {
             return '<tr>'
                 + '<td><strong>' + esc(q.license_plate || '—') + '</strong></td>'
@@ -486,11 +617,46 @@
         }).join('');
     }
 
+    function renderLicSection(licenses, total) {
+        document.getElementById('cnt-lic').textContent = licenses.length;
+        const amtEl = document.getElementById('amt-lic');
+        amtEl.textContent = licenses.length ? fmt(total) : '';
+        const empty     = document.getElementById('lic-empty');
+        const tableWrap = document.getElementById('lic-table-wrap');
+        if (!licenses.length) {
+            empty.classList.remove('d-none');
+            tableWrap.classList.add('d-none');
+            return;
+        }
+        empty.classList.add('d-none');
+        tableWrap.classList.remove('d-none');
+        const tbody = document.getElementById('tbody-lic');
+        tbody.innerHTML = licenses.map(function (l) {
+            return '<tr>'
+                + '<td><strong>' + esc(l.license_number || '—') + '</strong></td>'
+                + '<td>' + esc((l.holder_firstname ? l.holder_firstname + ' ' : '') + (l.holder_name || '')) + '</td>'
+                + '<td style="font-size:.8rem;opacity:.65;">' + esc(l.requested_by || '—') + '</td>'
+                + '<td style="font-size:.8rem;opacity:.55;">' + esc(l.requested_at || '—') + '</td>'
+                + '<td><span style="background:rgba(188,140,255,0.12);color:var(--st-purple);border:1px solid rgba(188,140,255,0.25);border-radius:5px;font-size:.72rem;padding:.1em .5em;">' + esc(l.printed_by || '—') + '</span></td>'
+                + '<td style="font-size:.8rem;">' + esc(l.printed_at || '—') + '</td>'
+                + '<td><strong>' + fmt(l.unit_price || 0) + '</strong></td>'
+                + '</tr>';
+        }).join('');
+    }
+
     function renderSubSection(subs, total) {
-        document.getElementById('section-subs').style.display = subs.length ? '' : 'none';
-        if (!subs.length) return;
         document.getElementById('cnt-sub').textContent = subs.length;
-        document.getElementById('amt-sub').textContent = fmt(total);
+        const amtSubEl = document.getElementById('amt-sub');
+        amtSubEl.textContent = subs.length ? fmt(total) : '';
+        const subEmpty     = document.getElementById('sub-empty');
+        const subTableWrap = document.getElementById('sub-table-wrap');
+        if (!subs.length) {
+            subEmpty.classList.remove('d-none');
+            subTableWrap.classList.add('d-none');
+            return;
+        }
+        subEmpty.classList.add('d-none');
+        subTableWrap.classList.remove('d-none');
         const tbody = document.getElementById('tbody-sub');
         const statusBadge = {
             'paid':      '<span style="background:rgba(63,185,80,0.12);color:var(--st-green);border:1px solid rgba(63,185,80,0.25);border-radius:6px;font-size:.7rem;padding:.1em .5em;white-space:nowrap;"><i class="fas fa-check me-1"></i>Payé</span>',
@@ -534,10 +700,18 @@
     }
 
     function renderExpSection(expenses, total) {
-        document.getElementById('section-expenses').style.display = expenses.length ? '' : 'none';
-        if (!expenses.length) return;
         document.getElementById('cnt-exp').textContent = expenses.length;
-        document.getElementById('amt-exp').textContent = fmt(total);
+        const amtExpEl = document.getElementById('amt-exp');
+        amtExpEl.textContent = expenses.length ? fmt(total) : '';
+        const expEmpty     = document.getElementById('exp-empty');
+        const expTableWrap = document.getElementById('exp-table-wrap');
+        if (!expenses.length) {
+            expEmpty.classList.remove('d-none');
+            expTableWrap.classList.add('d-none');
+            return;
+        }
+        expEmpty.classList.add('d-none');
+        expTableWrap.classList.remove('d-none');
         const tbody = document.getElementById('tbody-exp');
         tbody.innerHTML = expenses.map(function (e) {
             return '<tr>'
@@ -546,6 +720,69 @@
                 + '<td class="text-muted">' + esc(e.vendor || '—') + '</td>'
                 + '<td><strong style="color:var(--st-red);">' + fmt(e.amount) + '</strong></td>'
                 + '<td style="font-size:.8rem;">' + esc(e.expense_date || '—') + '</td>'
+                + '</tr>';
+        }).join('');
+    }
+
+    function renderCommissionSection(rows, total, rate, hasReceipt, receiptMonth) {
+        var card = document.getElementById('s-comm-card');
+        var nav  = document.getElementById('tab-comm-nav');
+        if (!rate || rows.length === 0) {
+            card.style.display = 'none';
+            nav.style.display  = 'none';
+            return;
+        }
+        card.style.display = '';
+        nav.style.display  = '';
+        document.getElementById('s-comm-total').textContent = fmt(total);
+        var confirmed = rows.filter(function(c){ return c.confirmed; }).length;
+        document.getElementById('s-comm-sub').textContent = hasReceipt
+            ? confirmed + '/' + rows.length + ' reçues'
+            : rows.length + ' compagnies';
+        document.getElementById('cnt-comm').textContent = rows.length;
+        document.getElementById('amt-comm').textContent = rows.length ? fmt(total) : '';
+        document.getElementById('comm-rate-label').textContent =
+            rate ? Number(rate).toLocaleString('fr') + ' KMF / abonnement' : 'Commission par abonnement';
+        // Show month label when in daily mode so the user knows it's the full month
+        var periodLbl = document.getElementById('comm-period-label');
+        if (receiptMonth && typeof currentType !== 'undefined' && currentType !== 'monthly') {
+            var pts = receiptMonth.split('-');
+            var MONTHS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+            periodLbl.textContent = '— mensuel ' + MONTHS[parseInt(pts[1],10)-1] + ' ' + pts[0];
+            periodLbl.style.display = '';
+        } else {
+            periodLbl.style.display = 'none';
+        }
+
+        // Update thead: add Réception column when receipt state is available
+        var thead = document.getElementById('comm-thead-tr');
+        thead.innerHTML = '<th>Compagnie</th><th>Île</th><th>Activations</th><th>Renouvellements</th><th>Commission</th>'
+            + (hasReceipt ? '<th>Réception</th>' : '');
+
+        var empty = document.getElementById('comm-empty');
+        var wrap  = document.getElementById('comm-table-wrap');
+        if (!rows.length) {
+            empty.classList.remove('d-none'); wrap.classList.add('d-none'); return;
+        }
+        empty.classList.add('d-none'); wrap.classList.remove('d-none');
+        document.getElementById('tbody-comm').innerHTML = rows.map(function(c){
+            var rcptCell = '';
+            if (hasReceipt) {
+                if (c.confirmed && c.confirmed_at) {
+                    var dt = new Date(c.confirmed_at);
+                    var dtStr = dt.toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'});
+                    rcptCell = '<td><span style="background:rgba(63,185,80,0.12);color:var(--st-green);border:1px solid rgba(63,185,80,0.3);border-radius:6px;font-size:.72rem;padding:.15em .55em;white-space:nowrap;"><i class="fas fa-check me-1"></i>' + dtStr + '</span></td>';
+                } else {
+                    rcptCell = '<td><span style="background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:.72rem;padding:.15em .55em;white-space:nowrap;"><i class="fas fa-clock me-1"></i>En attente</span></td>';
+                }
+            }
+            return '<tr>'
+                + '<td><strong>' + esc(c.company_name) + '</strong></td>'
+                + '<td>' + (c.island ? esc(c.island) : '<span class="text-muted">—</span>') + '</td>'
+                + '<td>' + c.activations + '</td>'
+                + '<td>' + c.renewals + '</td>'
+                + '<td><strong style="color:var(--st-yellow);">' + fmt(c.commission) + '</strong></td>'
+                + rcptCell
                 + '</tr>';
         }).join('');
     }
@@ -575,6 +812,24 @@
             a.addEventListener('click', closeSidebar);
         });
     })();
+</script>
+
+<script>
+(function(){
+    function pollLicBadge(){
+        fetch("/smart-tech/api/licences/requests/stats")
+            .then(function(r){return r.ok?r.json():null;})
+            .then(function(d){
+                if(!d)return;
+                var b=document.getElementById("nav-lic-badge");
+                if(!b)return;
+                b.textContent=d.pending_count;
+                b.style.display=d.pending_count>0?"":"none";
+            }).catch(function(){});
+    }
+    pollLicBadge();
+    setInterval(pollLicBadge,5000);
+})();
 </script>
 </body>
 </html>

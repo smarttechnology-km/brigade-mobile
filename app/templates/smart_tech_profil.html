@@ -104,6 +104,8 @@
         html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
         html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
         @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}}
+        .nav-badge { margin-left: auto; background: var(--st-yellow); color: #000; border-radius: 20px; font-size: 0.65rem; font-weight: 700; padding: 0.15em 0.55em; }
+        html[data-theme="light"] .nav-badge { background: #9a6700; color: #fff; }
     </style>
     <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 </head>
@@ -132,6 +134,10 @@
         <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
+        </a>
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
@@ -141,6 +147,9 @@
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
         </a>
         {% endif %}
         {% if current_user.role == 'admin' %}
@@ -445,6 +454,24 @@
             a.addEventListener('click', closeSidebar);
         });
     })();
+</script>
+
+<script>
+(function(){
+    function pollLicBadge(){
+        fetch("/smart-tech/api/licences/requests/stats")
+            .then(function(r){return r.ok?r.json():null;})
+            .then(function(d){
+                if(!d)return;
+                var b=document.getElementById("nav-lic-badge");
+                if(!b)return;
+                b.textContent=d.pending_count;
+                b.style.display=d.pending_count>0?"":"none";
+            }).catch(function(){});
+    }
+    pollLicBadge();
+    setInterval(pollLicBadge,5000);
+})();
 </script>
 </body>
 </html>

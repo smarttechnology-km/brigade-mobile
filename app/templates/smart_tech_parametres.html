@@ -169,6 +169,24 @@
         html[data-theme="light"] .btn-reset{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.1);color:rgba(0,0,0,0.5);}
         html[data-theme="light"] .btn-reset:hover{background:rgba(0,0,0,0.08);color:#1a1a2e;}
 
+        /* ── Param inline-style helper classes ── */
+        .param-heading{font-size:.85rem;font-weight:600;color:#e6edf3;}
+        .param-subtitle{font-size:.76rem;color:rgba(255,255,255,0.38);}
+        .param-spinner-text{font-size:.8rem;color:rgba(255,255,255,0.45);}
+        .param-filename{font-size:.78rem;color:rgba(255,255,255,0.4);}
+        .param-hint{font-size:.72rem;color:rgba(255,255,255,0.35);}
+        .param-hint-inline{font-size:.68rem;color:rgba(255,255,255,.35);}
+        html[data-theme="light"] .param-heading{color:#1a1a2e;}
+        html[data-theme="light"] .param-subtitle{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .param-spinner-text{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .param-filename{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .param-hint{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .param-hint-inline{color:rgba(0,0,0,.35);}
+        html[data-theme="light"] .sim-profit-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .sim-profit-val.neutral{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .sim-profit-banner.neutral{background:rgba(0,0,0,0.02);border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .sim-margin.neutral{background:rgba(0,0,0,0.04);color:rgba(0,0,0,0.4);}
+
         /* ── Mobile nav drawer ── */
         .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
         .mob-menu-btn:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--st-cyan);}
@@ -189,6 +207,8 @@
         @media(max-width:480px){
             .sim-result-grid{grid-template-columns:1fr;}
         }
+        .nav-badge { margin-left: auto; background: var(--st-yellow); color: #000; border-radius: 20px; font-size: 0.65rem; font-weight: 700; padding: 0.15em 0.55em; }
+        html[data-theme="light"] .nav-badge { background: #9a6700; color: #fff; }
     </style>
 </head>
 <body>
@@ -215,6 +235,10 @@
         <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
+        </a>
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
@@ -224,6 +248,9 @@
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
         </a>
         {% endif %}
         {% if current_user.role == 'admin' %}
@@ -267,7 +294,7 @@
 
     <div class="row g-4">
         <!-- ── Tarifs QR Code ── -->
-        <div class="col-12 col-lg-5 d-flex flex-column">
+        <div class="col-12 col-lg-4 d-flex flex-column">
             <div class="param-card flex-grow-1">
                 <div class="param-card-title">
                     <i class="fas fa-tag" style="color:var(--st-cyan);"></i>Tarifs QR Code
@@ -280,7 +307,6 @@
                                value="{{ activation_price }}" placeholder="5000">
                         <span class="input-group-text">FC</span>
                     </div>
-                    <div class="price-hint">Montant facturé lors de la première activation du QR code d'un véhicule</div>
                 </div>
 
                 <div class="mb-3">
@@ -290,20 +316,54 @@
                                value="{{ renewal_price }}" placeholder="3000">
                         <span class="input-group-text">FC</span>
                     </div>
-                    <div class="price-hint">Montant facturé lors du renouvellement annuel du QR code</div>
                 </div>
 
-                <div id="price-alert-success" class="alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Tarifs enregistrés avec succès.</div>
+                <div id="price-alert-success" class="alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Tarifs enregistrés.</div>
                 <div id="price-alert-error" class="alert-error mb-3"></div>
 
                 <button class="btn-save" onclick="savePrices()">
-                    <i class="fas fa-save me-1"></i>Enregistrer les tarifs
+                    <i class="fas fa-save me-1"></i>Enregistrer
+                </button>
+            </div>
+        </div>
+
+        <!-- ── Tarif Licences ── -->
+        <div class="col-12 col-lg-4 d-flex flex-column">
+            <div class="param-card flex-grow-1">
+                <div class="param-card-title">
+                    <i class="fas fa-id-card" style="color:var(--st-green);"></i>Tarif Licences
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Prix d'impression d'une carte biométrique</label>
+                    <div class="input-group">
+                        <input type="number" id="license-print-price" class="form-control" min="0" step="100"
+                               value="{{ license_print_price }}" placeholder="0">
+                        <span class="input-group-text">FC</span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" style="margin-bottom:2px;">Commission par abonnement — Agence Assurance</label>
+                    <div class="param-hint" style="margin-bottom:.35rem;">Montant facturé à l'agence pour chaque véhicule abonné</div>
+                    <div class="input-group">
+                        <input type="number" id="insurance-commission" class="form-control" min="0" step="100"
+                               value="{{ insurance_commission }}" placeholder="0">
+                        <span class="input-group-text">FC</span>
+                    </div>
+                </div>
+
+                <div id="license-price-success" class="alert-success mb-3" style="display:none;"><i class="fas fa-check-circle me-2"></i>Tarif enregistré.</div>
+                <div id="license-price-error" class="alert-error mb-3" style="display:none;"></div>
+
+                <button class="btn-save" onclick="saveLicensePrice()">
+                    <i class="fas fa-save me-1"></i>Enregistrer
                 </button>
             </div>
         </div>
 
         <!-- ── Paramètres de l'application ── -->
-        <div class="col-12 col-lg-7 d-flex flex-column">
+        <div class="col-12 col-lg-4 d-flex flex-column">
             <div class="param-card flex-grow-1">
                 <div class="param-card-title">
                     <i class="fas fa-cog" style="color:var(--st-purple);"></i>Paramètres de l'application
@@ -313,7 +373,6 @@
                     <label class="form-label">Nom de l'application</label>
                     <input type="text" id="app-name" class="form-control" maxlength="120"
                            value="{{ app_name }}" placeholder="SmartTech Brigade">
-                    <div class="price-hint">Nom affiché dans les rapports et reçus</div>
                 </div>
 
                 <div class="mb-3">
@@ -323,7 +382,6 @@
                         <option value="{{ isle }}" {% if app_island == isle %}selected{% endif %}>{{ isle }}</option>
                         {% endfor %}
                     </select>
-                    <div class="price-hint">Île d'opération principale par défaut</div>
                 </div>
 
                 <div class="mb-3">
@@ -333,7 +391,6 @@
                         <input type="text" id="app-contact" class="form-control" maxlength="60"
                                value="{{ app_contact }}" placeholder="+269 XXX XX XX">
                     </div>
-                    <div class="price-hint">Numéro de contact affiché dans les reçus et documents officiels</div>
                 </div>
 
                 <div id="app-alert-success" class="alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Paramètres enregistrés avec succès.</div>
@@ -342,6 +399,51 @@
                 <button class="btn-save" onclick="saveAppSettings()">
                     <i class="fas fa-save me-1"></i>Enregistrer les paramètres
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Sauvegarde & Restauration ── -->
+    <div class="row g-4 mt-0">
+        <div class="col-12">
+            <div class="param-card">
+                <div class="param-card-title">
+                    <i class="fas fa-database" style="color:var(--st-cyan);"></i>Sauvegarde &amp; Restauration
+                </div>
+                <div class="row g-3">
+                    <!-- Download -->
+                    <div class="col-12 col-md-6">
+                        <div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:10px;padding:1.1rem 1.2rem;">
+                            <div class="param-heading" style="margin-bottom:.35rem;"><i class="fas fa-download me-2" style="color:var(--st-cyan);"></i>Télécharger une sauvegarde</div>
+                            <div class="param-subtitle" style="margin-bottom:.85rem;">Exporte toutes les données de la base en un fichier ZIP.</div>
+                            <button class="btn-save" id="btn-st-backup" onclick="startBackup()">
+                                <i class="fas fa-download me-1"></i>Télécharger
+                            </button>
+                            <span id="backup-spinner" class="param-spinner-text" style="display:none;margin-left:.7rem;"><i class="fas fa-circle-notch fa-spin me-1"></i>Préparation…</span>
+                        </div>
+                    </div>
+                    <!-- Restore -->
+                    <div class="col-12 col-md-6">
+                        <div style="background:rgba(248,81,73,0.04);border:1px solid rgba(248,81,73,0.12);border-radius:10px;padding:1.1rem 1.2rem;">
+                            <div class="param-heading" style="margin-bottom:.35rem;"><i class="fas fa-upload me-2" style="color:var(--st-red);"></i>Restaurer depuis une sauvegarde</div>
+                            <div class="param-subtitle" style="margin-bottom:.85rem;">Remplace les données actuelles par celles du fichier ZIP. Cette action est irréversible.</div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <input type="file" id="restore-file-input" accept=".zip" style="display:none;" onchange="onRestoreFileChange()">
+                                <button class="btn-save" style="background:linear-gradient(135deg,rgba(248,81,73,0.7),rgba(180,40,40,0.8));" onclick="document.getElementById('restore-file-input').click()">
+                                    <i class="fas fa-folder-open me-1"></i>Choisir un fichier
+                                </button>
+                                <span id="restore-filename" class="param-filename">Aucun fichier sélectionné</span>
+                            </div>
+                            <div id="restore-confirm-row" style="display:none;margin-top:.75rem;">
+                                <button class="btn-save" style="background:linear-gradient(135deg,rgba(248,81,73,0.85),rgba(180,40,40,0.95));" onclick="confirmRestore()">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Confirmer la restauration
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Status messages -->
+                <div id="backup-restore-status" style="display:none;margin-top:1rem;border-radius:8px;padding:.6rem .9rem;font-size:.82rem;"></div>
             </div>
         </div>
     </div>
@@ -383,7 +485,7 @@
                         <div class="price-hint">Points de % ajoutés au taux chaque année</div>
                     </div>
                     <div>
-                        <label class="form-label">Taux d'attrition / an (%) <span style="color:rgba(255,255,255,.35);font-size:.68rem;">(panne / accident)</span></label>
+                        <label class="form-label">Taux d'attrition / an (%) <span class="param-hint-inline">(panne / accident)</span></label>
                         <div class="input-group">
                             <input type="number" id="sim-churn-rate" class="form-control" min="0" max="50" step="1" value="{{ sim_churn_rate|default(2) }}" placeholder="2">
                             <span class="input-group-text">%</span>
@@ -391,7 +493,7 @@
                         <div class="price-hint">% du parc actif retiré chaque année (panne, accident, radiation)</div>
                     </div>
                     <div>
-                        <label class="form-label">Dépenses annuelles (FC) <span style="color:rgba(255,255,255,.35);font-size:.68rem;">(abo + charges)</span></label>
+                        <label class="form-label">Dépenses annuelles (FC) <span class="param-hint-inline">(abo + charges)</span></label>
                         <div class="input-group">
                             <input type="number" id="sim-annual-expenses" class="form-control" min="0" step="1000" value="{{ sim_annual_expenses }}" placeholder="0">
                             <span class="input-group-text">FC</span>
@@ -524,6 +626,29 @@
     function fmt(n){ return n.toLocaleString('fr-FR') + ' FC'; }
 
     /* ── Save prices ── */
+    window.saveLicensePrice = function(){
+        const price      = parseFloat(document.getElementById('license-print-price').value)  || 0;
+        const commission = parseFloat(document.getElementById('insurance-commission').value) || 0;
+        fetch('/smart-tech/api/parametres', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({license_print_price: price, insurance_commission: commission})
+        })
+        .then(r => r.json())
+        .then(d => {
+            const ok  = document.getElementById('license-price-success');
+            const err = document.getElementById('license-price-error');
+            if (d.error) {
+                err.textContent = d.error; err.style.display = '';
+                ok.style.display = 'none';
+                return;
+            }
+            ok.style.display = '';
+            err.style.display = 'none';
+            setTimeout(function(){ ok.style.display = 'none'; }, 3000);
+        });
+    };
+
     window.savePrices = function(){
         const actPrice = parseFloat(document.getElementById('activation-price').value) || 0;
         const renPrice = parseFloat(document.getElementById('renewal-price').value) || 0;
@@ -746,6 +871,121 @@
         document.getElementById('btn-print-sim').style.display = 'none';
     };
 
+    /* ── Backup / Restore ── */
+    function showBRStatus(msg, type) {
+        var el = document.getElementById('backup-restore-status');
+        var colors = {
+            success: {bg:'rgba(63,185,80,0.1)', border:'rgba(63,185,80,0.3)', color:'var(--st-green)'},
+            error:   {bg:'rgba(248,81,73,0.1)',  border:'rgba(248,81,73,0.3)',  color:'var(--st-red)'},
+            info:    {bg:'rgba(0,212,255,0.07)', border:'rgba(0,212,255,0.2)',  color:'var(--st-cyan)'},
+        };
+        var c = colors[type] || colors.info;
+        el.style.background = c.bg;
+        el.style.border = '1px solid ' + c.border;
+        el.style.color = c.color;
+        el.innerHTML = msg;
+        el.style.display = '';
+    }
+
+    window.startBackup = function() {
+        var btn = document.getElementById('btn-st-backup');
+        var spinner = document.getElementById('backup-spinner');
+        btn.disabled = true;
+        spinner.style.display = '';
+        document.getElementById('backup-restore-status').style.display = 'none';
+        fetch('/smart-tech/api/backup')
+            .then(function(r) {
+                if (!r.ok) return r.json().then(function(d){ throw new Error(d.error || 'Erreur'); });
+                return r.blob();
+            })
+            .then(function(blob) {
+                var cd = '';
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                var now = new Date();
+                var ts = now.getFullYear() + '' +
+                    String(now.getMonth()+1).padStart(2,'0') +
+                    String(now.getDate()).padStart(2,'0') + '_' +
+                    String(now.getHours()).padStart(2,'0') +
+                    String(now.getMinutes()).padStart(2,'0') +
+                    String(now.getSeconds()).padStart(2,'0');
+                a.download = 'smarttech_backup_' + ts + '.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showBRStatus('<i class="fas fa-check-circle me-2"></i>Sauvegarde téléchargée avec succès.', 'success');
+            })
+            .catch(function(e) {
+                showBRStatus('<i class="fas fa-times-circle me-2"></i>' + e.message, 'error');
+            })
+            .finally(function() {
+                btn.disabled = false;
+                spinner.style.display = 'none';
+            });
+    };
+
+    window.onRestoreFileChange = function() {
+        var input = document.getElementById('restore-file-input');
+        var label = document.getElementById('restore-filename');
+        var confirmRow = document.getElementById('restore-confirm-row');
+        document.getElementById('backup-restore-status').style.display = 'none';
+        if (input.files && input.files.length > 0) {
+            label.textContent = input.files[0].name;
+            confirmRow.style.display = '';
+        } else {
+            label.textContent = 'Aucun fichier sélectionné';
+            confirmRow.style.display = 'none';
+        }
+    };
+
+    window.confirmRestore = function() {
+        var input = document.getElementById('restore-file-input');
+        if (!input.files || !input.files.length) return;
+        if (!confirm('Êtes-vous sûr de vouloir restaurer la base de données ? Toutes les données actuelles seront remplacées. Cette action est irréversible.')) return;
+        var fd = new FormData();
+        fd.append('backup_file', input.files[0]);
+        document.getElementById('restore-confirm-row').style.display = 'none';
+        showBRStatus('<i class="fas fa-circle-notch fa-spin me-2"></i>Restauration en cours…', 'info');
+        fetch('/smart-tech/api/restore', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.error) { showBRStatus('<i class="fas fa-times-circle me-2"></i>' + d.error, 'error'); return; }
+                pollRestore(d.task_id);
+            })
+            .catch(function() {
+                showBRStatus('<i class="fas fa-times-circle me-2"></i>Erreur réseau.', 'error');
+            });
+    };
+
+    function pollRestore(taskId) {
+        fetch('/smart-tech/api/restore/status/' + taskId)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.status === 'running') {
+                    setTimeout(function(){ pollRestore(taskId); }, 2000);
+                } else if (d.status === 'done') {
+                    var rows = '';
+                    if (d.tables) {
+                        var entries = Object.entries(d.tables).filter(function(e){ return e[1] > 0; });
+                        if (entries.length) {
+                            rows = ' (' + entries.map(function(e){ return e[0] + ' : ' + e[1]; }).join(', ') + ')';
+                        }
+                    }
+                    showBRStatus('<i class="fas fa-check-circle me-2"></i>' + d.message + rows, 'success');
+                    document.getElementById('restore-file-input').value = '';
+                    document.getElementById('restore-filename').textContent = 'Aucun fichier sélectionné';
+                } else {
+                    showBRStatus('<i class="fas fa-times-circle me-2"></i>' + (d.message || 'Erreur inconnue.'), 'error');
+                    document.getElementById('restore-confirm-row').style.display = '';
+                }
+            })
+            .catch(function() {
+                showBRStatus('<i class="fas fa-times-circle me-2"></i>Erreur réseau lors du suivi.', 'error');
+            });
+    }
+
     /* ── Mobile sidebar ── */
     function openSidebar(){
         document.querySelector('.st-sidebar').classList.add('mob-open');
@@ -760,6 +1000,24 @@
     document.querySelectorAll('.st-nav-item').forEach(function(a){
         a.addEventListener('click', closeSidebar);
     });
+})();
+</script>
+
+<script>
+(function(){
+    function pollLicBadge(){
+        fetch("/smart-tech/api/licences/requests/stats")
+            .then(function(r){return r.ok?r.json():null;})
+            .then(function(d){
+                if(!d)return;
+                var b=document.getElementById("nav-lic-badge");
+                if(!b)return;
+                b.textContent=d.pending_count;
+                b.style.display=d.pending_count>0?"":"none";
+            }).catch(function(){});
+    }
+    pollLicBadge();
+    setInterval(pollLicBadge,5000);
 })();
 </script>
 </body>

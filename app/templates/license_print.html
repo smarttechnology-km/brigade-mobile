@@ -108,7 +108,7 @@
     </div>
     <div class="doc-header-right">
       <div class="license-num">{{ lic.license_number }}</div>
-      <div class="license-type">{{ 'TEMPORAIRE' if lic.type_permis == 'temporaire' else 'PERMANENT' }}</div>
+      <div class="license-type">{{ 'TEMPORAIRE' if (force_temporaire or lic.type_permis == 'temporaire') else 'PERMANENT' }}</div>
     </div>
   </div>
 
@@ -128,7 +128,9 @@
         <div class="identity-name">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
         <div class="identity-sub">{{ lic.holder_island or '—' }}{% if lic.holder_phone %} · {{ lic.holder_phone }}{% endif %}</div>
         <div class="badges">
-          {% if lic.type_permis == 'temporaire' %}
+          {% if force_temporaire %}
+            <span class="badge badge-purple">⏱ Temporaire</span>
+          {% elif lic.type_permis == 'temporaire' %}
             <span class="badge badge-purple">⏱ Temporaire</span>
           {% else %}
             <span class="badge badge-blue">∞ Permanent</span>
@@ -163,8 +165,9 @@
           <span class="field-label">{{ 'Depuis le' if lic.type_permis == 'temporaire' else 'Date de début' }}</span>
           <span class="field-value">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
         </div>
-        {% if lic.type_permis == 'temporaire' %}
-        <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ lic.expiry_date.strftime('%d/%m/%Y') if lic.expiry_date else '—' }}</span></div>
+        {% if force_temporaire or lic.type_permis == 'temporaire' %}
+        {% set display_expiry = lic.expiry_date or computed_expiry %}
+        <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ display_expiry.strftime('%d/%m/%Y') if display_expiry else '—' }}</span></div>
         {% endif %}
         <div class="field"><span class="field-label">Centre d'immatriculation</span><span class="field-value">{{ lic.centre_immatriculation or '—' }}</span></div>
         {% if lic.notes %}

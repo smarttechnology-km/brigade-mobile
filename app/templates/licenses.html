@@ -17,6 +17,9 @@
         <i class="fas fa-cog me-2"></i>Paramètres
       </button>
       {% endif %}
+      <a href="{{ url_for('main.license_print_requests_page') }}" class="btn btn-outline-warning" id="btn-demandes-impression-nav">
+        <i class="fas fa-paper-plane me-2"></i>Demandes
+      </a>
       <button class="btn btn-primary" onclick="openAddModal()">
         <i class="fas fa-plus me-2"></i>Ajouter un permis
       </button>
@@ -370,11 +373,20 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" id="btn-renouveler" class="btn btn-outline-success" onclick="renewLicense()" style="display:none;">
+          <i class="fas fa-sync-alt me-1"></i>Renouveler
+        </button>
         <button type="button" class="btn btn-outline-secondary" onclick="printLicenseDetails()">
           <i class="fas fa-print me-1"></i>Imprimer
         </button>
         <button type="button" id="btn-carte-digitale" class="btn btn-outline-primary" onclick="printLicenseCard()" style="display:none;">
           <i class="fas fa-id-card me-1"></i>Carte digitale
+        </button>
+        <span id="badge-carte-imprimee" class="badge bg-success px-3 py-2 me-1 align-self-center" style="display:none;font-size:.85rem;">
+          <i class="fas fa-check-circle me-1"></i>Carte imprimée
+        </span>
+        <button type="button" id="btn-demander-impression" class="btn btn-outline-warning" onclick="demanderImpression()" style="display:none;" title="Envoyer une demande d'impression à Smart Technology">
+          <i class="fas fa-paper-plane me-1"></i>Demander impression
         </button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
       </div>

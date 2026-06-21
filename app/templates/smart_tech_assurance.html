@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Technology — Agence Assurance</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root{--st-bg:#0d1117;--st-surface:#161b22;--st-border:rgba(255,255,255,0.08);--st-cyan:#00d4ff;--st-green:#3fb950;--st-yellow:#f0b429;--st-red:#f85149;--st-blue:#58a6ff;--st-purple:#bc8cff;--st-orange:#f78166;--sidebar-w:260px;}
+        *{box-sizing:border-box;}
+        body{background:var(--st-bg);color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;margin:0;}
+
+        .st-sidebar{background:linear-gradient(180deg,#1a1a2e 0%,#0f3460 100%);width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;padding:1.4rem 1rem;border-right:1px solid rgba(0,212,255,0.1);z-index:100;display:flex;flex-direction:column;}
+        .st-brand{display:flex;align-items:center;gap:10px;padding-bottom:1.2rem;border-bottom:1px solid rgba(0,212,255,0.15);margin-bottom:1.5rem;}
+        .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
+        .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
+        .st-brand-sub{font-size:.7rem;color:var(--st-cyan);}
+        .st-nav{flex:1;}
+        .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
+        .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
+        .st-nav-item.active{border-left:3px solid var(--st-cyan);}
+        .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
+        .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
+        .st-sidebar-footer{padding-top:1rem;border-top:1px solid rgba(255,255,255,0.07);}
+
+        .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem;}
+        .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
+        .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
+        .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);text-decoration:none;transition:all .18s;}
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+        .st-theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .2s;}
+        .st-theme-btn:hover{background:rgba(0,212,255,0.15);border-color:var(--st-cyan);color:var(--st-cyan);}
+
+        /* Tab navigation */
+        .st-tabs{display:flex;gap:0;margin-bottom:1.4rem;border-bottom:2px solid var(--st-border);}
+        .st-tab{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.25rem;border:none;background:transparent;color:rgba(255,255,255,0.42);font-size:.87rem;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .18s;border-radius:0;}
+        .st-tab:hover{color:rgba(255,255,255,0.72);}
+        .st-tab.active{color:var(--st-cyan);border-bottom-color:var(--st-cyan);}
+
+        /* Stats */
+        .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.4rem;}
+        .stat-card{background:var(--st-surface);border:1px solid var(--st-border);border-radius:12px;padding:.9rem 1.1rem;display:flex;align-items:center;gap:.85rem;}
+        .stat-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
+        .stat-label{font-size:.72rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.4px;}
+        .stat-val{font-size:1.3rem;font-weight:700;margin-top:1px;}
+
+        /* Section */
+        .st-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;margin-bottom:1.5rem;}
+        .st-section-header{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--st-border);}
+        .st-section-title{font-size:.95rem;font-weight:700;color:#e6edf3;display:flex;align-items:center;gap:.5rem;}
+        .st-section-body{padding:0;overflow-x:auto;}
+
+        /* Toolbar */
+        .section-toolbar{display:flex;align-items:center;gap:.6rem;padding:.75rem 1.25rem;border-bottom:1px solid var(--st-border);flex-wrap:wrap;}
+        .st-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.42rem .9rem;border-radius:8px;border:none;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .18s;}
+        .st-btn-primary{background:linear-gradient(135deg,var(--st-cyan),#0080ff);color:#fff;}
+        .st-btn-primary:hover{opacity:.88;}
+        .st-search{flex:1;min-width:160px;max-width:260px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.82rem;padding:.38rem .75rem;outline:none;}
+        .st-search:focus{border-color:var(--st-cyan);}
+
+        /* Period / month filter */
+        .period-bar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;}
+        .st-month-input{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:.82rem;padding:.32rem .65rem;outline:none;cursor:pointer;transition:border-color .18s;}
+        .st-month-input:focus{border-color:var(--st-cyan);}
+        .period-btn{padding:.3rem .85rem;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.5);font-size:.77rem;font-weight:600;cursor:pointer;transition:all .18s;}
+        .period-btn:hover{border-color:rgba(0,212,255,0.35);color:rgba(255,255,255,0.8);}
+        .period-btn.active{background:rgba(0,212,255,0.12);border-color:var(--st-cyan);color:var(--st-cyan);}
+
+        /* Main table */
+        .st-table{width:100%;border-collapse:collapse;font-size:.83rem;}
+        .st-table thead th{background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.4);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;padding:.6rem 1.25rem;border-bottom:1px solid var(--st-border);white-space:nowrap;}
+        .st-table tbody td{padding:.7rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle;color:#e6edf3;}
+        .st-table tbody tr:last-child td{border-bottom:none;}
+        .empty-row td{text-align:center;color:rgba(255,255,255,0.25);padding:2rem!important;font-size:.82rem;}
+        .st-dash{color:rgba(255,255,255,0.25);}
+        .st-check-label{color:rgba(255,255,255,0.6);}
+
+        /* Expandable company rows */
+        .company-row{cursor:pointer;transition:background .15s;}
+        .company-row:hover td{background:rgba(0,212,255,0.035);}
+        .expand-chevron{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;font-size:.72rem;color:rgba(255,255,255,0.35);transition:transform .2s,color .2s;margin-right:.4rem;vertical-align:middle;}
+        .expand-chevron.open{transform:rotate(90deg);color:var(--st-cyan);}
+        .company-sub-row td{padding:0!important;border-bottom:2px solid rgba(0,212,255,0.12)!important;}
+        .company-sub-row:hover td{background:transparent!important;}
+        .sub-panel{padding:.85rem 1.25rem .85rem 2.6rem;background:rgba(0,212,255,0.025);}
+        .sub-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;}
+        .sub-title{font-size:.75rem;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.5px;}
+        .sub-add-btn{display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .75rem;border-radius:7px;border:none;font-size:.75rem;font-weight:600;cursor:pointer;background:linear-gradient(135deg,var(--st-cyan),#0080ff);color:#fff;transition:opacity .18s;}
+        .sub-add-btn:hover{opacity:.85;}
+        .sub-table{width:100%;border-collapse:collapse;font-size:.79rem;}
+        .sub-table thead th{color:rgba(255,255,255,0.3);font-weight:600;font-size:.68rem;text-transform:uppercase;letter-spacing:.4px;padding:.38rem .75rem;border-bottom:1px solid rgba(255,255,255,0.06);white-space:nowrap;}
+        .sub-table tbody td{padding:.48rem .75rem;border-bottom:1px solid rgba(255,255,255,0.03);color:#c9d1d9;vertical-align:middle;}
+        .sub-table tbody tr:last-child td{border-bottom:none;}
+        .sub-table tbody tr:hover td{background:rgba(0,212,255,0.02);}
+        .sub-empty{text-align:center;color:rgba(255,255,255,0.22);padding:1.2rem .75rem;font-size:.78rem;font-style:italic;}
+
+        /* Mouvement stats mini-cards */
+        .mv-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin-bottom:1.25rem;}
+        .mv-stat{background:var(--st-surface);border:1px solid var(--st-border);border-radius:10px;padding:.55rem .75rem;display:flex;align-items:center;gap:.6rem;}
+        .mv-stat-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.82rem;flex-shrink:0;}
+        .mv-stat-label{font-size:.62rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.4px;}
+        .mv-stat-val{font-size:1rem;font-weight:700;margin-top:1px;}
+
+        /* Movement table number cells */
+        .num-act{color:var(--st-green);font-weight:700;}
+        .num-ren{color:var(--st-blue);font-weight:700;}
+        .num-actv{color:var(--st-cyan);font-weight:700;}
+        .num-comm{color:var(--st-yellow);font-weight:700;}
+        .num-tot{color:rgba(255,255,255,0.55);font-weight:600;}
+
+        /* Commission receipt button */
+        .btn-receipt-pending{width:30px;height:30px;border-radius:7px;padding:0;font-size:.85rem;cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.5);}
+        .btn-receipt-pending:hover{background:rgba(63,185,80,0.12);border-color:rgba(63,185,80,0.3);color:var(--st-green);}
+        .rcpt-confirmed-badge{width:30px;height:30px;border-radius:7px;font-size:.85rem;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(63,185,80,0.12);border:1px solid rgba(63,185,80,0.3);color:var(--st-green);cursor:default;}
+        html[data-theme="light"] .btn-receipt-pending{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .btn-receipt-pending:hover{background:rgba(63,185,80,0.08);border-color:rgba(63,185,80,0.3);color:#2a7f4f;}
+        html[data-theme="light"] .rcpt-confirmed-badge{background:rgba(63,185,80,0.1);border-color:rgba(63,185,80,0.3);color:#2a7f4f;}
+        .rcpt-m-title{font-size:.95rem;font-weight:700;color:#fff;}
+        .rcpt-m-sub{font-size:.72rem;color:rgba(255,255,255,0.4);margin-top:2px;}
+        .rcpt-m-body{font-size:.88rem;color:rgba(255,255,255,0.75);margin-bottom:.75rem;}
+        .rcpt-m-company{font-size:.95rem;font-weight:700;color:#fff;}
+        .rcpt-m-period{font-size:.78rem;color:rgba(255,255,255,0.45);margin-top:2px;}
+        html[data-theme="light"] .rcpt-m-title{color:#1a1a2e;}
+        html[data-theme="light"] .rcpt-m-sub{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .rcpt-m-body{color:rgba(0,0,0,0.65);}
+        html[data-theme="light"] .rcpt-m-company{color:#1a1a2e;}
+        html[data-theme="light"] .rcpt-m-period{color:rgba(0,0,0,0.45);}
+
+        /* Badges */
+        .badge-active{background:rgba(63,185,80,0.15);color:var(--st-green);border:1px solid rgba(63,185,80,0.3);padding:.15em .6em;border-radius:20px;font-size:.72rem;font-weight:700;}
+        .badge-inactive{background:rgba(248,81,73,0.1);color:var(--st-red);border:1px solid rgba(248,81,73,0.25);padding:.15em .6em;border-radius:20px;font-size:.72rem;font-weight:700;}
+        .badge-island{background:rgba(88,166,255,0.1);color:var(--st-blue);border:1px solid rgba(88,166,255,0.2);padding:.15em .6em;border-radius:20px;font-size:.72rem;}
+
+        /* Action btns */
+        .btn-icon{width:28px;height:28px;border-radius:7px;border:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:.75rem;transition:all .18s;}
+        .btn-edit{background:rgba(88,166,255,0.12);color:var(--st-blue);}
+        .btn-edit:hover{background:rgba(88,166,255,0.25);}
+        .btn-del{background:rgba(248,81,73,0.1);color:var(--st-red);}
+        .btn-del:hover{background:rgba(248,81,73,0.22);}
+        .btn-toggle{background:rgba(240,180,41,0.1);color:var(--st-yellow);}
+        .btn-toggle:hover{background:rgba(240,180,41,0.22);}
+
+        /* Modal */
+        .modal-content{background:#1c2333;border:1px solid rgba(255,255,255,0.1);border-radius:14px;color:#e6edf3;}
+        .modal-header{border-bottom:1px solid rgba(255,255,255,0.08);padding:1rem 1.25rem;}
+        .modal-footer{border-top:1px solid rgba(255,255,255,0.08);padding:.75rem 1.25rem;}
+        .modal-title{font-size:.95rem;font-weight:700;color:#e6edf3;}
+        .form-label{font-size:.78rem;color:rgba(255,255,255,0.45);margin-bottom:.25rem;}
+        .form-control,.form-select{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.85rem;padding:.45rem .75rem;}
+        .form-control:focus,.form-select:focus{background:rgba(0,212,255,0.05);border-color:var(--st-cyan);color:#e6edf3;box-shadow:none;}
+        .form-select option{background:#1c2333;color:#e6edf3;}
+        .btn-close{filter:invert(1);}
+        .modal-err{font-size:.78rem;color:var(--st-red);display:none;margin-top:.4rem;}
+
+        /* Light mode */
+        html[data-theme="light"]{--st-bg:#f0f2f5;--st-surface:#fff;--st-border:rgba(0,0,0,0.08);}
+        html[data-theme="light"] body{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .st-tab{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .st-tab:hover{color:rgba(0,0,0,0.7);}
+        html[data-theme="light"] .st-tab.active{color:var(--st-cyan);}
+        html[data-theme="light"] .stat-label{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .stat-val{color:#1a1a2e;}
+        html[data-theme="light"] .st-section-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-table thead th{color:rgba(0,0,0,0.45);background:rgba(0,0,0,0.02);}
+        html[data-theme="light"] .st-table tbody td{color:#1a1a2e;}
+        html[data-theme="light"] .st-table tbody tr:hover td{background:rgba(0,149,179,0.04);}
+        html[data-theme="light"] .empty-row td{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .st-dash{color:rgba(0,0,0,0.3);}
+        html[data-theme="light"] .form-control,html[data-theme="light"] .form-select{background:#f8f9fa;border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .form-control:focus,html[data-theme="light"] .form-select:focus{background:#fff;border-color:var(--st-cyan);color:#1a1a2e;}
+        html[data-theme="light"] .form-select option{background:#fff;color:#1a1a2e;}
+        html[data-theme="light"] .modal-content{background:#fff;border-color:rgba(0,0,0,0.1);}
+        html[data-theme="light"] .modal-title{color:#1a1a2e;}
+        html[data-theme="light"] .form-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .st-check-label{color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .st-user-pill{color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .st-search{background:#fff;border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .sub-panel{background:rgba(0,0,0,0.015);}
+        html[data-theme="light"] .sub-title{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .sub-table thead th{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .sub-table tbody td{color:#2a2a3e;}
+        html[data-theme="light"] .sub-empty{color:rgba(0,0,0,0.3);}
+        html[data-theme="light"] .expand-chevron{color:rgba(0,0,0,0.3);}
+        html[data-theme="light"] .expand-chevron.open{color:var(--st-cyan);}
+        html[data-theme="light"] .mv-stat-label{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .mv-stat-val{color:#1a1a2e;}
+        html[data-theme="light"] .period-btn{border-color:rgba(0,0,0,0.1);color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .period-btn:hover{color:rgba(0,0,0,0.7);}
+        html[data-theme="light"] .st-month-input{background:#fff;border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .num-tot{color:rgba(0,0,0,0.45);}
+
+        /* Mobile */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        @media(max-width:768px){
+            .mob-menu-btn{display:flex!important;}
+            .mob-overlay{display:block;}
+            .st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}
+            .st-sidebar.mob-open{transform:translateX(0);}
+            .st-main{margin-left:0;padding:1rem;}
+            .stats-row{grid-template-columns:1fr 1fr;}
+            .mv-stats{grid-template-columns:1fr 1fr;}
+        }
+        .nav-badge{margin-left:auto;background:var(--st-yellow);color:#000;border-radius:20px;font-size:.65rem;font-weight:700;padding:.15em .55em;}
+        html[data-theme="light"] .nav-badge{background:#9a6700;color:#fff;}
+    </style>
+</head>
+<body>
+
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">Smart Technology</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
+        </a>
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ '' if pending_count > 0 else 'display:none;' }}">{{ pending_count }}</span>
+        </a>
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
+        </a>
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+        <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+    </a>
+    {% endif %}
+    <div class="st-sidebar-footer">
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<main class="st-main">
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-shield-alt me-2" style="color:var(--st-blue);"></i>Agence Assurance</div>
+            <div class="st-page-sub">Gestion des compagnies et comptes d'assurance</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" onclick="openSidebar()"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="st-tabs">
+        <button class="st-tab active" id="tab-btn-mouvements" onclick="switchTab('mouvements')">
+            <i class="fas fa-chart-line"></i> Mouvements
+        </button>
+        <button class="st-tab" id="tab-btn-compagnies" onclick="switchTab('compagnies')">
+            <i class="fas fa-building"></i> Compagnies
+        </button>
+    </div>
+
+    <!-- ===== TAB: COMPAGNIES ===== -->
+    <div id="tab-compagnies" style="display:none">
+        <!-- Stats -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(88,166,255,0.12);color:var(--st-blue);"><i class="fas fa-building"></i></div>
+                <div><div class="stat-label">Compagnies</div><div class="stat-val" id="stat-companies">—</div></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(63,185,80,0.12);color:var(--st-green);"><i class="fas fa-user-check"></i></div>
+                <div><div class="stat-label">Comptes actifs</div><div class="stat-val" id="stat-active">—</div></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(248,81,73,0.1);color:var(--st-red);"><i class="fas fa-user-times"></i></div>
+                <div><div class="stat-label">Comptes inactifs</div><div class="stat-val" id="stat-inactive">—</div></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(0,212,255,0.1);color:var(--st-cyan);"><i class="fas fa-users"></i></div>
+                <div><div class="stat-label">Total comptes</div><div class="stat-val" id="stat-total">—</div></div>
+            </div>
+        </div>
+
+        <!-- Compagnies table -->
+        <div class="st-section">
+            <div class="st-section-header">
+                <div class="st-section-title"><i class="fas fa-building" style="color:var(--st-blue);"></i>Compagnies d'Assurance</div>
+            </div>
+            <div class="section-toolbar">
+                <button class="st-btn st-btn-primary" onclick="openCompanyModal()"><i class="fas fa-plus me-1"></i>Nouvelle compagnie</button>
+                <input type="text" class="st-search" id="search-companies" placeholder="Rechercher…" oninput="filterCompanies()">
+            </div>
+            <div class="st-section-body">
+                <table class="st-table">
+                    <thead>
+                        <tr>
+                            <th>Compagnie</th>
+                            <th>Île</th>
+                            <th>Téléphone</th>
+                            <th>Adresse</th>
+                            <th>Comptes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="companies-tbody">
+                        <tr class="empty-row"><td colspan="6">Chargement…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: MOUVEMENTS ===== -->
+    <div id="tab-mouvements">
+        <!-- Period selector -->
+        <div class="st-section">
+            <div class="st-section-header">
+                <div class="st-section-title"><i class="fas fa-chart-line" style="color:var(--st-cyan);"></i>Mouvements par compagnie</div>
+                <div class="period-bar">
+                    <input type="month" class="st-month-input" id="mv-month" onchange="onMonthChange()">
+                    <button class="period-btn" id="mv-btn-year" onclick="setPeriodYear()">Cette année</button>
+                    <button class="period-btn" id="mv-btn-all" onclick="setPeriodAll()">Tout</button>
+                </div>
+            </div>
+
+            <!-- Mini stats -->
+            <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--st-border);">
+                <div class="mv-stats">
+                    <div class="mv-stat">
+                        <div class="mv-stat-icon" style="background:rgba(63,185,80,0.12);color:var(--st-green);"><i class="fas fa-plus-circle"></i></div>
+                        <div><div class="mv-stat-label">Nouveaux véhicules</div><div class="mv-stat-val num-act" id="mv-total-act">—</div></div>
+                    </div>
+                    <div class="mv-stat">
+                        <div class="mv-stat-icon" style="background:rgba(88,166,255,0.12);color:var(--st-blue);"><i class="fas fa-sync-alt"></i></div>
+                        <div><div class="mv-stat-label">Renouvellements</div><div class="mv-stat-val num-ren" id="mv-total-ren">—</div></div>
+                    </div>
+                    <div class="mv-stat">
+                        <div class="mv-stat-icon" style="background:rgba(0,212,255,0.1);color:var(--st-cyan);"><i class="fas fa-car"></i></div>
+                        <div><div class="mv-stat-label">Véhicules actifs</div><div class="mv-stat-val num-actv" id="mv-total-actv">—</div></div>
+                    </div>
+                    <div class="mv-stat">
+                        <div class="mv-stat-icon" style="background:rgba(210,153,34,0.12);color:var(--st-yellow);"><i class="fas fa-coins"></i></div>
+                        <div><div class="mv-stat-label">Commission totale</div><div class="mv-stat-val num-comm" id="mv-total-comm">—</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Movements table -->
+            <div class="st-section-body">
+                <table class="st-table">
+                    <thead>
+                        <tr>
+                            <th>Compagnie</th>
+                            <th>Île</th>
+                            <th style="white-space:normal;"><i class="fas fa-plus-circle" style="color:var(--st-green);margin-right:.3rem;"></i>Nouveaux<br>véhicules</th>
+                            <th><i class="fas fa-sync-alt" style="color:var(--st-blue);margin-right:.3rem;"></i>Renouvellements</th>
+                            <th style="white-space:normal;"><i class="fas fa-car" style="color:var(--st-cyan);margin-right:.3rem;"></i>Véhicules<br>actifs</th>
+                            <th style="white-space:normal;">Total<br>véhicules</th>
+                            <th><i class="fas fa-coins" style="color:var(--st-yellow);margin-right:.3rem;"></i>Commission</th>
+                            <th id="mv-col-receipt" style="display:none;width:42px;text-align:center;"><i class="fas fa-check-circle" title="Réception commission"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="mv-tbody">
+                        <tr class="empty-row"><td colspan="6">Chargement…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</main>
+
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- Modal Confirmation Réception Commission -->
+<div class="modal fade" id="rcptConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+        <div class="modal-content" style="background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;">
+            <div class="modal-header" style="border-bottom:1px solid var(--st-border);padding:.9rem 1.2rem;">
+                <div>
+                    <div class="rcpt-m-title"><i class="fas fa-coins me-2" style="color:var(--st-yellow);"></i>Confirmer la réception</div>
+                    <div class="rcpt-m-sub">Cette action est irréversible</div>
+                </div>
+            </div>
+            <div class="modal-body" style="padding:1.2rem;">
+                <p class="rcpt-m-body">
+                    Confirmez-vous avoir reçu la commission de :
+                </p>
+                <div style="background:rgba(63,185,80,0.07);border:1px solid rgba(63,185,80,0.2);border-radius:9px;padding:.7rem 1rem;margin-bottom:1rem;">
+                    <div class="rcpt-m-company" id="rcpt-modal-company">—</div>
+                    <div class="rcpt-m-period">Période : <span id="rcpt-modal-period">—</span></div>
+                </div>
+                <div style="background:rgba(248,81,73,0.06);border:1px solid rgba(248,81,73,0.18);border-radius:8px;padding:.55rem .85rem;font-size:.76rem;color:rgba(248,81,73,0.8);">
+                    <i class="fas fa-exclamation-triangle me-1"></i>Une fois confirmée, cette réception ne pourra plus être annulée.
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid var(--st-border);padding:.75rem 1.2rem;gap:.5rem;">
+                <button type="button" class="btn-reset" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" id="rcpt-confirm-btn" onclick="doConfirmReceipt()" style="background:linear-gradient(135deg,rgba(63,185,80,0.25),rgba(40,150,60,0.2));border:1px solid rgba(63,185,80,0.4);color:var(--st-green);border-radius:8px;padding:.42rem 1rem;font-size:.83rem;font-weight:600;cursor:pointer;">
+                    <i class="fas fa-check me-1"></i>Confirmer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Compagnie -->
+<div class="modal fade" id="companyModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="company-modal-title">Nouvelle compagnie</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="company-id">
+                <div class="mb-3">
+                    <label class="form-label">Nom de la compagnie *</label>
+                    <input type="text" class="form-control" id="company-name" placeholder="Ex: Comores Assurance">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Île</label>
+                    <select class="form-select" id="company-island">
+                        <option value="">— Choisir une île —</option>
+                        <option value="Grande Comore">Grande Comore</option>
+                        <option value="Anjouan">Anjouan</option>
+                        <option value="Moheli">Moheli</option>
+                        <option value="Nationale">Nationale</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Téléphone</label>
+                    <input type="text" class="form-control" id="company-phone" placeholder="+269 XXX XX XX">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Adresse</label>
+                    <input type="text" class="form-control" id="company-address" placeholder="Adresse…">
+                </div>
+                <div class="modal-err" id="company-err"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary btn-sm" onclick="saveCompany()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Compte -->
+<div class="modal fade" id="accountModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="account-modal-title">Nouveau compte</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="account-id">
+                <div class="mb-3">
+                    <label class="form-label">Compagnie *</label>
+                    <select class="form-select" id="account-insurance-id"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nom d'utilisateur *</label>
+                    <input type="text" class="form-control" id="account-username" placeholder="nom_utilisateur">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Mot de passe <span id="pw-hint" class="st-dash" style="font-size:.72rem;">(laisser vide pour ne pas changer)</span></label>
+                    <input type="password" class="form-control" id="account-password" placeholder="••••••••">
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-12">
+                        <label class="form-label">Personne de contact</label>
+                        <input type="text" class="form-control" id="account-contact-person" placeholder="Nom complet">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="account-contact-email" placeholder="email@exemple.com">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Téléphone</label>
+                        <input type="text" class="form-control" id="account-contact-phone" placeholder="+269…">
+                    </div>
+                </div>
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" id="account-active" checked>
+                    <label class="form-check-label st-check-label" style="font-size:.82rem;">Compte actif</label>
+                </div>
+                <div class="modal-err" id="account-err"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary btn-sm" onclick="saveAccount()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function(){
+    /* Theme */
+    const html = document.documentElement;
+    const themeBtn = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    function applyTheme(t){ html.setAttribute('data-theme',t); localStorage.setItem('st_theme',t); themeIcon.className=t==='dark'?'fas fa-sun':'fas fa-moon'; }
+    applyTheme(localStorage.getItem('st_theme')||'dark');
+    themeBtn.addEventListener('click',function(){ applyTheme(html.getAttribute('data-theme')==='dark'?'light':'dark'); });
+
+    /* Mobile sidebar */
+    window.openSidebar=function(){ document.querySelector('.st-sidebar').classList.add('mob-open'); document.getElementById('mob-overlay').classList.add('active'); };
+    window.closeSidebar=function(){ document.querySelector('.st-sidebar').classList.remove('mob-open'); document.getElementById('mob-overlay').classList.remove('active'); };
+    document.querySelectorAll('.st-nav-item').forEach(function(a){ a.addEventListener('click', window.closeSidebar); });
+
+    /* ===== TAB SWITCH ===== */
+    window.switchTab = function(name){
+        document.getElementById('tab-compagnies').style.display = name==='compagnies' ? '' : 'none';
+        document.getElementById('tab-mouvements').style.display = name==='mouvements' ? '' : 'none';
+        document.getElementById('tab-btn-compagnies').classList.toggle('active', name==='compagnies');
+        document.getElementById('tab-btn-mouvements').classList.toggle('active', name==='mouvements');
+        if(name==='mouvements'){ if(!_currentPeriod) _initMonthInput(); loadMovements(); }
+    };
+
+    /* ===== COMPAGNIES DATA ===== */
+    var _companies = [], _accounts = [], _expanded = new Set();
+
+    function loadAll(){ loadCompanies(); loadAccounts(); }
+
+    function loadCompanies(){
+        fetch('/smart-tech/api/assurance/companies')
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                _companies = data;
+                renderCompanies();
+                updateStats();
+                populateCompanySelect();
+            });
+    }
+
+    function loadAccounts(){
+        fetch('/smart-tech/api/assurance/accounts')
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                _accounts = data;
+                renderCompanies();
+                updateStats();
+            });
+    }
+
+    function updateStats(){
+        document.getElementById('stat-companies').textContent = _companies.length;
+        var active = _accounts.filter(function(a){ return a.is_active; }).length;
+        document.getElementById('stat-active').textContent   = active;
+        document.getElementById('stat-inactive').textContent = _accounts.length - active;
+        document.getElementById('stat-total').textContent    = _accounts.length;
+    }
+
+    /* Render companies with expandable sub-rows */
+    function renderCompanies(list){
+        if(list === undefined) list = _companies;
+        var tbody = document.getElementById('companies-tbody');
+        if(!list.length){
+            tbody.innerHTML='<tr class="empty-row"><td colspan="6">Aucune compagnie enregistrée.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = list.map(function(c){
+            var accs = _accounts.filter(function(a){ return a.insurance_id === c.id; });
+            var open = _expanded.has(c.id);
+            return (
+                '<tr class="company-row" onclick="toggleCompanyRow('+c.id+')" id="crow-'+c.id+'">'+
+                '<td><span class="expand-chevron'+(open?' open':'')+'" id="chev-'+c.id+'"><i class="fas fa-chevron-right"></i></span>'+
+                    '<strong>'+esc(c.company_name)+'</strong></td>'+
+                '<td>'+(c.island?'<span class="badge-island">'+esc(c.island)+'</span>':'<span class="st-dash">—</span>')+'</td>'+
+                '<td>'+(c.phone?esc(c.phone):'<span class="st-dash">—</span>')+'</td>'+
+                '<td>'+(c.address?esc(c.address):'<span class="st-dash">—</span>')+'</td>'+
+                '<td><span style="color:var(--st-cyan);font-weight:700;">'+accs.length+'</span></td>'+
+                '<td onclick="event.stopPropagation()"><div class="d-flex gap-1">'+
+                    '<button class="btn-icon btn-edit" onclick="editCompany('+c.id+')" title="Modifier"><i class="fas fa-pen"></i></button>'+
+                    '<button class="btn-icon btn-del" onclick="deleteCompany('+c.id+',\''+esc(c.company_name)+'\')" title="Supprimer"><i class="fas fa-trash"></i></button>'+
+                '</div></td>'+
+                '</tr>'+
+                '<tr class="company-sub-row" id="srow-'+c.id+'" style="display:'+(open?'':'none')+'">'+
+                '<td colspan="6"><div class="sub-panel">'+buildSubAccounts(c.id, accs)+'</div></td>'+
+                '</tr>'
+            );
+        }).join('');
+    }
+
+    function buildSubAccounts(companyId, accs){
+        var addBtn = '<button class="sub-add-btn" onclick="openAccountModal('+companyId+')"><i class="fas fa-plus"></i> Ajouter un compte</button>';
+        var header = '<div class="sub-header">'+
+            '<span class="sub-title"><i class="fas fa-user-shield" style="color:var(--st-green);margin-right:.4rem;"></i>Comptes ('+accs.length+')</span>'+
+            addBtn+'</div>';
+        if(!accs.length){
+            return header+'<div class="sub-empty">Aucun compte pour cette compagnie.</div>';
+        }
+        var rows = accs.map(function(a){
+            var badge = a.is_active
+                ? '<span class="badge-active">Actif</span>'
+                : '<span class="badge-inactive">Inactif</span>';
+            return '<tr>'+
+                '<td><strong>'+esc(a.username)+'</strong></td>'+
+                '<td>'+(a.contact_person?esc(a.contact_person):'<span class="st-dash">—</span>')+'</td>'+
+                '<td>'+(a.contact_email?esc(a.contact_email):'<span class="st-dash">—</span>')+'</td>'+
+                '<td>'+(a.contact_phone?esc(a.contact_phone):'<span class="st-dash">—</span>')+'</td>'+
+                '<td>'+badge+'</td>'+
+                '<td><div class="d-flex gap-1">'+
+                    '<button class="btn-icon btn-edit" onclick="editAccount('+a.id+')" title="Modifier"><i class="fas fa-pen"></i></button>'+
+                    '<button class="btn-icon btn-toggle" onclick="toggleAccount('+a.id+','+a.is_active+')" title="'+(a.is_active?'Désactiver':'Activer')+'"><i class="fas fa-'+(a.is_active?'ban':'check')+'"></i></button>'+
+                    '<button class="btn-icon btn-del" onclick="deleteAccount('+a.id+',\''+esc(a.username)+'\')" title="Supprimer"><i class="fas fa-trash"></i></button>'+
+                '</div></td>'+
+                '</tr>';
+        }).join('');
+        return header+
+            '<table class="sub-table"><thead><tr>'+
+            '<th>Utilisateur</th><th>Contact</th><th>Email</th><th>Téléphone</th><th>Statut</th><th>Actions</th>'+
+            '</tr></thead><tbody>'+rows+'</tbody></table>';
+    }
+
+    window.toggleCompanyRow = function(id){
+        var srow = document.getElementById('srow-'+id);
+        var chev = document.getElementById('chev-'+id);
+        if(!srow) return;
+        if(_expanded.has(id)){
+            _expanded.delete(id);
+            srow.style.display = 'none';
+            if(chev) chev.classList.remove('open');
+        } else {
+            _expanded.add(id);
+            var accs = _accounts.filter(function(a){ return a.insurance_id===id; });
+            srow.querySelector('td').innerHTML = '<div class="sub-panel">'+buildSubAccounts(id, accs)+'</div>';
+            srow.style.display = '';
+            if(chev) chev.classList.add('open');
+        }
+    };
+
+    window.filterCompanies = function(){
+        var q = document.getElementById('search-companies').value.toLowerCase();
+        renderCompanies(_companies.filter(function(c){
+            return (c.company_name+c.island+c.phone+c.address).toLowerCase().includes(q);
+        }));
+    };
+
+    /* ===== MOUVEMENTS ===== */
+    var _currentPeriod = '';
+
+    function _initMonthInput(){
+        var now = new Date();
+        var val = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+        document.getElementById('mv-month').value = val;
+        _currentPeriod = val;
+    }
+
+    function _clearBtns(){
+        document.getElementById('mv-btn-year').classList.remove('active');
+        document.getElementById('mv-btn-all').classList.remove('active');
+    }
+
+    window.onMonthChange = function(){
+        var val = document.getElementById('mv-month').value;
+        _clearBtns();
+        _currentPeriod = val || 'all';
+        loadMovements();
+    };
+
+    window.setPeriodYear = function(){
+        document.getElementById('mv-month').value = '';
+        _clearBtns();
+        document.getElementById('mv-btn-year').classList.add('active');
+        _currentPeriod = 'year';
+        loadMovements();
+    };
+
+    window.setPeriodAll = function(){
+        document.getElementById('mv-month').value = '';
+        _clearBtns();
+        document.getElementById('mv-btn-all').classList.add('active');
+        _currentPeriod = 'all';
+        loadMovements();
+    };
+
+    var _MONTHS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+
+    function _isMonthPeriod(p){ return /^\d{4}-\d{2}$/.test(p); }
+
+    var _MONTHS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+    function _fmtPeriod(p){ var pts=p.split('-'); return _MONTHS_FR[parseInt(pts[1],10)-1]+' '+pts[0]; }
+
+    var _pendingReceiptId = null;
+    var _rcptModal = null;
+
+    window.confirmReceiptPrompt = function(btn){
+        if(!_isMonthPeriod(_currentPeriod)) return;
+        _pendingReceiptId = btn.getAttribute('data-ins-id');
+        document.getElementById('rcpt-modal-company').textContent = btn.getAttribute('data-name');
+        document.getElementById('rcpt-modal-period').textContent  = _fmtPeriod(_currentPeriod);
+        if(!_rcptModal) _rcptModal = new bootstrap.Modal(document.getElementById('rcptConfirmModal'));
+        _rcptModal.show();
+    };
+
+    window.doConfirmReceipt = function(){
+        if(!_pendingReceiptId) return;
+        var confirmBtn = document.getElementById('rcpt-confirm-btn');
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin me-1"></i>Confirmation…';
+        fetch('/smart-tech/api/assurance/commission-received',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({period:_currentPeriod, insurance_id:parseInt(_pendingReceiptId)})
+        }).then(function(r){ return r.json(); })
+          .then(function(d){
+              if(d.confirmed){
+                  var el = document.getElementById('rcpt-btn-'+_pendingReceiptId);
+                  if(el){
+                      var dt = new Date(d.confirmed_at);
+                      var title = 'Reçue le '+dt.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+                      el.outerHTML = '<span class="rcpt-confirmed-badge" id="rcpt-btn-'+_pendingReceiptId+'" title="'+title+'"><i class="fas fa-check-circle"></i></span>';
+                  }
+              }
+              confirmBtn.disabled = false;
+              confirmBtn.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer';
+              _rcptModal.hide();
+              _pendingReceiptId = null;
+          }).catch(function(){
+              confirmBtn.disabled = false;
+              confirmBtn.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer';
+          });
+    };
+
+    function loadMovements(){
+        var isMonth = _isMonthPeriod(_currentPeriod);
+        document.getElementById('mv-col-receipt').style.display = isMonth ? '' : 'none';
+        var tbody = document.getElementById('mv-tbody');
+        var cols = isMonth ? 8 : 7;
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="'+cols+'">Chargement…</td></tr>';
+        fetch('/smart-tech/api/assurance/movements?period='+_currentPeriod)
+            .then(function(r){ return r.json(); })
+            .then(function(data){ renderMovements(data); });
+    }
+
+    function renderMovements(data){
+        var isMonth = _isMonthPeriod(_currentPeriod);
+        var cols = isMonth ? 8 : 7;
+        var tbody = document.getElementById('mv-tbody');
+        if(!data.length){
+            tbody.innerHTML='<tr class="empty-row"><td colspan="'+cols+'">Aucune compagnie enregistrée.</td></tr>';
+            document.getElementById('mv-total-act').textContent  = '0';
+            document.getElementById('mv-total-ren').textContent  = '0';
+            document.getElementById('mv-total-actv').textContent = '0';
+            document.getElementById('mv-total-comm').textContent = '0 FC';
+            return;
+        }
+        var totAct=0, totRen=0, totActv=0, totComm=0;
+        tbody.innerHTML = data.map(function(row){
+            totAct  += row.activations;
+            totRen  += row.renewals;
+            totActv += row.active_vehicles;
+            totComm += row.commission || 0;
+            var commFmt = (row.commission||0).toLocaleString('fr-FR')+' FC';
+            var rcptCell = '';
+            if(isMonth){
+                if(row.confirmed){
+                    var dt = row.confirmed_at ? new Date(row.confirmed_at) : null;
+                    var title = dt ? 'Reçue le '+dt.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}) : 'Commission reçue';
+                    rcptCell = '<td style="text-align:center;"><span class="rcpt-confirmed-badge" id="rcpt-btn-'+row.insurance_id+'" title="'+title+'"><i class="fas fa-check-circle"></i></span></td>';
+                } else {
+                    rcptCell = '<td style="text-align:center;"><button class="btn-receipt-pending" id="rcpt-btn-'+row.insurance_id+'" data-ins-id="'+row.insurance_id+'" data-name="'+esc(row.company_name)+'" onclick="confirmReceiptPrompt(this)" title="Confirmer la réception"><i class="fas fa-clock"></i></button></td>';
+                }
+            }
+            return '<tr>'+
+                '<td><strong>'+esc(row.company_name)+'</strong></td>'+
+                '<td>'+(row.island?'<span class="badge-island">'+esc(row.island)+'</span>':'<span class="st-dash">—</span>')+'</td>'+
+                '<td><span class="num-act">'+row.activations+'</span></td>'+
+                '<td><span class="num-ren">'+row.renewals+'</span></td>'+
+                '<td><span class="num-actv">'+row.active_vehicles+'</span></td>'+
+                '<td><span class="num-tot">'+row.total_vehicles+'</span></td>'+
+                '<td><span class="num-comm">'+commFmt+'</span></td>'+
+                rcptCell+
+            '</tr>';
+        }).join('');
+        document.getElementById('mv-total-act').textContent  = totAct;
+        document.getElementById('mv-total-ren').textContent  = totRen;
+        document.getElementById('mv-total-actv').textContent = totActv;
+        document.getElementById('mv-total-comm').textContent = totComm.toLocaleString('fr-FR')+' FC';
+    }
+
+    /* ===== COMPANY MODAL ===== */
+    function populateCompanySelect(selectedId){
+        var sel = document.getElementById('account-insurance-id');
+        sel.innerHTML = '<option value="">— Choisir une compagnie —</option>' +
+            _companies.map(function(c){
+                return '<option value="'+c.id+'"'+(c.id===selectedId?' selected':'')+'>'+esc(c.company_name)+'</option>';
+            }).join('');
+    }
+
+    var _companyModal = new bootstrap.Modal(document.getElementById('companyModal'));
+
+    window.openCompanyModal = function(){
+        document.getElementById('company-id').value='';
+        document.getElementById('company-name').value='';
+        document.getElementById('company-island').value='';
+        document.getElementById('company-phone').value='';
+        document.getElementById('company-address').value='';
+        document.getElementById('company-err').style.display='none';
+        document.getElementById('company-modal-title').textContent='Nouvelle compagnie';
+        _companyModal.show();
+    };
+
+    window.editCompany = function(id){
+        var c = _companies.find(function(x){ return x.id===id; });
+        if(!c) return;
+        document.getElementById('company-id').value=c.id;
+        document.getElementById('company-name').value=c.company_name||'';
+        document.getElementById('company-island').value=c.island||'';
+        document.getElementById('company-phone').value=c.phone||'';
+        document.getElementById('company-address').value=c.address||'';
+        document.getElementById('company-err').style.display='none';
+        document.getElementById('company-modal-title').textContent='Modifier la compagnie';
+        _companyModal.show();
+    };
+
+    window.saveCompany = function(){
+        var id   = document.getElementById('company-id').value;
+        var name = document.getElementById('company-name').value.trim();
+        var errEl = document.getElementById('company-err');
+        if(!name){ errEl.textContent="Le nom est requis."; errEl.style.display=''; return; }
+        errEl.style.display='none';
+        var payload = {
+            company_name: name,
+            island:   document.getElementById('company-island').value,
+            phone:    document.getElementById('company-phone').value.trim(),
+            address:  document.getElementById('company-address').value.trim(),
+        };
+        fetch(id?'/smart-tech/api/assurance/companies/'+id:'/smart-tech/api/assurance/companies',
+              { method:id?'PUT':'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if(d.error){ errEl.textContent=d.error; errEl.style.display=''; return; }
+                _companyModal.hide();
+                loadAll();
+            });
+    };
+
+    window.deleteCompany = function(id, name){
+        if(!confirm('Supprimer la compagnie "'+name+'" ?')) return;
+        fetch('/smart-tech/api/assurance/companies/'+id, { method:'DELETE' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if(d.error){ alert(d.error); return; }
+                _expanded.delete(id);
+                loadAll();
+            });
+    };
+
+    /* ===== ACCOUNT MODAL ===== */
+    var _accountModal = new bootstrap.Modal(document.getElementById('accountModal'));
+
+    window.openAccountModal = function(companyId){
+        document.getElementById('account-id').value='';
+        document.getElementById('account-username').value='';
+        document.getElementById('account-password').value='';
+        document.getElementById('account-contact-person').value='';
+        document.getElementById('account-contact-email').value='';
+        document.getElementById('account-contact-phone').value='';
+        document.getElementById('account-active').checked=true;
+        document.getElementById('account-err').style.display='none';
+        document.getElementById('account-modal-title').textContent='Nouveau compte';
+        document.getElementById('pw-hint').style.display='none';
+        populateCompanySelect(companyId||null);
+        _accountModal.show();
+    };
+
+    window.editAccount = function(id){
+        var a = _accounts.find(function(x){ return x.id===id; });
+        if(!a) return;
+        document.getElementById('account-id').value=a.id;
+        document.getElementById('account-username').value=a.username||'';
+        document.getElementById('account-password').value='';
+        document.getElementById('account-contact-person').value=a.contact_person||'';
+        document.getElementById('account-contact-email').value=a.contact_email||'';
+        document.getElementById('account-contact-phone').value=a.contact_phone||'';
+        document.getElementById('account-active').checked=a.is_active;
+        document.getElementById('account-err').style.display='none';
+        document.getElementById('account-modal-title').textContent='Modifier le compte';
+        document.getElementById('pw-hint').style.display='';
+        populateCompanySelect(a.insurance_id);
+        _accountModal.show();
+    };
+
+    window.saveAccount = function(){
+        var id      = document.getElementById('account-id').value;
+        var insId   = parseInt(document.getElementById('account-insurance-id').value);
+        var username= document.getElementById('account-username').value.trim();
+        var password= document.getElementById('account-password').value.trim();
+        var errEl   = document.getElementById('account-err');
+        if(!insId){ errEl.textContent="Veuillez sélectionner une compagnie."; errEl.style.display=''; return; }
+        if(!username){ errEl.textContent="Le nom d'utilisateur est requis."; errEl.style.display=''; return; }
+        if(!id && !password){ errEl.textContent="Le mot de passe est requis."; errEl.style.display=''; return; }
+        errEl.style.display='none';
+        var payload = {
+            insurance_id:   insId,
+            username:       username,
+            contact_person: document.getElementById('account-contact-person').value.trim(),
+            contact_email:  document.getElementById('account-contact-email').value.trim(),
+            contact_phone:  document.getElementById('account-contact-phone').value.trim(),
+            is_active:      document.getElementById('account-active').checked,
+        };
+        if(password) payload.password = password;
+        fetch(id?'/smart-tech/api/assurance/accounts/'+id:'/smart-tech/api/assurance/accounts',
+              { method:id?'PUT':'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if(d.error){ errEl.textContent=d.error; errEl.style.display=''; return; }
+                _accountModal.hide();
+                loadAccounts();
+            });
+    };
+
+    window.toggleAccount = function(id, currentActive){
+        fetch('/smart-tech/api/assurance/accounts/'+id, {
+            method:'PUT', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ is_active: !currentActive })
+        }).then(function(r){ return r.json(); })
+          .then(function(d){ if(!d.error) loadAccounts(); });
+    };
+
+    window.deleteAccount = function(id, username){
+        if(!confirm('Supprimer le compte "'+username+'" ?')) return;
+        fetch('/smart-tech/api/assurance/accounts/'+id, { method:'DELETE' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){ if(!d.error) loadAccounts(); });
+    };
+
+    function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    loadAll();
+    _initMonthInput();
+    loadMovements();
+})();
+</script>
+</body>
+</html>

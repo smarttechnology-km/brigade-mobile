@@ -89,6 +89,9 @@
 
         /* ── Table ── */
         .table { --bs-table-color: #e6edf3; --bs-table-bg: transparent; color: #e6edf3; margin: 0; font-size: 0.82rem; }
+        .nav-badge { margin-left: auto; background: var(--st-yellow); color: #000;
+            border-radius: 20px; font-size: 0.65rem; font-weight: 700; padding: 0.15em 0.55em; }
+        html[data-theme="light"] .nav-badge { background: #9a6700; color: #fff; }
         .text-muted { color: rgba(255,255,255,0.42) !important; }
         .table thead th { background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.45); border-color: var(--st-border); font-weight: 500; font-size: 0.73rem; text-transform: uppercase; letter-spacing: 0.4px; padding: 0.65rem 1rem; }
         .table tbody td { border-color: rgba(255,255,255,0.04); padding: 0.7rem 1rem; vertical-align: middle; }
@@ -249,6 +252,10 @@
         <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
+        </a>
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
@@ -258,6 +265,9 @@
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
         </a>
         {% endif %}
         {% if current_user.role == 'admin' %}
@@ -867,6 +877,24 @@
   ${receiptBlock('📁 Exemplaire Archives')}
 </div>
 <div class="no-print"><button class="btn-print" onclick="window.print()">🖨️ Imprimer</button></div>
+
+<script>
+(function(){
+    function pollLicBadge(){
+        fetch("/smart-tech/api/licences/requests/stats")
+            .then(function(r){return r.ok?r.json():null;})
+            .then(function(d){
+                if(!d)return;
+                var b=document.getElementById("nav-lic-badge");
+                if(!b)return;
+                b.textContent=d.pending_count;
+                b.style.display=d.pending_count>0?"":"none";
+            }).catch(function(){});
+    }
+    pollLicBadge();
+    setInterval(pollLicBadge,5000);
+})();
+</script>
 </body></html>`);
         w.document.close();
         setTimeout(() => w.print(), 600);

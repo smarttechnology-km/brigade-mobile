@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}Demandes d'impression — Licences{% endblock %}
+
+
+{% block content %}
+<div class="container py-4">
+
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h2><i class="fas fa-paper-plane me-2"></i>Demandes d'impression</h2>
+      <p class="text-muted mb-0">Suivi des demandes d'impression de cartes biométriques</p>
+    </div>
+    <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadAll()">
+        <i class="fas fa-sync-alt"></i> Actualiser
+      </button>
+      <a href="{{ url_for('main.licenses_page') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>Retour aux licences
+      </a>
+    </div>
+  </div>
+
+  <!-- Filtre par date -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-body py-3">
+      <div class="row align-items-center g-2">
+        <div class="col-auto">
+          <label class="form-label mb-0 fw-semibold">
+            <i class="fas fa-calendar-alt me-1 text-primary"></i>Période
+          </label>
+        </div>
+        <div class="col-auto d-flex align-items-center gap-2">
+          <input type="date" id="date-from" class="form-control form-control-sm" onchange="applyFilter()">
+          <span class="text-muted">→</span>
+          <input type="date" id="date-to" class="form-control form-control-sm" onchange="applyFilter()">
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-sm btn-outline-secondary" onclick="resetToLastMonth()">
+            <i class="fas fa-undo me-1"></i>1 mois
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row mb-4 g-3">
+    <div class="col-6 col-md-3">
+      <div class="card h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+          <div>
+            <div class="text-muted small">En attente</div>
+            <h3 class="mb-0 fw-bold text-warning" id="stat-pending">—</h3>
+          </div>
+          <i class="fas fa-clock text-warning" style="font-size:1.6rem;opacity:.7;"></i>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+          <div>
+            <div class="text-muted small">Imprimées</div>
+            <h3 class="mb-0 fw-bold text-success" id="stat-printed">—</h3>
+          </div>
+          <i class="fas fa-check-circle text-success" style="font-size:1.6rem;opacity:.7;"></i>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+          <div>
+            <div class="text-muted small">Annulées</div>
+            <h3 class="mb-0 fw-bold text-danger" id="stat-cancelled">—</h3>
+          </div>
+          <i class="fas fa-times-circle text-danger" style="font-size:1.6rem;opacity:.7;"></i>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+          <div>
+            <div class="text-muted small">Total</div>
+            <h3 class="mb-0 fw-bold" id="stat-total">—</h3>
+          </div>
+          <i class="fas fa-list text-secondary" style="font-size:1.6rem;opacity:.7;"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onglets -->
+  <div class="card shadow-sm">
+    <div class="card-header p-0">
+      <ul class="nav nav-tabs card-header-tabs px-3" id="req-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active d-flex align-items-center gap-2 py-3" id="tab-pending-btn"
+            data-bs-toggle="tab" data-bs-target="#tab-pending" type="button" role="tab">
+            <i class="fas fa-clock text-warning"></i>
+            En attente d'impression
+            <span class="badge bg-warning text-dark" id="badge-pending">0</span>
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link d-flex align-items-center gap-2 py-3" id="tab-printed-btn"
+            data-bs-toggle="tab" data-bs-target="#tab-printed" type="button" role="tab">
+            <i class="fas fa-check-circle text-success"></i>
+            Demandes imprimées
+            <span class="badge bg-success" id="badge-printed">0</span>
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link d-flex align-items-center gap-2 py-3" id="tab-cancelled-btn"
+            data-bs-toggle="tab" data-bs-target="#tab-cancelled" type="button" role="tab">
+            <i class="fas fa-times-circle text-danger"></i>
+            Demandes annulées
+            <span class="badge bg-danger" id="badge-cancelled">0</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+    <div class="tab-content" id="req-tabs-content">
+
+      <!-- En attente -->
+      <div class="tab-pane show active" id="tab-pending" role="tabpanel">
+        <div id="pending-loading" class="text-center py-4 text-muted">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Chargement…
+        </div>
+        <div id="pending-empty" class="text-center py-5 text-muted d-none">
+          <i class="fas fa-check-circle fa-2x mb-2 d-block text-success opacity-50"></i>
+          Aucune demande en attente
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 d-none" id="pending-table">
+            <thead class="table-light">
+              <tr>
+                <th>Permis</th>
+                <th>Titulaire</th>
+                <th>Demandé par</th>
+                <th>Date demande</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="pending-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Imprimées -->
+      <div class="tab-pane" id="tab-printed" role="tabpanel">
+        <div id="printed-loading" class="text-center py-4 text-muted">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Chargement…
+        </div>
+        <div id="printed-empty" class="text-center py-5 text-muted d-none">
+          <i class="fas fa-inbox fa-2x mb-2 d-block opacity-50"></i>
+          Aucune demande imprimée
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 d-none" id="printed-table">
+            <thead class="table-light">
+              <tr>
+                <th>Permis</th>
+                <th>Titulaire</th>
+                <th>Demandé par</th>
+                <th>Date demande</th>
+                <th>Imprimé par</th>
+                <th>Date impression</th>
+              </tr>
+            </thead>
+            <tbody id="printed-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Annulées -->
+      <div class="tab-pane" id="tab-cancelled" role="tabpanel">
+        <div id="cancelled-loading" class="text-center py-4 text-muted">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Chargement…
+        </div>
+        <div id="cancelled-empty" class="text-center py-5 text-muted d-none">
+          <i class="fas fa-inbox fa-2x mb-2 d-block opacity-50"></i>
+          Aucune demande annulée
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 d-none" id="cancelled-table">
+            <thead class="table-light">
+              <tr>
+                <th>Permis</th>
+                <th>Titulaire</th>
+                <th>Demandé par</th>
+                <th>Date demande</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody id="cancelled-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+let allData = [];
+
+function extractDateKey(dtStr) {
+  if (!dtStr) return '';
+  const [datePart] = dtStr.split(' ');
+  const [d, m, y]  = datePart.split('/');
+  return `${y}-${m}-${d}`;
+}
+
+function renderPendingRow(r) {
+  return `<tr>
+    <td><span class="fw-semibold">${r.license_number || '—'}</span></td>
+    <td>${r.holder_firstname || ''} ${r.holder_name || ''}</td>
+    <td><span class="badge bg-secondary">${r.requested_by || '—'}</span></td>
+    <td class="text-nowrap text-muted">${r.requested_at || '—'}</td>
+    <td class="text-muted small">${r.notes || '—'}</td>
+    <td class="text-end">
+      <button class="btn btn-sm btn-outline-danger" onclick="cancelRequest(${r.id})" title="Annuler">
+        <i class="fas fa-times"></i>
+      </button>
+    </td>
+  </tr>`;
+}
+
+function renderPrintedRow(r) {
+  return `<tr>
+    <td class="fw-semibold">${r.license_number || '—'}</td>
+    <td>${r.holder_firstname || ''} ${r.holder_name || ''}</td>
+    <td><span class="badge bg-secondary">${r.requested_by || '—'}</span></td>
+    <td class="text-nowrap text-muted">${r.requested_at || '—'}</td>
+    <td><span class="badge bg-success">${r.printed_by || '—'}</span></td>
+    <td class="text-nowrap text-muted">${r.printed_at || '—'}</td>
+  </tr>`;
+}
+
+function renderCancelledRow(r) {
+  return `<tr class="text-muted">
+    <td class="fw-semibold">${r.license_number || '—'}</td>
+    <td>${r.holder_firstname || ''} ${r.holder_name || ''}</td>
+    <td><span class="badge bg-secondary">${r.requested_by || '—'}</span></td>
+    <td class="text-nowrap">${r.requested_at || '—'}</td>
+    <td class="small">${r.notes || '—'}</td>
+  </tr>`;
+}
+
+function setSection(prefix, rows, renderFn) {
+  const loading = document.getElementById(prefix + '-loading');
+  const empty   = document.getElementById(prefix + '-empty');
+  const table   = document.getElementById(prefix + '-table');
+  const tbody   = document.getElementById(prefix + '-tbody');
+  loading.classList.add('d-none');
+  if (!rows.length) {
+    empty.classList.remove('d-none');
+    table.classList.add('d-none');
+  } else {
+    empty.classList.add('d-none');
+    table.classList.remove('d-none');
+    tbody.innerHTML = rows.map(renderFn).join('');
+  }
+}
+
+function render(data) {
+  const pending   = data.filter(r => r.status === 'pending');
+  const printed   = data.filter(r => r.status === 'printed');
+  const cancelled = data.filter(r => r.status === 'cancelled');
+
+  document.getElementById('stat-pending').textContent    = pending.length;
+  document.getElementById('stat-printed').textContent    = printed.length;
+  document.getElementById('stat-cancelled').textContent  = cancelled.length;
+  document.getElementById('stat-total').textContent      = data.length;
+  document.getElementById('badge-pending').textContent   = pending.length;
+  document.getElementById('badge-printed').textContent   = printed.length;
+  document.getElementById('badge-cancelled').textContent = cancelled.length;
+
+  setSection('pending',   pending,   renderPendingRow);
+  setSection('printed',   printed,   renderPrintedRow);
+  setSection('cancelled', cancelled, renderCancelledRow);
+}
+
+function applyFilter() {
+  const from = document.getElementById('date-from').value;
+  const to   = document.getElementById('date-to').value;
+
+  if (!from && !to) { render(allData); return; }
+
+  const filtered = allData.filter(r => {
+    const key = extractDateKey(r.requested_at);
+    if (!key) return false;
+    if (from && key < from) return false;
+    if (to   && key > to)   return false;
+    return true;
+  });
+  render(filtered);
+}
+
+function toInputDate(d) {
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+function resetToLastMonth() {
+  const today    = new Date();
+  const monthAgo = new Date(today);
+  monthAgo.setMonth(monthAgo.getMonth() - 1);
+  document.getElementById('date-from').value = toInputDate(monthAgo);
+  document.getElementById('date-to').value   = toInputDate(today);
+  applyFilter();
+}
+
+function loadAll() {
+  ['pending','printed','cancelled'].forEach(p => {
+    document.getElementById(p + '-loading').classList.remove('d-none');
+    document.getElementById(p + '-empty').classList.add('d-none');
+    document.getElementById(p + '-table').classList.add('d-none');
+  });
+
+  fetch('/api/licenses/print-requests', {credentials: 'same-origin'})
+    .then(r => r.ok ? r.json() : [])
+    .then(data => {
+      allData = data;
+      applyFilter();
+    })
+    .catch(() => {
+      document.getElementById('pending-loading').innerHTML =
+        '<div class="text-danger py-3 text-center">Erreur de chargement</div>';
+      document.getElementById('printed-loading').innerHTML = '';
+      document.getElementById('cancelled-loading').innerHTML = '';
+    });
+}
+
+function cancelRequest(id) {
+  if (!confirm('Annuler cette demande d\'impression ?')) return;
+  fetch(`/api/licenses/print-requests/${id}`, {
+    method: 'DELETE',
+    credentials: 'same-origin'
+  }).then(r => r.ok ? loadAll() : alert('Erreur lors de l\'annulation'));
+}
+
+(function init() {
+  const today    = new Date();
+  const monthAgo = new Date(today);
+  monthAgo.setMonth(monthAgo.getMonth() - 1);
+  document.getElementById('date-from').value = toInputDate(monthAgo);
+  document.getElementById('date-to').value   = toInputDate(today);
+  loadAll();
+})();
+</script>
+{% endblock %}

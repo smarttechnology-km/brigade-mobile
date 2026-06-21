@@ -22,6 +22,9 @@
     .btn-print:hover { background: #1e3a8a; }
     .btn-back  { background: #fff; color: #374151; border: 1px solid #d1d5db; }
     .btn-back:hover { background: #f9fafb; }
+    .btn-img   { background: #065f46; color: #fff; }
+    .btn-img:hover { background: #047857; }
+    .btn-img:disabled { opacity: .6; cursor: wait; }
 
     /* ── Card ── */
     .card {
@@ -41,13 +44,22 @@
       border-bottom: 3px solid #f59e0b;
     }
     .card-header-left { display: flex; align-items: center; gap: 10px; }
-    .card-flag { font-size: 24px; }
+    .card-flag { font-size: 28px; line-height: 1; }
     .card-title-block { display: flex; flex-direction: column; gap: 1px; }
     .card-title  { font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .07em; text-transform: uppercase; }
-    .card-country{ font-size: 8px; color: rgba(255,255,255,.5); font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
-    .card-num {
-      font-family: 'Courier New', monospace;
-      font-size: 16px; font-weight: 700; color: #fbbf24; letter-spacing: .1em;
+    .card-country{ font-size: 11px; color: rgba(255,255,255,.5); font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+    .card-stars {
+      display: flex; flex-direction: row; gap: 12px;
+      align-items: center; justify-content: center;
+    }
+    .card-stars span {
+      font-size: 18px; line-height: 1;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    }
+    .card-arabic {
+      font-size: 14px; font-weight: 700; color: rgba(255,255,255,.85);
+      text-align: right; line-height: 1.5;
+      font-family: 'Arial', sans-serif;
     }
 
     /* Flag stripe */
@@ -81,6 +93,7 @@
     .info-col {
       flex: 1; display: flex; flex-direction: column;
       padding: 10px 16px 8px; gap: 7px;
+      position: relative;
       background: linear-gradient(
         to bottom,
         rgba(252,209,22,.18) 0%,   rgba(252,209,22,.18) 25%,
@@ -89,9 +102,18 @@
         rgba(58,117,196,.16) 75%,  rgba(58,117,196,.16) 100%
       );
     }
+    .info-col-watermark {
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 230px; height: 230px;
+      object-fit: contain;
+      opacity: 0.15;
+      pointer-events: none;
+    }
     .holder-name { font-size: 22px; font-weight: 800; color: #0d1e50; line-height: 1.1; }
     .holder-sub  { font-size: 11px; color: #64748b; }
-    .info-divider { height: 1px; background: #e2e8f0; margin: 1px 0; }
+    .info-divider { height: 1px; background: transparent; margin: 1px 0; }
 
     .fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px 12px; }
     .field-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; font-weight: 700; }
@@ -109,16 +131,18 @@
     /* Footer */
     .card-footer {
       background: #f8fafc; border-top: 1px solid #e2e8f0;
-      padding: 6px 16px;
+      padding: 0 16px 3px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
+      overflow: visible;
     }
-    .footer-left { display: flex; flex-direction: column; gap: 2px; }
+    .footer-left { display: flex; flex-direction: column; gap: 1px; }
     .footer-main { font-size: 12px; font-weight: 700; color: #1e3a8a; }
     .footer-sub  { font-size: 10px; color: #94a3b8; }
 
     /* QR */
-    .qr-wrap img { width: 62px; height: 62px; display: block; border-radius: 5px; border: 1px solid #e2e8f0; }
+    .qr-wrap { margin-top: -30px; }
+    .qr-wrap img { width: 80px; height: 80px; display: block; border-radius: 5px; mix-blend-mode: multiply; }
 
     /* ── Back of card ── */
     .card-separator {
@@ -207,6 +231,7 @@
       .card-back { box-shadow: none; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/dom-to-image-more@2.10.1/dist/dom-to-image-more.min.js"></script>
 </head>
 <body>
 
@@ -219,6 +244,13 @@
       <rect x="6" y="14" width="12" height="8"/>
     </svg>
     Imprimer
+  </button>
+  <button class="btn btn-img" id="btn-img" onclick="downloadImages()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21 15 16 10 5 21"/>
+    </svg>
+    Télécharger en images
   </button>
 </div>
 
@@ -233,7 +265,13 @@
         <span class="card-country">Permis de Conduire</span>
       </div>
     </div>
-    <div class="card-num">{{ lic.license_number }}</div>
+    <div class="card-stars">
+      <span style="color:#f5e50b;">★</span>
+      <span style="color:#fff;">★</span>
+      <span style="color:#e41414;">★</span>
+      <span style="color:#2a5ff3;">★</span>
+    </div>
+    <div class="card-arabic" dir="rtl"><span style="color:#fff;letter-spacing:.25em;">جمهورية القمر المتحدة</span><br><span style="color:#fff;letter-spacing:.25em;">رخصة قيادة</span></div>
   </div>
 
   <!-- Corps : photo + infos -->
@@ -248,13 +286,14 @@
     </div>
 
     <div class="info-col">
+      <img class="info-col-watermark" src="/static/img/logo_comores.png" alt="">
       {% set is_exp = lic.expiry_date and lic.expiry_date < now_comoros().date() %}
 
       <div class="holder-name">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
       <div class="holder-sub">{{ lic.holder_island or '—' }}{% if lic.nationalite %} · {{ lic.nationalite }}{% endif %}</div>
       <div class="info-divider"></div>
 
-      <div class="fields">
+      <div class="fields" style="margin-top:8px;">
         <!-- Rangée 1 : dates -->
         <div>
           <div class="field-lbl">Naissance</div>
@@ -312,7 +351,11 @@
       <div class="footer-sub">Délivré par le Chef du Centre d'immatriculation</div>
     </div>
     <div class="qr-wrap">
-      <img src="/licenses/{{ lic.id }}/qrcode" alt="QR">
+      {% if qr_data_uri is defined and qr_data_uri %}
+        <img src="{{ qr_data_uri }}" alt="QR">
+      {% else %}
+        <img src="/licenses/{{ lic.id }}/qrcode" alt="QR">
+      {% endif %}
     </div>
   </div>
 
@@ -378,6 +421,42 @@
 
 </div>
 
-<script>setTimeout(function(){ window.print(); }, 400);</script>
+
+<script>
+
+
+function downloadImages() {
+  var btn = document.getElementById('btn-img');
+  btn.disabled = true;
+  btn.textContent = 'Génération…';
+  var licNum = '{{ lic.license_number }}';
+  var scale = 3;
+  var opts = { scale: scale, bgcolor: '#ffffff', style: { margin: '0' } };
+
+  var front = document.querySelector('.card');
+  var back  = document.querySelector('.card-back');
+
+  domtoimage.toPng(front, opts).then(function(url1) {
+    var a1 = document.createElement('a');
+    a1.download = 'permis_' + licNum + '_recto.png';
+    a1.href = url1;
+    a1.click();
+
+    return domtoimage.toPng(back, opts);
+  }).then(function(url2) {
+    var a2 = document.createElement('a');
+    a2.download = 'permis_' + licNum + '_verso.png';
+    a2.href = url2;
+    a2.click();
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Télécharger en images';
+  }).catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = 'Erreur';
+    console.error(e);
+  });
+}
+</script>
 </body>
 </html>

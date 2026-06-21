@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Technology — Licences</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg: #0d1117;
+            --st-surface: #161b22;
+            --st-border: rgba(255,255,255,0.08);
+            --st-cyan: #00d4ff;
+            --st-green: #3fb950;
+            --st-yellow: #f0b429;
+            --st-red: #f85149;
+            --st-blue: #58a6ff;
+            --st-purple: #bc8cff;
+            --sidebar-w: 260px;
+        }
+        * { box-sizing: border-box; }
+        body { background: var(--st-bg); color: #e6edf3; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; }
+
+        /* ── Sidebar ── */
+        .st-sidebar {
+            background: linear-gradient(180deg, #1a1a2e 0%, #0f3460 100%);
+            width: var(--sidebar-w); position: fixed; top: 0; left: 0; bottom: 0;
+            padding: 1.4rem 1rem; border-right: 1px solid rgba(0,212,255,0.1);
+            z-index: 100; display: flex; flex-direction: column;
+        }
+        .st-brand { display: flex; align-items: center; gap: 10px; padding-bottom: 1.2rem;
+            border-bottom: 1px solid rgba(0,212,255,0.15); margin-bottom: 1.5rem; }
+        .st-brand-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--st-cyan), #0080ff);
+            border-radius: 11px; display: flex; align-items: center; justify-content: center;
+            font-size: 1.15rem; color: #fff; flex-shrink: 0; }
+        .st-brand-name { font-weight: 700; font-size: 0.92rem; color: #fff; line-height: 1.2; }
+        .st-brand-sub  { font-size: 0.7rem; color: var(--st-cyan); font-weight: 400; }
+        .st-nav { flex: 1; }
+        .st-nav-item {
+            display: flex; align-items: center; gap: 11px; padding: 0.7rem 1rem;
+            border-radius: 10px; color: rgba(255,255,255,0.6); text-decoration: none;
+            font-size: 0.9rem; margin-bottom: 4px; transition: all 0.18s; position: relative;
+        }
+        .st-nav-item:hover, .st-nav-item.active { background: rgba(0,212,255,0.1); color: #fff; }
+        .st-nav-item.active { border-left: 3px solid var(--st-cyan); }
+        .st-nav-icon { width: 20px; text-align: center; color: var(--st-cyan); flex-shrink: 0; font-size: 1rem; }
+        .st-nav-divider { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.7px;
+            color: rgba(255,255,255,0.3); padding: 1rem 1rem 0.35rem; }
+        .st-sidebar-footer { padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.07); }
+        .nav-badge { margin-left: auto; background: var(--st-yellow); color: #000;
+            border-radius: 20px; font-size: 0.65rem; font-weight: 700; padding: 0.15em 0.55em; }
+
+        /* ── Main ── */
+        .st-main { margin-left: var(--sidebar-w); padding: 1.5rem 2rem; min-height: 100vh; }
+        .st-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.6rem; }
+        .st-page-title { font-size: 1.2rem; font-weight: 700; color: #fff; }
+        .st-page-sub   { font-size: 0.78rem; color: rgba(255,255,255,0.4); margin-top: 1px; }
+        .st-user-pill {
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(0,212,255,0.15);
+            border-radius: 30px; padding: 0.3rem 0.9rem; font-size: 0.8rem; color: rgba(255,255,255,0.7);
+        }
+        .st-user-pill:hover { border-color: rgba(0,212,255,0.35); background: rgba(0,212,255,0.08); color: var(--st-cyan); }
+
+        /* ── Section ── */
+        .st-section { background: var(--st-surface); border: 1px solid var(--st-border);
+            border-radius: 14px; overflow: hidden; margin-bottom: 1.5rem; }
+        .st-section-header { display: flex; align-items: center; justify-content: space-between;
+            padding: 0.9rem 1.2rem; border-bottom: 1px solid var(--st-border); flex-wrap: wrap; gap: 0.5rem; }
+        .st-section-title { font-size: 0.88rem; font-weight: 600; color: #fff; }
+
+        /* ── Demandes en attente ── */
+        .requests-banner {
+            background: linear-gradient(90deg, rgba(240,180,41,0.12) 0%, rgba(240,180,41,0.05) 100%);
+            border: 1px solid rgba(240,180,41,0.3); border-radius: 14px; margin-bottom: 1.5rem; overflow: hidden;
+        }
+        .requests-banner-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.9rem 1.4rem; border-bottom: 1px solid rgba(240,180,41,0.2); flex-wrap: wrap; gap: 0.5rem;
+        }
+        .requests-banner-title { font-size: 0.9rem; font-weight: 700; color: var(--st-yellow); display: flex; align-items: center; gap: 8px; }
+        .requests-count { background: var(--st-yellow); color: #000; border-radius: 20px; font-size: 0.7rem; font-weight: 800; padding: 0.2em 0.7em; }
+        .requests-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; padding: 1.2rem; }
+        .request-card {
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(240,180,41,0.2);
+            border-radius: 11px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;
+            transition: border-color 0.18s;
+        }
+        .request-card:hover { border-color: rgba(240,180,41,0.45); }
+        .request-card-header { display: flex; align-items: center; gap: 10px; }
+        .request-photo { width: 52px; height: 62px; border-radius: 6px; object-fit: cover;
+            border: 1.5px solid rgba(255,255,255,0.15); flex-shrink: 0; }
+        .request-photo-empty { width: 52px; height: 62px; border-radius: 6px;
+            background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,0.25); font-size: 1.5rem; flex-shrink: 0; }
+        .request-info { flex: 1; min-width: 0; }
+        .request-name { font-weight: 700; font-size: 0.92rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .request-num  { font-family: monospace; font-size: 0.8rem; color: var(--st-cyan); margin-top: 1px; }
+        .request-meta { font-size: 0.72rem; color: rgba(255,255,255,0.4); margin-top: 3px; }
+        .request-actions { display: flex; gap: 0.5rem; }
+        .btn-validate {
+            flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+            background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4);
+            color: var(--st-green); border-radius: 8px; padding: 0.45rem 0.75rem;
+            font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.18s;
+        }
+        .btn-validate:hover { background: rgba(63,185,80,0.28); border-color: var(--st-green); }
+        .btn-validate:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-open-card {
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+            background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.3);
+            color: var(--st-cyan); border-radius: 8px; padding: 0.45rem 0.75rem;
+            font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none;
+            transition: all 0.18s; white-space: nowrap;
+        }
+        .btn-open-card:hover { background: rgba(0,212,255,0.22); border-color: var(--st-cyan); color: var(--st-cyan); }
+        .btn-cancel-req {
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.25);
+            color: var(--st-red); border-radius: 8px; padding: 0.45rem 0.6rem;
+            font-size: 0.8rem; cursor: pointer; transition: all 0.18s;
+        }
+        .btn-cancel-req:hover { background: rgba(248,81,73,0.18); border-color: var(--st-red); }
+        .requests-empty { padding: 2rem; text-align: center; color: rgba(240,180,41,0.4); font-size: 0.85rem; }
+
+        /* ── btn-print-card (used inside request cards) ── */
+        .btn-print-card {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(0,212,255,0.12); border: 1px solid rgba(0,212,255,0.3);
+            color: var(--st-cyan); border-radius: 7px; padding: 0.3rem 0.75rem;
+            font-size: 0.77rem; font-weight: 600; cursor: pointer; text-decoration: none;
+            transition: all 0.18s; white-space: nowrap;
+        }
+        .btn-print-card:hover { background: rgba(0,212,255,0.22); border-color: var(--st-cyan); color: var(--st-cyan); }
+
+        /* ── Stat cards ── */
+        .st-stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .st-stat-card {
+            background: var(--st-surface); border: 1px solid var(--st-border);
+            border-radius: 14px; padding: 1.1rem 1.3rem;
+            display: flex; flex-direction: column; gap: 0.35rem;
+            transition: border-color 0.18s;
+        }
+        .st-stat-card:hover { border-color: rgba(255,255,255,0.18); }
+        .st-stat-icon { font-size: 1.1rem; margin-bottom: 0.15rem; }
+        .st-stat-value { font-size: 2rem; font-weight: 800; line-height: 1; }
+        .st-stat-label { font-size: 0.73rem; color: rgba(255,255,255,0.42); font-weight: 500; }
+        html[data-theme="light"] .st-stat-card { background: #fff; border-color: rgba(0,0,0,0.08); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        html[data-theme="light"] .st-stat-card:hover { border-color: rgba(0,0,0,0.18); }
+        html[data-theme="light"] .st-stat-label { color: rgba(0,0,0,0.42); }
+
+        /* ── Historique ── */
+        .hist-filter-bar {
+            display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;
+            padding: 0.8rem 1.2rem; border-bottom: 1px solid var(--st-border);
+        }
+        .hist-filter-label { font-size: 0.78rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
+        html[data-theme="light"] .hist-filter-label { color: rgba(0,0,0,0.45); }
+        .hist-date-input {
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 7px; color: #e6edf3; padding: 0.32rem 0.65rem; font-size: 0.8rem;
+            color-scheme: dark;
+        }
+        html[data-theme="light"] .hist-date-input {
+            background: #fff; border-color: rgba(0,0,0,0.18); color: #1a1a2e; color-scheme: light;
+        }
+        .hist-date-input:focus { outline: none; border-color: var(--st-cyan); }
+        .btn-hist-filter {
+            background: rgba(0,212,255,0.12); border: 1px solid rgba(0,212,255,0.3);
+            color: var(--st-cyan); border-radius: 7px; padding: 0.32rem 0.75rem;
+            font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.18s; white-space: nowrap;
+        }
+        .btn-hist-filter:hover { background: rgba(0,212,255,0.22); border-color: var(--st-cyan); }
+        html[data-theme="light"] .btn-hist-filter { background: rgba(0,149,179,0.08); border-color: rgba(0,149,179,0.3); color: #0095b3; }
+        html[data-theme="light"] .btn-hist-filter:hover { background: rgba(0,149,179,0.18); }
+
+        .hist-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        .hist-table th { padding: 0.6rem 1rem; text-align: left; font-size: 0.72rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.4);
+            border-bottom: 1px solid var(--st-border); }
+        html[data-theme="light"] .hist-table th { color: rgba(0,0,0,0.4); }
+        .hist-table td { padding: 0.65rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+        html[data-theme="light"] .hist-table td { border-bottom-color: rgba(0,0,0,0.05); }
+        .hist-table tr:last-child td { border-bottom: none; }
+        .hist-table tr:hover td { background: rgba(255,255,255,0.025); }
+        html[data-theme="light"] .hist-table tr:hover td { background: rgba(0,0,0,0.02); }
+        .hist-num { font-family: monospace; color: var(--st-cyan); font-size: 0.8rem; }
+        html[data-theme="light"] .hist-num { color: #0095b3; }
+        .hist-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(63,185,80,0.15);
+            border: 1px solid rgba(63,185,80,0.3); color: var(--st-green); border-radius: 5px;
+            padding: 0.15em 0.55em; font-size: 0.72rem; font-weight: 600; }
+        html[data-theme="light"] .hist-badge { background: rgba(26,127,55,0.1); border-color: rgba(26,127,55,0.3); color: #1a7f37; }
+        .hist-empty { padding: 2.5rem; text-align: center; color: rgba(255,255,255,0.25); font-size: 0.85rem; }
+        html[data-theme="light"] .hist-empty { color: rgba(0,0,0,0.3); }
+        .hist-stats { display: flex; gap: 1.5rem; padding: 0.8rem 1.2rem; border-bottom: 1px solid var(--st-border); }
+        .hist-stat-item { font-size: 0.78rem; color: rgba(255,255,255,0.4); }
+        .hist-stat-item strong { color: var(--st-green); font-size: 1rem; margin-right: 4px; }
+        html[data-theme="light"] .hist-stat-item { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .hist-stat-item strong { color: #1a7f37; }
+
+        /* ── Theme button ── */
+        .st-theme-btn { width: 34px; height: 34px; border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.07);
+            color: rgba(255,255,255,0.75); display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-size: 0.85rem; transition: all 0.2s; flex-shrink: 0; }
+        .st-theme-btn:hover { background: rgba(0,212,255,0.15); border-color: var(--st-cyan); color: var(--st-cyan); }
+
+        /* ── Light mode ── */
+        html[data-theme="light"] body { background: #f0f2f5; color: #1a1a2e; }
+        html[data-theme="light"] .st-section { background: #fff; border-color: rgba(0,0,0,0.08); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        html[data-theme="light"] .st-section-header { border-bottom-color: rgba(0,0,0,0.08); }
+        html[data-theme="light"] .st-section-title { color: #1a1a2e; }
+        html[data-theme="light"] .requests-banner { background: linear-gradient(90deg, rgba(154,103,0,0.07) 0%, rgba(154,103,0,0.03) 100%); border-color: rgba(154,103,0,0.3); }
+        html[data-theme="light"] .requests-banner-header { border-bottom-color: rgba(154,103,0,0.15); }
+        html[data-theme="light"] .requests-banner-title { color: #9a6700; }
+        html[data-theme="light"] .requests-count { background: #9a6700; color: #fff; }
+        html[data-theme="light"] .request-card { background: rgba(0,0,0,0.02); border-color: rgba(154,103,0,0.2); }
+        html[data-theme="light"] .request-card:hover { border-color: rgba(154,103,0,0.45); }
+        html[data-theme="light"] .request-name { color: #1a1a2e; }
+        html[data-theme="light"] .request-num  { color: #0095b3; }
+        html[data-theme="light"] .request-meta { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .request-photo-empty { background: rgba(0,0,0,0.05); color: rgba(0,0,0,0.2); }
+        html[data-theme="light"] .requests-empty { color: rgba(154,103,0,0.5); }
+        html[data-theme="light"] .st-page-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-page-sub { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .st-user-pill { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.12); color: #1a1a2e; }
+        html[data-theme="light"] .st-theme-btn { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); color: #555; }
+        html[data-theme="light"] .st-theme-btn:hover { background: rgba(0,150,180,0.1); border-color: #0095b3; color: #0095b3; }
+        html[data-theme="light"] .btn-print-card { background: rgba(0,149,179,0.08); border-color: rgba(0,149,179,0.3); color: #0095b3; }
+        html[data-theme="light"] .btn-print-card:hover { background: rgba(0,149,179,0.16); border-color: #0095b3; color: #0095b3; }
+        html[data-theme="light"] .btn-validate { background: rgba(26,127,55,0.1); border-color: rgba(26,127,55,0.35); color: #1a7f37; }
+        html[data-theme="light"] .btn-validate:hover { background: rgba(26,127,55,0.2); border-color: #1a7f37; }
+        html[data-theme="light"] .btn-open-card { background: rgba(0,149,179,0.08); border-color: rgba(0,149,179,0.25); color: #0095b3; }
+        html[data-theme="light"] .btn-open-card:hover { background: rgba(0,149,179,0.18); border-color: #0095b3; color: #0095b3; }
+        html[data-theme="light"] .btn-cancel-req { background: rgba(207,34,46,0.06); border-color: rgba(207,34,46,0.2); color: #cf222e; }
+        html[data-theme="light"] .btn-cancel-req:hover { background: rgba(207,34,46,0.14); border-color: #cf222e; }
+        html[data-theme="light"] .nav-badge { background: #9a6700; color: #fff; }
+        .text-muted { color: rgba(255,255,255,0.42) !important; }
+        html[data-theme="light"] .text-muted { color: rgba(0,0,0,0.45) !important; }
+
+        /* ── Mobile ── */
+        @media (max-width: 768px) {
+            .mob-menu-btn { display: flex !important; }
+            .st-sidebar { transform: translateX(-100%); transition: transform .28s cubic-bezier(.4,0,.2,1); }
+            .st-sidebar.mob-open { transform: translateX(0); z-index: 101; }
+            .st-main { margin-left: 0; padding: 1rem; }
+            .requests-grid { grid-template-columns: 1fr; }
+        }
+        .mob-menu-btn { display: none; width: 36px; height: 36px; border-radius: 9px;
+            border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);
+            color: rgba(255,255,255,0.8); align-items: center; justify-content: center;
+            cursor: pointer; font-size: .95rem; flex-shrink: 0; transition: all .18s; }
+        .mob-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+            z-index: 99; opacity: 0; transition: opacity .25s; pointer-events: none; }
+        .mob-overlay.active { opacity: 1; pointer-events: all; }
+    </style>
+    <script>(function(){ const t = localStorage.getItem('st_theme') || 'dark'; document.documentElement.setAttribute('data-theme', t); })();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- ── Sidebar ── -->
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">Smart Technology</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
+        </a>
+        <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
+        </a>
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ '' if pending_count > 0 else 'display:none;' }}">{{ pending_count }}</span>
+        </a>
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+        <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+    </a>
+    {% endif %}
+    <div class="st-sidebar-footer">
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="st-main">
+
+    <!-- Topbar -->
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-id-card me-2" style="color:var(--st-cyan);"></i>Licences — Cartes biométriques</div>
+            <div class="st-page-sub">Gérez les demandes d'impression et imprimez les cartes</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" onclick="openSidebar()"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn" title="Changer le thème">
+                <i class="fas fa-sun" id="theme-icon"></i>
+            </button>
+            <div id="live-badge" style="display:none;font-size:0.75rem;padding:0.25rem 0.75rem;border-radius:20px;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);color:var(--st-green);white-space:nowrap;">● En direct</div>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- ── Stat cards (admin only) ── -->
+    {% if current_user.role == 'admin' %}
+    <div class="st-stats-grid">
+        <div class="st-stat-card">
+            <div class="st-stat-icon" style="color:var(--st-yellow);"><i class="fas fa-clock"></i></div>
+            <div class="st-stat-value" style="color:var(--st-yellow);" id="stat-pending">—</div>
+            <div class="st-stat-label">En attente</div>
+        </div>
+        <div class="st-stat-card">
+            <div class="st-stat-icon" style="color:var(--st-green);"><i class="fas fa-calendar-day"></i></div>
+            <div class="st-stat-value" style="color:var(--st-green);" id="stat-today">—</div>
+            <div class="st-stat-label">Imprimées aujourd'hui</div>
+        </div>
+        <div class="st-stat-card">
+            <div class="st-stat-icon" style="color:var(--st-cyan);"><i class="fas fa-calendar-alt"></i></div>
+            <div class="st-stat-value" style="color:var(--st-cyan);" id="stat-month">—</div>
+            <div class="st-stat-label">Imprimées ce mois</div>
+        </div>
+        <div class="st-stat-card">
+            <div class="st-stat-icon" style="color:var(--st-blue);"><i class="fas fa-check-circle"></i></div>
+            <div class="st-stat-value" style="color:var(--st-blue);" id="stat-total">—</div>
+            <div class="st-stat-label">Total imprimées</div>
+        </div>
+        <div class="st-stat-card">
+            <div class="st-stat-icon" style="color:var(--st-red);"><i class="fas fa-times-circle"></i></div>
+            <div class="st-stat-value" style="color:var(--st-red);" id="stat-cancelled">—</div>
+            <div class="st-stat-label">Annulées</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Section 1 : Demandes en attente ── -->
+    <div class="requests-banner" id="requests-section">
+        <div class="requests-banner-header">
+            <div class="requests-banner-title">
+                <i class="fas fa-bell"></i>
+                Demandes d'impression en attente
+                <span class="requests-count" id="req-count">0</span>
+            </div>
+        </div>
+        <div id="requests-grid" class="requests-grid">
+            <div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+        </div>
+    </div>
+
+    <!-- ── Section 2 : Historique des cartes imprimées (admin only) ── -->
+    {% if current_user.role == 'admin' %}
+    <div class="st-section">
+        <div class="st-section-header">
+            <span class="st-section-title"><i class="fas fa-history me-2" style="color:var(--st-green);"></i>Historique des cartes imprimées</span>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                <input type="date" id="hist-from" class="hist-date-input" onchange="loadHistory()">
+                <span class="hist-filter-label">→</span>
+                <input type="date" id="hist-to" class="hist-date-input" onchange="loadHistory()">
+                <button class="btn-hist-filter" onclick="resetHistRange()">
+                    <i class="fas fa-undo me-1"></i>1 mois
+                </button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div id="hist-body">
+            <div class="hist-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+        </div>
+    </div>
+    {% endif %}
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    /* ── Theme ── */
+    const html = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', () => applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+
+    /* ── Helpers ── */
+    function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    /* ══════════════════════════════════════════
+       SECTION 1 — Demandes en attente
+    ══════════════════════════════════════════ */
+    window.loadRequests = function () {
+        lastRefresh = Date.now();
+        const grid = document.getElementById('requests-grid');
+        grid.innerHTML = '<div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+
+        fetch('/smart-tech/api/licences/requests')
+            .then(r => r.ok ? r.json() : [])
+            .then(reqs => {
+                const countEl = document.getElementById('req-count');
+                countEl.textContent = reqs.length;
+
+                if (!reqs.length) {
+                    grid.innerHTML = '<div class="requests-empty"><i class="fas fa-check-circle me-2"></i>Aucune demande en attente.</div>';
+                    return;
+                }
+
+                grid.innerHTML = reqs.map(r => {
+                    const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
+                    const photo = r.photo_filename
+                        ? `<img class="request-photo" src="/static/uploads/license_photos/${esc(r.photo_filename)}" alt="">`
+                        : `<div class="request-photo-empty"><i class="fas fa-user"></i></div>`;
+                    return `
+                    <div class="request-card" id="req-card-${r.id}">
+                        <div class="request-card-header">
+                            ${photo}
+                            <div class="request-info">
+                                <div class="request-name">${fullName}</div>
+                                <div class="request-num">${esc(r.license_number)}</div>
+                                <div class="request-meta">
+                                    <i class="fas fa-clock me-1"></i>${esc(r.requested_at)}
+                                    &nbsp;·&nbsp; par <strong>${esc(r.requested_by)}</strong>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="request-actions">
+                            <a href="/smart-tech/licences/${r.license_id}/card" target="_blank" class="btn-open-card"
+                               onclick="onOpenCard(${r.id})">
+                                <i class="fas fa-print"></i> Ouvrir & Imprimer
+                            </a>
+                            <button class="btn-validate" id="btn-val-${r.id}" onclick="validateRequest(${r.id})"
+                                    style="${getOpenedCards().includes(r.id) ? '' : 'display:none;'}">
+                                <i class="fas fa-check"></i> Valider
+                            </button>
+                            <button class="btn-cancel-req" title="Annuler la demande" onclick="cancelRequest(${r.id})">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>`;
+                }).join('');
+            })
+            .catch(() => {
+                document.getElementById('requests-grid').innerHTML =
+                    '<div class="requests-empty"><i class="fas fa-exclamation-triangle me-2"></i>Erreur de chargement.</div>';
+            });
+    };
+
+    function getOpenedCards() {
+        try { return JSON.parse(localStorage.getItem('st_opened_cards') || '[]'); } catch { return []; }
+    }
+    function markCardOpened(reqId) {
+        const opened = getOpenedCards();
+        if (!opened.includes(reqId)) { opened.push(reqId); localStorage.setItem('st_opened_cards', JSON.stringify(opened)); }
+    }
+    function clearOpenedCard(reqId) {
+        const opened = getOpenedCards().filter(id => id !== reqId);
+        localStorage.setItem('st_opened_cards', JSON.stringify(opened));
+    }
+
+    window.onOpenCard = function (reqId) {
+        markCardOpened(reqId);
+        const btn = document.getElementById('btn-val-' + reqId);
+        if (btn) btn.style.display = '';
+    };
+
+    window.validateRequest = function (reqId) {
+        const btn = document.getElementById('btn-val-' + reqId);
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+
+        fetch(`/smart-tech/api/licences/requests/${reqId}/validate`, { method: 'POST' })
+            .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+            .then(({ ok, data }) => {
+                if (ok) {
+                    const card = document.getElementById('req-card-' + reqId);
+                    if (card) {
+                        card.style.transition = 'opacity 0.3s, transform 0.3s';
+                        card.style.opacity = '0';
+                        card.style.transform = 'scale(0.95)';
+                        setTimeout(() => {
+                            card.remove(); updateReqCount(); clearOpenedCard(reqId);
+                            {% if current_user.role == 'admin' %}loadStats(); loadHistory();{% endif %}
+                        }, 320);
+                    }
+                } else {
+                    alert(data.error || 'Erreur.');
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Valider'; }
+                }
+            })
+            .catch(() => { alert('Erreur réseau.'); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Valider'; } });
+    };
+
+    window.cancelRequest = function (reqId) {
+        if (!confirm('Annuler cette demande d\'impression ?')) return;
+        fetch(`/smart-tech/api/licences/requests/${reqId}/cancel`, { method: 'POST' })
+            .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+            .then(({ ok, data }) => {
+                if (ok) {
+                    const card = document.getElementById('req-card-' + reqId);
+                    if (card) {
+                        card.style.transition = 'opacity 0.3s';
+                        card.style.opacity = '0';
+                        setTimeout(() => {
+                            card.remove(); updateReqCount(); clearOpenedCard(reqId);
+                            {% if current_user.role == 'admin' %}loadStats();{% endif %}
+                        }, 300);
+                    }
+                } else { alert(data.error || 'Erreur.'); }
+            });
+    };
+
+    function updateReqCount() {
+        const remaining = document.querySelectorAll('[id^="req-card-"]').length;
+        document.getElementById('req-count').textContent = remaining;
+        if (!remaining) {
+            document.getElementById('requests-grid').innerHTML =
+                '<div class="requests-empty"><i class="fas fa-check-circle me-2"></i>Aucune demande en attente.</div>';
+        }
+    }
+
+    /* ══════════════════════════════════════════
+       STAT CARDS
+    ══════════════════════════════════════════ */
+    function loadStats() {
+        fetch('/smart-tech/api/licences/requests/stats')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d) return;
+                document.getElementById('stat-pending').textContent   = d.pending_count;
+                document.getElementById('stat-today').textContent     = d.printed_today;
+                document.getElementById('stat-month').textContent     = d.printed_month;
+                document.getElementById('stat-total').textContent     = d.printed_total;
+                document.getElementById('stat-cancelled').textContent = d.cancelled_total;
+            })
+            .catch(() => {});
+    }
+
+    /* ══════════════════════════════════════════
+       SECTION 2 — Historique des cartes imprimées
+    ══════════════════════════════════════════ */
+    function toInputDate(d) {
+        const y  = d.getFullYear();
+        const m  = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+    }
+    function inputToApiDate(val) {
+        // "yyyy-mm-dd" → "dd/mm/yyyy"
+        if (!val) return '';
+        const [y, m, d] = val.split('-');
+        return `${d}/${m}/${y}`;
+    }
+
+    function resetHistRange() {
+        const today    = new Date();
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        document.getElementById('hist-from').value = toInputDate(monthAgo);
+        document.getElementById('hist-to').value   = toInputDate(today);
+        loadHistory();
+    }
+
+    window.loadHistory = function () {
+        const from = inputToApiDate(document.getElementById('hist-from').value);
+        const to   = inputToApiDate(document.getElementById('hist-to').value);
+        const body = document.getElementById('hist-body');
+        body.innerHTML = '<div class="hist-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+
+        let url = '/smart-tech/api/licences/requests/history';
+        const params = [];
+        if (from) params.push('from=' + encodeURIComponent(from));
+        if (to)   params.push('to='   + encodeURIComponent(to));
+        if (params.length) url += '?' + params.join('&');
+
+        fetch(url)
+            .then(r => r.ok ? r.json() : [])
+            .then(reqs => {
+
+                if (!reqs.length) {
+                    body.innerHTML = '<div class="hist-empty"><i class="fas fa-inbox me-2"></i>Aucune carte imprimée sur cette période.</div>';
+                    return;
+                }
+
+                body.innerHTML = `<div class="table-responsive">
+                <table class="hist-table">
+                    <thead><tr>
+                        <th>Photo</th>
+                        <th>Numéro de permis</th>
+                        <th>Titulaire</th>
+                        <th>Demandé par</th>
+                        <th>Date demande</th>
+                        <th>Imprimé par</th>
+                        <th>Date impression</th>
+                    </tr></thead>
+                    <tbody>${reqs.map(r => {
+                        const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
+                        const photo = r.photo_filename
+                            ? `<img src="/static/uploads/license_photos/${esc(r.photo_filename)}" style="width:36px;height:44px;object-fit:cover;border-radius:5px;border:1px solid rgba(255,255,255,0.12);" alt="">`
+                            : `<div style="width:36px;height:44px;border-radius:5px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:1.1rem;"><i class="fas fa-user"></i></div>`;
+                        return `<tr>
+                            <td>${photo}</td>
+                            <td><span class="hist-num">${esc(r.license_number)}</span></td>
+                            <td style="font-weight:600;">${fullName}</td>
+                            <td><span style="font-size:0.75rem;opacity:.65;">${esc(r.requested_by)}</span></td>
+                            <td style="font-size:0.75rem;opacity:.55;white-space:nowrap;">${esc(r.requested_at)}</td>
+                            <td><span class="hist-badge"><i class="fas fa-check"></i>${esc(r.printed_by)}</span></td>
+                            <td style="font-size:0.78rem;white-space:nowrap;">${esc(r.printed_at)}</td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table></div>`;
+            })
+            .catch(() => {
+                body.innerHTML = '<div class="hist-empty"><i class="fas fa-exclamation-triangle me-2"></i>Erreur de chargement.</div>';
+            });
+    };
+
+    {% if current_user.role == 'admin' %}
+    // Init history with default range (last month)
+    (function initHistory() {
+        const today    = new Date();
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        document.getElementById('hist-from').value = toInputDate(monthAgo);
+        document.getElementById('hist-to').value   = toInputDate(today);
+        loadHistory();
+    })();
+    {% endif %}
+
+    /* ── Badge "En direct" ── */
+    var lastRefresh = Date.now();
+    var liveBadge   = document.getElementById('live-badge');
+    liveBadge.style.display = '';
+
+    function updateLiveBadge() {
+        var secs = Math.round((Date.now() - lastRefresh) / 1000);
+        if (secs < 5) {
+            liveBadge.style.background = 'rgba(63,185,80,0.1)';
+            liveBadge.style.borderColor = 'rgba(63,185,80,0.3)';
+            liveBadge.style.color = 'var(--st-green)';
+            liveBadge.textContent = '● En direct';
+        } else {
+            liveBadge.style.background = 'rgba(240,180,41,0.1)';
+            liveBadge.style.borderColor = 'rgba(240,180,41,0.3)';
+            liveBadge.style.color = 'var(--st-yellow)';
+            liveBadge.textContent = '↻ il y a ' + secs + 's';
+        }
+    }
+    setInterval(updateLiveBadge, 1000);
+
+    /* ── Change-detection : poll stats every 3 s (endpoint existant) ── */
+    var _licLastKey = null;
+
+    function updateNavBadge(count) {
+        var b = document.getElementById('nav-lic-badge');
+        if (!b) return;
+        b.textContent = count;
+        b.style.display = count > 0 ? '' : 'none';
+    }
+
+    function checkLicUpdates() {
+        if (document.hidden) return;
+        fetch('/smart-tech/api/licences/requests/stats')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(d) {
+                if (!d) return;
+                updateNavBadge(d.pending_count);
+                var key = d.pending_count + '|' + d.printed_total + '|' + d.cancelled_total;
+                if (_licLastKey === null) { _licLastKey = key; return; }
+                if (key !== _licLastKey) {
+                    _licLastKey = key;
+                    loadRequests();
+                    {% if current_user.role == 'admin' %}loadStats(); loadHistory();{% endif %}
+                    lastRefresh = Date.now();
+                }
+            })
+            .catch(function() {});
+    }
+
+    /* ── Init ── */
+    {% if current_user.role == 'admin' %}
+    loadStats();
+    {% endif %}
+    loadRequests();
+    lastRefresh = Date.now();
+    checkLicUpdates(); /* initialise la clé et le badge immédiatement */
+    setInterval(checkLicUpdates, 3000);
+    setInterval(function() {
+        loadRequests();
+        lastRefresh = Date.now();
+        {% if current_user.role == 'admin' %}loadStats();{% endif %}
+    }, 30000); /* safety-net */
+    document.addEventListener('visibilitychange', function() { if (!document.hidden) checkLicUpdates(); });
+    window.addEventListener('focus', function() { loadRequests(); lastRefresh = Date.now(); });
+
+    /* ── Mobile sidebar ── */
+    window.openSidebar  = () => { document.querySelector('.st-sidebar').classList.add('mob-open'); document.getElementById('mob-overlay').classList.add('active'); };
+    window.closeSidebar = () => { document.querySelector('.st-sidebar').classList.remove('mob-open'); document.getElementById('mob-overlay').classList.remove('active'); };
+    document.querySelectorAll('.st-nav-item').forEach(a => a.addEventListener('click', closeSidebar));
+})();
+</script>
+</body>
+</html>
