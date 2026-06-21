@@ -249,47 +249,34 @@ function openEditDatesModal(vehicleId) {
     document.getElementById('edit-owner-phone').value = vehicle.owner_phone || '';
     document.getElementById('edit-usage-type').value = vehicle.usage_type || '';
     document.getElementById('edit-insurance-expiry').value = vehicle.insurance_expiry ? vehicle.insurance_expiry.split('T')[0] : '';
-    // Disable editing of insurance expiry for inactive vehicles or expired QR
     const insuranceInput = document.getElementById('edit-insurance-expiry');
-    const saveBtn = document.getElementById('save-dates-btn');
-    let isInactive = false;
-    try {
-        const now = new Date();
-        const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
-        if (vehicle.status === 'inactive') isInactive = true;
-        if (qrExpiry && qrExpiry < now) isInactive = true;
-    } catch (e) {
-        isInactive = false;
+    const saveBtn        = document.getElementById('save-dates-btn');
+    const alertEl        = document.getElementById('edit-dates-alert');
+    const alertText      = document.getElementById('edit-dates-alert-text');
+
+    let blockReason = null;
+    const now = new Date();
+    const qrExpiry          = vehicle.qr_code_expiry  ? new Date(vehicle.qr_code_expiry)  : null;
+    const insuranceExpiry   = vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry) : null;
+
+    if (vehicle.status === 'inactive') {
+        blockReason = 'Le véhicule est inactif.';
+    } else if (qrExpiry && qrExpiry < now) {
+        blockReason = 'QR code expiré le ' + qrExpiry.toLocaleDateString('fr-FR') + '.';
+    } else if (insuranceExpiry && insuranceExpiry > now) {
+        blockReason = "L'assurance est encore active jusqu'au "
+            + insuranceExpiry.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'})
+            + '. La date ne peut être modifiée qu\'après expiration.';
     }
 
-    const alertEl = document.getElementById('edit-dates-alert');
-    const alertText = document.getElementById('edit-dates-alert-text');
-    if (isInactive) {
+    if (blockReason) {
         if (insuranceInput) insuranceInput.disabled = true;
-        if (saveBtn) {
-            saveBtn.disabled = true;
-            saveBtn.title = 'Impossible de modifier: véhicule inactif ou QR expiré';
-        }
-        if (alertEl && alertText) {
-            let reason = [];
-            try {
-                const now = new Date();
-                const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
-                if (vehicle.status === 'inactive') reason.push('statut: ' + vehicle.status);
-                if (qrExpiry && qrExpiry < now) reason.push('QR code expiré le ' + qrExpiry.toLocaleDateString());
-            } catch (e) {}
-            alertText.textContent = reason.length ? reason.join(' — ') : 'Véhicule inactif.';
-            alertEl.style.display = '';
-        }
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.title = blockReason; }
+        if (alertEl && alertText) { alertText.textContent = blockReason; alertEl.style.display = ''; }
     } else {
         if (insuranceInput) insuranceInput.disabled = false;
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.title = '';
-        }
-        if (alertEl) {
-            alertEl.style.display = 'none';
-        }
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.title = ''; }
+        if (alertEl) alertEl.style.display = 'none';
     }
 
     const modal = new bootstrap.Modal(document.getElementById('editDatesModal'));

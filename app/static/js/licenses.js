@@ -622,12 +622,102 @@
         if (!_currentLicense) return;
         const onHistory = document.getElementById('view-tab-history')?.classList.contains('active');
         const route = onHistory ? 'print-history' : 'print';
-        window.open(`/licenses/${_currentLicense.id}/${route}`, '_blank');
+        window.open(`/licenses/${_currentLicense.id}/${route}?temporaire=1`, '_blank');
     };
 
     window.printLicenseCard = function () {
         if (!_currentLicense) return;
         window.open(`/licenses/${_currentLicense.id}/print-card`, '_blank');
+    };
+
+    window.renewLicense = function () {
+        if (!_currentLicense) return;
+        const months = _settings.temp_validity_months || 12;
+        const today = new Date();
+        const toISO = d => d.toISOString().slice(0, 10);
+        const expiry = new Date(today);
+        expiry.setMonth(expiry.getMonth() + months);
+        const issueStr  = toISO(today);
+        const expiryStr = toISO(expiry);
+        const fmtFR = s => { const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; };
+        if (!confirm(`Renouveler ce permis temporaire ?\n\nDepuis le : ${fmtFR(issueStr)}\nJusqu'au   : ${fmtFR(expiryStr)}`)) return;
+        const btn = document.getElementById('btn-renouveler');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours…'; }
+        fetch(`/api/licenses/${_currentLicense.id}`, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ issue_date: issueStr, expiry_date: expiryStr, status: 'actif' })
+        })
+        .then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.error || 'Erreur')))
+        .then(() => {
+            bootstrap.Modal.getInstance(document.getElementById('viewModal'))?.hide();
+            loadLicenses();
+        })
+        .catch(err => {
+            alert('Erreur : ' + err);
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Renouveler'; }
+        });
+    };
+
+    function syncPrintButton(licId, isPermanent) {
+        const btn   = document.getElementById('btn-demander-impression');
+        const badge = document.getElementById('badge-carte-imprimee');
+        if (!btn) return;
+        if (!isPermanent) {
+            btn.style.display = 'none';
+            if (badge) badge.style.display = 'none';
+            return;
+        }
+        btn.style.display = '';
+        fetch(`/api/licenses/${licId}/print-requests`, { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : [])
+            .then(requests => {
+                const hasPending     = requests.some(r => r.status === 'pending');
+                const latestPrinted  = !hasPending && requests.length > 0 && requests[0].status === 'printed';
+                if (badge) badge.style.display = latestPrinted ? '' : 'none';
+                if (hasPending) {
+                    btn.disabled  = true;
+                    btn.className = 'btn btn-outline-success';
+                    btn.innerHTML = '<i class="fas fa-check me-1"></i>Demande envoyée';
+                } else {
+                    btn.disabled  = false;
+                    btn.className = 'btn btn-outline-warning';
+                    btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Demander impression';
+                }
+            })
+            .catch(() => {
+                if (badge) badge.style.display = 'none';
+                btn.disabled  = false;
+                btn.className = 'btn btn-outline-warning';
+                btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Demander impression';
+            });
+    }
+
+    window.demanderImpression = function () {
+        if (!_currentLicense) return;
+        const btn = document.getElementById('btn-demander-impression');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Envoi…';
+        fetch(`/api/licenses/${_currentLicense.id}/print-request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({}),
+        })
+        .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+        .then(({ ok, data }) => {
+            if (ok) {
+                syncPrintButton(_currentLicense.id, _currentLicense.type_permis === 'permanent');
+            } else {
+                alert(data.error || 'Erreur lors de la demande.');
+                syncPrintButton(_currentLicense.id, _currentLicense.type_permis === 'permanent');
+            }
+        })
+        .catch(() => {
+            alert('Erreur réseau.');
+            syncPrintButton(_currentLicense.id, _currentLicense.type_permis === 'permanent');
+        });
     };
 
     window.viewLicense = function (id) {
@@ -646,6 +736,9 @@
                 _currentLicense = l;
                 const btnCarte = document.getElementById('btn-carte-digitale');
                 if (btnCarte) btnCarte.style.display = l.type_permis === 'permanent' ? '' : 'none';
+                syncPrintButton(l.id, l.type_permis === 'permanent');
+                const btnRenouveler = document.getElementById('btn-renouveler');
+                if (btnRenouveler) btnRenouveler.style.display = (l.type_permis === 'temporaire' && l.is_expired) ? '' : 'none';
                 const cats = l.categories
                     ? l.categories.split(',').map(c => `<span class="badge bg-info text-dark me-1">${esc(c.trim())}</span>`).join('')
                     : '—';
