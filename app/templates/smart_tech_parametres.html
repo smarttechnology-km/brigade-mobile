@@ -501,6 +501,19 @@
                         <div class="price-hint">Total abonnements + dépenses sur 12 mois</div>
                     </div>
                     <div>
+                        <label class="form-label">Licences imprimées / an</label>
+                        <input type="number" id="sim-licenses-per-year" class="form-control" min="0" step="1" value="{{ sim_licenses_per_year|default(0) }}" placeholder="0">
+                        <div class="price-hint">Cartes biométriques imprimées × tarif d'impression</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Taux assurance du parc national (%) <span style="color:var(--st-yellow);font-size:.68rem;">(commission)</span></label>
+                        <div class="input-group">
+                            <input type="number" id="sim-insurance-rate" class="form-control" min="0" max="100" step="1" value="{{ sim_insurance_rate|default(0) }}" placeholder="0">
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <div class="price-hint">% du parc actif qui souscrit ou renouvelle une assurance via agence → commission par véhicule</div>
+                    </div>
+                    <div>
                         <label class="form-label">Durée de projection (années)</label>
                         <input type="number" id="sim-years" class="form-control" min="1" max="20" step="1" value="{{ sim_years }}" placeholder="5">
                         <div class="price-hint">Nombre d'années à projeter (1 – 20)</div>
@@ -539,6 +552,18 @@
                             <div class="sim-sum-val cyan" id="res-total-rev">—</div>
                         </div>
                         <div class="sim-sum-card">
+                            <div class="sim-sum-label">dont QR (act. + ren.)</div>
+                            <div class="sim-sum-val" style="color:var(--st-cyan);" id="res-total-qr">—</div>
+                        </div>
+                        <div class="sim-sum-card">
+                            <div class="sim-sum-label">dont Licences</div>
+                            <div class="sim-sum-val" style="color:var(--st-purple);" id="res-total-lic">—</div>
+                        </div>
+                        <div class="sim-sum-card">
+                            <div class="sim-sum-label">dont Commissions</div>
+                            <div class="sim-sum-val" style="color:var(--st-yellow);" id="res-total-comm">—</div>
+                        </div>
+                        <div class="sim-sum-card">
                             <div class="sim-sum-label">Total dépenses</div>
                             <div class="sim-sum-val red" id="res-total-exp">—</div>
                         </div>
@@ -565,17 +590,19 @@
                     <div class="sim-table-wrap">
                         <table class="sim-table">
                             <colgroup>
+                                <col style="width:6%">
+                                <col style="width:7%">
                                 <col style="width:7%">
                                 <col style="width:8%">
+                                <col style="width:6%">
                                 <col style="width:8%">
-                                <col style="width:10%">
+                                <col style="width:9%">
                                 <col style="width:8%">
-                                <col style="width:10%">
-                                <col style="width:11%">
                                 <col style="width:9%">
-                                <col style="width:9%">
-                                <col style="width:10%">
-                                <col style="width:10%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:8%">
                             </colgroup>
                             <thead>
                                 <tr>
@@ -583,9 +610,11 @@
                                     <th>Activations</th>
                                     <th>Retrait (attrition)</th>
                                     <th>Pool renouvellement</th>
-                                    <th>Taux act./renouv.</th>
+                                    <th>Taux</th>
                                     <th>Rev. Activation</th>
                                     <th>Rev. Renouvellement</th>
+                                    <th>Rev. Licences</th>
+                                    <th>Rev. Commissions</th>
                                     <th>Rev. Total</th>
                                     <th>Dépenses</th>
                                     <th>Bénéfice net</th>
@@ -674,19 +703,23 @@
     /* ── Simulation ── */
     function getCurrentPrices(){
         return {
-            act: parseFloat(document.getElementById('activation-price').value) || 0,
-            ren: parseFloat(document.getElementById('renewal-price').value) || 0,
+            act:  parseFloat(document.getElementById('activation-price').value)    || 0,
+            ren:  parseFloat(document.getElementById('renewal-price').value)       || 0,
+            lic:  parseFloat(document.getElementById('license-print-price').value) || 0,
+            comm: parseFloat(document.getElementById('insurance-commission').value)|| 0,
         };
     }
 
     window.saveSim = function(){
         const payload = {
-            sim_new_vehicles:    parseInt(document.getElementById('sim-new-vehicles').value)    || 0,
-            sim_existing:        parseInt(document.getElementById('sim-existing').value)        || 0,
-            sim_renewal_rate:    parseFloat(document.getElementById('sim-renewal-rate').value)  || 0,
-            sim_rate_growth:     parseFloat(document.getElementById('sim-rate-growth').value)   || 0,
-            sim_churn_rate:      parseFloat(document.getElementById('sim-churn-rate').value)    || 0,
-            sim_annual_expenses: parseInt(document.getElementById('sim-annual-expenses').value) || 0,
+            sim_new_vehicles:      parseInt(document.getElementById('sim-new-vehicles').value)      || 0,
+            sim_existing:          parseInt(document.getElementById('sim-existing').value)          || 0,
+            sim_renewal_rate:      parseFloat(document.getElementById('sim-renewal-rate').value)    || 0,
+            sim_rate_growth:       parseFloat(document.getElementById('sim-rate-growth').value)     || 0,
+            sim_churn_rate:        parseFloat(document.getElementById('sim-churn-rate').value)      || 0,
+            sim_annual_expenses:   parseInt(document.getElementById('sim-annual-expenses').value)   || 0,
+            sim_licenses_per_year: parseInt(document.getElementById('sim-licenses-per-year').value) || 0,
+            sim_insurance_rate:    parseFloat(document.getElementById('sim-insurance-rate').value)  || 0,
             sim_years:           parseInt(document.getElementById('sim-years').value)           || 5,
         };
         fetch('/smart-tech/api/parametres', {
@@ -748,16 +781,18 @@
     };
 
     window.runSimulation = function(){
-        const prices      = getCurrentPrices();
-        const newVeh      = Math.max(0, parseInt(document.getElementById('sim-new-vehicles').value)   || 0);
-        const existing    = Math.max(0, parseInt(document.getElementById('sim-existing').value)       || 0);
-        const initRate    = Math.min(100, Math.max(0, parseFloat(document.getElementById('sim-renewal-rate').value)  || 0));
-        const rateGrowth  = Math.min(50,  Math.max(0, parseFloat(document.getElementById('sim-rate-growth').value)   || 0));
-        const churnRate   = Math.min(50,  Math.max(0, parseFloat(document.getElementById('sim-churn-rate').value)    || 0));
-        const annualExp   = Math.max(0, parseFloat(document.getElementById('sim-annual-expenses').value) || 0);
-        const years       = Math.min(20, Math.max(1, parseInt(document.getElementById('sim-years').value) || 5));
+        const prices        = getCurrentPrices();
+        const newVeh        = Math.max(0, parseInt(document.getElementById('sim-new-vehicles').value)      || 0);
+        const existing      = Math.max(0, parseInt(document.getElementById('sim-existing').value)          || 0);
+        const initRate      = Math.min(100, Math.max(0, parseFloat(document.getElementById('sim-renewal-rate').value)   || 0));
+        const rateGrowth    = Math.min(50,  Math.max(0, parseFloat(document.getElementById('sim-rate-growth').value)    || 0));
+        const churnRate     = Math.min(50,  Math.max(0, parseFloat(document.getElementById('sim-churn-rate').value)     || 0));
+        const annualExp     = Math.max(0, parseFloat(document.getElementById('sim-annual-expenses').value) || 0);
+        const licPerYear    = Math.max(0, parseInt(document.getElementById('sim-licenses-per-year').value) || 0);
+        const insuranceRate = Math.min(100, Math.max(0, parseFloat(document.getElementById('sim-insurance-rate').value) || 0));
+        const years         = Math.min(20, Math.max(1, parseInt(document.getElementById('sim-years').value) || 5));
 
-        let totalRev = 0, totalExp = 0, cumNet = 0;
+        let totalRev = 0, totalExp = 0, cumNet = 0, totalLicRev = 0, totalCommRev = 0, totalQRRev = 0;
         const rows = [];
 
         const existingActivated = Math.round(existing * initRate / 100);
@@ -787,12 +822,17 @@
                 renewCount = Math.round(renewPool * rateY / 100);
                 renRev     = renewCount * prices.ren;
             }
-            const yearRev = actRev + renRev;
+            const licRev  = licPerYear * prices.lic;
+            const commRev = Math.round(activePool * insuranceRate / 100) * prices.comm;
+            const yearRev = actRev + renRev + licRev + commRev;
             const netY    = yearRev - annualExp;
             cumNet       += netY;
             totalRev     += yearRev;
             totalExp     += annualExp;
-            rows.push({ y, actCount, churnLoss, renewPool, rateY, actRev, renRev, yearRev, netY, cumNet, isLaunch: y === 1 });
+            totalLicRev  += licRev;
+            totalCommRev += commRev;
+            totalQRRev   += actRev + renRev;
+            rows.push({ y, actCount, churnLoss, renewPool, rateY, actRev, renRev, licRev, commRev, yearRev, netY, cumNet, isLaunch: y === 1 });
         }
 
         const totalProfit = totalRev - totalExp;
@@ -801,6 +841,9 @@
         const cardCls     = totalProfit > 0 ? 'green' : totalProfit < 0 ? 'red' : '';
 
         document.getElementById('res-total-rev').textContent   = fmt(totalRev);
+        document.getElementById('res-total-qr').textContent    = fmt(totalQRRev);
+        document.getElementById('res-total-lic').textContent   = fmt(totalLicRev);
+        document.getElementById('res-total-comm').textContent  = fmt(totalCommRev);
         document.getElementById('res-total-exp').textContent   = fmt(totalExp);
 
         const profitEl = document.getElementById('res-total-profit');
@@ -853,6 +896,8 @@
                 '<td>' + rateCell + '</td>' +
                 '<td class="col-pos">' + fmt(r.actRev) + '</td>' +
                 '<td class="col-pos">' + fmt(r.renRev) + '</td>' +
+                '<td style="color:var(--st-purple);">' + fmt(r.licRev) + '</td>' +
+                '<td style="color:var(--st-yellow);">' + fmt(r.commRev) + '</td>' +
                 '<td class="col-pos"><strong>' + fmt(r.yearRev) + '</strong></td>' +
                 '<td class="col-neg">' + fmt(annualExp) + '</td>' +
                 '<td class="' + netCls + '">' + (r.netY >= 0 ? '+' : '') + fmt(r.netY) + '</td>' +

@@ -35,7 +35,7 @@
         .st-brand-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--st-cyan), #0080ff); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; color: #fff; flex-shrink: 0; }
         .st-brand-name { font-weight: 700; font-size: 0.92rem; color: #fff; line-height: 1.2; }
         .st-brand-sub  { font-size: 0.7rem; color: var(--st-cyan); font-weight: 400; }
-        .st-nav { flex: 1; overflow-y: auto; }
+        .st-nav { flex: 1; }
         .st-nav-item { display: flex; align-items: center; gap: 11px; padding: 0.7rem 1rem; border-radius: 10px; color: rgba(255,255,255,0.6); text-decoration: none; font-size: 0.9rem; margin-bottom: 4px; transition: all 0.18s; }
         .st-nav-item:hover, .st-nav-item.active { background: rgba(0,212,255,0.1); color: #fff; }
         .st-nav-item.active { border-left: 3px solid var(--st-cyan); }
@@ -53,6 +53,8 @@
         /* ── Theme toggle ── */
         .st-theme-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.75); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; flex-shrink: 0; }
         .st-theme-btn:hover { background: rgba(0,212,255,0.15); border-color: var(--st-cyan); color: var(--st-cyan); }
+        .st-user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(0,212,255,0.15); border-radius: 30px; padding: 0.3rem 0.9rem; font-size: 0.8rem; color: rgba(255,255,255,0.7); transition: all 0.18s; }
+        .st-user-pill:hover { border-color: rgba(0,212,255,0.35); background: rgba(0,212,255,0.08); color: var(--st-cyan); }
 
         /* ── Section ── */
         .st-section { background: var(--st-surface); border: 1px solid var(--st-border); border-radius: 14px; overflow: hidden; margin-bottom: 1.5rem; }
@@ -179,6 +181,7 @@
         html[data-theme="light"] .table tbody td { border-color: rgba(0,0,0,0.05); }
         html[data-theme="light"] .table tbody tr:hover td { background: rgba(0,149,179,0.06); color: #1a1a2e; }
         html[data-theme="light"] .st-page-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-user-pill { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.12); color: #1a1a2e; }
         html[data-theme="light"] .st-theme-btn { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); color: #555; }
         html[data-theme="light"] .st-theme-btn:hover { background: rgba(0,150,180,0.1); border-color: #0095b3; color: #0095b3; }
         html[data-theme="light"] .st-pagination { border-top-color: rgba(0,0,0,0.08); color: rgba(0,0,0,0.45); }
@@ -274,19 +277,21 @@
 <!-- ── Main ── -->
 <div class="st-main">
     <div class="st-topbar">
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-            <button class="mob-menu-btn" onclick="openSidebar()"><i class="fas fa-bars"></i></button>
-            <div class="st-page-title">
-                <i class="fas fa-car me-2" style="color:var(--st-cyan);"></i>Gestion des Véhicules
-            </div>
+        <div>
+            <div class="st-page-title"><i class="fas fa-car me-2" style="color:var(--st-cyan);"></i>Gestion des Véhicules</div>
         </div>
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-            <button id="theme-toggle" class="st-theme-btn" title="Passer en mode clair">
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn" title="Changer le thème">
                 <i id="theme-icon" class="fas fa-sun"></i>
             </button>
             <button class="btn-add" onclick="openAddModal()">
                 <i class="fas fa-plus"></i>Ajouter un véhicule
             </button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
         </div>
     </div>
 
@@ -492,11 +497,38 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label-st">Usage</label>
-                    <select id="f-usage_type" class="st-input lg">
+                    <select id="f-usage_type" class="st-input lg" onchange="onUsageChange()">
                         <option value="Personnelle">Personnelle</option>
-                        <option value="Professionnelle">Professionnelle</option>
-                        <option value="Transport commun">Transport commun</option>
-                        <option value="Commercial">Commercial</option>
+                        <option value="Taxi">Taxi</option>
+                        <option value="Transport public">Transport public</option>
+                        <option value="Location">Location</option>
+                        <option value="Véhicule de service">Véhicule de service</option>
+                        <option value="Véhicule utilitaire">Véhicule utilitaire</option>
+                        <option value="Transport scolaire">Transport scolaire</option>
+                        <option value="Transport touristique">Transport touristique</option>
+                        <option value="Auto-école">Auto-école</option>
+                        <option value="autre">➕ Autre...</option>
+                    </select>
+                    <input type="text" id="f-usage_type_other" class="st-input lg mt-1 d-none" placeholder="Précisez le type d'usage">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label-st">Classe Fiscale</label>
+                    <select id="f-fiscal_class" class="st-input lg">
+                        <option value="">-- Sélectionner --</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label-st">Classe CV</label>
+                    <select id="f-cv_class" class="st-input lg">
+                        <option value="">-- Sélectionner --</option>
+                        <option value="0-5 CV">0-5 CV</option>
+                        <option value="6-9 CV">6-9 CV</option>
+                        <option value="10-12 CV">10-12 CV</option>
+                        <option value="12 CV et +">12 CV et +</option>
                     </select>
                 </div>
                 <div class="col-md-4">
@@ -529,7 +561,7 @@
                     <label class="form-label-st">Île</label>
                     <select id="f-owner_island" class="st-input lg">
                         <option value="">-- Sélectionner --</option>
-                        <option value="Grande Comore">Grande Comore</option>
+                        <option value="Grande Comores">Grande Comores</option>
                         <option value="Anjouan">Anjouan</option>
                         <option value="Moheli">Mohéli</option>
                     </select>
@@ -544,7 +576,10 @@
             <div class="row g-2">
                 <div class="col-md-6">
                     <label class="form-label-st">Compagnie d'assurance</label>
-                    <input type="text" id="f-insurance_company" class="st-input lg" placeholder="Ex: Amana Assurance">
+                    <select id="f-insurance_company" class="st-input lg" onchange="onInsuranceCompanyChange()">
+                        <option value="">-- Sélectionner --</option>
+                    </select>
+                    <input type="text" id="f-insurance_company_other" class="st-input lg mt-1 d-none" placeholder="Précisez la compagnie">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label-st">Date d'expiration assurance</label>
@@ -729,6 +764,8 @@
         document.getElementById('save-btn').innerHTML =
             mode === 'edit' ? '<i class="fas fa-save me-1"></i>Enregistrer les modifications'
                             : '<i class="fas fa-save me-1"></i>Enregistrer';
+        const genBtn = document.getElementById('btn-gen-plate');
+        if (genBtn) genBtn.style.display = mode === 'edit' ? 'none' : '';
     }
 
     window.openAddModal = function() {
@@ -757,7 +794,7 @@
                 document.getElementById('f-owner_name').value    = v.owner_name    || '';
                 document.getElementById('f-owner_phone').value   = v.owner_phone   || '';
                 document.getElementById('f-owner_address').value = v.owner_address || '';
-                document.getElementById('f-insurance_company').value = v.insurance_company || '';
+                loadInsuranceSelect(v.insurance_company || '');
                 document.getElementById('f-notes').value = v.notes || '';
                 // vignette_expiry: format YYYY-MM-DD
                 if (v.vignette_expiry) {
@@ -771,8 +808,11 @@
                 setSelectOrOther('f-fuel_type_select',    'f-fuel_type_other',    v.fuel_type);
                 const statusEl = document.getElementById('f-status');
                 if (statusEl) statusEl.value = v.status || 'active';
-                const usageEl = document.getElementById('f-usage_type');
-                if (usageEl) usageEl.value = v.usage_type || 'Personnelle';
+                setSelectOrOther('f-usage_type', 'f-usage_type_other', v.usage_type, 'autre');
+                const fiscalEl = document.getElementById('f-fiscal_class');
+                if (fiscalEl) fiscalEl.value = v.fiscal_class || '';
+                const cvEl = document.getElementById('f-cv_class');
+                if (cvEl) cvEl.value = v.cv_class || '';
                 const islandEl = document.getElementById('f-owner_island');
                 if (islandEl) islandEl.value = v.owner_island || '';
                 // Hide hints
@@ -784,7 +824,8 @@
             .catch(() => showToast('Impossible de charger les données du véhicule.', 'error'));
     };
 
-    function setSelectOrOther(selId, otherId, val) {
+    function setSelectOrOther(selId, otherId, val, otherSentinel) {
+        const sentinel = otherSentinel || 'other';
         const sel   = document.getElementById(selId);
         const other = document.getElementById(otherId);
         if (!sel || !other) return;
@@ -793,7 +834,7 @@
             sel.value = val;
             other.classList.add('d-none');
         } else if (val) {
-            sel.value = 'other';
+            sel.value = sentinel;
             other.value = val;
             other.classList.remove('d-none');
         } else {
@@ -818,6 +859,46 @@
         const v = document.getElementById('f-fuel_type_select').value;
         document.getElementById('f-fuel_type_other').classList.toggle('d-none', v !== 'other');
     };
+    window.onUsageChange = function() {
+        const v = document.getElementById('f-usage_type').value;
+        document.getElementById('f-usage_type_other').classList.toggle('d-none', v !== 'autre');
+    };
+    window.onInsuranceCompanyChange = function() {
+        const v = document.getElementById('f-insurance_company').value;
+        document.getElementById('f-insurance_company_other').classList.toggle('d-none', v !== 'Autre');
+    };
+
+    /* ── Load insurance companies into select ── */
+    function loadInsuranceSelect(currentValue) {
+        fetch('/api/vehicles/insurances', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(data => {
+                const sel = document.getElementById('f-insurance_company');
+                sel.innerHTML = '<option value="">-- Sélectionner --</option>';
+                (data.insurances || []).forEach(ins => {
+                    const opt = document.createElement('option');
+                    opt.value = ins.company_name;
+                    opt.textContent = ins.company_name;
+                    sel.appendChild(opt);
+                });
+                const autre = document.createElement('option');
+                autre.value = 'Autre';
+                autre.textContent = '➕ Autre...';
+                sel.appendChild(autre);
+                if (currentValue) {
+                    const known = Array.from(sel.options).map(o => o.value);
+                    if (known.includes(currentValue)) {
+                        sel.value = currentValue;
+                    } else {
+                        sel.value = 'Autre';
+                        document.getElementById('f-insurance_company_other').value = currentValue;
+                        document.getElementById('f-insurance_company_other').classList.remove('d-none');
+                    }
+                }
+            })
+            .catch(() => {});
+    }
+    loadInsuranceSelect();
 
     /* ── Save vehicle (create or update) ── */
     window.saveVehicle = function() {
@@ -843,10 +924,16 @@
             vin:               document.getElementById('f-vin').value.trim(),
             vehicle_type:      vehicleType,
             fuel_type:         fuelType,
-            usage_type:        document.getElementById('f-usage_type').value,
+            usage_type:        document.getElementById('f-usage_type').value === 'autre'
+                                   ? document.getElementById('f-usage_type_other').value.trim()
+                                   : document.getElementById('f-usage_type').value,
+            fiscal_class:      document.getElementById('f-fiscal_class').value,
+            cv_class:          document.getElementById('f-cv_class').value,
             status:            document.getElementById('f-status').value,
             vignette_expiry:   document.getElementById('f-vignette_expiry').value,
-            insurance_company: document.getElementById('f-insurance_company').value.trim(),
+            insurance_company: document.getElementById('f-insurance_company').value === 'Autre'
+                                   ? document.getElementById('f-insurance_company_other').value.trim()
+                                   : document.getElementById('f-insurance_company').value,
             insurance_expiry:  document.getElementById('f-insurance_expiry').value,
             notes:             document.getElementById('f-notes').value.trim(),
         };

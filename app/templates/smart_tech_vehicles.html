@@ -489,6 +489,14 @@
             <span style="color:rgba(255,255,255,0.5);">Type</span>
             <span id="receipt-type">—</span>
           </div>
+          <div id="receipt-frais-row" style="display:none;flex-direction:row;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span style="color:rgba(255,255,255,0.5);">Frais d'immatriculation numérique</span>
+            <span id="receipt-frais">—</span>
+          </div>
+          <div id="receipt-abonnement-row" style="display:none;flex-direction:row;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span style="color:rgba(255,255,255,0.5);">Abonnement annuel</span>
+            <span id="receipt-abonnement">—</span>
+          </div>
           <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
             <span style="color:rgba(255,255,255,0.5);">Date</span>
             <span id="receipt-date">—</span>
@@ -798,6 +806,20 @@
         document.getElementById('receipt-date').textContent   = data.paid_at || '—';
         document.getElementById('receipt-expiry').textContent = data.new_expiry || '—';
         document.getElementById('receipt-agent').textContent  = data.recorded_by || '—';
+        const isActivation = data.payment_type === 'activation';
+        const fraisRow = document.getElementById('receipt-frais-row');
+        const abonnRow = document.getElementById('receipt-abonnement-row');
+        if (isActivation) {
+            const half = Math.round(Number(data.amount) / 2).toLocaleString('fr-FR') + ' KMF';
+            document.getElementById('receipt-frais').textContent      = half;
+            document.getElementById('receipt-abonnement').textContent = half;
+            fraisRow.style.display = 'flex';
+            abonnRow.style.display = 'flex';
+        } else {
+            document.getElementById('receipt-abonnement').textContent = Number(data.amount).toLocaleString('fr-FR') + ' KMF';
+            fraisRow.style.display = 'none';
+            abonnRow.style.display = 'flex';
+        }
         new bootstrap.Modal(document.getElementById('qrReceiptModal')).show();
     }
 
@@ -805,6 +827,15 @@
         const d = _receiptData;
         const typeLabel = d.payment_type === 'activation' ? 'Activation QR Code' : 'Renouvellement QR Code';
         const amount = Number(d.amount).toLocaleString('fr-FR') + ' KMF';
+
+        const isActivation = d.payment_type === 'activation';
+        const halfAmt = Math.round(Number(d.amount) / 2).toLocaleString('fr-FR') + ' KMF';
+        const splitRows = isActivation
+            ? `
+    <div class="row"><span class="label">Frais d'immatriculation numérique</span><span class="value">${halfAmt}</span></div>
+    <div class="row"><span class="label">Abonnement annuel</span><span class="value">${halfAmt}</span></div>`
+            : `
+    <div class="row"><span class="label">Abonnement annuel</span><span class="value">${amount}</span></div>`;
 
         function receiptBlock(copy) {
             return `
@@ -822,7 +853,7 @@
   <div class="details">
     <div class="row"><span class="label">Immatriculation</span><span class="value plate">${d.license_plate || '—'}</span></div>
     <div class="row"><span class="label">Propriétaire</span><span class="value">${d.owner_name || '—'}</span></div>
-    <div class="row"><span class="label">Type</span><span class="value">${typeLabel}</span></div>
+    <div class="row"><span class="label">Type</span><span class="value">${typeLabel}</span></div>${splitRows}
     <div class="row"><span class="label">Date</span><span class="value">${d.paid_at || '—'}</span></div>
     <div class="row"><span class="label">Expiration QR</span><span class="value green">${d.new_expiry || '—'}</span></div>
     <div class="row"><span class="label">Enregistré par</span><span class="value">${d.recorded_by || '—'}</span></div>
@@ -894,7 +925,7 @@
     pollLicBadge();
     setInterval(pollLicBadge,5000);
 })();
-</script>
+<\/script>
 </body></html>`);
         w.document.close();
         setTimeout(() => w.print(), 600);

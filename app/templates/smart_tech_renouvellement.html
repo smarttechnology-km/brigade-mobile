@@ -29,7 +29,7 @@
         .st-brand-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--st-cyan), #0080ff); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; color: #fff; flex-shrink: 0; }
         .st-brand-name { font-weight: 700; font-size: 0.92rem; color: #fff; line-height: 1.2; }
         .st-brand-sub  { font-size: 0.7rem; color: var(--st-cyan); font-weight: 400; }
-        .st-nav { flex: 1; overflow-y: auto; }
+        .st-nav { flex: 1; }
         .st-nav-item { display: flex; align-items: center; gap: 11px; padding: 0.7rem 1rem; border-radius: 10px; color: rgba(255,255,255,0.6); text-decoration: none; font-size: 0.9rem; margin-bottom: 4px; transition: all 0.18s; }
         .st-nav-item:hover, .st-nav-item.active { background: rgba(0,212,255,0.1); color: #fff; }
         .st-nav-item.active { border-left: 3px solid var(--st-cyan); }
@@ -43,6 +43,8 @@
         .st-page-title { font-size: 1.2rem; font-weight: 700; color: #fff; }
         .st-theme-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.75); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; flex-shrink: 0; }
         .st-theme-btn:hover { background: rgba(0,212,255,0.15); border-color: var(--st-cyan); color: var(--st-cyan); }
+        .st-user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(0,212,255,0.15); border-radius: 30px; padding: 0.3rem 0.9rem; font-size: 0.8rem; color: rgba(255,255,255,0.7); transition: all 0.18s; }
+        .st-user-pill:hover { border-color: rgba(0,212,255,0.35); background: rgba(0,212,255,0.08); color: var(--st-cyan); }
 
         /* ── Stats banner ── */
         .st-banner { background: linear-gradient(135deg, rgba(248,81,73,0.12), rgba(240,180,41,0.08)); border: 1px solid rgba(248,81,73,0.25); border-radius: 14px; padding: 1.1rem 1.4rem; margin-bottom: 1.4rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
@@ -125,6 +127,7 @@
         html[data-theme="light"] .table tbody td { border-color: rgba(0,0,0,0.05); }
         html[data-theme="light"] .table tbody tr:hover td { background: rgba(0,149,179,0.04); }
         html[data-theme="light"] .st-page-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-user-pill { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.12); color: #1a1a2e; }
         html[data-theme="light"] .st-theme-btn { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); color: #555; }
         html[data-theme="light"] .st-theme-btn:hover { background: rgba(0,150,180,0.1); border-color: #0095b3; color: #0095b3; }
         html[data-theme="light"] .st-pagination { border-top-color: rgba(0,0,0,0.08); color: rgba(0,0,0,0.45); }
@@ -212,16 +215,18 @@
 <!-- ── Main ── -->
 <div class="st-main">
     <div class="st-topbar">
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-            <button class="mob-menu-btn" onclick="openSidebar()"><i class="fas fa-bars"></i></button>
-            <div class="st-page-title">
-                <i class="fas fa-sync-alt me-2" style="color:var(--st-red);"></i>Renouvellement QR Code
-            </div>
+        <div>
+            <div class="st-page-title"><i class="fas fa-sync-alt me-2" style="color:var(--st-red);"></i>Renouvellement QR Code</div>
         </div>
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-            <button id="theme-toggle" class="st-theme-btn" title="Passer en mode clair">
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn" title="Changer le thème">
                 <i id="theme-icon" class="fas fa-sun"></i>
             </button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
         </div>
     </div>
 

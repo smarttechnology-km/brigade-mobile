@@ -504,10 +504,12 @@
     }
 
     /* ── Generate report ── */
-    window.generateReport = function () {
+    window.generateReport = function (showOverlay) {
         const value = getPeriodValue();
         if (!value) return;
-        document.getElementById('loading-overlay').classList.add('show');
+        if (showOverlay !== false) {
+            document.getElementById('loading-overlay').classList.add('show');
+        }
         fetch('/smart-tech/api/rapport?type=' + currentType + '&value=' + encodeURIComponent(value))
             .then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error || 'Erreur'); }))
             .then(renderReport)
@@ -787,8 +789,8 @@
         }).join('');
     }
 
-    /* ── Auto-generate on load ── */
-    generateReport();
+    /* ── Auto-generate on load (sans overlay pour éviter le flash) ── */
+    generateReport(false);
 
     /* ── Enter key on inputs ── */
     ['input-daily','input-monthly','input-annual'].forEach(function (id) {

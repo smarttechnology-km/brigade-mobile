@@ -385,6 +385,11 @@
                 </div>
             </div>
 
+            <!-- Lock notice (shown before 25th of current month) -->
+            <div id="mv-lock-notice" style="display:none;padding:.65rem 1.25rem;background:rgba(210,153,34,0.1);border-bottom:1px solid rgba(210,153,34,0.25);font-size:.8rem;color:var(--st-yellow);gap:.5rem;align-items:center;">
+                <i class="fas fa-lock me-2"></i>La confirmation de réception sera disponible à partir du <strong>25 du mois</strong>.
+            </div>
+
             <!-- Movements table -->
             <div class="st-section-body">
                 <table class="st-table">
@@ -461,7 +466,7 @@
                     <label class="form-label">Île</label>
                     <select class="form-select" id="company-island">
                         <option value="">— Choisir une île —</option>
-                        <option value="Grande Comore">Grande Comore</option>
+                        <option value="Grande Comores">Grande Comores</option>
                         <option value="Anjouan">Anjouan</option>
                         <option value="Moheli">Moheli</option>
                         <option value="Nationale">Nationale</option>
@@ -777,6 +782,25 @@
             .then(function(data){ renderMovements(data); });
     }
 
+    function _confirmAllowed(period){
+        /* Confirmation only unlocks on the 25th of the period month.
+           For past months it is always allowed. */
+        if(!_isMonthPeriod(period)) return false;
+        var now = new Date();
+        var pts = period.split('-');
+        var pYear  = parseInt(pts[0], 10);
+        var pMonth = parseInt(pts[1], 10) - 1; // 0-indexed
+        var nowYear  = now.getFullYear();
+        var nowMonth = now.getMonth();
+        if(pYear < nowYear || (pYear === nowYear && pMonth < nowMonth)){
+            return true; // past month — always allowed
+        }
+        if(pYear === nowYear && pMonth === nowMonth){
+            return now.getDate() >= 25;
+        }
+        return false; // future month
+    }
+
     function renderMovements(data){
         var isMonth = _isMonthPeriod(_currentPeriod);
         var cols = isMonth ? 8 : 7;
@@ -787,8 +811,12 @@
             document.getElementById('mv-total-ren').textContent  = '0';
             document.getElementById('mv-total-actv').textContent = '0';
             document.getElementById('mv-total-comm').textContent = '0 FC';
+            document.getElementById('mv-lock-notice').style.display = 'none';
             return;
         }
+        var canConfirm = _confirmAllowed(_currentPeriod);
+        var lockNotice = document.getElementById('mv-lock-notice');
+        lockNotice.style.display = (isMonth && !canConfirm) ? 'flex' : 'none';
         var totAct=0, totRen=0, totActv=0, totComm=0;
         tbody.innerHTML = data.map(function(row){
             totAct  += row.activations;
@@ -802,8 +830,10 @@
                     var dt = row.confirmed_at ? new Date(row.confirmed_at) : null;
                     var title = dt ? 'Reçue le '+dt.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}) : 'Commission reçue';
                     rcptCell = '<td style="text-align:center;"><span class="rcpt-confirmed-badge" id="rcpt-btn-'+row.insurance_id+'" title="'+title+'"><i class="fas fa-check-circle"></i></span></td>';
-                } else {
+                } else if(canConfirm){
                     rcptCell = '<td style="text-align:center;"><button class="btn-receipt-pending" id="rcpt-btn-'+row.insurance_id+'" data-ins-id="'+row.insurance_id+'" data-name="'+esc(row.company_name)+'" onclick="confirmReceiptPrompt(this)" title="Confirmer la réception"><i class="fas fa-clock"></i></button></td>';
+                } else {
+                    rcptCell = '<td style="text-align:center;"><button class="btn-receipt-pending" disabled title="Disponible le 25 du mois" style="opacity:.35;cursor:not-allowed;"><i class="fas fa-lock"></i></button></td>';
                 }
             }
             return '<tr>'+
