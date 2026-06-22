@@ -1569,6 +1569,46 @@ def api_user_details(user_id):
     })
 
 
+@api_bp.route('/users/<int:user_id>/officer-history', methods=['GET'])
+@login_required
+def api_officer_history(user_id):
+    """Fines issued and point reductions done by a given officer (by username)."""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    fines = Fine.query.filter_by(officer=user.username).order_by(Fine.issued_at.desc()).limit(200).all()
+    fines_data = []
+    for f in fines:
+        fines_data.append({
+            'id':         f.id,
+            'plate':      f.vehicle.license_plate if f.vehicle else '—',
+            'reason':     f.reason,
+            'amount':     float(f.amount),
+            'paid':       f.paid,
+            'issued_at':  f.issued_at.strftime('%d/%m/%Y %H:%M') if f.issued_at else '—',
+        })
+
+    reductions = PointReductionHistory.query.filter_by(created_by=user.username)\
+        .order_by(PointReductionHistory.created_at.desc()).limit(200).all()
+    reductions_data = []
+    for r in reductions:
+        lic = DriverLicense.query.get(r.license_id)
+        holder = f"{lic.holder_firstname or ''} {lic.holder_name}".strip() if lic else '—'
+        reductions_data.append({
+            'id':              r.id,
+            'holder':          holder,
+            'license_number':  lic.license_number if lic else '—',
+            'reason':          r.reason_label,
+            'points_deducted': r.points_deducted,
+            'points_before':   r.points_before,
+            'points_after':    r.points_after,
+            'created_at':      r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else '—',
+        })
+
+    return jsonify({'fines': fines_data, 'reductions': reductions_data})
+
+
 @api_bp.route('/phone/<int:phone_id>/usage-history', methods=['GET'])
 @login_required
 def api_phone_usage_history(phone_id):

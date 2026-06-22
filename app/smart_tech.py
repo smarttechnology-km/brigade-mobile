@@ -85,7 +85,9 @@ def parametres_page():
                            sim_rate_growth=float(SmartTechSetting.get('sim_rate_growth', 5)),
                            sim_churn_rate=float(SmartTechSetting.get('sim_churn_rate', 2)),
                            sim_annual_expenses=int(SmartTechSetting.get('sim_annual_expenses', 0)),
-                           sim_years=int(SmartTechSetting.get('sim_years', 5)))
+                           sim_years=int(SmartTechSetting.get('sim_years', 5)),
+                           sim_licenses_per_year=int(SmartTechSetting.get('sim_licenses_per_year', 0)),
+                           sim_insurance_rate=float(SmartTechSetting.get('sim_insurance_rate', 0)))
 
 
 @smart_tech_bp.route('/api/parametres', methods=['GET'])
@@ -131,13 +133,15 @@ def api_parametres_update():
     if 'app_contact' in data:
         SmartTechSetting.set('app_contact', str(data['app_contact']).strip()[:60])
     _SIM_KEYS = {
-        'sim_new_vehicles': (int, 0, None),
-        'sim_existing':     (int, 0, None),
-        'sim_renewal_rate': (float, 0, 100),
-        'sim_rate_growth':  (float, 0, 50),
-        'sim_churn_rate':   (float, 0, 50),
-        'sim_annual_expenses': (int, 0, None),
-        'sim_years':        (int, 1, 20),
+        'sim_new_vehicles':      (int,   0,   None),
+        'sim_existing':          (int,   0,   None),
+        'sim_renewal_rate':      (float, 0,   100),
+        'sim_rate_growth':       (float, 0,   50),
+        'sim_churn_rate':        (float, 0,   50),
+        'sim_annual_expenses':   (int,   0,   None),
+        'sim_years':             (int,   1,   20),
+        'sim_licenses_per_year': (int,   0,   None),
+        'sim_insurance_rate':    (float, 0,   100),
     }
     for key, (cast, mn, mx) in _SIM_KEYS.items():
         if key in data:
