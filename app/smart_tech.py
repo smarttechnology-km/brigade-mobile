@@ -38,6 +38,30 @@ def st_admin_required(f):
     return decorated
 
 
+def st_no_secretaire_required(f):
+    """Decorator: admin or employe only (secretaire is redirected)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not getattr(current_user, 'is_smart_tech', False):
+            return redirect(url_for('smart_tech.login'))
+        if current_user.role not in ('admin', 'employe'):
+            return redirect(url_for('smart_tech.dashboard'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def st_admin_or_secretaire_required(f):
+    """Decorator: admin or secretaire only (employe is redirected)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not getattr(current_user, 'is_smart_tech', False):
+            return redirect(url_for('smart_tech.login'))
+        if current_user.role not in ('admin', 'secretaire'):
+            return redirect(url_for('smart_tech.dashboard'))
+        return f(*args, **kwargs)
+    return decorated
+
+
 @smart_tech_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated and getattr(current_user, 'is_smart_tech', False):
@@ -775,7 +799,7 @@ def api_qr_table():
 # ── Gestion des Véhicules ──────────────────────────────────────────────────────
 
 @smart_tech_bp.route('/gestion-vehicules')
-@smart_tech_required
+@st_no_secretaire_required
 def gestion_vehicules_page():
     return render_template('smart_tech_gestion_vehicules.html')
 
@@ -783,7 +807,7 @@ def gestion_vehicules_page():
 # ── Renouvellement QR ──────────────────────────────────────────────────────────
 
 @smart_tech_bp.route('/renouvellement')
-@smart_tech_required
+@st_no_secretaire_required
 def renouvellement_page():
     renewal_price = int(SmartTechSetting.get('qr_renewal_price', 3000))
     return render_template('smart_tech_renouvellement.html', renewal_price=renewal_price)
@@ -792,7 +816,7 @@ def renouvellement_page():
 # ── Subscriptions ──────────────────────────────────────────────────────────────
 
 @smart_tech_bp.route('/subscriptions')
-@smart_tech_required
+@st_admin_or_secretaire_required
 def subscriptions_page():
     subs          = Subscription.query.order_by(Subscription.created_at.desc()).all()
     active_subs   = [s for s in subs if s.is_active]
@@ -942,7 +966,7 @@ def api_subscription_delete(sub_id):
 # ── Expenses ────────────────────────────────────────────────────────────────
 
 @smart_tech_bp.route('/depenses')
-@smart_tech_required
+@st_admin_or_secretaire_required
 def depenses_page():
     from app.timezone_utils import now_comoros
     from datetime import date
@@ -1151,14 +1175,11 @@ def _build_report(period_type, period_value):
     commission_rate = int(SmartTechSetting.get('insurance_commission', 0))
     is_monthly = (period_type == 'monthly')
     if period_type == 'daily':
-        receipt_month = period_value[:7]           # "2026-06-21" → "2026-06"
-        comm_start_dt, comm_end_dt = _period_bounds('monthly', receipt_month)
+        receipt_month = period_value[:7]           # "2026-06-21" → "2026-06" (for receipt lookup)
     elif period_type == 'monthly':
         receipt_month = period_value
-        comm_start_dt, comm_end_dt = start_dt, end_dt
     else:
         receipt_month = None                       # annual — no single-month receipt
-        comm_start_dt, comm_end_dt = start_dt, end_dt
     companies  = Insurance.query.order_by(Insurance.company_name).all()
     insurance_commissions = []
     commission_total = 0
@@ -1172,13 +1193,8 @@ def _build_report(period_type, period_value):
         else:
             vids = []
         if vids:
-            qr_q = QRCodePayment.query.filter(
-                QRCodePayment.vehicle_id.in_(vids),
-                QRCodePayment.status == 'paid',
-                QRCodePayment.paid_at >= comm_start_dt,
-                QRCodePayment.paid_at <= comm_end_dt,
-            )
-            payments = qr_q.all()
+            vids_set = set(vids)
+            payments = [q for q in qr_in if q.vehicle_id in vids_set]
             comp_acts = sum(1 for p in payments if p.payment_type == 'activation')
             comp_rens = sum(1 for p in payments if p.payment_type == 'renewal')
         else:
@@ -1191,12 +1207,13 @@ def _build_report(period_type, period_value):
             if rval and rval != '0':
                 confirmed = True
                 confirmed_at = str(rval)
-        insurance_commissions.append({
-            'id': ins.id, 'company_name': ins.company_name, 'island': ins.island or '',
-            'activations': comp_acts, 'renewals': comp_rens,
-            'commission': comp_comm, 'confirmed': confirmed, 'confirmed_at': confirmed_at,
-        })
-        commission_total += comp_comm
+        if comp_acts or comp_rens:
+            insurance_commissions.append({
+                'id': ins.id, 'company_name': ins.company_name, 'island': ins.island or '',
+                'activations': comp_acts, 'renewals': comp_rens,
+                'commission': comp_comm, 'confirmed': confirmed, 'confirmed_at': confirmed_at,
+            })
+            commission_total += comp_comm
 
     return {
         'period_type':        period_type,
@@ -1232,7 +1249,7 @@ def _build_report(period_type, period_value):
 
 
 @smart_tech_bp.route('/rapport')
-@st_admin_required
+@st_admin_or_secretaire_required
 def rapport_page():
     from app.timezone_utils import now_comoros
     today = now_comoros().date()
@@ -1249,7 +1266,7 @@ def rapport_page():
 
 
 @smart_tech_bp.route('/api/rapport')
-@st_admin_required
+@st_admin_or_secretaire_required
 def api_rapport():
     period_type  = request.args.get('type', 'daily')
     period_value = request.args.get('value', '')
@@ -1338,7 +1355,7 @@ def _period_label(period_type, period_value):
 
 
 @smart_tech_bp.route('/rapport/pdf')
-@st_admin_required
+@st_admin_or_secretaire_required
 def rapport_pdf():
     period_type  = request.args.get('type', 'daily')
     period_value = request.args.get('value', '')
@@ -1704,7 +1721,7 @@ def _island_stats(year=None):
 
 
 @smart_tech_bp.route('/stats-iles')
-@st_admin_required
+@st_admin_or_secretaire_required
 def stats_iles_page():
     from app.timezone_utils import now_comoros
     current_year = now_comoros().year
@@ -1717,7 +1734,7 @@ def stats_iles_page():
 
 
 @smart_tech_bp.route('/api/stats-iles')
-@st_admin_required
+@st_admin_or_secretaire_required
 def api_stats_iles():
     year_raw = request.args.get('year', '')
     year = int(year_raw) if year_raw.isdigit() else None
@@ -1730,7 +1747,7 @@ def api_stats_iles():
 # ── Licences (cartes biométriques) ────────────────────────────────────────────
 
 @smart_tech_bp.route('/licences')
-@smart_tech_required
+@st_no_secretaire_required
 def licences_page():
     pending_count = LicensePrintRequest.query.filter_by(status='pending').count()
     return render_template('smart_tech_licences.html', pending_count=pending_count)
@@ -2195,7 +2212,7 @@ def api_st_restore_status(task_id):
 # ── Agence Assurance ─────────────────────────────────────────────────────────
 
 @smart_tech_bp.route('/assurance')
-@st_admin_required
+@smart_tech_required
 def assurance_page():
     return render_template('smart_tech_assurance.html')
 
@@ -2203,7 +2220,7 @@ def assurance_page():
 # --- Companies ---
 
 @smart_tech_bp.route('/api/assurance/companies', methods=['GET'])
-@st_admin_required
+@smart_tech_required
 def api_assurance_companies():
     companies = Insurance.query.order_by(Insurance.company_name).all()
     return jsonify([c.to_dict() for c in companies])
@@ -2263,7 +2280,7 @@ def api_assurance_company_delete(ins_id):
 # --- Accounts ---
 
 @smart_tech_bp.route('/api/assurance/accounts', methods=['GET'])
-@st_admin_required
+@smart_tech_required
 def api_assurance_accounts():
     accounts = InsuranceAccount.query.order_by(InsuranceAccount.created_at.desc()).all()
     return jsonify([a.to_dict() for a in accounts])
@@ -2337,7 +2354,7 @@ def api_assurance_account_delete(acc_id):
 # --- Movements ---
 
 @smart_tech_bp.route('/api/assurance/movements')
-@st_admin_required
+@smart_tech_required
 def api_assurance_movements():
     from datetime import datetime, timedelta
     from app.timezone_utils import now_comoros, COMOROS_TZ

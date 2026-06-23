@@ -1970,7 +1970,7 @@ def upload_photo_submission():
         return jsonify({"error": "Only image files allowed"}), 400
     
     # Create uploads directory if not exists
-    upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'photo_submissions')
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'photo_submissions')
     os.makedirs(upload_dir, exist_ok=True)
     
     # Generate unique filename
@@ -2415,7 +2415,7 @@ def create_vehicle_transfer():
                     return jsonify({'error': 'Only PDF and image files (JPEG, PNG, GIF, WebP) are allowed'}), 400
                 
                 # Create uploads directory if not exists
-                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'identity_documents')
+                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'identity_documents')
                 os.makedirs(upload_dir, exist_ok=True)
                 
                 # Generate unique filename
@@ -2554,11 +2554,11 @@ def get_transfer_identity_document(transfer_id):
         # Build file path — handle two upload conventions:
         # - Mobile/api.py uploads: path is just the filename, stored in static/identity_documents/
         # - Web/routes.py uploads: path includes directory prefix like "vehicle_transfers/file.jpg"
-        static_dir = os.path.join(os.path.dirname(__file__), 'static')
+        upload_base = current_app.config['UPLOAD_FOLDER']
         if os.sep in transfer.identity_document_path or '/' in transfer.identity_document_path:
-            doc_path = os.path.join(static_dir, transfer.identity_document_path)
+            doc_path = os.path.join(upload_base, transfer.identity_document_path)
         else:
-            doc_path = os.path.join(static_dir, 'identity_documents', transfer.identity_document_path)
+            doc_path = os.path.join(upload_base, 'identity_documents', transfer.identity_document_path)
 
         if not os.path.exists(doc_path):
             return jsonify({'error': 'Document file not found'}), 404
@@ -3377,7 +3377,7 @@ def api_licenses_delete(license_id):
         return jsonify({'error': 'Ce permis a un historique de points et ne peut pas être supprimé.'}), 400
     if lic.photo_filename:
         try:
-            photo_path = os.path.join('app', 'static', 'uploads', 'license_photos', lic.photo_filename)
+            photo_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'license_photos', lic.photo_filename)
             if os.path.exists(photo_path):
                 os.remove(photo_path)
         except Exception:
@@ -3397,7 +3397,7 @@ def api_licenses_photo(license_id):
     ext = os.path.splitext(secure_filename(file.filename))[1].lower()
     if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
         return jsonify({'error': 'Format non autorisé (jpg, png, webp)'}), 400
-    upload_dir = os.path.join('app', 'static', 'uploads', 'license_photos')
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'license_photos')
     os.makedirs(upload_dir, exist_ok=True)
     if lic.photo_filename:
         old_path = os.path.join(upload_dir, lic.photo_filename)
@@ -3407,7 +3407,7 @@ def api_licenses_photo(license_id):
     file.save(os.path.join(upload_dir, filename))
     lic.photo_filename = filename
     db.session.commit()
-    return jsonify({'photo_url': f'/static/uploads/license_photos/{filename}'})
+    return jsonify({'photo_url': f'/uploads/license_photos/{filename}'})
 
 
 # ── License print requests ────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort, send_file, current_app
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort, send_file, send_from_directory, current_app
 from flask_login import login_required, current_user
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from functools import wraps
@@ -611,6 +611,12 @@ def roles_required(*allowed_roles):
             abort(403)
         return wrapped
     return deco
+
+
+@main_bp.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    """Serve files from UPLOAD_FOLDER (persistent disk on Render, static/ in dev)."""
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
 
 
 @main_bp.route('/')
@@ -5646,7 +5652,7 @@ def submit_vehicle_transfer():
                 if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
                     return jsonify({'error': 'Invalid file type. Allowed: PDF, JPG, PNG, GIF'}), 400
 
-                upload_dir = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'app/static'), 'vehicle_transfers')
+                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'vehicle_transfers')
                 os.makedirs(upload_dir, exist_ok=True)
                 filename = secure_filename(f"{vehicle_id}_{datetime.now().timestamp()}_{file.filename}")
                 file.save(os.path.join(upload_dir, filename))
