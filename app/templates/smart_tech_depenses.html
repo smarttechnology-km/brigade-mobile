@@ -192,36 +192,46 @@
         <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
         </a>
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
         </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
             <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
         </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
         <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item active">
             <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
         </a>
+        {% endif %}
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
         </a>
-        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
-            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
-        </a>
         {% endif %}
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
         </a>
         {% endif %}
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
         </a>

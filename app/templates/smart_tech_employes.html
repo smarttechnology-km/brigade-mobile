@@ -75,6 +75,8 @@
         .badge-role-admin{background:rgba(149,76,233,0.12);color:var(--st-purple);border:1px solid rgba(149,76,233,0.3);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
         .badge-role-emp{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.12);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
         html[data-theme="light"] .badge-role-emp{background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.5);border-color:rgba(0,0,0,0.1);}
+        .badge-role-sec{background:rgba(240,180,41,0.1);color:var(--st-yellow);border:1px solid rgba(240,180,41,0.3);padding:.18em .6em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        html[data-theme="light"] .badge-role-sec{background:rgba(180,120,0,0.08);color:#9a6700;border-color:rgba(180,120,0,0.25);}
         .account-section{background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.15);border-radius:8px;padding:.75rem 1rem;margin-top:.5rem;}
         html[data-theme="light"] .account-section{background:rgba(0,100,200,0.04);border-color:rgba(0,100,200,0.15);}
         .form-check-input:checked{background-color:var(--st-cyan);border-color:var(--st-cyan);}
@@ -136,6 +138,12 @@
         html[data-theme="light"] .btn-close{filter:none;}
         html[data-theme="light"] .position-pill{color:rgba(0,0,0,0.45);}
         html[data-theme="light"] .empty-state{color:rgba(0,0,0,0.25);}
+        html[data-theme="light"] .section-divider{color:rgba(0,0,0,0.35);border-bottom-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .form-control::placeholder,
+        html[data-theme="light"] .form-select::placeholder{color:rgba(0,0,0,0.3);}
+        html[data-theme="light"] .form-select option{background:#fff;color:#1a1a2e;}
+        html[data-theme="light"] .st-cancel-btn{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.12);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .form-check-label{color:#1a1a2e;}
         /* Muted text adapts to theme */
         .td-muted{font-size:.8rem;color:rgba(255,255,255,0.5);}
         .td-dim{color:rgba(255,255,255,0.3);}
@@ -177,36 +185,46 @@
         <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
         </a>
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
         </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
             <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
         </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
         <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
         </a>
+        {% endif %}
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item active">
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
         </a>
-        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
-            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
-        </a>
         {% endif %}
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
         </a>
         {% endif %}
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
         </a>
@@ -429,7 +447,8 @@
                     <div class="mb-2">
                         <label class="form-label">Rôle</label>
                         <select id="emp-account-role" class="form-select">
-                            <option value="employe">Employé — accès limité (Vue d'ensemble, Véhicules, Abonnements, Dépenses)</option>
+                            <option value="employe">Employé — Vue d'ensemble, Véhicules, Gestion, Renouvellement, Licences, Assurance</option>
+                            <option value="secretaire">Secrétaire — Vue d'ensemble, Véhicules, Assurance, Abonnements, Dépenses, Rapport, Stats</option>
                             <option value="admin">Administrateur — accès complet</option>
                         </select>
                     </div>
@@ -570,7 +589,9 @@
                     ? `${accessBadge}<br><span style="margin-top:.25rem;display:inline-block;">${
                         e.account_role === 'admin'
                             ? '<span class="badge-role-admin"><i class="fas fa-crown me-1"></i>Admin</span>'
-                            : '<span class="badge-role-emp"><i class="fas fa-user me-1"></i>Employé</span>'
+                            : e.account_role === 'secretaire'
+                                ? '<span class="badge-role-sec"><i class="fas fa-pen-nib me-1"></i>Secrétaire</span>'
+                                : '<span class="badge-role-emp"><i class="fas fa-user me-1"></i>Employé</span>'
                     }</span>`
                     : '<span class="td-dim" style="font-size:.75rem;">—</span>'
                 }</td>

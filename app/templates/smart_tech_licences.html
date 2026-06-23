@@ -167,6 +167,20 @@
             background: #fff; border-color: rgba(0,0,0,0.18); color: #1a1a2e; color-scheme: light;
         }
         .hist-date-input:focus { outline: none; border-color: var(--st-cyan); }
+        .hist-search-input {
+            padding: .35rem .75rem .35rem 2rem; background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+            color: #e6edf3; font-size: .82rem; width: 200px; outline: none;
+        }
+        .hist-search-input::placeholder { color: rgba(255,255,255,0.35); }
+        .hist-search-input:focus { border-color: var(--st-cyan); }
+        html[data-theme="light"] .hist-search-input {
+            background: #fff; border-color: rgba(0,0,0,0.18); color: #1a1a2e;
+        }
+        html[data-theme="light"] .hist-search-input::placeholder { color: rgba(0,0,0,0.35); }
+        .hist-search-wrap { position: relative; }
+        .hist-search-icon { position:absolute; left:9px; top:50%; transform:translateY(-50%); font-size:.8rem; pointer-events:none; color:rgba(255,255,255,0.35); }
+        html[data-theme="light"] .hist-search-icon { color: rgba(0,0,0,0.4); }
         .btn-hist-filter {
             background: rgba(0,212,255,0.12); border: 1px solid rgba(0,212,255,0.3);
             color: var(--st-cyan); border-radius: 7px; padding: 0.32rem 0.75rem;
@@ -278,36 +292,46 @@
         <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
         </a>
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
         </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item active">
             <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
             <span class="nav-badge" id="nav-lic-badge" style="{{ '' if pending_count > 0 else 'display:none;' }}">{{ pending_count }}</span>
         </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
         <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
         </a>
+        {% endif %}
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
         </a>
-        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
-            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
-        </a>
         {% endif %}
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
         </a>
         {% endif %}
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
         </a>
@@ -392,12 +416,16 @@
         </div>
     </div>
 
-    <!-- ── Section 2 : Historique des cartes imprimées (admin only) ── -->
-    {% if current_user.role == 'admin' %}
+    <!-- ── Section 2 : Historique des cartes imprimées (admin + employe) ── -->
+    {% if current_user.role in ['admin', 'employe'] %}
     <div class="st-section">
         <div class="st-section-header">
             <span class="st-section-title"><i class="fas fa-history me-2" style="color:var(--st-green);"></i>Historique des cartes imprimées</span>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                <div class="hist-search-wrap">
+                    <i class="fas fa-search hist-search-icon"></i>
+                    <input type="text" id="hist-search" placeholder="Nom, permis, agent…" oninput="filterHistory()" class="hist-search-input">
+                </div>
                 <input type="date" id="hist-from" class="hist-date-input" onchange="loadHistory()">
                 <span class="hist-filter-label">→</span>
                 <input type="date" id="hist-to" class="hist-date-input" onchange="loadHistory()">
@@ -526,7 +554,7 @@
                         card.style.transform = 'scale(0.95)';
                         setTimeout(() => {
                             card.remove(); updateReqCount(); clearOpenedCard(reqId);
-                            {% if current_user.role == 'admin' %}loadStats(); loadHistory();{% endif %}
+                            {% if current_user.role in ['admin', 'employe'] %}loadStats(); loadHistory();{% endif %}
                         }, 320);
                     }
                 } else {
@@ -598,20 +626,70 @@
         return `${d}/${m}/${y}`;
     }
 
-    function resetHistRange() {
+    window.resetHistRange = function resetHistRange() {
         const today    = new Date();
         const monthAgo = new Date(today);
         monthAgo.setMonth(monthAgo.getMonth() - 1);
         document.getElementById('hist-from').value = toInputDate(monthAgo);
         document.getElementById('hist-to').value   = toInputDate(today);
         loadHistory();
+    };
+
+    var _histData = [];
+
+    function renderHistTable(reqs) {
+        const body = document.getElementById('hist-body');
+        if (!reqs.length) {
+            body.innerHTML = '<div class="hist-empty"><i class="fas fa-inbox me-2"></i>Aucune carte imprimée sur cette période.</div>';
+            return;
+        }
+        body.innerHTML = `<div class="table-responsive">
+        <table class="hist-table">
+            <thead><tr>
+                <th>Photo</th>
+                <th>Numéro de permis</th>
+                <th>Titulaire</th>
+                <th>Demandé par</th>
+                <th>Date demande</th>
+                <th>Imprimé par</th>
+                <th>Date impression</th>
+            </tr></thead>
+            <tbody>${reqs.map(r => {
+                const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
+                const photo = r.photo_filename
+                    ? `<img src="/static/uploads/license_photos/${esc(r.photo_filename)}" style="width:36px;height:44px;object-fit:cover;border-radius:5px;border:1px solid rgba(255,255,255,0.12);" alt="">`
+                    : `<div style="width:36px;height:44px;border-radius:5px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:1.1rem;"><i class="fas fa-user"></i></div>`;
+                return `<tr>
+                    <td>${photo}</td>
+                    <td><span class="hist-num">${esc(r.license_number)}</span></td>
+                    <td style="font-weight:600;">${fullName}</td>
+                    <td><span style="font-size:0.75rem;opacity:.65;">${esc(r.requested_by)}</span></td>
+                    <td style="font-size:0.75rem;opacity:.55;white-space:nowrap;">${esc(r.requested_at)}</td>
+                    <td><span class="hist-badge"><i class="fas fa-check"></i>${esc(r.printed_by)}</span></td>
+                    <td style="font-size:0.78rem;white-space:nowrap;">${esc(r.printed_at)}</td>
+                </tr>`;
+            }).join('')}</tbody>
+        </table></div>`;
     }
+
+    window.filterHistory = function () {
+        const q = (document.getElementById('hist-search').value || '').toLowerCase().trim();
+        if (!q) { renderHistTable(_histData); return; }
+        renderHistTable(_histData.filter(r => {
+            const fullName = ((r.holder_firstname || '') + ' ' + r.holder_name).toLowerCase();
+            return fullName.includes(q)
+                || (r.license_number || '').toLowerCase().includes(q)
+                || (r.requested_by  || '').toLowerCase().includes(q)
+                || (r.printed_by    || '').toLowerCase().includes(q);
+        }));
+    };
 
     window.loadHistory = function () {
         const from = inputToApiDate(document.getElementById('hist-from').value);
         const to   = inputToApiDate(document.getElementById('hist-to').value);
         const body = document.getElementById('hist-body');
         body.innerHTML = '<div class="hist-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+        document.getElementById('hist-search').value = '';
 
         let url = '/smart-tech/api/licences/requests/history';
         const params = [];
@@ -621,47 +699,13 @@
 
         fetch(url)
             .then(r => r.ok ? r.json() : [])
-            .then(reqs => {
-
-                if (!reqs.length) {
-                    body.innerHTML = '<div class="hist-empty"><i class="fas fa-inbox me-2"></i>Aucune carte imprimée sur cette période.</div>';
-                    return;
-                }
-
-                body.innerHTML = `<div class="table-responsive">
-                <table class="hist-table">
-                    <thead><tr>
-                        <th>Photo</th>
-                        <th>Numéro de permis</th>
-                        <th>Titulaire</th>
-                        <th>Demandé par</th>
-                        <th>Date demande</th>
-                        <th>Imprimé par</th>
-                        <th>Date impression</th>
-                    </tr></thead>
-                    <tbody>${reqs.map(r => {
-                        const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
-                        const photo = r.photo_filename
-                            ? `<img src="/static/uploads/license_photos/${esc(r.photo_filename)}" style="width:36px;height:44px;object-fit:cover;border-radius:5px;border:1px solid rgba(255,255,255,0.12);" alt="">`
-                            : `<div style="width:36px;height:44px;border-radius:5px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:1.1rem;"><i class="fas fa-user"></i></div>`;
-                        return `<tr>
-                            <td>${photo}</td>
-                            <td><span class="hist-num">${esc(r.license_number)}</span></td>
-                            <td style="font-weight:600;">${fullName}</td>
-                            <td><span style="font-size:0.75rem;opacity:.65;">${esc(r.requested_by)}</span></td>
-                            <td style="font-size:0.75rem;opacity:.55;white-space:nowrap;">${esc(r.requested_at)}</td>
-                            <td><span class="hist-badge"><i class="fas fa-check"></i>${esc(r.printed_by)}</span></td>
-                            <td style="font-size:0.78rem;white-space:nowrap;">${esc(r.printed_at)}</td>
-                        </tr>`;
-                    }).join('')}</tbody>
-                </table></div>`;
-            })
+            .then(reqs => { _histData = reqs; renderHistTable(reqs); })
             .catch(() => {
                 body.innerHTML = '<div class="hist-empty"><i class="fas fa-exclamation-triangle me-2"></i>Erreur de chargement.</div>';
             });
     };
 
-    {% if current_user.role == 'admin' %}
+    {% if current_user.role in ['admin', 'employe'] %}
     // Init history with default range (last month)
     (function initHistory() {
         const today    = new Date();
@@ -716,7 +760,7 @@
                 if (key !== _licLastKey) {
                     _licLastKey = key;
                     loadRequests();
-                    {% if current_user.role == 'admin' %}loadStats(); loadHistory();{% endif %}
+                    {% if current_user.role in ['admin', 'employe'] %}loadStats(); loadHistory();{% endif %}
                     lastRefresh = Date.now();
                 }
             })
