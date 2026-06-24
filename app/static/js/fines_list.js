@@ -296,6 +296,7 @@ function displayFinesPage() {
             <td>${f.paid ? '<span class="status-badge-paid">Payée</span>' : '<span class="status-badge-unpaid">Impayée</span>'}</td>
             <td>
               ${f.track_token ? `<a class="btn btn-sm btn-outline-primary me-1" href="/track/${f.track_token}"><i class="fas fa-location-arrow me-1"></i>Track</a>` : ''}
+              ${f.photo_url ? `<button type="button" class="btn btn-sm btn-outline-secondary" title="Voir la photo" onclick="showFinePhoto('${f.photo_url}')"><i class="fas fa-camera"></i></button>` : ''}
             </td>
             </tr>`;
     }).join('');
@@ -599,4 +600,11 @@ function saveEditReason(btn, fineId) {
         loadFines();
     })
     .catch(() => { alert('Erreur réseau.'); btn.disabled = false; });
+}
+
+function showFinePhoto(photoUrl){
+    const img = document.getElementById('fine-photo-modal-img');
+    if(img) img.src = photoUrl;
+    const modalEl = document.getElementById('finePhotoModal');
+    if(modalEl) new bootstrap.Modal(modalEl).show();
 }
