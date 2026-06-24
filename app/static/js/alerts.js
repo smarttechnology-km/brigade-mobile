@@ -1,0 +1,446 @@
+document.addEventListener('DOMContentLoaded', function () {
+    window.alertsCurrentItems = [];
+    window.alertsCurrentFilter = 'active';
+    window.alertsSelectedPhotos = [];
+    window.alertsPrimaryIndex = 0;
+    window.alertsSelectedVehicles = [];
+
+    loadAlerts();
+
+    document.querySelectorAll('#alerts-filter-group button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('#alerts-filter-group button').forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            window.alertsCurrentFilter = btn.dataset.filter;
+            renderAlertsTable();
+        });
+    });
+
+    document.getElementById('alert-type').addEventListener('change', updateConditionalFields);
+    document.getElementById('alert-photos').addEventListener('change', handlePhotosSelected);
+    document.getElementById('alert-create-submit').addEventListener('click', submitAlertForm);
+
+    let vehicleSearchTimer = null;
+    const vehicleSearchInput = document.getElementById('alert-vehicle-search');
+    vehicleSearchInput.addEventListener('input', function () {
+        clearTimeout(vehicleSearchTimer);
+        const q = vehicleSearchInput.value.trim();
+        if (!q) { hideVehicleResults(); return; }
+        vehicleSearchTimer = setTimeout(function () { searchVehiclesForAlert(q); }, 300);
+    });
+    document.addEventListener('click', function (e) {
+        const wrap = document.getElementById('alert-vehicles-wrap');
+        if (wrap && !wrap.contains(e.target)) hideVehicleResults();
+    });
+
+    document.getElementById('alert-create-modal').addEventListener('show.bs.modal', function () {
+        prefillDates();
+        updateConditionalFields();
+    });
+    document.getElementById('alert-create-modal').addEventListener('hidden.bs.modal', function () {
+        resetAlertForm();
+    });
+});
+
+const ALERT_TYPE_META = {
+    accident:              { icon: 'fas fa-car-burst',       color: '#dc3545', label: 'Accident' },
+    recherche_vehicule:    { icon: 'fas fa-magnifying-glass', color: '#6f42c1', label: 'Recherche de véhicule' },
+    route_construction:    { icon: 'fas fa-road',             color: '#fd7e14', label: 'Route en construction' },
+    evenement_circulation: { icon: 'fas fa-triangle-exclamation', color: '#ffc107', label: 'Évènement bloquant la circulation' },
+    travaux_planifies:     { icon: 'fas fa-helmet-safety',    color: '#0d6efd', label: 'Travaux planifiés' },
+};
+const VEHICLE_LINK_TYPES = ['accident', 'recherche_vehicule'];
+const ZONE_TYPES = ['route_construction', 'evenement_circulation', 'travaux_planifies'];
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function toLocalDatetimeInputValue(d) {
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function prefillDates() {
+    const startsInput = document.getElementById('alert-starts-at');
+    const expiresInput = document.getElementById('alert-expires-at');
+    if (!startsInput.value) {
+        const now = new Date();
+        startsInput.value = toLocalDatetimeInputValue(now);
+        const plus3h = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+        expiresInput.value = toLocalDatetimeInputValue(plus3h);
+    }
+}
+
+function updateConditionalFields() {
+    const type = document.getElementById('alert-type').value;
+    document.getElementById('alert-vehicles-wrap').classList.toggle('d-none', !VEHICLE_LINK_TYPES.includes(type));
+    document.getElementById('alert-zone-wrap').classList.toggle('d-none', !ZONE_TYPES.includes(type));
+    document.getElementById('alert-custom-type-wrap').classList.toggle('d-none', type !== 'autre');
+}
+
+function searchVehiclesForAlert(q) {
+    fetch(`/api/vehicles/query?q=${encodeURIComponent(q)}`)
+        .then(function (r) { return r.json(); })
+        .then(function (list) {
+            renderVehicleResults(Array.isArray(list) ? list : []);
+        })
+        .catch(function () { hideVehicleResults(); });
+}
+
+function renderVehicleResults(list) {
+    const box = document.getElementById('alert-vehicle-results');
+    const selectedIds = window.alertsSelectedVehicles.map(function (v) { return v.id; });
+    window.alertsVehicleSearchResults = list.filter(function (v) { return !selectedIds.includes(v.id); });
+    if (!window.alertsVehicleSearchResults.length) {
+        box.innerHTML = '<div class="list-group-item text-muted small">Aucun véhicule trouvé</div>';
+        box.classList.remove('d-none');
+        return;
+    }
+    box.innerHTML = window.alertsVehicleSearchResults.map(function (v, idx) {
+        return `<button type="button" class="list-group-item list-group-item-action" onclick="addVehicleToAlertByIndex(${idx})">
+            <strong>${escapeHtml(v.license_plate)}</strong>${v.owner_name ? ' — ' + escapeHtml(v.owner_name) : ''}
+        </button>`;
+    }).join('');
+    box.classList.remove('d-none');
+}
+
+function addVehicleToAlertByIndex(idx) {
+    const vehicle = (window.alertsVehicleSearchResults || [])[idx];
+    if (vehicle) addVehicleToAlert(vehicle);
+}
+
+function hideVehicleResults() {
+    const box = document.getElementById('alert-vehicle-results');
+    box.classList.add('d-none');
+    box.innerHTML = '';
+}
+
+function addVehicleToAlert(vehicle) {
+    if (!window.alertsSelectedVehicles.some(function (v) { return v.id === vehicle.id; })) {
+        window.alertsSelectedVehicles.push(vehicle);
+    }
+    document.getElementById('alert-vehicle-search').value = '';
+    hideVehicleResults();
+    renderVehicleChips();
+}
+
+function removeVehicleFromAlert(id) {
+    window.alertsSelectedVehicles = window.alertsSelectedVehicles.filter(function (v) { return v.id !== id; });
+    renderVehicleChips();
+}
+
+function renderVehicleChips() {
+    const container = document.getElementById('alert-vehicle-chips');
+    container.innerHTML = window.alertsSelectedVehicles.map(function (v) {
+        return `<span class="badge bg-secondary d-inline-flex align-items-center gap-1 py-2 px-2">
+            <i class="fas fa-car"></i> ${escapeHtml(v.license_plate)}
+            <button type="button" class="btn-close btn-close-white" style="font-size:.6rem;" onclick="removeVehicleFromAlert(${v.id})"></button>
+        </span>`;
+    }).join('');
+}
+
+function handlePhotosSelected(e) {
+    window.alertsSelectedPhotos = Array.from(e.target.files || []);
+    window.alertsPrimaryIndex = 0;
+    renderPhotosPreview();
+}
+
+function renderPhotosPreview() {
+    const container = document.getElementById('alert-photos-preview');
+    if (!window.alertsSelectedPhotos.length) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = window.alertsSelectedPhotos.map(function (file, idx) {
+        const url = URL.createObjectURL(file);
+        const checked = idx === window.alertsPrimaryIndex ? 'checked' : '';
+        return `<div class="text-center" style="width:90px;">
+            <img src="${url}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid ${idx === window.alertsPrimaryIndex ? '#dc3545' : '#dee2e6'};">
+            <div class="form-check form-check-inline mt-1" style="font-size:.75rem;">
+                <input class="form-check-input" type="radio" name="alert-primary-photo" id="primary-photo-${idx}" ${checked} onchange="setPrimaryPhoto(${idx})">
+                <label class="form-check-label" for="primary-photo-${idx}">Principale</label>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function setPrimaryPhoto(idx) {
+    window.alertsPrimaryIndex = idx;
+    renderPhotosPreview();
+}
+
+function loadAlerts() {
+    fetch('/api/alerts')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            window.alertsCurrentItems = Array.isArray(data) ? data : [];
+            renderAlertsTable();
+        })
+        .catch(function () {
+            document.getElementById('alerts-tbody').innerHTML = '<tr><td colspan="8" class="text-center text-muted">Erreur de chargement</td></tr>';
+        });
+}
+
+function renderAlertsTable() {
+    const tbody = document.getElementById('alerts-tbody');
+    let items = window.alertsCurrentItems || [];
+
+    if (window.alertsCurrentFilter === 'active') items = items.filter(function (a) { return !a.is_expired; });
+    else if (window.alertsCurrentFilter === 'expired') items = items.filter(function (a) { return a.is_expired; });
+
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Aucune alerte</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = items.map(function (a, i) {
+        const meta = ALERT_TYPE_META[a.alert_type] || { icon: 'fas fa-bell', color: '#6c757d', label: a.alert_type_label };
+        const statusBadge = a.is_expired
+            ? '<span class="badge bg-secondary">Expirée</span>'
+            : '<span class="badge bg-success">Active</span>';
+        const vehiclesLine = (a.vehicles && a.vehicles.length)
+            ? `<div class="text-muted small mt-1"><i class="fas fa-car me-1"></i>${a.vehicles.map(function (v) { return escapeHtml(v.license_plate); }).join(', ')}</div>`
+            : '';
+        const zoneLine = a.zone
+            ? `<div class="text-muted small mt-1"><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(a.zone)}</div>`
+            : '';
+        const extraPhotosBadge = a.photos && a.photos.length > 1
+            ? `<span class="badge bg-light text-dark border ms-1">+${a.photos.length - 1}</span>`
+            : '';
+        const photoBtn = a.primary_photo_url
+            ? `<button type="button" class="btn btn-sm btn-outline-secondary me-1" title="Voir les photos" onclick='showAlertPhotos(${JSON.stringify(a.photos)})'><i class="fas fa-camera"></i></button>${extraPhotosBadge}`
+            : '';
+        const descLine = a.description
+            ? `<div class="text-muted small mt-1">${escapeHtml(a.description)}</div>`
+            : '';
+        const expireBtn = (!a.expires_at_str && !a.is_expired)
+            ? `<button type="button" class="btn btn-sm btn-outline-secondary me-1" title="Marquer comme expirée" onclick="markAlertExpired(${a.id})"><i class="fas fa-flag-checkered"></i></button>`
+            : '';
+        return `<tr>
+            <td>${i + 1}</td>
+            <td><strong>${escapeHtml(a.title)}</strong>${descLine}${vehiclesLine}${zoneLine}</td>
+            <td><i class="${meta.icon} me-2" style="color:${meta.color};"></i>${escapeHtml(a.alert_type_label)}</td>
+            <td>${escapeHtml(a.island)}</td>
+            <td>${a.starts_at_str || ''}</td>
+            <td>${a.expires_at_str || '<span class="text-muted">—</span>'}</td>
+            <td>${statusBadge}</td>
+            <td>
+                <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Voir le détail" onclick="viewAlert(${a.id})"><i class="fas fa-eye"></i></button>
+                ${photoBtn}
+                ${expireBtn}
+                <button type="button" class="btn btn-sm btn-outline-danger" title="Supprimer" onclick="deleteAlert(${a.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function viewAlert(id) {
+    const a = (window.alertsCurrentItems || []).find(function (x) { return x.id === id; });
+    if (!a) return;
+
+    const meta = ALERT_TYPE_META[a.alert_type] || { icon: 'fas fa-bell', color: '#6c757d' };
+    const statusBadge = a.is_expired
+        ? '<span class="badge bg-secondary">Expirée</span>'
+        : '<span class="badge bg-success">Active</span>';
+
+    const vehiclesBlock = (a.vehicles && a.vehicles.length)
+        ? `<div class="col-12">
+             <div class="small fw-bold text-muted">Véhicule(s) concerné(s)</div>
+             <div>${a.vehicles.map(function (v) {
+                 return `<span class="badge bg-secondary me-1"><i class="fas fa-car me-1"></i>${escapeHtml(v.license_plate)}${v.owner_name ? ' — ' + escapeHtml(v.owner_name) : ''}</span>`;
+             }).join('')}</div>
+           </div>`
+        : '';
+
+    const zoneBlock = a.zone
+        ? `<div class="col-12"><div class="small fw-bold text-muted">Zone concernée</div><div>${escapeHtml(a.zone)}</div></div>`
+        : '';
+
+    const descBlock = a.description
+        ? `<div class="col-12"><div class="small fw-bold text-muted">Description</div><div>${escapeHtml(a.description)}</div></div>`
+        : '';
+
+    const photosBlock = (a.photos && a.photos.length)
+        ? `<div class="col-12">
+             <div class="small fw-bold text-muted mb-1">Photos</div>
+             <div class="d-flex flex-wrap gap-2">
+                 ${a.photos.map(function (p) {
+                     return `<div style="position:relative;">
+                         <img src="${p.photo_url}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:2px solid ${p.is_primary ? '#dc3545' : '#dee2e6'};">
+                         ${p.is_primary ? '<span class="badge bg-danger" style="position:absolute;bottom:4px;left:4px;font-size:.6rem;">Principale</span>' : ''}
+                     </div>`;
+                 }).join('')}
+             </div>
+           </div>`
+        : '';
+
+    document.getElementById('alert-view-modal-body').innerHTML = `
+        <div class="row g-3">
+            <div class="col-12 d-flex align-items-center justify-content-between">
+                <h5 class="mb-0"><i class="${meta.icon} me-2" style="color:${meta.color};"></i>${escapeHtml(a.title)}</h5>
+                ${statusBadge}
+            </div>
+            <div class="col-md-6"><div class="small fw-bold text-muted">Type</div><div>${escapeHtml(a.alert_type_label)}</div></div>
+            <div class="col-md-6"><div class="small fw-bold text-muted">Île</div><div>${escapeHtml(a.island)}</div></div>
+            <div class="col-md-6"><div class="small fw-bold text-muted">Date de début</div><div>${a.starts_at_str || ''}</div></div>
+            <div class="col-md-6"><div class="small fw-bold text-muted">Date de fin</div><div>${a.expires_at_str || '<span class="text-muted">Non définie</span>'}</div></div>
+            ${zoneBlock}
+            ${vehiclesBlock}
+            ${descBlock}
+            ${photosBlock}
+            <div class="col-12 border-top pt-2 d-flex justify-content-between text-muted small">
+                <span>Créée par ${escapeHtml(a.created_by || '—')}</span>
+                <span>${a.created_at || ''}</span>
+            </div>
+        </div>
+    `;
+
+    const modalEl = document.getElementById('alertViewModal');
+    if (modalEl) new bootstrap.Modal(modalEl).show();
+}
+
+function showAlertPhotos(photos) {
+    const wrap = document.getElementById('alert-photo-modal-body');
+    if (!photos || !photos.length) return;
+    const sorted = photos.slice().sort(function (a, b) { return (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0); });
+    wrap.innerHTML = sorted.map(function (p) {
+        return `<div class="mb-3">
+            ${p.is_primary ? '<span class="badge bg-danger mb-1">Photo principale</span>' : ''}
+            <img src="${p.photo_url}" style="max-width:100%; border-radius:8px;">
+        </div>`;
+    }).join('');
+    const modalEl = document.getElementById('alertPhotoModal');
+    if (modalEl) new bootstrap.Modal(modalEl).show();
+}
+
+function deleteAlert(id) {
+    if (!confirm('Supprimer cette alerte ?')) return;
+    fetch(`/api/alerts/${id}`, { method: 'DELETE' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d.error) { alert(d.error); return; }
+            loadAlerts();
+        })
+        .catch(function () { alert('Erreur réseau.'); });
+}
+
+function markAlertExpired(id) {
+    if (!confirm("Marquer cette alerte comme expirée ?")) return;
+    fetch(`/api/alerts/${id}/expire`, { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d.error) { alert(d.error); return; }
+            loadAlerts();
+        })
+        .catch(function () { alert('Erreur réseau.'); });
+}
+
+function resetAlertForm() {
+    document.getElementById('alert-create-form').reset();
+    document.getElementById('alert-create-error').classList.add('d-none');
+    document.getElementById('alert-vehicles-wrap').classList.add('d-none');
+    document.getElementById('alert-zone-wrap').classList.add('d-none');
+    document.getElementById('alert-custom-type-wrap').classList.add('d-none');
+    window.alertsSelectedPhotos = [];
+    window.alertsPrimaryIndex = 0;
+    window.alertsSelectedVehicles = [];
+    document.getElementById('alert-photos-preview').innerHTML = '';
+    document.getElementById('alert-vehicle-chips').innerHTML = '';
+    hideVehicleResults();
+}
+
+function submitAlertForm() {
+    const title = document.getElementById('alert-title').value;
+    const alertType = document.getElementById('alert-type').value;
+    const island = document.getElementById('alert-island').value;
+    const startsAt = document.getElementById('alert-starts-at').value;
+    const expiresAt = document.getElementById('alert-expires-at').value;
+    const zone = document.getElementById('alert-zone').value;
+    const customTypeLabel = document.getElementById('alert-custom-type-label').value;
+    const description = document.getElementById('alert-description').value;
+    const sendNotification = document.getElementById('alert-send-notification').checked;
+    const errorBox = document.getElementById('alert-create-error');
+    const submitBtn = document.getElementById('alert-create-submit');
+
+    errorBox.classList.add('d-none');
+
+    if (!title.trim() || !alertType || !island || !startsAt) {
+        errorBox.textContent = 'Veuillez remplir tous les champs obligatoires (*).';
+        errorBox.classList.remove('d-none');
+        return;
+    }
+    if (expiresAt && new Date(expiresAt) <= new Date(startsAt)) {
+        errorBox.textContent = 'La date de fin doit être après la date de début.';
+        errorBox.classList.remove('d-none');
+        return;
+    }
+    if (alertType === 'autre' && !customTypeLabel.trim()) {
+        errorBox.textContent = "Veuillez préciser le type d'alerte.";
+        errorBox.classList.remove('d-none');
+        return;
+    }
+    if (ZONE_TYPES.includes(alertType) && !zone.trim()) {
+        errorBox.textContent = 'Veuillez préciser la zone concernée.';
+        errorBox.classList.remove('d-none');
+        return;
+    }
+    if (VEHICLE_LINK_TYPES.includes(alertType) && !window.alertsSelectedVehicles.length) {
+        errorBox.textContent = 'Veuillez sélectionner au moins un véhicule.';
+        errorBox.classList.remove('d-none');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('title', title.trim());
+    formData.append('alert_type', alertType);
+    formData.append('island', island);
+    formData.append('starts_at', startsAt);
+    if (expiresAt) formData.append('expires_at', expiresAt);
+    formData.append('description', description);
+    formData.append('send_notification', sendNotification ? '1' : '0');
+    if (VEHICLE_LINK_TYPES.includes(alertType)) {
+        window.alertsSelectedVehicles.forEach(function (v) {
+            formData.append('vehicle_ids', v.id);
+        });
+    }
+    if (ZONE_TYPES.includes(alertType) && zone.trim()) {
+        formData.append('zone', zone.trim());
+    }
+    if (alertType === 'autre' && customTypeLabel.trim()) {
+        formData.append('custom_type_label', customTypeLabel.trim());
+    }
+    (window.alertsSelectedPhotos || []).forEach(function (file) {
+        formData.append('photos', file);
+    });
+    formData.append('primary_index', window.alertsPrimaryIndex || 0);
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Création...';
+
+    fetch('/api/alerts', { method: 'POST', body: formData })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+            if (!res.ok) {
+                errorBox.textContent = res.data.error || 'Erreur lors de la création.';
+                errorBox.classList.remove('d-none');
+                return;
+            }
+            bootstrap.Modal.getInstance(document.getElementById('alert-create-modal')).hide();
+            loadAlerts();
+        })
+        .catch(function () {
+            errorBox.textContent = 'Erreur réseau.';
+            errorBox.classList.remove('d-none');
+        })
+        .finally(function () {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-check me-1"></i>Créer l\'alerte';
+        });
+}
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
