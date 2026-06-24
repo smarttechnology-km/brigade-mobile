@@ -2,7 +2,9 @@ from app import db
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
+from sqlalchemy import event
 import uuid
+import os
 from app.timezone_utils import now_comoros
 
 
@@ -322,6 +324,34 @@ class Fine(db.Model):
             'issued_at_str': self.issued_at.strftime('%d/%m/%Y %H:%M') if self.issued_at else None,
             'photo_url': f'/uploads/fine_photos/{self.photo_filename}' if self.photo_filename else None
         }
+
+
+def _delete_fine_photo_file(filename):
+    """Remove a fine's photo from disk, regardless of which code path marked it paid/deleted."""
+    if not filename:
+        return
+    try:
+        from flask import current_app
+        path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'fine_photos', filename)
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+
+@event.listens_for(Fine, 'before_update')
+def _fine_delete_photo_on_paid(mapper, connection, target):
+    """Once a fine is paid, its photo proof is no longer needed — free up disk space."""
+    history = db.inspect(target).attrs.paid.history
+    if history.has_changes() and target.paid and target.photo_filename:
+        _delete_fine_photo_file(target.photo_filename)
+        target.photo_filename = None
+
+
+@event.listens_for(Fine, 'before_delete')
+def _fine_delete_photo_on_delete(mapper, connection, target):
+    """If a fine record is deleted outright (e.g. exoneration cleanup), don't orphan its photo."""
+    _delete_fine_photo_file(target.photo_filename)
 
 
 class FineType(db.Model):
