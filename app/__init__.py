@@ -295,6 +295,9 @@ def create_app():
                                 conn.execute(text("ALTER TABLE fines ADD COLUMN base_amount NUMERIC(10,2)"))
                                 conn.execute(text("UPDATE fines SET base_amount = amount WHERE base_amount IS NULL"))
                                 logger.info("Added fines.base_amount column and backfilled from amount")
+                            if 'photo_filename' not in fine_columns:
+                                conn.execute(text("ALTER TABLE fines ADD COLUMN photo_filename VARCHAR(255)"))
+                                logger.info("Added fines.photo_filename column")
 
                         vehicle_column_definitions = {
                             'track_token': "ALTER TABLE vehicles ADD COLUMN track_token VARCHAR(36)",

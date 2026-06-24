@@ -300,6 +300,7 @@ class Fine(db.Model):
     receipt_number = db.Column(db.String(100), nullable=True)
     notes = db.Column(db.Text)
     issued_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    photo_filename = db.Column(db.String(255), nullable=True)
 
     vehicle = db.relationship('Vehicle', backref=db.backref('fines', lazy='dynamic'))
 
@@ -318,7 +319,8 @@ class Fine(db.Model):
             'receipt_number': self.receipt_number,
             'notes': self.notes,
             'issued_at': self.issued_at.isoformat(),
-            'issued_at_str': self.issued_at.strftime('%d/%m/%Y %H:%M') if self.issued_at else None
+            'issued_at_str': self.issued_at.strftime('%d/%m/%Y %H:%M') if self.issued_at else None,
+            'photo_url': f'/uploads/fine_photos/{self.photo_filename}' if self.photo_filename else None
         }
 
 

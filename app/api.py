@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_file, g
+from flask import Blueprint, request, jsonify, send_file, g, current_app
 from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
@@ -831,19 +831,41 @@ def api_fines_create():
     user = User.query.get(int(uid))
     if not user or user.role not in ['policier', 'administrateur']:
         return jsonify({"error": "Forbidden"}), 403
-    
-    data = request.get_json() or {}
+
+    # Accept both JSON (no photo) and multipart/form-data (optional photo)
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        data = request.form
+    else:
+        data = request.get_json() or {}
+
     vehicle_id = data.get('vehicle_id')
     amount = data.get('amount')
     reason = data.get('reason')
-    
+
     if not vehicle_id or not amount or not reason:
         return jsonify({"error": "Missing required fields"}), 400
-    
+
+    try:
+        vehicle_id = int(vehicle_id)
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid vehicle_id or amount"}), 400
+
     vehicle = Vehicle.query.get(vehicle_id)
     if not vehicle:
         return jsonify({"error": "Vehicle not found"}), 404
-    
+
+    photo_filename = None
+    photo_file = request.files.get('photo')
+    if photo_file and photo_file.filename:
+        if not photo_file.content_type.startswith('image/'):
+            return jsonify({"error": "Only image files allowed for photo"}), 400
+        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'fine_photos')
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = secure_filename(photo_file.filename).rsplit('.', 1)[-1] if '.' in photo_file.filename else 'jpg'
+        photo_filename = f"{uuid.uuid4()}.{ext}"
+        photo_file.save(os.path.join(upload_dir, photo_filename))
+
     fine = Fine(
         vehicle_id=vehicle_id,
         amount=amount,
@@ -851,9 +873,10 @@ def api_fines_create():
         reason=reason,
         officer=user.username,
         issued_at=now_comoros(),
-        paid=False
+        paid=False,
+        photo_filename=photo_filename
     )
-    
+
     db.session.add(fine)
     db.session.commit()
 
