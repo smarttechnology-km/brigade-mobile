@@ -326,17 +326,22 @@ class Fine(db.Model):
         }
 
 
-def _delete_fine_photo_file(filename):
-    """Remove a fine's photo from disk, regardless of which code path marked it paid/deleted."""
+def _delete_upload_file(filename, subdir):
+    """Remove a file from UPLOAD_FOLDER/<subdir>, regardless of which code path triggered it."""
     if not filename:
         return
     try:
         from flask import current_app
-        path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'fine_photos', filename)
+        path = os.path.join(current_app.config['UPLOAD_FOLDER'], subdir, filename)
         if os.path.exists(path):
             os.remove(path)
     except Exception:
         pass
+
+
+def _delete_fine_photo_file(filename):
+    """Remove a fine's photo from disk, regardless of which code path marked it paid/deleted."""
+    _delete_upload_file(filename, 'fine_photos')
 
 
 @event.listens_for(Fine, 'before_update')
@@ -1281,4 +1286,108 @@ class LicenseSetting(db.Model):
             'initial_points':       self.initial_points,
             'temp_validity_months': self.temp_validity_months,
         }
+
+
+alert_vehicles = db.Table(
+    'alert_vehicles',
+    db.Column('alert_id', db.Integer, db.ForeignKey('alerts.id'), primary_key=True),
+    db.Column('vehicle_id', db.Integer, db.ForeignKey('vehicles.id'), primary_key=True),
+)
+
+
+class Alert(db.Model):
+    __tablename__ = 'alerts'
+
+    ALERT_TYPE_LABELS = {
+        'accident':              'Accident',
+        'recherche_vehicule':    'Recherche de véhicule',
+        'route_construction':    'Route en construction',
+        'evenement_circulation': 'Évènement bloquant la circulation',
+        'travaux_planifies':     'Travaux planifiés',
+        'autre':                 'Autre',
+    }
+    ISLANDS = ['Grande Comores', 'Anjouan', 'Moheli']
+    NATIONAL = 'National'  # special island value: visible on all three islands
+    ISLAND_OPTIONS = ISLANDS + [NATIONAL]
+    VEHICLE_LINK_TYPES = ('accident', 'recherche_vehicule')  # alert types that link to vehicles in the database
+    ZONE_TYPES = ('route_construction', 'evenement_circulation', 'travaux_planifies')  # alert types that show the zone field
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    alert_type = db.Column(db.String(50), nullable=False)
+    custom_type_label = db.Column(db.String(100), nullable=True)  # used when alert_type == 'autre'
+    island = db.Column(db.String(50), nullable=False)
+    zone = db.Column(db.String(255), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    send_notification = db.Column(db.Boolean, nullable=False, default=False)
+    starts_at = db.Column(db.DateTime, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    manually_expired = db.Column(db.Boolean, nullable=False, default=False)
+    created_by = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    photos = db.relationship('AlertPhoto', backref='alert', lazy='dynamic', cascade='all, delete-orphan')
+    vehicles = db.relationship('Vehicle', secondary='alert_vehicles', lazy='dynamic')
+
+    @property
+    def is_expired(self):
+        if self.manually_expired:
+            return True
+        if self.expires_at is None:
+            return False
+        from app.timezone_utils import ensure_comoros
+        return now_comoros() > ensure_comoros(self.expires_at)
+
+    def to_dict(self):
+        photos = self.photos.order_by(AlertPhoto.id.asc()).all()
+        primary = next((p for p in photos if p.is_primary), photos[0] if photos else None)
+        label = self.custom_type_label if (self.alert_type == 'autre' and self.custom_type_label) \
+            else self.ALERT_TYPE_LABELS.get(self.alert_type, self.alert_type)
+        return {
+            'id': self.id,
+            'title': self.title,
+            'alert_type': self.alert_type,
+            'alert_type_label': label,
+            'custom_type_label': self.custom_type_label or '',
+            'island': self.island,
+            'zone': self.zone or '',
+            'description': self.description or '',
+            'vehicles': [
+                {'id': v.id, 'license_plate': v.license_plate, 'owner_name': v.owner_name}
+                for v in self.vehicles
+            ],
+            'send_notification': self.send_notification,
+            'starts_at': self.starts_at.isoformat() if self.starts_at else None,
+            'starts_at_str': self.starts_at.strftime('%d/%m/%Y %H:%M') if self.starts_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'expires_at_str': self.expires_at.strftime('%d/%m/%Y %H:%M') if self.expires_at else None,
+            'is_expired': self.is_expired,
+            'manually_expired': self.manually_expired,
+            'created_by': self.created_by or '',
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else None,
+            'photos': [p.to_dict() for p in photos],
+            'primary_photo_url': primary.to_dict()['photo_url'] if primary else None,
+        }
+
+
+class AlertPhoto(db.Model):
+    __tablename__ = 'alert_photo_files'
+
+    id = db.Column(db.Integer, primary_key=True)
+    alert_id = db.Column(db.Integer, db.ForeignKey('alerts.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    is_primary = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'photo_url': f'/uploads/alert_photos/{self.filename}',
+            'is_primary': self.is_primary,
+        }
+
+
+@event.listens_for(AlertPhoto, 'before_delete')
+def _alert_photo_delete_file(mapper, connection, target):
+    _delete_upload_file(target.filename, 'alert_photos')
 

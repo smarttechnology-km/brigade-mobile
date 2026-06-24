@@ -841,6 +841,13 @@ def exoneration_page():
     return render_template('exoneration.html')
 
 
+@main_bp.route('/alerts')
+@roles_required('policier', 'judiciaire')
+def alerts_page():
+    """Page de gestion des alertes (accidents, travaux, recherches de véhicule...)"""
+    return render_template('alerts.html')
+
+
 @vehicle_bp.route('/stats', methods=['GET'])
 @login_required
 def get_vehicle_stats():
