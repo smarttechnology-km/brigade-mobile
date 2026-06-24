@@ -3510,6 +3510,22 @@ def _alerts_allowed():
     return hasattr(current_user, 'role') and current_user.role in ('administrateur', 'policier', 'judiciaire')
 
 
+@api_bp.route('/alerts/public', methods=['GET'])
+def api_alerts_public_list():
+    """Public, unauthenticated list of active alerts for the citizen mobile app.
+    Strips internal/sensitive fields (officer username, vehicle owner names)."""
+    alerts = Alert.query.order_by(Alert.created_at.desc()).all()
+    items = []
+    for a in alerts:
+        d = a.to_dict()
+        if d['is_expired']:
+            continue
+        d.pop('created_by', None)
+        d['vehicles'] = [{'license_plate': v['license_plate']} for v in d.get('vehicles', [])]
+        items.append(d)
+    return jsonify(items)
+
+
 @api_bp.route('/alerts', methods=['GET'])
 @login_required
 def api_alerts_list():
