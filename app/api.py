@@ -3514,7 +3514,7 @@ def _alerts_allowed():
 def api_alerts_public_list():
     """Public, unauthenticated list of active alerts for the citizen mobile app.
     Strips internal/sensitive fields (officer username, vehicle owner names)."""
-    alerts = Alert.query.order_by(Alert.created_at.desc()).all()
+    alerts = Alert.query.order_by(Alert.starts_at.desc()).all()
     items = []
     for a in alerts:
         d = a.to_dict()
@@ -3541,7 +3541,7 @@ def api_alerts_list():
         query = query.filter(db.or_(Alert.island == country, Alert.island == Alert.NATIONAL))
     elif current_user.role in ('judiciaire', 'policier') and current_user.country:
         query = query.filter(db.or_(Alert.island == current_user.country, Alert.island == Alert.NATIONAL))
-    alerts = query.order_by(Alert.created_at.desc()).all()
+    alerts = query.order_by(Alert.starts_at.desc()).all()
 
     items = [a.to_dict() for a in alerts]
     if status_filter == 'active':
