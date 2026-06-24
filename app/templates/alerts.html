@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Alertes - Contrôle Policier{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1 class="mb-2">
+        <i class="fas fa-exclamation-triangle"></i> Gestion des Alertes
+      </h1>
+      <p class="text-muted">Accidents, recherches de véhicule, travaux, routes bloquées...</p>
+    </div>
+  </div>
+
+  <div class="row mb-3 align-items-center">
+    <div class="col-12 col-md-6">
+      <div class="btn-group btn-group-sm" role="group" id="alerts-filter-group" aria-label="Filtres alertes">
+        <button type="button" class="btn btn-outline-secondary active" data-filter="active">Actives</button>
+        <button type="button" class="btn btn-outline-secondary" data-filter="expired">Expirées</button>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 text-end mt-2 mt-md-0">
+      <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#alert-create-modal">
+        <i class="fas fa-plus-circle me-1"></i> Ajouter une alerte
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover" id="alerts-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Titre</th>
+              <th>Type</th>
+              <th>Île</th>
+              <th>Début</th>
+              <th>Fin</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="alerts-tbody">
+            <tr><td colspan="8" class="text-center text-muted">Chargement des données...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: créer une alerte -->
+<div class="modal fade" id="alert-create-modal" tabindex="-1" aria-labelledby="alertCreateLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="alertCreateLabel"><i class="fas fa-exclamation-triangle me-1"></i>Ajouter une alerte</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="alert-create-form">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label small fw-bold">Titre *</label>
+              <input type="text" id="alert-title" class="form-control" placeholder="Ex: Accident grave sur la RN1" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Type d'alerte *</label>
+              <select id="alert-type" class="form-select" required>
+                <option value="">-- Sélectionner --</option>
+                <option value="accident">Accident</option>
+                <option value="recherche_vehicule">Recherche de véhicule</option>
+                <option value="route_construction">Route en construction</option>
+                <option value="evenement_circulation">Évènement</option>
+                <option value="travaux_planifies">Travaux planifiés</option>
+                <option value="autre">Autre</option>
+              </select>
+            </div>
+            <div class="col-md-6 d-none" id="alert-custom-type-wrap">
+              <label class="form-label small fw-bold">Précisez le type d'alerte *</label>
+              <input type="text" id="alert-custom-type-label" class="form-control" placeholder="Ex: Manifestation" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Île *</label>
+              <select id="alert-island" class="form-select" required>
+                <option value="">-- Sélectionner --</option>
+                <option value="National">National</option>
+                <option value="Grande Comores">Grande Comores</option>
+                <option value="Anjouan">Anjouan</option>
+                <option value="Moheli">Moheli</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Date de début *</label>
+              <input type="datetime-local" id="alert-starts-at" class="form-control" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Date de fin</label>
+              <input type="datetime-local" id="alert-expires-at" class="form-control" />
+              <div class="form-text">Optionnel. Si vide, vous pourrez marquer l'alerte comme expirée manuellement.</div>
+            </div>
+            <div class="col-12 d-none position-relative" id="alert-vehicles-wrap">
+              <label class="form-label small fw-bold">Véhicule(s) concerné(s) *</label>
+              <input type="text" id="alert-vehicle-search" class="form-control" placeholder="Rechercher par immatriculation..." autocomplete="off" />
+              <div id="alert-vehicle-results" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1060; max-height:220px; overflow-y:auto;"></div>
+              <div id="alert-vehicle-chips" class="d-flex flex-wrap gap-2 mt-2"></div>
+            </div>
+            <div class="col-12 d-none" id="alert-zone-wrap">
+              <label class="form-label small fw-bold">Zone concernée *</label>
+              <input type="text" id="alert-zone" class="form-control" placeholder="Ex: Route nationale entre Moroni et Mitsamiouli, km 5" />
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-bold">Photos (optionnel)</label>
+              <input type="file" id="alert-photos" class="form-control" accept="image/*" multiple />
+              <div class="form-text">Vous pouvez ajouter plusieurs photos. Choisissez la photo principale ci-dessous.</div>
+              <div id="alert-photos-preview" class="d-flex flex-wrap gap-2 mt-2"></div>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-bold">Description</label>
+              <textarea id="alert-description" class="form-control" rows="3" placeholder="Détails de l'alerte..."></textarea>
+            </div>
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="alert-send-notification">
+                <label class="form-check-label" for="alert-send-notification">
+                  Envoyer une notification <span class="text-muted small">(fonctionnalité à venir)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div id="alert-create-error" class="alert alert-danger mt-3 d-none"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger" id="alert-create-submit"><i class="fas fa-check me-1"></i>Créer l'alerte</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: voir la photo -->
+<div class="modal fade" id="alertPhotoModal" tabindex="-1" aria-labelledby="alertPhotoModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="alertPhotoModalLabel"><i class="fas fa-camera me-1"></i>Photos de l'alerte</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center" id="alert-photo-modal-body">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: voir le détail de l'alerte -->
+<div class="modal fade" id="alertViewModal" tabindex="-1" aria-labelledby="alertViewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="alertViewModalLabel"><i class="fas fa-circle-info me-1"></i>Détail de l'alerte</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="alert-view-modal-body">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+{% endblock %}
