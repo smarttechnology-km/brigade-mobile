@@ -3627,12 +3627,15 @@ def _parse_alert_fields(data, current_user):
 
     if hasattr(data, 'getlist'):
         vehicle_ids_raw = data.getlist('vehicle_ids')
+        contact_phones_raw = data.getlist('contact_phones')
     else:
         vehicle_ids_raw = data.get('vehicle_ids') or []
+        contact_phones_raw = data.get('contact_phones') or []
     try:
         vehicle_ids = [int(v) for v in vehicle_ids_raw if str(v).strip()]
     except (TypeError, ValueError):
         return None, None, (jsonify({'error': 'Identifiant de véhicule invalide'}), 400)
+    contact_phones_list = [str(p).strip() for p in contact_phones_raw if str(p).strip()]
 
     if not title:
         return None, None, (jsonify({'error': 'Le titre est obligatoire'}), 400)
@@ -3646,6 +3649,8 @@ def _parse_alert_fields(data, current_user):
         return None, None, (jsonify({'error': 'Veuillez préciser la zone'}), 400)
     if alert_type in Alert.VEHICLE_LINK_TYPES and not vehicle_ids:
         return None, None, (jsonify({'error': 'Veuillez sélectionner au moins un véhicule'}), 400)
+    if alert_type == 'recherche_vehicule' and not contact_phones_list:
+        return None, None, (jsonify({'error': 'Veuillez indiquer au moins un numéro à contacter'}), 400)
 
     vehicles = []
     if vehicle_ids:
@@ -3678,6 +3683,7 @@ def _parse_alert_fields(data, current_user):
         island=island,
         zone=zone if alert_type in Alert.ZONE_TYPES else None,
         description=description,
+        contact_phones=','.join(contact_phones_list) if alert_type == 'recherche_vehicule' and contact_phones_list else None,
         send_notification=send_notification,
         starts_at=starts_at,
         expires_at=expires_at,

@@ -432,6 +432,15 @@ def create_app():
                             conn.execute(text("ALTER TABLE license_print_requests ADD COLUMN unit_price FLOAT NOT NULL DEFAULT 0"))
                             logger.info("Added missing license_print_requests.unit_price column")
 
+                    alerts_table_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='alerts'")
+                    ).first() is not None
+                    if alerts_table_exists:
+                        alert_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(alerts)")).fetchall()}
+                        if 'contact_phones' not in alert_cols:
+                            conn.execute(text("ALTER TABLE alerts ADD COLUMN contact_phones TEXT"))
+                            logger.info("Added missing alerts.contact_phones column")
+
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
 

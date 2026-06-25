@@ -1319,6 +1319,7 @@ class Alert(db.Model):
     island = db.Column(db.String(50), nullable=False)
     zone = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
+    contact_phones = db.Column(db.Text, nullable=True)  # comma-separated phone numbers to call if the vehicle is found (recherche_vehicule)
     send_notification = db.Column(db.Boolean, nullable=False, default=False)
     starts_at = db.Column(db.DateTime, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=True)
@@ -1352,6 +1353,7 @@ class Alert(db.Model):
             'island': self.island,
             'zone': self.zone or '',
             'description': self.description or '',
+            'contact_phones': [p.strip() for p in (self.contact_phones or '').split(',') if p.strip()],
             'vehicles': [
                 {'id': v.id, 'license_plate': v.license_plate, 'owner_name': v.owner_name}
                 for v in self.vehicles
