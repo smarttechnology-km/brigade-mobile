@@ -71,6 +71,7 @@ document.addEventListener('DOMContentLoaded', function () {
     window.alertsSelectedPhotos = [];
     window.alertsPrimaryIndex = 0;
     window.alertsSelectedVehicles = [];
+    window.alertsContactPhones = [];
     window.alertsEditingId = null;
     window.alertsExistingPhotos = [];
     window.alertsPrimaryExistingId = null;
@@ -101,6 +102,14 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('click', function (e) {
         const wrap = document.getElementById('alert-vehicles-wrap');
         if (wrap && !wrap.contains(e.target)) hideVehicleResults();
+    });
+
+    document.getElementById('alert-contact-phone-add').addEventListener('click', addContactPhoneToAlert);
+    document.getElementById('alert-contact-phone-input').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addContactPhoneToAlert();
+        }
     });
 
     document.getElementById('alert-create-modal').addEventListener('show.bs.modal', function () {
@@ -142,6 +151,7 @@ function prefillDates() {
 function updateConditionalFields() {
     const type = document.getElementById('alert-type').value;
     document.getElementById('alert-vehicles-wrap').classList.toggle('d-none', !VEHICLE_LINK_TYPES.includes(type));
+    document.getElementById('alert-contact-phones-wrap').classList.toggle('d-none', type !== 'recherche_vehicule');
     document.getElementById('alert-zone-wrap').classList.toggle('d-none', !ZONE_TYPES.includes(type));
     document.getElementById('alert-custom-type-wrap').classList.toggle('d-none', type !== 'autre');
 }
@@ -203,6 +213,33 @@ function renderVehicleChips() {
         return `<span class="badge bg-secondary d-inline-flex align-items-center gap-1 py-2 px-2">
             <i class="fas fa-car"></i> ${escapeHtml(v.license_plate)}
             <button type="button" class="btn-close btn-close-white" style="font-size:.6rem;" onclick="removeVehicleFromAlert(${v.id})"></button>
+        </span>`;
+    }).join('');
+}
+
+function addContactPhoneToAlert() {
+    const input = document.getElementById('alert-contact-phone-input');
+    const value = input.value.trim();
+    if (!value) return;
+    if (!window.alertsContactPhones.includes(value)) {
+        window.alertsContactPhones.push(value);
+    }
+    input.value = '';
+    input.focus();
+    renderContactPhoneChips();
+}
+
+function removeContactPhoneFromAlert(idx) {
+    window.alertsContactPhones.splice(idx, 1);
+    renderContactPhoneChips();
+}
+
+function renderContactPhoneChips() {
+    const container = document.getElementById('alert-contact-phone-chips');
+    container.innerHTML = window.alertsContactPhones.map(function (phone, idx) {
+        return `<span class="badge bg-secondary d-inline-flex align-items-center gap-1 py-2 px-2">
+            <i class="fas fa-phone"></i> ${escapeHtml(phone)}
+            <button type="button" class="btn-close btn-close-white" style="font-size:.6rem;" onclick="removeContactPhoneFromAlert(${idx})"></button>
         </span>`;
     }).join('');
 }
@@ -340,6 +377,15 @@ function viewAlert(id) {
            </div>`
         : '';
 
+    const contactPhonesBlock = (a.contact_phones && a.contact_phones.length)
+        ? `<div class="col-12">
+             <div class="small fw-bold text-muted">Numéro(s) à contacter</div>
+             <div>${a.contact_phones.map(function (phone) {
+                 return `<span class="badge bg-secondary me-1"><i class="fas fa-phone me-1"></i>${escapeHtml(phone)}</span>`;
+             }).join('')}</div>
+           </div>`
+        : '';
+
     const zoneBlock = a.zone
         ? `<div class="col-12"><div class="small fw-bold text-muted">Zone concernée</div><div>${escapeHtml(a.zone)}</div></div>`
         : '';
@@ -374,6 +420,7 @@ function viewAlert(id) {
             <div class="col-md-6"><div class="small fw-bold text-muted">Date de fin</div><div>${a.expires_at_str || '<span class="text-muted">Non définie</span>'}</div></div>
             ${zoneBlock}
             ${vehiclesBlock}
+            ${contactPhonesBlock}
             ${descBlock}
             ${photosBlock}
             <div class="col-12 border-top pt-2 d-flex justify-content-between text-muted small">
@@ -409,6 +456,9 @@ function editAlert(id) {
         return { id: v.id, license_plate: v.license_plate, owner_name: v.owner_name };
     });
     renderVehicleChips();
+
+    window.alertsContactPhones = (a.contact_phones || []).slice();
+    renderContactPhoneChips();
 
     renderExistingPhotos();
 
@@ -520,18 +570,21 @@ function resetAlertForm() {
     document.getElementById('alert-create-form').reset();
     document.getElementById('alert-create-error').classList.add('d-none');
     document.getElementById('alert-vehicles-wrap').classList.add('d-none');
+    document.getElementById('alert-contact-phones-wrap').classList.add('d-none');
     document.getElementById('alert-zone-wrap').classList.add('d-none');
     document.getElementById('alert-custom-type-wrap').classList.add('d-none');
     document.getElementById('alert-existing-photos-wrap').classList.add('d-none');
     window.alertsSelectedPhotos = [];
     window.alertsPrimaryIndex = 0;
     window.alertsSelectedVehicles = [];
+    window.alertsContactPhones = [];
     window.alertsEditingId = null;
     window.alertsExistingPhotos = [];
     window.alertsPrimaryExistingId = null;
     document.getElementById('alert-editing-id').value = '';
     document.getElementById('alert-photos-preview').innerHTML = '';
     document.getElementById('alert-vehicle-chips').innerHTML = '';
+    document.getElementById('alert-contact-phone-chips').innerHTML = '';
     document.getElementById('alert-existing-photos').innerHTML = '';
     hideVehicleResults();
     if (window.alertsDescriptionQuill) window.alertsDescriptionQuill.setText('');
@@ -581,6 +634,11 @@ function submitAlertForm() {
         errorBox.classList.remove('d-none');
         return;
     }
+    if (alertType === 'recherche_vehicule' && !window.alertsContactPhones.length) {
+        errorBox.textContent = 'Veuillez indiquer au moins un numéro à contacter.';
+        errorBox.classList.remove('d-none');
+        return;
+    }
 
     const formData = new FormData();
     formData.append('title', title.trim());
@@ -597,6 +655,11 @@ function submitAlertForm() {
     }
     if (ZONE_TYPES.includes(alertType) && zone.trim()) {
         formData.append('zone', zone.trim());
+    }
+    if (alertType === 'recherche_vehicule') {
+        window.alertsContactPhones.forEach(function (phone) {
+            formData.append('contact_phones', phone);
+        });
     }
     if (alertType === 'autre' && customTypeLabel.trim()) {
         formData.append('custom_type_label', customTypeLabel.trim());
