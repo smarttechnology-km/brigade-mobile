@@ -3578,6 +3578,9 @@ def api_alerts_mobile_list():
             {'id': v.id, 'license_plate': v.license_plate, 'owner_name': v.owner_name, 'track_token': v.track_token}
             for v in a.vehicles
         ]
+        # description_html keeps the rich formatting for the detail screen;
+        # description stays plain text for list previews.
+        d['description_html'] = d.get('description')
         d['description'] = _html_to_plain_text(d.get('description'))
         items.append(d)
     return jsonify(items)
