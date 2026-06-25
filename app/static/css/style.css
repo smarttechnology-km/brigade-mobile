@@ -128,7 +128,7 @@ h1.display-4, h1.page-title {
     border-right: 1px solid rgba(255,255,255,0.04);
 }
 .sidebar .sidebar-header {
-    padding: 1.25rem 1rem;
+    padding: 0.85rem 1rem;
     border-bottom: 1px solid rgba(255,255,255,0.03);
 }
 .sidebar .navbar-brand {
@@ -139,14 +139,16 @@ h1.display-4, h1.page-title {
 }
 .sidebar .nav-link {
     color: rgba(255,255,255,0.9);
-    padding: 0.75rem 1rem;
-    margin: 0.25rem 0;
+    padding: 0.66rem 0.92rem;
+    margin: 0.17rem 0;
     border-radius: 0.375rem;
+    font-size: 0.97rem;
     transition: background-color 160ms ease, transform 160ms ease;
 }
 .sidebar .nav-link i {
-    width: 18px;
+    width: 17px;
     text-align: center;
+    font-size: 0.92rem;
 }
 .sidebar .nav-link:hover{
     background: rgba(255,255,255,0.03);
