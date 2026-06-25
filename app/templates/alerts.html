@@ -68,6 +68,14 @@
               <label class="form-label small fw-bold">Titre *</label>
               <input type="text" id="alert-title" class="form-control" placeholder="Ex: Accident grave sur la RN1" required />
             </div>
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="alert-send-notification">
+                <label class="form-check-label" for="alert-send-notification">
+                  Envoyer une notification <span class="text-muted small">(push sur l'app citoyen)</span>
+                </label>
+              </div>
+            </div>
             <div class="col-md-6">
               <label class="form-label small fw-bold">Type d'alerte *</label>
               <select id="alert-type" class="form-select" required>
@@ -154,14 +162,6 @@
                 </span>
               </div>
               <div id="alert-description-editor" style="background:#fff; min-height:120px;"></div>
-            </div>
-            <div class="col-12">
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="alert-send-notification">
-                <label class="form-check-label" for="alert-send-notification">
-                  Envoyer une notification <span class="text-muted small">(push sur l'app citoyen)</span>
-                </label>
-              </div>
             </div>
           </div>
           <div id="alert-create-error" class="alert alert-danger mt-3 d-none"></div>
