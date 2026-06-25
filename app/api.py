@@ -3545,6 +3545,9 @@ def api_alerts_public_list():
             continue
         d.pop('created_by', None)
         d['vehicles'] = [{'license_plate': v['license_plate']} for v in d.get('vehicles', [])]
+        # description_html keeps the rich formatting for the alert detail screen;
+        # description stays plain text for list previews and native Share text.
+        d['description_html'] = d.get('description')
         d['description'] = _html_to_plain_text(d.get('description'))
         items.append(d)
     return jsonify(items)
