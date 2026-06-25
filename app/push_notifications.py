@@ -88,6 +88,50 @@ def send_insurance_expiry_notification(vehicle, days_until):
     })
 
 
+def send_alert_broadcast_notification(alert):
+    """Notify every citizen app user that a new public alert was published.
+
+    Unlike _send_to_vehicle, this is not scoped to one vehicle's owner: alerts are
+    broadcast safety/traffic info shown to all citizens, so every registered token
+    gets notified, via Expo's push service so it is delivered even when the app is
+    closed.
+    """
+    try:
+        from app.models import VehicleOwner, Alert
+        tokens = {
+            o.expo_push_token
+            for o in VehicleOwner.query.filter(
+                VehicleOwner.expo_push_token.isnot(None),
+                VehicleOwner.expo_push_token != ''
+            ).all()
+        }
+        if not tokens:
+            print("⚠️ No registered push tokens to notify for alert broadcast")
+            return {'success': False, 'message': 'No push tokens registered'}
+
+        type_label = alert.custom_type_label or Alert.ALERT_TYPE_LABELS.get(alert.alert_type, alert.alert_type)
+        title = f"🚨 {type_label}"
+        body = alert.title
+        if alert.island and alert.island != Alert.NATIONAL:
+            body += f" — {alert.island}"
+
+        results = [
+            send_expo_push_notification(token, title, body, {
+                'type': 'alert',
+                'alert_id': alert.id,
+                'alert_type': alert.alert_type,
+                'island': alert.island,
+            })
+            for token in tokens
+        ]
+        success_count = sum(1 for r in results if r.get('success'))
+        print(f"📢 Alert broadcast: {success_count}/{len(results)} push notifications delivered")
+        return {'success': success_count > 0, 'sent': success_count, 'total': len(results)}
+    except Exception as error:
+        print(f"❌ Exception in send_alert_broadcast_notification: {error}")
+        return {'success': False, 'message': str(error)}
+
+
 def send_expo_push_notification(push_token, title, body, data=None):
     """Send a single Expo push notification via Expo push service.
     

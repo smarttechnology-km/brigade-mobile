@@ -5,10 +5,11 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from flask_login import login_required, current_user
 from datetime import timedelta, datetime
 from app.timezone_utils import now_comoros
-from app.push_notifications import send_fine_push_notification
+from app.push_notifications import send_fine_push_notification, send_alert_broadcast_notification
 from io import BytesIO
 import qrcode
 import os
+import re
 import uuid
 from werkzeug.utils import secure_filename
 
@@ -3506,6 +3507,28 @@ def api_license_print_requests_all():
 
 # ── Alertes (accidents, recherches de véhicule, travaux...) ──────────────────
 
+def _sanitize_description_html(html):
+    """Strip script/style tags and inline event handlers from the rich-text description.
+    Authors are trusted internal roles, but we still avoid storing obvious XSS vectors."""
+    if not html:
+        return html
+    html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.IGNORECASE | re.DOTALL)
+    html = re.sub(r'\son\w+\s*=\s*(".*?"|\'.*?\'|[^\s>]+)', '', html, flags=re.IGNORECASE)
+    html = re.sub(r'(href|src)\s*=\s*["\']\s*javascript:[^"\']*["\']', '', html, flags=re.IGNORECASE)
+    return html
+
+
+def _html_to_plain_text(html):
+    """Convert the rich-text description to plain text for clients that can't render HTML
+    (e.g. the citizen mobile app)."""
+    if not html:
+        return html
+    text = re.sub(r'<(br|/p|/div|/li)\s*/?>', '\n', html, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', text)
+    text = text.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"').replace('&#39;', "'")
+    return '\n'.join(line.strip() for line in text.strip().splitlines() if line.strip())
+
+
 def _alerts_allowed():
     return hasattr(current_user, 'role') and current_user.role in ('administrateur', 'policier', 'judiciaire')
 
@@ -3522,6 +3545,7 @@ def api_alerts_public_list():
             continue
         d.pop('created_by', None)
         d['vehicles'] = [{'license_plate': v['license_plate']} for v in d.get('vehicles', [])]
+        d['description'] = _html_to_plain_text(d.get('description'))
         items.append(d)
     return jsonify(items)
 
@@ -3552,19 +3576,14 @@ def api_alerts_list():
     return jsonify(items)
 
 
-@api_bp.route('/alerts', methods=['POST'])
-@login_required
-def api_alerts_create():
-    if not _alerts_allowed():
-        return jsonify({'error': 'Accès refusé'}), 403
-
-    data = request.form if request.content_type and 'multipart/form-data' in request.content_type else (request.get_json(silent=True) or {})
-
+def _parse_alert_fields(data, current_user):
+    """Validate and parse alert fields shared by create/edit.
+    Returns (fields_dict, vehicles_list, error_response_or_None)."""
     title = (data.get('title') or '').strip()
     alert_type = (data.get('alert_type') or '').strip()
     island = (data.get('island') or '').strip()
     zone = (data.get('zone') or '').strip() or None
-    description = (data.get('description') or '').strip() or None
+    description = _sanitize_description_html((data.get('description') or '').strip()) or None
     custom_type_label = (data.get('custom_type_label') or '').strip() or None
     starts_at_raw = (data.get('starts_at') or '').strip()
     expires_at_raw = (data.get('expires_at') or '').strip()
@@ -3577,46 +3596,46 @@ def api_alerts_create():
     try:
         vehicle_ids = [int(v) for v in vehicle_ids_raw if str(v).strip()]
     except (TypeError, ValueError):
-        return jsonify({'error': 'Identifiant de véhicule invalide'}), 400
+        return None, None, (jsonify({'error': 'Identifiant de véhicule invalide'}), 400)
 
     if not title:
-        return jsonify({'error': 'Le titre est obligatoire'}), 400
+        return None, None, (jsonify({'error': 'Le titre est obligatoire'}), 400)
     if alert_type not in Alert.ALERT_TYPE_LABELS:
-        return jsonify({'error': "Type d'alerte invalide"}), 400
+        return None, None, (jsonify({'error': "Type d'alerte invalide"}), 400)
     if island not in Alert.ISLAND_OPTIONS:
-        return jsonify({'error': 'Île invalide'}), 400
+        return None, None, (jsonify({'error': 'Île invalide'}), 400)
     if alert_type == 'autre' and not custom_type_label:
-        return jsonify({'error': 'Veuillez préciser le type d\'alerte'}), 400
+        return None, None, (jsonify({'error': 'Veuillez préciser le type d\'alerte'}), 400)
     if alert_type in Alert.ZONE_TYPES and not zone:
-        return jsonify({'error': 'Veuillez préciser la zone'}), 400
+        return None, None, (jsonify({'error': 'Veuillez préciser la zone'}), 400)
     if alert_type in Alert.VEHICLE_LINK_TYPES and not vehicle_ids:
-        return jsonify({'error': 'Veuillez sélectionner au moins un véhicule'}), 400
+        return None, None, (jsonify({'error': 'Veuillez sélectionner au moins un véhicule'}), 400)
 
     vehicles = []
     if vehicle_ids:
         vehicles = Vehicle.query.filter(Vehicle.id.in_(vehicle_ids)).all()
         if len(vehicles) != len(set(vehicle_ids)):
-            return jsonify({'error': 'Un ou plusieurs véhicules sont introuvables'}), 400
+            return None, None, (jsonify({'error': 'Un ou plusieurs véhicules sont introuvables'}), 400)
 
     try:
         starts_at = datetime.strptime(starts_at_raw, '%Y-%m-%dT%H:%M')
     except (TypeError, ValueError):
-        return jsonify({'error': 'Date de début invalide'}), 400
+        return None, None, (jsonify({'error': 'Date de début invalide'}), 400)
     expires_at = None
     if expires_at_raw:
         try:
             expires_at = datetime.strptime(expires_at_raw, '%Y-%m-%dT%H:%M')
         except (TypeError, ValueError):
-            return jsonify({'error': 'Date de fin invalide'}), 400
+            return None, None, (jsonify({'error': 'Date de fin invalide'}), 400)
         if expires_at <= starts_at:
-            return jsonify({'error': 'La date de fin doit être après la date de début'}), 400
+            return None, None, (jsonify({'error': 'La date de fin doit être après la date de début'}), 400)
 
-    # Island-restricted users (policier/judiciaire) can only create alerts for their own island or National
+    # Island-restricted users (policier/judiciaire) can only manage alerts for their own island or National
     if current_user.role in ('policier', 'judiciaire') and current_user.country \
             and island not in (current_user.country, Alert.NATIONAL):
-        return jsonify({'error': 'Accès refusé à cette île'}), 403
+        return None, None, (jsonify({'error': 'Accès refusé à cette île'}), 403)
 
-    alert = Alert(
+    fields = dict(
         title=title,
         alert_type=alert_type,
         custom_type_label=custom_type_label if alert_type == 'autre' else None,
@@ -3626,39 +3645,149 @@ def api_alerts_create():
         send_notification=send_notification,
         starts_at=starts_at,
         expires_at=expires_at,
-        created_by=getattr(current_user, 'username', None),
     )
-    if alert_type in Alert.VEHICLE_LINK_TYPES:
-        alert.vehicles = vehicles
+    return fields, (vehicles if alert_type in Alert.VEHICLE_LINK_TYPES else []), None
+
+
+def _save_alert_photos(alert, photo_files, primary_index=None):
+    """Save uploaded photo files for an alert. Returns (saved_photos, None) on success,
+    or (None, (response, status)) on failure. If primary_index is given (relative to
+    these new files), mark that one primary and unset any previous primary."""
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'alert_photos')
+    saved = []
+    for idx, photo_file in enumerate(photo_files):
+        if not photo_file or not photo_file.filename:
+            continue
+        if not photo_file.content_type.startswith('image/'):
+            return None, (jsonify({'error': 'Seules les images sont autorisées pour les photos'}), 400)
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = secure_filename(photo_file.filename).rsplit('.', 1)[-1] if '.' in photo_file.filename else 'jpg'
+        filename = f"{uuid.uuid4()}.{ext}"
+        photo_file.save(os.path.join(upload_dir, filename))
+        is_primary = primary_index is not None and idx == primary_index
+        if is_primary:
+            for p in alert.photos:
+                p.is_primary = False
+        photo = AlertPhoto(alert_id=alert.id, filename=filename, is_primary=is_primary)
+        db.session.add(photo)
+        saved.append(photo)
+    return saved, None
+
+
+@api_bp.route('/alerts', methods=['POST'])
+@login_required
+def api_alerts_create():
+    if not _alerts_allowed():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    data = request.form if request.content_type and 'multipart/form-data' in request.content_type else (request.get_json(silent=True) or {})
+
+    fields, vehicles, error = _parse_alert_fields(data, current_user)
+    if error:
+        return error
+
+    alert = Alert(created_by=getattr(current_user, 'username', None), **fields)
+    alert.vehicles = vehicles
     db.session.add(alert)
     db.session.flush()  # assign alert.id before attaching photos
 
-    photo_files = request.files.getlist('photos')
     try:
         primary_index = int(data.get('primary_index', 0))
     except (TypeError, ValueError):
         primary_index = 0
 
-    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'alert_photos')
-    for idx, photo_file in enumerate(photo_files):
-        if not photo_file or not photo_file.filename:
-            continue
-        if not photo_file.content_type.startswith('image/'):
-            db.session.rollback()
-            return jsonify({'error': 'Seules les images sont autorisées pour les photos'}), 400
-        os.makedirs(upload_dir, exist_ok=True)
-        ext = secure_filename(photo_file.filename).rsplit('.', 1)[-1] if '.' in photo_file.filename else 'jpg'
-        filename = f"{uuid.uuid4()}.{ext}"
-        photo_file.save(os.path.join(upload_dir, filename))
-        db.session.add(AlertPhoto(
-            alert_id=alert.id,
-            filename=filename,
-            is_primary=(idx == primary_index),
-        ))
+    photo_files = request.files.getlist('photos')
+    _, photo_error = _save_alert_photos(alert, photo_files, primary_index=primary_index)
+    if photo_error:
+        db.session.rollback()
+        return photo_error
 
     db.session.commit()
 
+    if alert.send_notification:
+        push_result = send_alert_broadcast_notification(alert)
+        print(f"📲 Alert push notification result: {push_result}")
+
     return jsonify(alert.to_dict()), 201
+
+
+@api_bp.route('/alerts/<int:alert_id>', methods=['PUT'])
+@login_required
+def api_alerts_update(alert_id):
+    if not _alerts_allowed():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    alert = Alert.query.get_or_404(alert_id)
+    if current_user.role in ('policier', 'judiciaire') and current_user.country \
+            and alert.island not in (current_user.country, Alert.NATIONAL):
+        return jsonify({'error': 'Accès refusé à cette île'}), 403
+
+    data = request.form if request.content_type and 'multipart/form-data' in request.content_type else (request.get_json(silent=True) or {})
+
+    fields, vehicles, error = _parse_alert_fields(data, current_user)
+    if error:
+        return error
+
+    for key, value in fields.items():
+        setattr(alert, key, value)
+    alert.vehicles = vehicles
+
+    # The chosen primary can be an EXISTING photo (primary_photo_id) or one of the
+    # newly uploaded files (primary_index, relative to the "photos" files in this request).
+    primary_photo_id = data.get('primary_photo_id')
+    primary_index = None
+    if not primary_photo_id:
+        try:
+            raw_idx = data.get('primary_index')
+            if raw_idx is not None and raw_idx != '':
+                primary_index = int(raw_idx)
+        except (TypeError, ValueError):
+            primary_index = None
+
+    photo_files = request.files.getlist('photos')
+    new_photos, photo_error = _save_alert_photos(alert, photo_files, primary_index=primary_index)
+    if photo_error:
+        return photo_error
+
+    if primary_photo_id:
+        try:
+            primary_photo_id = int(primary_photo_id)
+            for p in alert.photos:
+                p.is_primary = (p.id == primary_photo_id)
+        except (TypeError, ValueError):
+            pass
+    elif new_photos and not any(p.is_primary for p in alert.photos):
+        new_photos[0].is_primary = True
+
+    db.session.commit()
+    return jsonify(alert.to_dict())
+
+
+@api_bp.route('/alerts/<int:alert_id>/photos/<int:photo_id>', methods=['DELETE'])
+@login_required
+def api_alerts_delete_photo(alert_id, photo_id):
+    if not _alerts_allowed():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    alert = Alert.query.get_or_404(alert_id)
+    if current_user.role in ('policier', 'judiciaire') and current_user.country \
+            and alert.island not in (current_user.country, Alert.NATIONAL):
+        return jsonify({'error': 'Accès refusé à cette île'}), 403
+
+    photo = AlertPhoto.query.filter_by(id=photo_id, alert_id=alert_id).first()
+    if not photo:
+        return jsonify({'error': 'Photo introuvable'}), 404
+
+    was_primary = photo.is_primary
+    db.session.delete(photo)
+    db.session.flush()
+    if was_primary:
+        remaining = alert.photos.order_by(AlertPhoto.id.asc()).first()
+        if remaining:
+            remaining.is_primary = True
+
+    db.session.commit()
+    return jsonify(alert.to_dict())
 
 
 @api_bp.route('/alerts/<int:alert_id>', methods=['DELETE'])
