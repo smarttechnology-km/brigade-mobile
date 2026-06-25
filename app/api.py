@@ -3553,6 +3553,36 @@ def api_alerts_public_list():
     return jsonify(items)
 
 
+@api_bp.route('/alerts/mobile', methods=['GET'])
+@jwt_required()
+def api_alerts_mobile_list():
+    """Alerts for the police agent mobile app: only the types relevant to an officer on
+    patrol (accident / vehicle search), with full vehicle details (plate, owner, track
+    token) since this audience is internal — unlike the public citizen endpoint, which
+    strips that info for privacy."""
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+
+    alerts = Alert.query.filter(
+        Alert.alert_type.in_(['accident', 'recherche_vehicule'])
+    ).order_by(Alert.starts_at.desc()).all()
+
+    items = []
+    for a in alerts:
+        d = a.to_dict()
+        if d['is_expired']:
+            continue
+        d.pop('created_by', None)
+        d['vehicles'] = [
+            {'id': v.id, 'license_plate': v.license_plate, 'owner_name': v.owner_name, 'track_token': v.track_token}
+            for v in a.vehicles
+        ]
+        d['description'] = _html_to_plain_text(d.get('description'))
+        items.append(d)
+    return jsonify(items)
+
+
 @api_bp.route('/alerts', methods=['GET'])
 @login_required
 def api_alerts_list():
