@@ -1,9 +1,79 @@
+let alertsLastEditorRange = null;
+
+function initDescriptionQuillOnce() {
+    if (window.alertsDescriptionQuill) return;
+
+    // Quill's bundled Size style attributor ships with its OWN default whitelist
+    // (10px/18px/32px) — any other value is silently rejected unless we clear it here.
+    const SizeStyle = Quill.import('attributors/style/size');
+    SizeStyle.whitelist = null;
+    Quill.register(SizeStyle, true);
+
+    window.alertsDescriptionQuill = new Quill('#alert-description-editor', {
+        theme: 'snow',
+        placeholder: "Détails de l'alerte...",
+        modules: {
+            toolbar: '#alert-description-toolbar',
+        },
+    });
+
+    // Quill's own Selection module saves the range on blur and restores it when
+    // focus() is called (which getSelection(true) does). We ALSO track it ourselves
+    // as a fallback, since clicking into the px input blurs the editor.
+    window.alertsDescriptionQuill.on('selection-change', function (range) {
+        if (range && range.length > 0) alertsLastEditorRange = range;
+    });
+
+    const sizeInput = document.getElementById('alert-description-size-input');
+    sizeInput.value = '12';
+
+    // Case 1: text is actually selected -> restyle it live, on every keystroke.
+    // formatText() works purely on the document model by index/length, so it never
+    // touches browser focus and never interrupts typing in this input.
+    function applySizeToSelection() {
+        const val = parseInt(sizeInput.value, 10);
+        if (!val || val < 1) return;
+        const range = alertsLastEditorRange;
+        if (!range || range.length === 0) return;
+        window.alertsDescriptionQuill.formatText(range.index, range.length, 'size', val + 'px', 'user');
+    }
+
+    // Case 2: nothing selected -> the size should apply to the NEXT characters typed,
+    // not to existing text. This needs Quill's selection focused on a collapsed cursor,
+    // which steals browser focus — so only do this once the user leaves the input
+    // (blur / Enter), never on every keystroke, otherwise typing a 2-digit value here
+    // would be interrupted.
+    function applySizeForFutureTyping() {
+        const val = parseInt(sizeInput.value, 10);
+        if (!val || val < 1) return;
+        const range = alertsLastEditorRange;
+        if (range && range.length > 0) return; // real selection: handled live instead
+        const quill = window.alertsDescriptionQuill;
+        const cursorIndex = range ? range.index : Math.max(0, quill.getLength() - 1);
+        quill.setSelection(cursorIndex, 0, 'silent');
+        quill.format('size', val + 'px', 'user');
+    }
+
+    sizeInput.addEventListener('input', applySizeToSelection);
+    sizeInput.addEventListener('blur', applySizeForFutureTyping);
+    sizeInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            applySizeToSelection();
+            applySizeForFutureTyping();
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     window.alertsCurrentItems = [];
     window.alertsCurrentFilter = 'active';
     window.alertsSelectedPhotos = [];
     window.alertsPrimaryIndex = 0;
     window.alertsSelectedVehicles = [];
+    window.alertsEditingId = null;
+    window.alertsExistingPhotos = [];
+    window.alertsPrimaryExistingId = null;
 
     loadAlerts();
 
@@ -34,6 +104,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     document.getElementById('alert-create-modal').addEventListener('show.bs.modal', function () {
+        initDescriptionQuillOnce();
         prefillDates();
         updateConditionalFields();
     });
@@ -163,7 +234,9 @@ function renderPhotosPreview() {
 
 function setPrimaryPhoto(idx) {
     window.alertsPrimaryIndex = idx;
+    window.alertsPrimaryExistingId = null;
     renderPhotosPreview();
+    renderExistingPhotos();
 }
 
 function loadAlerts() {
@@ -204,14 +277,15 @@ function renderAlertsTable() {
         const extraPhotosBadge = a.photos && a.photos.length > 1
             ? `<span class="badge bg-light text-dark border ms-1">+${a.photos.length - 1}</span>`
             : '';
-        const photoBtn = a.primary_photo_url
-            ? `<button type="button" class="btn btn-sm btn-outline-secondary me-1" title="Voir les photos" onclick='showAlertPhotos(${JSON.stringify(a.photos)})'><i class="fas fa-camera"></i></button>${extraPhotosBadge}`
+        const photoMenuItem = a.primary_photo_url
+            ? `<li><a class="dropdown-item" href="#" onclick='event.preventDefault(); showAlertPhotos(${JSON.stringify(a.photos)});'><i class="fas fa-camera me-2"></i>Voir les photos${a.photos.length > 1 ? ` <span class="badge bg-light text-dark border ms-1">+${a.photos.length - 1}</span>` : ''}</a></li>`
             : '';
-        const descLine = a.description
-            ? `<div class="text-muted small mt-1">${escapeHtml(a.description)}</div>`
+        const descPlain = stripHtml(a.description);
+        const descLine = descPlain
+            ? `<div class="text-muted small mt-1">${escapeHtml(descPlain.length > 120 ? descPlain.slice(0, 120) + '…' : descPlain)}</div>`
             : '';
-        const expireBtn = (!a.expires_at_str && !a.is_expired)
-            ? `<button type="button" class="btn btn-sm btn-outline-secondary me-1" title="Marquer comme expirée" onclick="markAlertExpired(${a.id})"><i class="fas fa-flag-checkered"></i></button>`
+        const expireMenuItem = (!a.expires_at_str && !a.is_expired)
+            ? `<li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markAlertExpired(${a.id});"><i class="fas fa-flag-checkered me-2"></i>Marquer comme expirée</a></li>`
             : '';
         return `<tr>
             <td>${i + 1}</td>
@@ -222,13 +296,30 @@ function renderAlertsTable() {
             <td>${a.expires_at_str || '<span class="text-muted">—</span>'}</td>
             <td>${statusBadge}</td>
             <td>
-                <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Voir le détail" onclick="viewAlert(${a.id})"><i class="fas fa-eye"></i></button>
-                ${photoBtn}
-                ${expireBtn}
-                <button type="button" class="btn btn-sm btn-outline-danger" title="Supprimer" onclick="deleteAlert(${a.id})"><i class="fas fa-trash"></i></button>
+                <div class="d-flex align-items-center gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-primary" title="Voir le détail" onclick="viewAlert(${a.id})"><i class="fas fa-eye"></i></button>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false" title="Plus d'actions">
+                            <i class="fas fa-ellipsis-h"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); editAlert(${a.id});"><i class="fas fa-pencil-alt me-2"></i>Modifier</a></li>
+                            ${photoMenuItem}
+                            ${expireMenuItem}
+                        </ul>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" title="Supprimer" onclick="deleteAlert(${a.id})"><i class="fas fa-trash"></i></button>
+                </div>
             </td>
         </tr>`;
     }).join('');
+
+    // Force the "..." actions dropdown to use fixed (viewport-relative) positioning.
+    // This escapes ANY ancestor's overflow/clipping entirely (unlike boundary tuning),
+    // since position:fixed is not constrained by scrolling/overflow containers.
+    tbody.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function (el) {
+        new bootstrap.Dropdown(el, { popperConfig: { strategy: 'fixed' } });
+    });
 }
 
 function viewAlert(id) {
@@ -254,7 +345,7 @@ function viewAlert(id) {
         : '';
 
     const descBlock = a.description
-        ? `<div class="col-12"><div class="small fw-bold text-muted">Description</div><div>${escapeHtml(a.description)}</div></div>`
+        ? `<div class="col-12"><div class="small fw-bold text-muted">Description</div><div>${a.description}</div></div>`
         : '';
 
     const photosBlock = (a.photos && a.photos.length)
@@ -294,6 +385,99 @@ function viewAlert(id) {
 
     const modalEl = document.getElementById('alertViewModal');
     if (modalEl) new bootstrap.Modal(modalEl).show();
+}
+
+function editAlert(id) {
+    const a = (window.alertsCurrentItems || []).find(function (x) { return x.id === id; });
+    if (!a) return;
+
+    window.alertsEditingId = id;
+    window.alertsExistingPhotos = (a.photos || []).slice();
+    window.alertsPrimaryExistingId = (a.photos || []).find(function (p) { return p.is_primary; })?.id || null;
+
+    document.getElementById('alert-editing-id').value = id;
+    document.getElementById('alert-title').value = a.title || '';
+    document.getElementById('alert-type').value = a.alert_type;
+    document.getElementById('alert-island').value = a.island;
+    document.getElementById('alert-starts-at').value = (a.starts_at || '').slice(0, 16);
+    document.getElementById('alert-expires-at').value = a.expires_at ? a.expires_at.slice(0, 16) : '';
+    document.getElementById('alert-zone').value = a.zone || '';
+    document.getElementById('alert-custom-type-label').value = a.custom_type_label || '';
+    document.getElementById('alert-send-notification').checked = !!a.send_notification;
+
+    window.alertsSelectedVehicles = (a.vehicles || []).map(function (v) {
+        return { id: v.id, license_plate: v.license_plate, owner_name: v.owner_name };
+    });
+    renderVehicleChips();
+
+    renderExistingPhotos();
+
+    updateConditionalFields();
+
+    document.getElementById('alertCreateLabel').innerHTML = '<i class="fas fa-pencil-alt me-1"></i>Modifier l\'alerte';
+    document.getElementById('alert-create-submit').innerHTML = '<i class="fas fa-check me-1"></i>Enregistrer';
+
+    const modalEl = document.getElementById('alert-create-modal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+
+    // Quill needs the editor visible before content can be set reliably
+    setTimeout(function () {
+        if (window.alertsDescriptionQuill) {
+            window.alertsDescriptionQuill.root.innerHTML = a.description || '';
+        }
+    }, 50);
+}
+
+function renderExistingPhotos() {
+    const wrap = document.getElementById('alert-existing-photos-wrap');
+    const container = document.getElementById('alert-existing-photos');
+    const photos = window.alertsExistingPhotos || [];
+
+    if (!photos.length) {
+        wrap.classList.add('d-none');
+        container.innerHTML = '';
+        return;
+    }
+
+    wrap.classList.remove('d-none');
+    container.innerHTML = photos.map(function (p) {
+        const isPrimary = p.id === window.alertsPrimaryExistingId;
+        return `<div class="text-center" style="width:90px;">
+            <div style="position:relative;">
+                <img src="${p.photo_url}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:2px solid ${isPrimary ? '#dc3545' : '#dee2e6'};">
+                <button type="button" class="btn-close btn-close-white bg-danger rounded-circle p-1" style="position:absolute;top:-6px;right:-6px;font-size:.55rem;" title="Retirer" onclick="removeExistingPhoto(${p.id})"></button>
+            </div>
+            <div class="form-check form-check-inline mt-1" style="font-size:.75rem;">
+                <input class="form-check-input" type="radio" name="alert-primary-existing-photo" id="primary-existing-${p.id}" ${isPrimary ? 'checked' : ''} onchange="setExistingPhotoPrimary(${p.id})">
+                <label class="form-check-label" for="primary-existing-${p.id}">Principale</label>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function setExistingPhotoPrimary(photoId) {
+    window.alertsPrimaryExistingId = photoId;
+    window.alertsPrimaryIndex = null;
+    renderExistingPhotos();
+    renderPhotosPreview();
+}
+
+function removeExistingPhoto(photoId) {
+    if (!window.alertsEditingId) return;
+    if (!confirm('Retirer cette photo de l\'alerte ?')) return;
+    fetch(`/api/alerts/${window.alertsEditingId}/photos/${photoId}`, { method: 'DELETE' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d.error) { alert(d.error); return; }
+            window.alertsExistingPhotos = d.photos || [];
+            window.alertsPrimaryExistingId = (d.photos || []).find(function (p) { return p.is_primary; })?.id || null;
+            renderExistingPhotos();
+            // keep the table in sync in case the modal is closed without re-saving
+            const idx = (window.alertsCurrentItems || []).findIndex(function (x) { return x.id === window.alertsEditingId; });
+            if (idx !== -1) window.alertsCurrentItems[idx] = d;
+        })
+        .catch(function () { alert('Erreur réseau.'); });
 }
 
 function showAlertPhotos(photos) {
@@ -338,12 +522,21 @@ function resetAlertForm() {
     document.getElementById('alert-vehicles-wrap').classList.add('d-none');
     document.getElementById('alert-zone-wrap').classList.add('d-none');
     document.getElementById('alert-custom-type-wrap').classList.add('d-none');
+    document.getElementById('alert-existing-photos-wrap').classList.add('d-none');
     window.alertsSelectedPhotos = [];
     window.alertsPrimaryIndex = 0;
     window.alertsSelectedVehicles = [];
+    window.alertsEditingId = null;
+    window.alertsExistingPhotos = [];
+    window.alertsPrimaryExistingId = null;
+    document.getElementById('alert-editing-id').value = '';
     document.getElementById('alert-photos-preview').innerHTML = '';
     document.getElementById('alert-vehicle-chips').innerHTML = '';
+    document.getElementById('alert-existing-photos').innerHTML = '';
     hideVehicleResults();
+    if (window.alertsDescriptionQuill) window.alertsDescriptionQuill.setText('');
+    document.getElementById('alertCreateLabel').innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Ajouter une alerte';
+    document.getElementById('alert-create-submit').innerHTML = '<i class="fas fa-check me-1"></i>Créer l\'alerte';
 }
 
 function submitAlertForm() {
@@ -354,7 +547,9 @@ function submitAlertForm() {
     const expiresAt = document.getElementById('alert-expires-at').value;
     const zone = document.getElementById('alert-zone').value;
     const customTypeLabel = document.getElementById('alert-custom-type-label').value;
-    const description = document.getElementById('alert-description').value;
+    const descriptionHtml = window.alertsDescriptionQuill.getText().trim()
+        ? window.alertsDescriptionQuill.root.innerHTML
+        : '';
     const sendNotification = document.getElementById('alert-send-notification').checked;
     const errorBox = document.getElementById('alert-create-error');
     const submitBtn = document.getElementById('alert-create-submit');
@@ -393,7 +588,7 @@ function submitAlertForm() {
     formData.append('island', island);
     formData.append('starts_at', startsAt);
     if (expiresAt) formData.append('expires_at', expiresAt);
-    formData.append('description', description);
+    formData.append('description', descriptionHtml);
     formData.append('send_notification', sendNotification ? '1' : '0');
     if (VEHICLE_LINK_TYPES.includes(alertType)) {
         window.alertsSelectedVehicles.forEach(function (v) {
@@ -409,16 +604,26 @@ function submitAlertForm() {
     (window.alertsSelectedPhotos || []).forEach(function (file) {
         formData.append('photos', file);
     });
-    formData.append('primary_index', window.alertsPrimaryIndex || 0);
+    if (window.alertsPrimaryExistingId) {
+        formData.append('primary_photo_id', window.alertsPrimaryExistingId);
+    } else {
+        formData.append('primary_index', window.alertsPrimaryIndex || 0);
+    }
+
+    const isEditing = !!window.alertsEditingId;
+    const url = isEditing ? `/api/alerts/${window.alertsEditingId}` : '/api/alerts';
+    const method = isEditing ? 'PUT' : 'POST';
+    const loadingText = isEditing ? 'Enregistrement...' : 'Création...';
+    const idleText = isEditing ? 'Enregistrer' : "Créer l'alerte";
 
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Création...';
+    submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i>${loadingText}`;
 
-    fetch('/api/alerts', { method: 'POST', body: formData })
+    fetch(url, { method: method, body: formData })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
             if (!res.ok) {
-                errorBox.textContent = res.data.error || 'Erreur lors de la création.';
+                errorBox.textContent = res.data.error || "Erreur lors de l'enregistrement.";
                 errorBox.classList.remove('d-none');
                 return;
             }
@@ -431,7 +636,7 @@ function submitAlertForm() {
         })
         .finally(function () {
             submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fas fa-check me-1"></i>Créer l\'alerte';
+            submitBtn.innerHTML = `<i class="fas fa-check me-1"></i>${idleText}`;
         });
 }
 
@@ -443,4 +648,11 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+function stripHtml(html) {
+    if (!html) return '';
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return (div.textContent || div.innerText || '').trim();
 }
