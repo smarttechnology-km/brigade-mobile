@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app, url_for, render_template, send_file
 from app import db
-from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting
+from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting, QRCodePayment, SmartTechSetting
 from datetime import datetime, timedelta
 import io
 import json
@@ -266,6 +266,17 @@ def lookup():
     vehicle_payload['renewal_needed'] = renewal_needed
     vehicle_payload['renewal_period_open'] = bool(in_renewal_period)
 
+    qr_expiry = ensure_comoros(vehicle.qr_code_expiry) if vehicle.qr_code_expiry else None
+    qr_status = 'none'
+    if qr_expiry:
+        if qr_expiry < now:
+            qr_status = 'expired'
+        elif qr_expiry < now + timedelta(days=30):
+            qr_status = 'expiring'
+        else:
+            qr_status = 'active'
+    qr_renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
+
     return jsonify({
         'vehicle': vehicle_payload,
         'fines': unpaid_fines,
@@ -281,6 +292,13 @@ def lookup():
             'renewal_allowed': renewal_allowed,
             'renewal_needed': renewal_needed,
             'renewal_period_open': bool(in_renewal_period),
+        },
+        'qr_quote': {
+            'status': qr_status,
+            'price': round(qr_renewal_price, 2),
+            'expiry': qr_expiry.isoformat() if qr_expiry else None,
+            # QR code renewal is only payable once it has actually expired.
+            'renewal_allowed': qr_status == 'expired',
         }
     })
 
@@ -402,6 +420,54 @@ def create_payment():
                 'total_amount': round(total, 2),
                 'requested_expiry': requested_expiry.isoformat() if requested_expiry else None,
             }
+        })
+
+    if payment_type == 'qr_renewal':
+        vehicle_id = data.get('vehicle_id')
+        if not vehicle_id:
+            return jsonify({'error': 'vehicle_id is required for QR code renewal'}), 400
+
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+
+        qr_expiry = ensure_comoros(vehicle.qr_code_expiry) if vehicle.qr_code_expiry else None
+        if qr_expiry and qr_expiry > now_comoros():
+            return jsonify({'error': 'Le code QR de ce véhicule est encore valide.'}), 400
+
+        amount = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
+        payload = {
+            'type': 'qr_renewal_request',
+            'payment_type': 'qr_renewal',
+            'vehicle_id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name,
+            'amount': amount,
+        }
+
+        payment = Payment(
+            amount=amount,
+            currency='KMF',
+            status='pending',
+            license_plate=vehicle.license_plate,
+            owner_name=vehicle.owner_name,
+            payer_name=payer_name,
+            payer_email=payer_email,
+            fines=json.dumps(payload)
+        )
+        db.session.add(payment)
+        db.session.commit()
+
+        checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
+
+        return jsonify({
+            'payment_id': payment.id,
+            'checkout_url': checkout_url,
+            'amount': round(amount, 2),
+            'currency': 'KMF',
+            'status': 'pending',
+            'payment_type': 'qr_renewal',
+            'vehicle': vehicle.to_dict(),
         })
 
     if not fines_ids:
@@ -578,6 +644,29 @@ def webhook():
                         f.receipt_number = f'VEN-{f.id}-{int(payment_time.timestamp())}'
 
                 db.session.commit()
+        elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'qr_renewal_request':
+            vehicle_id = fine_payload.get('vehicle_id')
+            vehicle = Vehicle.query.get(int(vehicle_id)) if vehicle_id else None
+            if vehicle:
+                payment_time = payment.paid_at or now_comoros()
+                vehicle.generate_qr_code_with_expiry()
+                vehicle.status = 'active'
+
+                db.session.add(QRCodePayment(
+                    vehicle_id=vehicle.id,
+                    payment_type='renewal',
+                    amount=float(payment.amount or 0.0),
+                    status='paid',
+                    paid_at=payment_time,
+                    recorded_by=payment.payer_name or payment.phone_number or 'HuriMoney (App Citoyen)',
+                ))
+                db.session.add(VehicleHistory(
+                    vehicle_id=vehicle.id,
+                    action='Renouvellement QR Code via mobile citoyen',
+                    officer='App Mobile',
+                    notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF | Nouvelle expiration: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
+                ))
+                db.session.commit()
         else:
             for fid in fine_payload:
                 f = Fine.query.get(int(fid))
@@ -634,6 +723,10 @@ def get_receipt(payment_id):
                 'requested_expiry': payload.get('requested_expiry'),
             }
             fine_ids = payload.get('fine_ids') or []
+        elif isinstance(payload, dict) and payload.get('type') == 'qr_renewal_request':
+            payment_type = 'qr_renewal'
+            vehicle = Vehicle.query.get(payload.get('vehicle_id')) if payload.get('vehicle_id') else None
+            fine_ids = []
         else:
             fine_ids = payload if isinstance(payload, list) else []
 
@@ -659,7 +752,7 @@ def get_receipt(payment_id):
         payload = []
 
     # Generate receipt number
-    receipt_prefix = 'VGN' if payment_type == 'vignette' else 'RCP'
+    receipt_prefix = 'VGN' if payment_type == 'vignette' else 'QRR' if payment_type == 'qr_renewal' else 'RCP'
     receipt_number = f'{receipt_prefix}-{p.id}-{int(p.created_at.timestamp())}'
     
     return jsonify({

@@ -2256,63 +2256,6 @@ def get_photo_submission(submission_id):
         )
     
 
-@api_bp.route('/vehicle/track/<token>/renew-qrcode', methods=['POST'])
-@login_required
-def renew_vehicle_qrcode_by_token(token):
-    """Renew QR code for a vehicle using track token and reactivate it"""
-    try:
-        vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
-        
-        # Check island access for judiciaire users
-        if current_user.role == 'judiciaire' and current_user.country:
-            if vehicle.owner_island != current_user.country:
-                return jsonify({"success": False, "error": "Accès refusé"}), 403
-        
-        # Store old values for logging
-        old_expiry = vehicle.qr_code_expiry.strftime('%Y-%m-%d') if vehicle.qr_code_expiry else 'Non défini'
-        old_status = vehicle.status
-        
-        # Renew QR code expiry without changing the token
-        vehicle.generate_qr_code_with_expiry()
-        
-        # Reactivate vehicle
-        vehicle.status = 'active'
-        
-        # Log the action in vehicle history while preserving the token
-        from app.models import VehicleHistory
-        history = VehicleHistory(
-            vehicle_id=vehicle.id,
-            action=f"QR Code renouvelé - Token conservé",
-            officer=current_user.username,
-            notes=f"Token conservé: {vehicle.track_token}\nAncien expiry: {old_expiry}\nNouvelle expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
-        )
-        db.session.add(history)
-        
-        db.session.commit()
-
-        log_user_history(
-            current_user,
-            'QR Code renouvelé (mobile)',
-            f"Véhicule {vehicle.license_plate}: QR code renouvelé et véhicule réactivé"
-        )
-        
-        return jsonify({
-            "success": True,
-            "message": f"Code QR renouvelé et véhicule réactivé",
-            "old_status": old_status,
-            "new_status": vehicle.status,
-            "track_token": vehicle.track_token,
-            "token_unchanged": True,
-            "old_expiry": old_expiry,
-            "new_expiry": vehicle.qr_code_expiry.strftime('%Y-%m-%d'),
-            "generated_at": vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S')
-        }), 200
-    
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
 # ============================================================================
 # VEHICLE TRANSFER ENDPOINTS (ADMIN)
 # ============================================================================
