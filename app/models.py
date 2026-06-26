@@ -1320,6 +1320,7 @@ class Alert(db.Model):
     zone = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
     contact_phones = db.Column(db.Text, nullable=True)  # comma-separated phone numbers to call if the vehicle is found (recherche_vehicule)
+    is_pinned = db.Column(db.Boolean, nullable=False, default=False)  # pinned alerts show first in the citizen app
     send_notification = db.Column(db.Boolean, nullable=False, default=False)
     starts_at = db.Column(db.DateTime, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=True)
@@ -1359,6 +1360,7 @@ class Alert(db.Model):
                 for v in self.vehicles
             ],
             'send_notification': self.send_notification,
+            'is_pinned': self.is_pinned,
             'starts_at': self.starts_at.isoformat() if self.starts_at else None,
             'starts_at_str': self.starts_at.strftime('%d/%m/%Y %H:%M') if self.starts_at else None,
             'expires_at': self.expires_at.isoformat() if self.expires_at else None,

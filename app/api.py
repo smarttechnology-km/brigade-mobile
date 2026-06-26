@@ -3550,6 +3550,8 @@ def api_alerts_public_list():
         d['description_html'] = d.get('description')
         d['description'] = _html_to_plain_text(d.get('description'))
         items.append(d)
+    # Pinned alerts show first; stable sort preserves the starts_at-desc order within each group.
+    items.sort(key=lambda d: not d['is_pinned'])
     return jsonify(items)
 
 
@@ -3624,6 +3626,7 @@ def _parse_alert_fields(data, current_user):
     starts_at_raw = (data.get('starts_at') or '').strip()
     expires_at_raw = (data.get('expires_at') or '').strip()
     send_notification = str(data.get('send_notification', '')).lower() in ('1', 'true', 'on', 'yes')
+    is_pinned = str(data.get('is_pinned', '')).lower() in ('1', 'true', 'on', 'yes')
 
     if hasattr(data, 'getlist'):
         vehicle_ids_raw = data.getlist('vehicle_ids')
@@ -3685,6 +3688,7 @@ def _parse_alert_fields(data, current_user):
         description=description,
         contact_phones=','.join(contact_phones_list) if alert_type == 'recherche_vehicule' and contact_phones_list else None,
         send_notification=send_notification,
+        is_pinned=is_pinned,
         starts_at=starts_at,
         expires_at=expires_at,
     )

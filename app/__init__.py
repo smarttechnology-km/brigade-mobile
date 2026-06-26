@@ -440,6 +440,9 @@ def create_app():
                         if 'contact_phones' not in alert_cols:
                             conn.execute(text("ALTER TABLE alerts ADD COLUMN contact_phones TEXT"))
                             logger.info("Added missing alerts.contact_phones column")
+                        if 'is_pinned' not in alert_cols:
+                            conn.execute(text("ALTER TABLE alerts ADD COLUMN is_pinned BOOLEAN NOT NULL DEFAULT 0"))
+                            logger.info("Added missing alerts.is_pinned column")
 
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
