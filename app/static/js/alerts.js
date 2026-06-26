@@ -324,9 +324,10 @@ function renderAlertsTable() {
         const expireMenuItem = (!a.expires_at_str && !a.is_expired)
             ? `<li><a class="dropdown-item" href="#" onclick="event.preventDefault(); markAlertExpired(${a.id});"><i class="fas fa-flag-checkered me-2"></i>Marquer comme expirée</a></li>`
             : '';
+        const pinBadge = a.is_pinned ? '<span class="badge bg-warning text-dark ms-1" title="Épinglée"><i class="fas fa-thumbtack"></i></span>' : '';
         return `<tr>
             <td>${i + 1}</td>
-            <td><strong>${escapeHtml(a.title)}</strong>${descLine}${vehiclesLine}${zoneLine}</td>
+            <td><strong>${escapeHtml(a.title)}</strong>${pinBadge}${descLine}${vehiclesLine}${zoneLine}</td>
             <td><i class="${meta.icon} me-2" style="color:${meta.color};"></i>${escapeHtml(a.alert_type_label)}</td>
             <td>${escapeHtml(a.island)}</td>
             <td>${a.starts_at_str || ''}</td>
@@ -367,6 +368,9 @@ function viewAlert(id) {
     const statusBadge = a.is_expired
         ? '<span class="badge bg-secondary">Expirée</span>'
         : '<span class="badge bg-success">Active</span>';
+    const pinnedBadge = a.is_pinned
+        ? '<span class="badge bg-warning text-dark"><i class="fas fa-thumbtack me-1"></i>Épinglée</span>'
+        : '';
 
     const vehiclesBlock = (a.vehicles && a.vehicles.length)
         ? `<div class="col-12">
@@ -412,7 +416,7 @@ function viewAlert(id) {
         <div class="row g-3">
             <div class="col-12 d-flex align-items-center justify-content-between">
                 <h5 class="mb-0"><i class="${meta.icon} me-2" style="color:${meta.color};"></i>${escapeHtml(a.title)}</h5>
-                ${statusBadge}
+                <div class="d-flex gap-1">${pinnedBadge}${statusBadge}</div>
             </div>
             <div class="col-md-6"><div class="small fw-bold text-muted">Type</div><div>${escapeHtml(a.alert_type_label)}</div></div>
             <div class="col-md-6"><div class="small fw-bold text-muted">Île</div><div>${escapeHtml(a.island)}</div></div>
@@ -451,6 +455,7 @@ function editAlert(id) {
     document.getElementById('alert-zone').value = a.zone || '';
     document.getElementById('alert-custom-type-label').value = a.custom_type_label || '';
     document.getElementById('alert-send-notification').checked = !!a.send_notification;
+    document.getElementById('alert-is-pinned').checked = !!a.is_pinned;
 
     window.alertsSelectedVehicles = (a.vehicles || []).map(function (v) {
         return { id: v.id, license_plate: v.license_plate, owner_name: v.owner_name };
@@ -604,6 +609,7 @@ function submitAlertForm() {
         ? window.alertsDescriptionQuill.root.innerHTML
         : '';
     const sendNotification = document.getElementById('alert-send-notification').checked;
+    const isPinned = document.getElementById('alert-is-pinned').checked;
     const errorBox = document.getElementById('alert-create-error');
     const submitBtn = document.getElementById('alert-create-submit');
 
@@ -648,6 +654,7 @@ function submitAlertForm() {
     if (expiresAt) formData.append('expires_at', expiresAt);
     formData.append('description', descriptionHtml);
     formData.append('send_notification', sendNotification ? '1' : '0');
+    formData.append('is_pinned', isPinned ? '1' : '0');
     if (VEHICLE_LINK_TYPES.includes(alertType)) {
         window.alertsSelectedVehicles.forEach(function (v) {
             formData.append('vehicle_ids', v.id);
