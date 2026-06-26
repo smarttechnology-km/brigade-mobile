@@ -69,11 +69,21 @@
               <input type="text" id="alert-title" class="form-control" placeholder="Ex: Accident grave sur la RN1" required />
             </div>
             <div class="col-12">
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="alert-send-notification">
-                <label class="form-check-label" for="alert-send-notification">
-                  Envoyer une notification <span class="text-muted small">(push sur l'app citoyen)</span>
-                </label>
+              <div class="d-flex flex-wrap gap-4 p-3 rounded-3 bg-light border">
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="alert-send-notification">
+                  <label class="form-check-label" for="alert-send-notification">
+                    <div class="fw-bold"><i class="fas fa-bell me-1 text-primary"></i> Envoyer une notification</div>
+                    <div class="text-muted small">Push sur l'app citoyen</div>
+                  </label>
+                </div>
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="alert-is-pinned">
+                  <label class="form-check-label" for="alert-is-pinned">
+                    <div class="fw-bold"><i class="fas fa-thumbtack me-1 text-warning"></i> Épingler cette alerte</div>
+                    <div class="text-muted small">Affichée en premier dans l'app citoyen</div>
+                  </label>
+                </div>
               </div>
             </div>
             <div class="col-md-6">
