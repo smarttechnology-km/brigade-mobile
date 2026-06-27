@@ -3259,6 +3259,11 @@ def api_licenses_public_scan():
         {k: v for k, v in h.to_dict().items() if k != 'created_by'}
         for h in history
     ]
+    # is_registered tells the citizen app whether this license is already claimed by
+    # SOME account, without leaking the actual phone number of whoever holds it.
+    data['is_registered'] = bool(data.get('registered_phone'))
+    data.pop('registered_phone', None)
+    data.pop('registered_at', None)
     return jsonify(data)
 
 
