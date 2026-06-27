@@ -204,6 +204,7 @@ class Payment(db.Model):
     status = db.Column(db.String(30), nullable=False, default='pending')
     huri_payment_id = db.Column(db.String(128), nullable=True)
     phone_number = db.Column(db.String(20), nullable=True)
+    destination_phone = db.Column(db.String(20), nullable=True)  # Huri Money account this payment's revenue is routed to (per payment type)
     license_plate = db.Column(db.String(50), nullable=False)
     owner_name = db.Column(db.String(150), nullable=False)
     payer_name = db.Column(db.String(150), nullable=True)
@@ -220,6 +221,7 @@ class Payment(db.Model):
             'status': self.status,
             'huri_payment_id': self.huri_payment_id,
             'phone_number': self.phone_number,
+            'destination_phone': self.destination_phone,
             'license_plate': self.license_plate,
             'owner_name': self.owner_name,
             'payer_name': self.payer_name,
@@ -1286,6 +1288,106 @@ class LicenseSetting(db.Model):
             'initial_points':       self.initial_points,
             'temp_validity_months': self.temp_validity_months,
         }
+
+
+class HuriDestinationSetting(db.Model):
+    """Singleton config: which Huri Money account (phone number) receives the revenue
+    for each mobile payment type, so fines/vignette/QR renewal income can be kept
+    separate once real Huri Money payouts are wired up (currently a stub/simulation)."""
+    __tablename__ = 'huri_destination_settings'
+    id                = db.Column(db.Integer, primary_key=True)
+    fine_phone        = db.Column(db.String(20), nullable=True)
+    fine_phone_updated_at = db.Column(db.DateTime, nullable=True)
+    fine_phone_updated_by = db.Column(db.String(80), nullable=True)
+    vignette_phone    = db.Column(db.String(20), nullable=True)
+    vignette_phone_updated_at = db.Column(db.DateTime, nullable=True)
+    vignette_phone_updated_by = db.Column(db.String(80), nullable=True)
+    qr_renewal_phone  = db.Column(db.String(20), nullable=True)
+    qr_renewal_phone_updated_at = db.Column(db.DateTime, nullable=True)
+    qr_renewal_phone_updated_by = db.Column(db.String(80), nullable=True)
+
+    @staticmethod
+    def get():
+        s = HuriDestinationSetting.query.first()
+        if not s:
+            s = HuriDestinationSetting()
+            db.session.add(s)
+            db.session.commit()
+        return s
+
+    def phone_for(self, payment_type):
+        return {
+            'fine': self.fine_phone,
+            'vignette': self.vignette_phone,
+            'qr_renewal': self.qr_renewal_phone,
+        }.get(payment_type)
+
+    def to_dict(self):
+        def fmt(dt):
+            return dt.strftime('%d/%m/%Y %H:%M') if dt else None
+        return {
+            'fine_phone': self.fine_phone or '',
+            'fine_phone_updated_at': fmt(self.fine_phone_updated_at),
+            'fine_phone_updated_by': self.fine_phone_updated_by,
+            'vignette_phone': self.vignette_phone or '',
+            'vignette_phone_updated_at': fmt(self.vignette_phone_updated_at),
+            'vignette_phone_updated_by': self.vignette_phone_updated_by,
+            'qr_renewal_phone': self.qr_renewal_phone or '',
+            'qr_renewal_phone_updated_at': fmt(self.qr_renewal_phone_updated_at),
+            'qr_renewal_phone_updated_by': self.qr_renewal_phone_updated_by,
+        }
+
+
+class HuriDestinationPhoneHistory(db.Model):
+    """Audit log of changes to Huri Money destination phone numbers, one row per change,
+    so admins can see who changed which number and when (per payment type)."""
+    __tablename__ = 'huri_destination_phone_history'
+    id         = db.Column(db.Integer, primary_key=True)
+    field      = db.Column(db.String(20), nullable=False)  # 'fine_phone' | 'vignette_phone' | 'qr_renewal_phone'
+    old_value  = db.Column(db.String(20), nullable=True)
+    new_value  = db.Column(db.String(20), nullable=True)
+    changed_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    changed_by = db.Column(db.String(80), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'old_value': self.old_value or '—',
+            'new_value': self.new_value or '—',
+            'changed_at': self.changed_at.strftime('%d/%m/%Y %H:%M') if self.changed_at else None,
+            'changed_by': self.changed_by,
+        }
+
+
+class PendingPhoneChange(db.Model):
+    """A requested change to a Huri Money destination phone number, awaiting confirmation
+    via a code sent out-of-band (email) to a server-side-only address. Only applied once
+    confirmed, so a single compromised/malicious admin account cannot redirect payment
+    revenue on its own — the confirmation channel is outside the in-app account system."""
+    __tablename__ = 'pending_phone_changes'
+    id           = db.Column(db.Integer, primary_key=True)
+    field        = db.Column(db.String(20), nullable=False)  # 'fine_phone' | 'vignette_phone'
+    old_value    = db.Column(db.String(20), nullable=True)
+    new_value    = db.Column(db.String(20), nullable=True)
+    code_hash    = db.Column(db.String(255), nullable=False)
+    attempts     = db.Column(db.Integer, nullable=False, default=0)
+    requested_by = db.Column(db.String(80), nullable=True)
+    requested_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    expires_at   = db.Column(db.DateTime, nullable=False)
+    consumed     = db.Column(db.Boolean, nullable=False, default=False)
+
+    MAX_ATTEMPTS = 5
+
+    def set_code(self, code):
+        self.code_hash = generate_password_hash(code)
+
+    def check_code(self, code):
+        return check_password_hash(self.code_hash, code)
+
+    @property
+    def is_expired(self):
+        from app.timezone_utils import ensure_comoros
+        return now_comoros() > ensure_comoros(self.expires_at)
 
 
 alert_vehicles = db.Table(

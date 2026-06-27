@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_login import login_user, logout_user, login_required, current_user
 from functools import wraps
-from app.models import SmartTechAccount, QRCodePayment, Vehicle, Subscription, Expense, Employee, SmartTechSetting, LicensePrintRequest, Insurance, InsuranceAccount, VehicleInsuranceAssignment
+from app.models import SmartTechAccount, QRCodePayment, Vehicle, Subscription, Expense, Employee, SmartTechSetting, LicensePrintRequest, Insurance, InsuranceAccount, VehicleInsuranceAssignment, HuriDestinationSetting
 from app import db
 
 smart_tech_bp = Blueprint('smart_tech', __name__, url_prefix='/smart-tech')
@@ -100,9 +100,7 @@ def parametres_page():
                            renewal_price=int(renewal_price),
                            license_print_price=int(license_print_price),
                            insurance_commission=int(insurance_commission),
-                           app_name=SmartTechSetting.get('app_name', 'SmartTech Brigade'),
-                           app_island=SmartTechSetting.get('app_island', 'Nationale'),
-                           app_contact=SmartTechSetting.get('app_contact', ''),
+                           qr_renewal_destination_phone=HuriDestinationSetting.get().qr_renewal_phone or '',
                            sim_new_vehicles=int(SmartTechSetting.get('sim_new_vehicles', 500)),
                            sim_existing=int(SmartTechSetting.get('sim_existing', 10000)),
                            sim_renewal_rate=float(SmartTechSetting.get('sim_renewal_rate', 10)),
@@ -122,13 +120,9 @@ def api_parametres_get():
         'qr_renewal_price':      SmartTechSetting.get('qr_renewal_price', 3000),
         'license_print_price':   SmartTechSetting.get('license_print_price', 0),
         'insurance_commission':  SmartTechSetting.get('insurance_commission', 0),
-        'app_name':    SmartTechSetting.get('app_name', 'SmartTech Brigade'),
-        'app_island':  SmartTechSetting.get('app_island', 'Nationale'),
-        'app_contact': SmartTechSetting.get('app_contact', ''),
+        'qr_renewal_destination_phone': HuriDestinationSetting.get().qr_renewal_phone or '',
     })
 
-
-_VALID_ISLANDS = {'Nationale', 'Grande Comore', 'Anjouan', 'Moheli'}
 
 @smart_tech_bp.route('/api/parametres', methods=['PUT'])
 @st_admin_required
@@ -146,16 +140,13 @@ def api_parametres_update():
             SmartTechSetting.set(key, v)
         except (ValueError, TypeError):
             errors.append(f"Valeur invalide pour {key}")
-    if 'app_name' in data:
-        name = str(data['app_name']).strip()[:120]
-        if name:
-            SmartTechSetting.set('app_name', name)
-    if 'app_island' in data:
-        isle = str(data['app_island']).strip()
-        if isle in _VALID_ISLANDS:
-            SmartTechSetting.set('app_island', isle)
-    if 'app_contact' in data:
-        SmartTechSetting.set('app_contact', str(data['app_contact']).strip()[:60])
+    if 'qr_renewal_destination_phone' in data:
+        from app.timezone_utils import now_comoros
+        setting = HuriDestinationSetting.get()
+        setting.qr_renewal_phone = str(data['qr_renewal_destination_phone']).strip() or None
+        setting.qr_renewal_phone_updated_at = now_comoros()
+        setting.qr_renewal_phone_updated_by = current_user.username if current_user.is_authenticated else None
+        db.session.commit()
     _SIM_KEYS = {
         'sim_new_vehicles':      (int,   0,   None),
         'sim_existing':          (int,   0,   None),
@@ -182,9 +173,7 @@ def api_parametres_update():
         'ok': True,
         'qr_activation_price': SmartTechSetting.get('qr_activation_price'),
         'qr_renewal_price':    SmartTechSetting.get('qr_renewal_price'),
-        'app_name':    SmartTechSetting.get('app_name', 'SmartTech Brigade'),
-        'app_island':  SmartTechSetting.get('app_island', 'Nationale'),
-        'app_contact': SmartTechSetting.get('app_contact', ''),
+        'qr_renewal_destination_phone': HuriDestinationSetting.get().qr_renewal_phone or '',
     })
 
 

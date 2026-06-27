@@ -3234,6 +3234,34 @@ def api_licenses_scan(license_id):
     return jsonify(lic.to_dict())
 
 
+@api_bp.route('/licenses/public-scan', methods=['GET'])
+def api_licenses_public_scan():
+    """Public lookup by license_number, for the citizen mobile app's QR scanner.
+
+    No login required — the physical card's QR code (license_number, the same value
+    printed on it) is itself the proof of access, mirroring the public vehicle
+    tracking page. Includes the point reduction history but strips the issuing
+    officer's username, which isn't relevant to a citizen verifying a license."""
+    number = request.args.get('number', '').strip().upper()
+    if not number:
+        return jsonify({'error': 'Numéro manquant'}), 400
+    lic = DriverLicense.query.filter_by(license_number=number).first()
+    if not lic:
+        return jsonify({'error': 'Permis introuvable'}), 404
+
+    history = (PointReductionHistory.query
+               .filter_by(license_id=lic.id)
+               .order_by(PointReductionHistory.created_at.desc())
+               .all())
+
+    data = lic.to_dict()
+    data['point_history'] = [
+        {k: v for k, v in h.to_dict().items() if k != 'created_by'}
+        for h in history
+    ]
+    return jsonify(data)
+
+
 @api_bp.route('/licenses/mobile/point-reasons', methods=['GET'])
 @jwt_required()
 def api_mobile_point_reasons():

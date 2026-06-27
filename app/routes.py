@@ -5598,6 +5598,153 @@ def update_vignette_settings():
     return jsonify({'message': 'Paramètres mis à jour.', **setting.to_dict()})
 
 
+# ============= HURI MONEY DESTINATION SETTINGS =============
+
+@main_bp.route('/payment-settings')
+@login_required
+@roles_required('administrateur')
+def payment_settings():
+    """Page for configuring which Huri Money account receives each payment type's revenue."""
+    return render_template('payment_settings.html')
+
+
+@vehicle_bp.route('/payment-settings', methods=['GET'])
+@login_required
+@roles_required('administrateur')
+def get_payment_settings():
+    from app.models import HuriDestinationSetting
+    setting = HuriDestinationSetting.get()
+    return jsonify(setting.to_dict())
+
+
+_PAYMENT_PHONE_FIELD_LABELS = {'fine_phone': 'Amendes', 'vignette_phone': 'Vignette'}
+
+
+@vehicle_bp.route('/payment-settings', methods=['PUT'])
+@login_required
+@roles_required('administrateur')
+def update_payment_settings():
+    """Request a change to a destination phone number. The change is NOT applied here —
+    a confirmation code is emailed to a fixed, server-side-only address
+    (PAYMENT_CHANGE_APPROVAL_EMAIL env var, not editable via the web app), and must be
+    confirmed via /payment-settings/confirm before it takes effect. This keeps the
+    approval channel outside the in-app account system, so a single compromised or
+    malicious admin account cannot redirect payment revenue on its own."""
+    from app.models import HuriDestinationSetting, PendingPhoneChange
+    from app.email_service import send_approval_email
+    import random
+
+    data = request.get_json() or {}
+    setting = HuriDestinationSetting.get()
+    username = current_user.username if current_user.is_authenticated else None
+
+    if 'fine_phone' in data:
+        field = 'fine_phone'
+        new_value = (data.get('fine_phone') or '').strip() or None
+        current_value = setting.fine_phone
+    elif 'vignette_phone' in data:
+        field = 'vignette_phone'
+        new_value = (data.get('vignette_phone') or '').strip() or None
+        current_value = setting.vignette_phone
+    else:
+        return jsonify({'error': 'Aucun champ à modifier.'}), 400
+
+    if new_value == current_value:
+        return jsonify({'message': 'Aucun changement.', **setting.to_dict()})
+
+    code = f"{random.randint(0, 999999):06d}"
+    pending = PendingPhoneChange(
+        field=field,
+        old_value=current_value,
+        new_value=new_value,
+        requested_by=username,
+        expires_at=now_comoros() + timedelta(minutes=15),
+    )
+    pending.set_code(code)
+
+    label = _PAYMENT_PHONE_FIELD_LABELS[field]
+    subject = f"Confirmation requise : changement numéro {label}"
+    body = (
+        f"{username or 'Un administrateur'} demande de changer le numéro Huri Money « {label} » :\n\n"
+        f"  Ancien numéro : {current_value or '—'}\n"
+        f"  Nouveau numéro : {new_value or '—'}\n\n"
+        f"Code de confirmation : {code}\n\n"
+        f"Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, "
+        f"ne communiquez pas ce code et vérifiez le compte administrateur concerné."
+    )
+    email_result = send_approval_email(subject, body)
+    if not email_result.get('success'):
+        return jsonify({'error': f"Impossible d'envoyer le code de confirmation : {email_result.get('message')}"}), 503
+
+    db.session.add(pending)
+    db.session.commit()
+
+    return jsonify({
+        'pending': True,
+        'change_id': pending.id,
+        'message': 'Un code de confirmation a été envoyé. Saisissez-le pour valider le changement.',
+    })
+
+
+@vehicle_bp.route('/payment-settings/confirm', methods=['POST'])
+@login_required
+@roles_required('administrateur')
+def confirm_payment_settings_change():
+    """Apply a pending phone number change once the emailed confirmation code is verified."""
+    from app.models import HuriDestinationSetting, HuriDestinationPhoneHistory, PendingPhoneChange
+
+    data = request.get_json() or {}
+    try:
+        change_id = int(data.get('change_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Demande de changement invalide.'}), 400
+    code = str(data.get('code') or '').strip()
+
+    pending = PendingPhoneChange.query.get(change_id)
+    if not pending or pending.consumed:
+        return jsonify({'error': 'Demande de changement introuvable ou déjà traitée.'}), 404
+
+    if pending.is_expired:
+        return jsonify({'error': 'Ce code a expiré. Veuillez recommencer.'}), 400
+
+    if pending.attempts >= PendingPhoneChange.MAX_ATTEMPTS:
+        return jsonify({'error': 'Trop de tentatives. Veuillez recommencer.'}), 400
+
+    if not code or not pending.check_code(code):
+        pending.attempts += 1
+        db.session.commit()
+        remaining = max(PendingPhoneChange.MAX_ATTEMPTS - pending.attempts, 0)
+        return jsonify({'error': f'Code incorrect. {remaining} tentative(s) restante(s).'}), 400
+
+    setting = HuriDestinationSetting.get()
+    db.session.add(HuriDestinationPhoneHistory(
+        field=pending.field, old_value=pending.old_value, new_value=pending.new_value, changed_by=pending.requested_by
+    ))
+    setattr(setting, pending.field, pending.new_value)
+    setattr(setting, f'{pending.field}_updated_at', now_comoros())
+    setattr(setting, f'{pending.field}_updated_by', pending.requested_by)
+
+    pending.consumed = True
+    db.session.commit()
+
+    return jsonify({'message': 'Changement confirmé et appliqué.', **setting.to_dict()})
+
+
+@vehicle_bp.route('/payment-settings/history', methods=['GET'])
+@login_required
+@roles_required('administrateur')
+def get_payment_settings_history():
+    from app.models import HuriDestinationPhoneHistory
+    field = request.args.get('field', '').strip()
+    if field not in ('fine_phone', 'vignette_phone', 'qr_renewal_phone'):
+        return jsonify({'error': 'Champ invalide'}), 400
+    entries = (HuriDestinationPhoneHistory.query
+               .filter_by(field=field)
+               .order_by(HuriDestinationPhoneHistory.changed_at.desc())
+               .all())
+    return jsonify([e.to_dict() for e in entries])
+
+
 # Vehicle Transfers - Citizen API
 
 @main_bp.route('/api/vehicle-transfers', methods=['POST'])

@@ -11,6 +11,12 @@ from sqlalchemy import text
 import os
 import logging
 
+# Load variables from a local .env file (development convenience). In production
+# (Render), env vars are set directly in the dashboard and this is a no-op if no
+# .env file is present.
+from dotenv import load_dotenv
+load_dotenv()
+
 logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
@@ -298,6 +304,35 @@ def create_app():
                             if 'photo_filename' not in fine_columns:
                                 conn.execute(text("ALTER TABLE fines ADD COLUMN photo_filename VARCHAR(255)"))
                                 logger.info("Added fines.photo_filename column")
+
+                        # Patch payments table
+                        payments_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='payments'")
+                        ).first() is not None
+                        if payments_table_exists:
+                            payment_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(payments)")).fetchall()}
+                            if 'destination_phone' not in payment_columns:
+                                conn.execute(text("ALTER TABLE payments ADD COLUMN destination_phone VARCHAR(20)"))
+                                logger.info("Added missing payments.destination_phone column")
+
+                        # Patch huri_destination_settings table (per-field update tracking)
+                        huri_dest_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='huri_destination_settings'")
+                        ).first() is not None
+                        if huri_dest_table_exists:
+                            huri_dest_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(huri_destination_settings)")).fetchall()}
+                            huri_dest_column_definitions = {
+                                'fine_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN fine_phone_updated_at DATETIME",
+                                'fine_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN fine_phone_updated_by VARCHAR(80)",
+                                'vignette_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN vignette_phone_updated_at DATETIME",
+                                'vignette_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN vignette_phone_updated_by VARCHAR(80)",
+                                'qr_renewal_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN qr_renewal_phone_updated_at DATETIME",
+                                'qr_renewal_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN qr_renewal_phone_updated_by VARCHAR(80)",
+                            }
+                            for column_name, alter_sql in huri_dest_column_definitions.items():
+                                if column_name not in huri_dest_columns:
+                                    conn.execute(text(alter_sql))
+                                    logger.info(f"Added missing huri_destination_settings.{column_name} column")
 
                         vehicle_column_definitions = {
                             'track_token': "ALTER TABLE vehicles ADD COLUMN track_token VARCHAR(36)",

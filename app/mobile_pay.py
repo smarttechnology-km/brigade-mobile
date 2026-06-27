@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app, url_for, render_template, send_file
 from app import db
-from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting, QRCodePayment, SmartTechSetting
+from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting, QRCodePayment, SmartTechSetting, HuriDestinationSetting
 from datetime import datetime, timedelta
 import io
 import json
@@ -397,6 +397,7 @@ def create_payment():
             owner_name=vehicle.owner_name,
             payer_name=payer_name,
             payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('vignette'),
             fines=json.dumps(payload)
         )
         db.session.add(payment)
@@ -453,6 +454,7 @@ def create_payment():
             owner_name=vehicle.owner_name,
             payer_name=payer_name,
             payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('qr_renewal'),
             fines=json.dumps(payload)
         )
         db.session.add(payment)
@@ -491,7 +493,17 @@ def create_payment():
 
     total = sum([f.amount for f in fines])
 
-    payment = Payment(amount=total, currency='KMF', status='pending', license_plate=license_plate, owner_name=owner_name, payer_name=payer_name, payer_email=payer_email, fines=str(fines_ids))
+    payment = Payment(
+        amount=total,
+        currency='KMF',
+        status='pending',
+        license_plate=license_plate,
+        owner_name=owner_name,
+        payer_name=payer_name,
+        payer_email=payer_email,
+        destination_phone=HuriDestinationSetting.get().phone_for('fine'),
+        fines=str(fines_ids)
+    )
     db.session.add(payment)
     db.session.commit()
 
