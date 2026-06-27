@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Paramètres Paiements Mobile{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-mobile-screen-button me-2"></i>Paramètres Paiements Mobile</h2>
+            <p class="text-muted mb-0">Configurez le numéro Huri Money qui reçoit les recettes de chaque type de paiement</p>
+        </div>
+    </div>
+
+    <div class="alert alert-info border-0 mb-4">
+        <i class="fas fa-info-circle me-2"></i>
+        Chaque type de paiement (amendes, vignette) peut être associé à un numéro Huri Money distinct, pour éviter de mélanger les recettes.
+        <strong>L'intégration Huri Money est actuellement en mode simulation</strong> — ces numéros seront utilisés dès que les identifiants API réels seront configurés, et sont déjà enregistrés sur chaque paiement à titre de traçabilité.
+    </div>
+
+    <div class="alert alert-warning border-0 mb-4">
+        <i class="fas fa-shield-halved me-2"></i>
+        Pour des raisons de sécurité, tout changement de numéro doit être confirmé par un <strong>code envoyé par email à une adresse fixe configurée côté serveur</strong> (non modifiable depuis cette page). Le changement n'est appliqué qu'après saisie du bon code.
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">⚠️ Amendes</h6>
+                    <button class="btn btn-sm btn-link p-0" onclick="showPhoneHistory('fine')">
+                        <i class="fas fa-clock-rotate-left me-1"></i>Historique
+                    </button>
+                </div>
+                <div class="card-body">
+                    <label class="form-label fw-semibold">Numéro de destination</label>
+                    <input type="tel" class="form-control mb-3" id="fine-phone" placeholder="Ex: 3123456">
+
+                    <button class="btn btn-primary" onclick="savePaymentPhone('fine')">
+                        <i class="fas fa-save me-2"></i>Enregistrer
+                    </button>
+
+                    <div id="fine-phone-msg" class="mt-3 d-none"></div>
+                    <div id="fine-phone-meta" class="text-muted small mt-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🚘 Vignette</h6>
+                    <button class="btn btn-sm btn-link p-0" onclick="showPhoneHistory('vignette')">
+                        <i class="fas fa-clock-rotate-left me-1"></i>Historique
+                    </button>
+                </div>
+                <div class="card-body">
+                    <label class="form-label fw-semibold">Numéro de destination</label>
+                    <input type="tel" class="form-control mb-3" id="vignette-phone" placeholder="Ex: 3123456">
+
+                    <button class="btn btn-primary" onclick="savePaymentPhone('vignette')">
+                        <i class="fas fa-save me-2"></i>Enregistrer
+                    </button>
+
+                    <div id="vignette-phone-msg" class="mt-3 d-none"></div>
+                    <div id="vignette-phone-meta" class="text-muted small mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Historique des numéros -->
+<div class="modal fade" id="phoneHistoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-clock-rotate-left me-2"></i>Historique <span id="phone-history-title"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Ancien numéro</th>
+                                <th>Nouveau numéro</th>
+                                <th>Par</th>
+                            </tr>
+                        </thead>
+                        <tbody id="phone-history-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation du changement de numéro -->
+<div class="modal fade" id="phoneConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-shield-halved me-2"></i>Code de confirmation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">Un code de confirmation a été envoyé par email à l'adresse de validation configurée. Saisissez-le pour appliquer le changement.</p>
+                <input type="text" class="form-control text-center" id="phone-confirm-code" maxlength="6" inputmode="numeric" placeholder="000000" style="font-size:1.4rem; letter-spacing:0.3rem;">
+                <div id="phone-confirm-error" class="alert alert-danger mt-3 d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" id="phone-confirm-submit" onclick="confirmPendingPhoneChange()">
+                    <i class="fas fa-check me-1"></i>Confirmer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const PAYMENT_PHONE_FIELDS = {
+        fine: { inputId: 'fine-phone', dataKey: 'fine_phone' },
+        vignette: { inputId: 'vignette-phone', dataKey: 'vignette_phone' },
+    };
+
+    async function loadPaymentSettings() {
+        try {
+            const res = await fetch('/api/vehicles/payment-settings', { credentials: 'include' });
+            const data = await res.json();
+            document.getElementById('fine-phone').value = data.fine_phone || '';
+            document.getElementById('vignette-phone').value = data.vignette_phone || '';
+            if (data.fine_phone_updated_at) {
+                document.getElementById('fine-phone-meta').textContent =
+                    `Dernière mise à jour : ${data.fine_phone_updated_at}${data.fine_phone_updated_by ? ' par ' + data.fine_phone_updated_by : ''}`;
+            }
+            if (data.vignette_phone_updated_at) {
+                document.getElementById('vignette-phone-meta').textContent =
+                    `Dernière mise à jour : ${data.vignette_phone_updated_at}${data.vignette_phone_updated_by ? ' par ' + data.vignette_phone_updated_by : ''}`;
+            }
+        } catch (e) {
+            console.error('Erreur chargement paramètres paiements:', e);
+        }
+    }
+
+    let pendingPhoneChange = null; // { type, changeId }
+
+    async function savePaymentPhone(type) {
+        const field = PAYMENT_PHONE_FIELDS[type];
+        const msg = document.getElementById(`${field.inputId}-msg`);
+        msg.classList.add('d-none');
+        try {
+            const res = await fetch('/api/vehicles/payment-settings', {
+                method: 'PUT',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    [field.dataKey]: document.getElementById(field.inputId).value,
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erreur lors de l\'enregistrement');
+
+            if (data.pending) {
+                pendingPhoneChange = { type, changeId: data.change_id };
+                document.getElementById('phone-confirm-code').value = '';
+                document.getElementById('phone-confirm-error').classList.add('d-none');
+                new bootstrap.Modal(document.getElementById('phoneConfirmModal')).show();
+                return;
+            }
+
+            msg.className = 'alert alert-success mt-3';
+            msg.textContent = data.message || 'Numéro enregistré.';
+            msg.classList.remove('d-none');
+            loadPaymentSettings();
+        } catch (e) {
+            msg.className = 'alert alert-danger mt-3';
+            msg.textContent = e.message || 'Erreur lors de l\'enregistrement';
+            msg.classList.remove('d-none');
+        }
+    }
+
+    async function confirmPendingPhoneChange() {
+        if (!pendingPhoneChange) return;
+        const errBox = document.getElementById('phone-confirm-error');
+        errBox.classList.add('d-none');
+        const code = document.getElementById('phone-confirm-code').value.trim();
+
+        try {
+            const res = await fetch('/api/vehicles/payment-settings/confirm', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ change_id: pendingPhoneChange.changeId, code })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Code incorrect.');
+
+            const field = PAYMENT_PHONE_FIELDS[pendingPhoneChange.type];
+            const msg = document.getElementById(`${field.inputId}-msg`);
+            msg.className = 'alert alert-success mt-3';
+            msg.textContent = data.message || 'Changement confirmé.';
+            msg.classList.remove('d-none');
+
+            bootstrap.Modal.getInstance(document.getElementById('phoneConfirmModal')).hide();
+            pendingPhoneChange = null;
+            loadPaymentSettings();
+        } catch (e) {
+            errBox.textContent = e.message;
+            errBox.classList.remove('d-none');
+        }
+    }
+
+    const PHONE_HISTORY_LABELS = {
+        fine: 'Amendes',
+        vignette: 'Vignette',
+    };
+
+    async function showPhoneHistory(type) {
+        const field = PAYMENT_PHONE_FIELDS[type];
+        document.getElementById('phone-history-title').textContent = `— ${PHONE_HISTORY_LABELS[type]}`;
+        const tbody = document.getElementById('phone-history-tbody');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>';
+
+        const modal = new bootstrap.Modal(document.getElementById('phoneHistoryModal'));
+        modal.show();
+
+        try {
+            const res = await fetch(`/api/vehicles/payment-settings/history?field=${field.dataKey}`, { credentials: 'include' });
+            const entries = await res.json();
+            if (!Array.isArray(entries) || entries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Aucun changement enregistré.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = entries.map(e => `
+                <tr>
+                    <td>${e.changed_at || '—'}</td>
+                    <td>${e.old_value}</td>
+                    <td>${e.new_value}</td>
+                    <td>${e.changed_by || '—'}</td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Erreur de chargement.</td></tr>';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadPaymentSettings);
+</script>
+{% endblock %}

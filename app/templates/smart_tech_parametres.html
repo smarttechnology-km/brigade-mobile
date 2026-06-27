@@ -372,34 +372,21 @@
             </div>
         </div>
 
-        <!-- ── Paramètres de l'application ── -->
+        <!-- ── Paramètres Paiements Mobile ── -->
         <div class="col-12 col-lg-4 d-flex flex-column">
             <div class="param-card flex-grow-1">
                 <div class="param-card-title">
-                    <i class="fas fa-cog" style="color:var(--st-purple);"></i>Paramètres de l'application
+                    <i class="fas fa-mobile-screen-button" style="color:var(--st-purple);"></i>Paramètres Paiements Mobile
                 </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Nom de l'application</label>
-                    <input type="text" id="app-name" class="form-control" maxlength="120"
-                           value="{{ app_name }}" placeholder="SmartTech Brigade">
-                </div>
+                <div class="param-subtitle mb-3">Numéro Huri Money qui reçoit les recettes de renouvellement de code QR (paiements via l'app citoyen).</div>
 
                 <div class="mb-3">
-                    <label class="form-label">Île principale</label>
-                    <select id="app-island" class="form-select">
-                        {% for isle in ['Nationale', 'Grande Comore', 'Anjouan', 'Moheli'] %}
-                        <option value="{{ isle }}" {% if app_island == isle %}selected{% endif %}>{{ isle }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Numéro de contact</label>
+                    <label class="form-label">🔳 Renouvellement Code QR</label>
                     <div class="input-group">
                         <span class="input-group-text"><i class="fas fa-phone"></i></span>
-                        <input type="text" id="app-contact" class="form-control" maxlength="60"
-                               value="{{ app_contact }}" placeholder="+269 XXX XX XX">
+                        <input type="tel" id="qr-renewal-destination-phone" class="form-control" maxlength="20"
+                               value="{{ qr_renewal_destination_phone }}" placeholder="Ex: 3123456">
                     </div>
                 </div>
 
@@ -769,18 +756,15 @@
     };
 
     window.saveAppSettings = function(){
-        const name    = document.getElementById('app-name').value.trim();
-        const island  = document.getElementById('app-island').value;
-        const contact = document.getElementById('app-contact').value.trim();
+        const phone = document.getElementById('qr-renewal-destination-phone').value.trim();
         const ok  = document.getElementById('app-alert-success');
         const err = document.getElementById('app-alert-error');
         ok.style.display = 'none';
         err.style.display = 'none';
-        if (!name){ err.textContent = 'Le nom de l\'application ne peut pas être vide.'; err.style.display=''; return; }
         fetch('/smart-tech/api/parametres', {
             method: 'PUT',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ app_name: name, app_island: island, app_contact: contact })
+            body: JSON.stringify({ qr_renewal_destination_phone: phone })
         })
         .then(function(r){ return r.json(); })
         .then(function(d){
