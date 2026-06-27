@@ -35,7 +35,7 @@
                     <label class="form-label fw-semibold">Numéro de destination</label>
                     <input type="tel" class="form-control mb-3" id="fine-phone" placeholder="Ex: 3123456">
 
-                    <button class="btn btn-primary" onclick="savePaymentPhone('fine')">
+                    <button class="btn btn-primary" id="fine-phone-save-btn" onclick="savePaymentPhone('fine')">
                         <i class="fas fa-save me-2"></i>Enregistrer
                     </button>
 
@@ -57,7 +57,7 @@
                     <label class="form-label fw-semibold">Numéro de destination</label>
                     <input type="tel" class="form-control mb-3" id="vignette-phone" placeholder="Ex: 3123456">
 
-                    <button class="btn btn-primary" onclick="savePaymentPhone('vignette')">
+                    <button class="btn btn-primary" id="vignette-phone-save-btn" onclick="savePaymentPhone('vignette')">
                         <i class="fas fa-save me-2"></i>Enregistrer
                     </button>
 
@@ -122,8 +122,8 @@
 
 <script>
     const PAYMENT_PHONE_FIELDS = {
-        fine: { inputId: 'fine-phone', dataKey: 'fine_phone' },
-        vignette: { inputId: 'vignette-phone', dataKey: 'vignette_phone' },
+        fine: { inputId: 'fine-phone', dataKey: 'fine_phone', btnId: 'fine-phone-save-btn' },
+        vignette: { inputId: 'vignette-phone', dataKey: 'vignette_phone', btnId: 'vignette-phone-save-btn' },
     };
 
     async function loadPaymentSettings() {
@@ -150,7 +150,13 @@
     async function savePaymentPhone(type) {
         const field = PAYMENT_PHONE_FIELDS[type];
         const msg = document.getElementById(`${field.inputId}-msg`);
+        const btn = document.getElementById(field.btnId);
         msg.classList.add('d-none');
+
+        const originalBtnHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Envoi du code de confirmation...';
+
         try {
             const res = await fetch('/api/vehicles/payment-settings', {
                 method: 'PUT',
@@ -179,6 +185,9 @@
             msg.className = 'alert alert-danger mt-3';
             msg.textContent = e.message || 'Erreur lors de l\'enregistrement';
             msg.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalBtnHtml;
         }
     }
 
