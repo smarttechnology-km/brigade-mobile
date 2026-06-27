@@ -452,6 +452,8 @@ def create_app():
                         'lieu_naissance':        "ALTER TABLE driver_licenses ADD COLUMN lieu_naissance VARCHAR(150)",
                         'centre_immatriculation':"ALTER TABLE driver_licenses ADD COLUMN centre_immatriculation VARCHAR(150)",
                         'type_permis':           "ALTER TABLE driver_licenses ADD COLUMN type_permis VARCHAR(20) NOT NULL DEFAULT 'permanent'",
+                        'registered_phone':      "ALTER TABLE driver_licenses ADD COLUMN registered_phone VARCHAR(20)",
+                        'registered_at':         "ALTER TABLE driver_licenses ADD COLUMN registered_at DATETIME",
                     }
                     for col, sql in dl_col_defs.items():
                         if col not in dl_cols:

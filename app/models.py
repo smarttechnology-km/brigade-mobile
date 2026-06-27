@@ -1148,6 +1148,10 @@ class DriverLicense(db.Model):
     created_by = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+    # Links this license to a citizen app account (VehicleOwner.phone is the stable
+    # identity across that person's vehicles), so it can show on their dashboard.
+    registered_phone = db.Column(db.String(20), nullable=True, unique=True, index=True)
+    registered_at = db.Column(db.DateTime, nullable=True)
 
     @property
     def is_expired(self):
@@ -1181,6 +1185,8 @@ class DriverLicense(db.Model):
             'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else '',
             'updated_at': self.updated_at.strftime('%d/%m/%Y %H:%M') if self.updated_at else '',
             'is_expired': self.is_expired,
+            'registered_phone': self.registered_phone or '',
+            'registered_at': self.registered_at.strftime('%d/%m/%Y %H:%M') if self.registered_at else '',
         }
 
 
