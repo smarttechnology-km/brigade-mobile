@@ -54,12 +54,13 @@
 
     /* ── Sections ── */
     .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .sections-stacked { grid-template-columns: 1fr; }
     .section { background: #f8faff; border: 1px solid #e8edf5; border-radius: 8px; padding: 16px 18px; }
-    .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #1a56db; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #dbeafe; }
+    .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #1a56db; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #dbeafe; }
     .field { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #e8edf5; }
     .field:last-child { border-bottom: none; }
-    .field-label { font-size: 11px; color: #6b7280; }
-    .field-value { font-size: 12px; font-weight: 600; color: #1a1a2e; text-align: right; max-width: 55%; }
+    .field-label { font-size: 13px; color: #6b7280; }
+    .field-value { font-size: 14px; font-weight: 600; color: #1a1a2e; text-align: right; max-width: 55%; }
 
     /* ── Categories ── */
     .cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
@@ -148,7 +149,7 @@
     </div>
 
     <!-- Info sections -->
-    <div class="sections">
+    <div class="sections{{ ' sections-stacked' if (force_temporaire or lic.type_permis == 'temporaire') else '' }}">
 
       <div class="section">
         <div class="section-title">Informations personnelles</div>
@@ -196,10 +197,7 @@
 
   <!-- Footer -->
   <div class="doc-footer">
-    <div class="doc-footer-left">
-      Émis par : <strong>{{ lic.created_by or '—' }}</strong>
-      {% if lic.created_at %} · {{ lic.created_at.strftime('%d/%m/%Y') }}{% endif %}
-    </div>
+    <div class="doc-footer-left"></div>
     <div class="doc-footer-right">
       Document généré le {{ '' }}
       <script>document.write(new Date().toLocaleDateString('fr-FR'));</script>

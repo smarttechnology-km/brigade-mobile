@@ -116,11 +116,11 @@
             <a class="nav-link text-white {% if request.path.startswith('/licenses') %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
             {% endif %}
 
-            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}
+            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'policier')) %}
             <a class="nav-link text-white {% if request.path.startswith('/fines') and not request.path.startswith('/fines/receipt') and not request.path.startswith('/fines/stats') %}active{% endif %}" href="/fines"><i class="fas fa-file-invoice-dollar me-2"></i> Amendes</a>
-            {% if current_user.is_admin or (current_user.role == 'judiciaire') %}
-            <a class="nav-link text-white {% if request.path.startswith('/fines/stats') %}active{% endif %}" href="/fines/stats"><i class="fas fa-chart-bar me-2"></i> Stats Amendes</a>
             {% endif %}
+            {% if current_user.is_authenticated and current_user.is_admin %}
+            <a class="nav-link text-white {% if request.path.startswith('/fines/stats') %}active{% endif %}" href="/fines/stats"><i class="fas fa-chart-bar me-2"></i> Stats Amendes</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}
@@ -150,12 +150,12 @@
             <a class="nav-link text-white {% if request.path.startswith('/mobile-money-archive') %}active{% endif %}" href="/mobile-money-archive"><i class="fas fa-archive me-2"></i> Archive Paiements</a>
             {% endif %}
 
-            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}
+            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'policier')) %}
             <a class="nav-link text-white {% if request.path.startswith('/phones') and not request.path.startswith('/phone-') %}active{% endif %}" href="/phones"><i class="fas fa-mobile-alt me-2"></i> Téléphones</a>
             <a class="nav-link text-white {% if request.path.startswith('/phone-usage') %}active{% endif %}" href="/phone-usage"><i class="fas fa-history me-2"></i> Historique Téléphones</a>
-            {% if current_user.is_admin or (current_user.role == 'judiciaire') %}
-            <a class="nav-link text-white {% if request.path.startswith('/photo-submissions') %}active{% endif %}" href="/photo-submissions"><i class="fas fa-images me-2"></i> Soumission <span id="photo-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% endif %}
+            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+            <a class="nav-link text-white {% if request.path.startswith('/photo-submissions') %}active{% endif %}" href="/photo-submissions"><i class="fas fa-images me-2"></i> Soumission <span id="photo-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% endif %}
 
             {% if current_user.is_authenticated and current_user.is_admin %}
