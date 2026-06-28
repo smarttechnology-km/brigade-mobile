@@ -821,14 +821,14 @@ def reports_page():
 
 
 @main_bp.route('/fines')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','policier')
 def fines_page():
     """Page d'administration des amandes/fines"""
     return render_template('fines.html')
 
 
 @main_bp.route('/fines/stats')
-@roles_required('judiciaire')
+@roles_required()
 def fines_stats_page():
     """Page de statistiques des amandes"""
     return render_template('fines_stats.html')
@@ -3565,20 +3565,20 @@ def remove_exonerated_vehicle(exoneration_id):
 # ===== PHONES MANAGEMENT =====
 
 @main_bp.route('/phones')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','policier')
 def phones_page():
     """Display phones management page"""
     return render_template('phones.html')
 
 @main_bp.route('/phone-usage')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','policier')
 def phone_usage_page():
     """Display phone usage history page"""
     return render_template('phone_usage.html')
 
 
 @main_bp.route('/phone/<int:phone_id>/history')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','policier')
 def phone_history_page(phone_id):
     """Display usage history for a specific phone"""
     phone = Phone.query.get(phone_id)
