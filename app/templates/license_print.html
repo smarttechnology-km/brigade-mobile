@@ -66,6 +66,13 @@
     .cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
     .cat { background: #1a56db; color: #fff; border-radius: 4px; padding: 3px 9px; font-size: 12px; font-weight: 700; }
 
+    /* ── Categories detail section ── */
+    .cats-section { margin-top: 20px; }
+    .cats-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+    .cat-detail-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dashed #e8edf5; }
+    .cat-detail-text { font-size: 12.5px; color: #1a1a2e; font-weight: 600; }
+    .cat-detail-empty { color: #9ca3af; font-weight: 400; font-style: italic; }
+
     /* ── Points bar ── */
     .points-section { margin-top: 20px; background: #f8faff; border: 1px solid #e8edf5; border-radius: 8px; padding: 16px 18px; }
     .points-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -74,15 +81,32 @@
     .points-bar-bg { height: 10px; background: #e8edf5; border-radius: 10px; overflow: hidden; }
     .points-bar-fill { height: 100%; border-radius: 10px; transition: width .3s; }
 
+    /* ── Signature ── */
+    .signature-section { margin-top: 28px; display: flex; justify-content: flex-end; }
+    .signature-block { text-align: center; min-width: 230px; }
+    .signature-img { max-width: 210px; max-height: 64px; object-fit: contain; }
+    .signature-line { width: 210px; height: 50px; }
+    .signature-name { font-size: 13px; font-weight: 700; color: #1a3a6c; border-top: 1.5px solid #cbd5e1; padding-top: 6px; margin-top: 2px; }
+    .signature-title { font-size: 10.5px; color: #6b7280; margin-top: 2px; }
+
     /* ── Footer ── */
-    .doc-footer { border-top: 1px solid #e8edf5; padding: 14px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafbff; }
+    .doc-footer { border-top: 1px solid #e8edf5; padding: 14px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafbff; gap: 16px; }
     .doc-footer-left { font-size: 10px; color: #9ca3af; }
-    .doc-footer-right { font-size: 10px; color: #9ca3af; text-align: right; }
+    .doc-footer-right { font-size: 10px; color: #b91c1c; font-weight: 600; text-align: right; }
 
     @media print {
       body { background: #fff; padding: 0; }
       .toolbar { display: none; }
       .document { box-shadow: none; border-radius: 0; max-width: 100%; }
+      .doc-body { padding: 16px 28px; }
+      .identity { margin-bottom: 16px; }
+      .sections { gap: 14px; }
+      .section { padding: 12px 16px; }
+      .cats-section { margin-top: 14px; }
+      .points-section { margin-top: 14px; padding: 12px 16px; }
+      .signature-section { margin-top: 16px; page-break-inside: avoid; break-inside: avoid; }
+      .doc-body { padding-bottom: 70px; }
+      .doc-footer { position: fixed; left: 0; bottom: 0; width: 100%; }
     }
   </style>
 </head>
@@ -178,6 +202,27 @@
 
     </div>
 
+    <!-- Categories detail -->
+    {% if lic.categories %}
+    <div class="section cats-section">
+      <div class="section-title">Catégories autorisées</div>
+      <div class="cats-detail-grid">
+        {% for code in lic.categories.split(',') %}
+          {% set code = code.strip() %}
+          {% set details = category_details.get(code) %}
+          <div class="cat-detail-row">
+            <span class="cat">{{ code }}</span>
+            {% if details and (details.identifiant or details.date) %}
+              <span class="cat-detail-text">N° {{ details.identifiant or '—' }} · Obtenu le {{ details.date or '—' }}</span>
+            {% else %}
+              <span class="cat-detail-text cat-detail-empty">Aucun détail enregistré</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Points bar -->
     {% set pts = lic.points if lic.points is not none else settings.initial_points %}
     {% set max_pts = settings.initial_points %}
@@ -193,15 +238,25 @@
       </div>
     </div>
 
+    <!-- Signature -->
+    <div class="signature-section">
+      <div class="signature-block">
+        {% if settings.directeur_signature_filename %}
+          <img class="signature-img" src="/uploads/signatures/{{ settings.directeur_signature_filename }}" alt="Signature">
+        {% else %}
+          <div class="signature-line"></div>
+        {% endif %}
+        <div class="signature-name">{{ settings.directeur_general_name or '—' }}</div>
+        <div class="signature-title">Directeur Général des Routes et Transports Routiers</div>
+      </div>
+    </div>
+
   </div><!-- /doc-body -->
 
   <!-- Footer -->
   <div class="doc-footer">
-    <div class="doc-footer-left"></div>
-    <div class="doc-footer-right">
-      Document généré le {{ '' }}
-      <script>document.write(new Date().toLocaleDateString('fr-FR'));</script>
-    </div>
+    <div class="doc-footer-left">Valable uniquement pour les catégories surlignées ci-dessus.</div>
+    <div class="doc-footer-right">⚠ Toute falsification est passible de sanctions pénales.</div>
   </div>
 
 </div><!-- /document -->

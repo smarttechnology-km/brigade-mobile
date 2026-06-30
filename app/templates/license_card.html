@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Carte — {{ lic.license_number }}</title>
+  <link href="/static/css/fa-icons-embedded.css" rel="stylesheet">
   <style>
     html { color-scheme: light; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -29,42 +30,48 @@
     /* ── Card ── */
     .card {
       width: 560px; height: 340px;
-      border-radius: 14px; overflow: hidden;
-      box-shadow: 0 24px 56px rgba(0,0,0,.18), 0 4px 12px rgba(0,0,0,.1);
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 28px 64px rgba(13,30,80,.22), 0 6px 16px rgba(13,30,80,.12), 0 0 0 1px rgba(13,30,80,.06);
       display: flex; flex-direction: column;
       background: #fff;
+      position: relative;
     }
 
     /* Header band (full width) */
     .card-header {
-      background: linear-gradient(90deg, #0d1e50 0%, #1a3a8a 65%, #1d4ed8 100%);
-      height: 50px; padding: 0 18px;
+      background:
+        radial-gradient(ellipse 420px 120px at 12% -30%, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 60%),
+        linear-gradient(90deg, #0a1638 0%, #14306e 45%, #1d4ed8 100%);
+      height: 52px; padding: 0 18px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
-      border-bottom: 3px solid #f59e0b;
+      position: relative;
+      border-bottom: 3px solid transparent;
+      background-clip: padding-box;
+    }
+    .card-header::after {
+      content: '';
+      position: absolute; left: 0; right: 0; bottom: -3px; height: 3px;
+      background: linear-gradient(90deg, #b45309 0%, #fbbf24 35%, #fde68a 50%, #fbbf24 65%, #b45309 100%);
     }
     .card-header-left { display: flex; align-items: center; gap: 10px; }
-    .card-flag { font-size: 28px; line-height: 1; }
+    .card-flag { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.3)); }
     .card-title-block { display: flex; flex-direction: column; gap: 1px; }
-    .card-title  { font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .07em; text-transform: uppercase; }
-    .card-country{ font-size: 11px; color: rgba(255,255,255,.5); font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+    .card-title  { font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+    .card-country{ font-size: 10.5px; color: #fbbf24; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
     .card-stars {
-      display: flex; flex-direction: row; gap: 12px;
+      display: flex; flex-direction: row; gap: 11px;
       align-items: center; justify-content: center;
     }
     .card-stars span {
-      font-size: 18px; line-height: 1;
+      font-size: 16px; line-height: 1;
       filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
     }
     .card-arabic {
-      font-size: 14px; font-weight: 700; color: rgba(255,255,255,.85);
-      text-align: right; line-height: 1.5;
+      font-size: 13px; font-weight: 700; color: rgba(255,255,255,.88);
+      text-align: right; line-height: 1.45;
       font-family: 'Arial', sans-serif;
     }
-
-    /* Flag stripe */
-    .flag-stripe { display: flex; height: 5px; flex-shrink: 0; }
-    .flag-stripe div { flex: 1; }
 
     /* Body */
     .card-body { flex: 1; display: flex; overflow: hidden; }
@@ -72,77 +79,131 @@
     /* Photo column — vert du drapeau */
     .photo-col {
       width: 128px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-      padding: 12px 10px;
-      background: linear-gradient(170deg, #1a6b3c 0%, #155e32 100%);
-      border-right: 3px solid rgba(255,255,255,.15);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 12px 10px; gap: 9px;
+      background:
+        radial-gradient(ellipse 140px 90px at 50% 0%, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 70%),
+        linear-gradient(170deg, #1e7a44 0%, #0f4c28 100%);
+      position: relative;
+    }
+    .photo-col::after {
+      content: '';
+      position: absolute; top: 0; right: 0; bottom: 0; width: 3px;
+      background: linear-gradient(180deg, #fbbf24, #f5e50b 50%, #fbbf24);
+      opacity: .6;
+    }
+    .photo-col-num {
+      width: 100%; box-sizing: border-box;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .photo-col-num-lbl {
+      font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+      color: #fde68a;
+    }
+    .photo-col-num-val {
+      font-family: 'Courier New', monospace;
+      font-size: 14.5px; font-weight: 800; letter-spacing: .03em;
+      color: #fff; text-align: center; line-height: 1.15;
+      text-shadow: 0 1px 2px rgba(0,0,0,.3);
     }
     .photo-col img,
     .photo-col .no-photo {
-      width: 108px; height: 132px; border-radius: 6px;
+      width: 106px; height: 130px; border-radius: 7px;
       object-fit: cover;
-      border: 2px solid rgba(255,255,255,.55);
-      box-shadow: 0 4px 16px rgba(0,0,0,.35);
+      border: 2.5px solid #fbbf24;
+      box-shadow: 0 6px 18px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.5);
     }
     .photo-col .no-photo {
       background: rgba(255,255,255,.1); display: flex;
       align-items: center; justify-content: center; font-size: 2.8rem;
     }
 
-    /* Info column — 4 bandes du drapeau en fond */
+    /* Info column */
     .info-col {
       flex: 1; display: flex; flex-direction: column;
-      padding: 10px 16px 8px; gap: 7px;
+      padding: 11px 16px 8px; gap: 7px;
       position: relative;
-      background: linear-gradient(
-        to bottom,
-        rgba(252,209,22,.18) 0%,   rgba(252,209,22,.18) 25%,
-        rgba(255,255,255,1)  25%,  rgba(255,255,255,1)  50%,
-        rgba(190,0,39,.12)   50%,  rgba(190,0,39,.12)   75%,
-        rgba(58,117,196,.16) 75%,  rgba(58,117,196,.16) 100%
-      );
+      background:
+        repeating-linear-gradient(135deg, rgba(13,30,80,.025) 0px, rgba(13,30,80,.025) 1px, transparent 1px, transparent 9px),
+        linear-gradient(180deg, #fbfcff 0%, #f3f6fb 100%);
+    }
+    .info-col::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+      background: linear-gradient(180deg, #fcd116 0%, #fcd116 25%, #fff 25%, #fff 50%, #be0027 50%, #be0027 75%, #3a75c4 75%, #3a75c4 100%);
     }
     .info-col-watermark {
       position: absolute;
       left: 50%; top: 50%;
       transform: translate(-50%, -50%);
-      width: 230px; height: 230px;
+      width: 220px; height: 220px;
       object-fit: contain;
-      opacity: 0.15;
+      opacity: 0.08;
       pointer-events: none;
     }
-    .holder-name { font-size: 22px; font-weight: 800; color: #0d1e50; line-height: 1.1; }
-    .holder-sub  { font-size: 11px; color: #64748b; }
     .info-divider { height: 1px; background: transparent; margin: 1px 0; }
 
+    .identity-col { display: flex; flex-direction: column; flex: 1; justify-content: space-between; }
+    .id-row {
+      display: flex; align-items: baseline; gap: 8px;
+      padding: 2px 0;
+      border-bottom: 1px dotted rgba(15,23,42,.1);
+    }
+    .id-row:last-child { border-bottom: none; }
+    .id-lbl { font-size: 8.5px; text-transform: uppercase; letter-spacing: .06em; color: #7c8aa3; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
+    .id-val { font-size: 10px; font-weight: 700; color: #0f172a; line-height: 1.25; text-transform: uppercase; }
+    .id-pair-right { display: flex; align-items: baseline; gap: 8px; margin-left: 26px; flex-shrink: 0; }
+    .id-pair-right .id-lbl { width: 52px; }
+    .id-val.holder-name { font-weight: 800; text-transform: uppercase; color: #0a1638; letter-spacing: .02em; }
+
     .fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px 12px; }
-    .field-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; font-weight: 700; }
-    .field-val  { font-size: 15px; font-weight: 700; color: #0f172a; margin-top: 1px; line-height: 1.2; }
+    .field-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; font-weight: 700; }
+    .field-val  { font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 1px; line-height: 1.2; }
     .field-val.exp-ok  { color: #15803d; }
     .field-val.exp-bad { color: #dc2626; }
 
-    .cats { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+    .cats { display: grid; grid-template-columns: repeat(4, max-content); gap: 3px; margin-top: 1px; }
     .cat {
-      background: #1e3a8a; color: #fff;
-      border-radius: 4px; padding: 2px 9px;
-      font-size: 11px; font-weight: 800;
+      background: linear-gradient(160deg, #2348a3, #14306e);
+      color: #fff;
+      border-radius: 4px; padding: 1px 7px;
+      font-size: 9.5px; font-weight: 800; letter-spacing: .02em;
+      box-shadow: 0 1px 3px rgba(20,48,110,.4);
     }
 
     /* Footer */
     .card-footer {
-      background: #f8fafc; border-top: 1px solid #e2e8f0;
+      background: linear-gradient(180deg, #f8fafc 0%, #eef2f8 100%);
+      border-top: 1px solid #dbe3ef;
       padding: 0 16px 3px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
       overflow: visible;
+      position: relative;
+    }
+    .card-footer::before {
+      content: '';
+      position: absolute; left: 0; right: 0; top: -1px; height: 1px;
+      background: linear-gradient(90deg, transparent, #fbbf24 30%, #fbbf24 70%, transparent);
     }
     .footer-left { display: flex; flex-direction: column; gap: 1px; }
-    .footer-main { font-size: 12px; font-weight: 700; color: #1e3a8a; }
-    .footer-sub  { font-size: 10px; color: #94a3b8; }
+    .footer-main { font-size: 10.5px; font-weight: 800; color: #14306e; letter-spacing: .01em; }
+    .footer-sub  { font-size: 9px; color: #8896ab; }
+
+    /* Signature */
+    .footer-signature { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; padding: 0 12px; width: 116px; }
+    .sig-title {
+      font-size: 6.8px; color: #8896ab; text-transform: uppercase;
+      letter-spacing: .03em; text-align: center; line-height: 1.25;
+    }
+    .sig-mark { width: 108px; height: 28px; margin: 1px 0; object-fit: contain; }
+    .sig-name {
+      font-size: 9px; font-weight: 800; color: #14306e; white-space: nowrap;
+      text-align: center; border-top: 1px solid #b9c2d4; padding-top: 2px; width: 100%;
+    }
 
     /* QR */
-    .qr-wrap { margin-top: -30px; }
-    .qr-wrap img { width: 80px; height: 80px; display: block; border-radius: 5px; mix-blend-mode: multiply; }
+    .qr-wrap img { width: 56px; height: 56px; display: block; border-radius: 3px; mix-blend-mode: multiply; }
 
     /* ── Back of card ── */
     .card-separator {
@@ -157,61 +218,92 @@
 
     .card-back {
       width: 560px; height: 340px;
-      border-radius: 14px; overflow: hidden;
-      box-shadow: 0 24px 56px rgba(0,0,0,.18), 0 4px 12px rgba(0,0,0,.1);
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 28px 64px rgba(13,30,80,.22), 0 6px 16px rgba(13,30,80,.12), 0 0 0 1px rgba(13,30,80,.06);
       display: flex; flex-direction: column;
       background: #fff;
       margin-top: 40px;
+      position: relative;
     }
 
     /* Back header */
     .back-header {
-      background: linear-gradient(90deg, #0f2847 0%, #1e3a8a 50%, #1d4ed8 100%);
+      background:
+        radial-gradient(ellipse 420px 100px at 12% -30%, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 60%),
+        linear-gradient(90deg, #0a1638 0%, #14306e 50%, #1d4ed8 100%);
       padding: 9px 18px;
       display: flex; justify-content: space-between; align-items: center;
       flex-shrink: 0;
+      position: relative;
+    }
+    .back-header::after {
+      content: '';
+      position: absolute; left: 0; right: 0; bottom: -3px; height: 3px;
+      background: linear-gradient(90deg, #b45309 0%, #fbbf24 35%, #fde68a 50%, #fbbf24 65%, #b45309 100%);
     }
     .back-header-left { display: flex; flex-direction: column; gap: 1px; }
-    .back-header-title { font-size: 11px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; }
-    .back-header-sub   { font-size: 9.5px; color: rgba(255,255,255,.6); }
+    .back-header-title { font-size: 11px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+    .back-header-sub   { font-size: 9.5px; color: rgba(255,255,255,.62); }
     .back-header-right { text-align: right; }
     .back-header-num   { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; color: #fbbf24; letter-spacing: .1em; }
-    .back-header-holder{ font-size: 9px; color: rgba(255,255,255,.55); margin-top: 1px; }
+    .back-header-holder{ font-size: 9px; color: rgba(255,255,255,.58); margin-top: 1px; }
 
     /* Holder's categories highlight strip */
     .holder-cats-strip {
-      background: #eff6ff; border-bottom: 1px solid #bfdbfe;
+      background: linear-gradient(180deg, #eff5ff 0%, #e3edfb 100%);
+      border-bottom: 1px solid #c7d8f5;
       padding: 7px 18px;
       display: flex; align-items: center; gap: 10px;
       flex-shrink: 0;
     }
-    .holder-cats-lbl { font-size: 9px; font-weight: 700; color: #1e40af; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
+    .holder-cats-lbl { font-size: 9px; font-weight: 700; color: #14306e; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
     .holder-cats-list { display: flex; flex-wrap: wrap; gap: 5px; }
     .holder-cat-pill {
-      background: #1e40af; color: #fff;
+      background: linear-gradient(160deg, #2348a3, #14306e);
+      color: #fff;
       border-radius: 6px; padding: 3px 11px;
       font-size: 13px; font-weight: 800;
+      box-shadow: 0 1px 3px rgba(20,48,110,.4);
     }
     .holder-cats-none { font-size: 10px; color: #94a3b8; font-style: italic; }
 
     /* Reference table */
     .back-body {
-      flex: 1; padding: 9px 18px 6px;
-      display: grid; grid-template-columns: 1fr 1fr; gap: 5px 16px;
+      flex: 1; padding: 6px 18px 2px;
       overflow: hidden;
+      background-color: #fff;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46'%3E%3Cpath d='M-5 23 Q6.5 5 18 23 T41 23' stroke='%2314306e' stroke-opacity='0.07' fill='none' stroke-width='1'/%3E%3Cpath d='M-5 11.5 Q6.5 -6.5 18 11.5 T41 11.5' stroke='%2314306e' stroke-opacity='0.05' fill='none' stroke-width='1'/%3E%3Cpath d='M-5 34.5 Q6.5 16.5 18 34.5 T41 34.5' stroke='%2314306e' stroke-opacity='0.05' fill='none' stroke-width='1'/%3E%3C/svg%3E");
+      background-repeat: repeat;
     }
-    .cat-row { display: flex; gap: 7px; align-items: flex-start; }
+    .cat-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .cat-table thead th {
+      font-size: 8px; text-transform: uppercase; letter-spacing: .05em;
+      color: #7c8aa3; font-weight: 700; text-align: left;
+      padding: 0 8px 3px 0; border-bottom: 1.5px solid #c7d2e0;
+    }
+    .cat-table thead th.cat-th-id { text-align: center; }
+    .cat-table thead th.cat-th-date { text-align: center; }
+    .cat-table tbody td {
+      padding: 4.0px 8px 4.0px 0;
+      border-bottom: 1px dotted #e2e8f0;
+      font-size: 10px; color: #1e293b; vertical-align: middle; line-height: 1.3;
+    }
+    .cat-table tbody tr:last-child td { border-bottom: none; }
+    .cat-table tbody tr.cat-tr-other td { color: #aab3c0; }
     .cat-badge {
-      flex-shrink: 0; min-width: 28px;
-      border-radius: 5px; padding: 1px 6px;
-      font-size: 11px; font-weight: 800; text-align: center;
-      line-height: 1.7; border: 1.5px solid;
+      flex-shrink: 0; min-width: 24px; display: inline-block;
+      border-radius: 4px; padding: 0px 4px;
+      font-size: 10.5px; font-weight: 800; text-align: center;
+      line-height: 1.4; border: 1.5px solid;
     }
-    .cat-badge-owned { background: #1e40af; color: #fff; border-color: #1e40af; }
+    .cat-badge-owned { background: linear-gradient(160deg, #2348a3, #14306e); color: #fff; border-color: #14306e; }
     .cat-badge-other { background: transparent; color: #94a3b8; border-color: #e2e8f0; }
-    .cat-desc { font-size: 9.5px; line-height: 1.4; padding-top: 2px; }
-    .cat-desc-owned { color: #1e293b; font-weight: 600; }
-    .cat-desc-other { color: #94a3b8; }
+    .cat-icon-table { font-size: 12px; color: #14306e; margin-right: 4px; }
+    .cat-tr-other .cat-icon-table { color: #cbd5e1; }
+    .cat-cell-id { font-weight: 700; text-align: center; }
+    .cat-cell-date { color: #64748b; text-align: center; }
+    .cat-cell-empty { font-style: italic; color: #aab3c0; }
 
     /* Back footer */
     .back-footer {
@@ -222,6 +314,49 @@
     }
     .back-footer-note { font-size: 8.5px; color: #94a3b8; }
     .back-footer-warn { font-size: 8.5px; color: #b91c1c; font-weight: 600; }
+
+    /* ── Variante "Professionnelle" (recto + verso) — thème bordeaux / or ── */
+    .card-pro .card-header,
+    .card-pro .back-header {
+      background:
+        radial-gradient(ellipse 420px 120px at 12% -30%, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 60%),
+        linear-gradient(90deg, #2b0a12 0%, #6b1029 45%, #9c1f3f 100%);
+    }
+    .card-pro .photo-col {
+      background:
+        radial-gradient(ellipse 140px 90px at 50% 0%, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 70%),
+        linear-gradient(170deg, #7a1530 0%, #3d0a18 100%);
+    }
+    .card-pro .cat,
+    .card-pro .holder-cat-pill,
+    .card-pro .cat-badge-owned {
+      background: linear-gradient(160deg, #9c1f3f, #6b1029);
+      box-shadow: 0 1px 3px rgba(107,16,41,.4);
+    }
+    .card-pro .cat-badge-owned { border-color: #6b1029; }
+    .card-pro .cat-icon-table { color: #7a1530; }
+    .card-pro .holder-cats-strip {
+      background: linear-gradient(180deg, #fdf2f4 0%, #fbe4e8 100%);
+      border-bottom-color: #f3c7d1;
+    }
+    .card-pro .holder-cats-lbl { color: #7a1530; }
+    .card-pro .card-footer,
+    .card-pro .back-footer {
+      background: linear-gradient(180deg, #fdf2f4 0%, #fbe4e8 100%);
+      border-top-color: #f3c7d1;
+    }
+    .card-pro .info-col {
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='70'%3E%3Cdefs%3E%3Cpath id='w1' d='M-130.0 20 Q-97.5 11.0 -65.0 20 Q-32.5 29.0 0.0 20 Q32.5 11.0 65.0 20 Q97.5 29.0 130.0 20 Q162.5 11.0 195.0 20 Q227.5 29.0 260.0 20 Q292.5 11.0 325.0 20 Q357.5 29.0 390.0 20 Q422.5 11.0 455.0 20 Q487.5 29.0 520.0 20'/%3E%3Cpath id='w2' d='M-65.0 50 Q-32.5 41.0 0.0 50 Q32.5 59.0 65.0 50 Q97.5 41.0 130.0 50 Q162.5 59.0 195.0 50 Q227.5 41.0 260.0 50 Q292.5 59.0 325.0 50 Q357.5 41.0 390.0 50 Q422.5 59.0 455.0 50 Q487.5 41.0 520.0 50 Q552.5 59.0 585.0 50'/%3E%3C/defs%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w1'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w2'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3C/svg%3E"),
+        linear-gradient(180deg, #fbfcff 0%, #f3f6fb 100%);
+      background-repeat: repeat, no-repeat;
+    }
+    .card-pro .back-body {
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='70'%3E%3Cdefs%3E%3Cpath id='w1' d='M-130.0 20 Q-97.5 11.0 -65.0 20 Q-32.5 29.0 0.0 20 Q32.5 11.0 65.0 20 Q97.5 29.0 130.0 20 Q162.5 11.0 195.0 20 Q227.5 29.0 260.0 20 Q292.5 11.0 325.0 20 Q357.5 29.0 390.0 20 Q422.5 11.0 455.0 20 Q487.5 29.0 520.0 20'/%3E%3Cpath id='w2' d='M-65.0 50 Q-32.5 41.0 0.0 50 Q32.5 59.0 65.0 50 Q97.5 41.0 130.0 50 Q162.5 59.0 195.0 50 Q227.5 41.0 260.0 50 Q292.5 59.0 325.0 50 Q357.5 41.0 390.0 50 Q422.5 59.0 455.0 50 Q487.5 41.0 520.0 50 Q552.5 59.0 585.0 50'/%3E%3C/defs%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w1'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w2'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3C/svg%3E");
+    }
+    .card-pro .back-header-num { color: #fbbf24; }
+    .cat-pro-value { color: #7a1530 !important; }
 
     @media print {
       body { background: #fff; padding: 0; justify-content: flex-start; padding-top: 20px; }
@@ -254,7 +389,10 @@
   </button>
 </div>
 
-<div class="card">
+{% set holder_cats = lic.categories.split(',') | map('trim') | list if lic.categories else [] %}
+{% set is_pro = 'P' in holder_cats %}
+
+<div class="card{{ ' card-pro' if is_pro else '' }}">
 
   <!-- Header pleine largeur -->
   <div class="card-header">
@@ -283,60 +421,71 @@
       {% else %}
         <div class="no-photo">👤</div>
       {% endif %}
+      <div class="photo-col-num">
+        <span class="photo-col-num-lbl">N° Permis</span>
+        <span class="photo-col-num-val">{{ lic.license_number or '—' }}</span>
+      </div>
     </div>
 
     <div class="info-col">
       <img class="info-col-watermark" src="/static/img/logo_comores.png" alt="">
       {% set is_exp = lic.expiry_date and lic.expiry_date < now_comoros().date() %}
 
-      <div class="holder-name">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
-      <div class="holder-sub">{{ lic.holder_island or '—' }}{% if lic.nationalite %} · {{ lic.nationalite }}{% endif %}</div>
-      <div class="info-divider"></div>
-
-      <div class="fields" style="margin-top:8px;">
-        <!-- Rangée 1 : dates -->
-        <div>
-          <div class="field-lbl">Naissance</div>
-          <div class="field-val">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</div>
+      <div class="identity-col">
+        <div class="id-row">
+          <span class="id-lbl">Nom</span>
+          <span class="id-val holder-name">{{ lic.holder_firstname or '' }}</span>
         </div>
-        <div>
-          <div class="field-lbl">Délivré le</div>
-          <div class="field-val">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</div>
+        <div class="id-row">
+          <span class="id-lbl">Prénom</span>
+          <span class="id-val">{{ lic.holder_name }}</span>
         </div>
-        <div>
-          <div class="field-lbl">N° Immatriculation</div>
-          <div class="field-val">{{ lic.license_number or '—' }}</div>
+        <div class="id-row">
+          <span class="id-lbl">Naissance</span>
+          <span class="id-val">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span>
         </div>
-        <!-- Rangée 2 : identité -->
-        <div>
-          <div class="field-lbl">Lieu de naissance</div>
-          <div class="field-val">{{ lic.lieu_naissance or '—' }}</div>
+        <div class="id-row">
+          <span class="id-lbl">Lieu de naissance</span>
+          <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.lieu_naissance or '—' }}</span>
+          <div class="id-pair-right">
+            <span class="id-lbl">Sexe</span>
+            <span class="id-val">{{ 'M' if lic.sexe == 'masculin' else ('F' if lic.sexe == 'feminin' else '—') }}</span>
+          </div>
         </div>
-        <div>
-          <div class="field-lbl">Sexe</div>
-          <div class="field-val">{{ 'M' if lic.sexe == 'masculin' else ('F' if lic.sexe == 'feminin' else '—') }}</div>
+        <div class="id-row">
+          <span class="id-lbl">Adresse</span>
+          <span class="id-val">{{ lic.holder_address or '—' }}</span>
         </div>
-        <div>
-          <div class="field-lbl">Centre de</div>
-          <div class="field-val">{{ lic.centre_immatriculation.replace('Centre de ', '') if lic.centre_immatriculation else '—' }}</div>
+        <div class="id-row">
+          <span class="id-lbl">Délivré le</span>
+          <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
+          <div class="id-pair-right">
+            <span class="id-lbl">Expire le</span>
+            <span class="id-val">{{ lic.expiry_date.strftime('%d/%m/%Y') if lic.expiry_date else '—' }}</span>
+          </div>
         </div>
-        <!-- Rangée 3 : adresse + catégories -->
-        <div>
-          <div class="field-lbl">Adresse</div>
-          <div class="field-val">{{ lic.holder_address or '—' }}</div>
-        </div>
-        <div>
-          <div class="field-lbl">Type</div>
-          <div class="field-val">{{ 'Temporaire' if lic.type_permis == 'temporaire' else 'Permanent' }}</div>
+        <div class="id-row">
+          <span class="id-lbl">Centre de</span>
+          <span class="id-val">{{ lic.centre_immatriculation.replace('Centre de ', '') if lic.centre_immatriculation else '—' }}</span>
         </div>
         {% if lic.categories %}
-        <div>
-          <div class="field-lbl">Catégories</div>
-          <div class="cats">
-            {% for cat in lic.categories.split(',') %}
-              <span class="cat">{{ cat.strip() }}</span>
+        {% set display_cats = (lic.categories.split(',') | map('trim') | reject('equalto', 'P') | list) if is_pro else (lic.categories.split(',') | map('trim') | list) %}
+        <div class="id-row">
+          <span class="id-lbl">Catégories</span>
+          <div class="cats"{% if is_pro %} style="width:115px; flex-shrink:0;"{% endif %}>
+            {% for cat in display_cats %}
+              <span class="cat">{{ cat }}</span>
             {% endfor %}
+            {% if is_pro and not display_cats %}
+              <span class="id-val" style="font-weight:400; color:#94a3b8;">—</span>
+            {% endif %}
           </div>
+          {% if is_pro %}
+          <div class="id-pair-right">
+            <span class="id-lbl">Type</span>
+            <span class="id-val cat-pro-value" style="font-size:8.5px; letter-spacing:0;">Professionnel</span>
+          </div>
+          {% endif %}
         </div>
         {% endif %}
       </div>
@@ -347,8 +496,20 @@
   <!-- Footer -->
   <div class="card-footer">
     <div class="footer-left">
-      <div class="footer-main">DIRECTION GENERAL DES ROUTES ET DES TRANSPORTS ROUTIERS</div>
-      <div class="footer-sub">Délivré par le Chef du Centre d'immatriculation</div>
+      <div class="footer-main">DIRECTION GENERALE DES ROUTES ET TRANSPORTS ROUTIERS</div>
+      <div class="footer-sub">DÉLIVRÉ PAR LE CHEF DU CENTRE D'IMMATRICULATION</div>
+    </div>
+    <div class="footer-signature">
+      <div class="sig-title">Directeur Général</div>
+      {% if settings.directeur_signature_filename %}
+        <img class="sig-mark" src="/uploads/signatures/{{ settings.directeur_signature_filename }}" alt="Signature">
+      {% else %}
+        <svg class="sig-mark" viewBox="0 0 100 26" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4,18 C10,6 14,24 20,14 C25,6 28,20 34,11 C40,3 44,22 51,12 C57,4 60,19 67,9 C72,3 76,16 82,10 C86,6 90,12 95,8"
+                stroke="#14306e" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      {% endif %}
+      <div class="sig-name">{{ settings.directeur_general_name or '' }}</div>
     </div>
     <div class="qr-wrap">
       {% if qr_data_uri is defined and qr_data_uri %}
@@ -362,15 +523,13 @@
 </div>
 
 
-{% set holder_cats = lic.categories.split(',') | map('trim') | list if lic.categories else [] %}
-
-<div class="card-back">
+<div class="card-back{{ ' card-pro' if is_pro else '' }}">
 
   <!-- Header -->
   <div class="back-header">
     <div class="back-header-left">
       <div class="back-header-title">Catégories de véhicules autorisées</div>
-      <div class="back-header-sub">DIRECTION GENERAL DES ROUTES ET DES TRANSPORTS ROUTIERS</div>
+      <div class="back-header-sub">DIRECTION GENERALE DES ROUTES ET TRANSPORTS ROUTIERS</div>
     </div>
     <div class="back-header-right">
       <div class="back-header-num">{{ lic.license_number }}</div>
@@ -395,22 +554,45 @@
   <!-- Reference table -->
   <div class="back-body">
     {% set all_cats = [
-      ('A',  'Motocyclette avec ou sans side-car à moteur de plus de 123 cm³'),
-      ('C',  'Véhicules affectés au transport de marchandises ou matériel de plus de 3 500 kg PTAC'),
-      ('A1', 'Vélomoteur et véhicule à moteur de cylindrée 50 cm³ sans excéder 123 cm³'),
-      ('D',  'Véhicules affectés au transport de personnes comportant plus de 9 places assises'),
-      ('A2', 'Cyclomoteurs et véhicules à moteur dont la cylindrée ne dépasse pas 50 cm³'),
-      ('E',  'Véhicules des catégories B, C, D ou F attelés d\'une remorque de plus de 750 kg PTAC'),
-      ('B',  'Véhicule de moins de 10 places et d\'un poids total autorisé en charge n\'excédant pas 3 500 kg'),
-      ('F',  'Véhicules des catégories A, A1, A2 ou B spécialement aménagés')
+      ('A',  'fa-motorcycle'),
+      ('A1', 'fa-motorcycle'),
+      ('A2', 'fa-motorcycle'),
+      ('B',  'fa-car'),
+      ('C',  'fa-truck'),
+      ('D',  'fa-bus'),
+      ('E',  'fa-caravan'),
+      ('F',  'fa-wheelchair')
     ] %}
-    {% for code, desc in all_cats %}
-      {% set owned = code in holder_cats %}
-      <div class="cat-row">
-        <span class="cat-badge {{ 'cat-badge-owned' if owned else 'cat-badge-other' }}">{{ code }}</span>
-        <span class="cat-desc {{ 'cat-desc-owned' if owned else 'cat-desc-other' }}">{{ desc }}</span>
-      </div>
-    {% endfor %}
+    <table class="cat-table">
+      <colgroup>
+        <col style="width:19%">
+        <col style="width:46%">
+        <col style="width:35%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Cat.</th>
+          <th class="cat-th-id">N° d'identifiant</th>
+          <th class="cat-th-date">Date d'obtention</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for code, icon_class in all_cats %}
+          {% set owned = code in holder_cats %}
+          {% set details = category_details.get(code) %}
+          <tr class="{{ 'cat-tr-owned' if owned else 'cat-tr-other' }}">
+            <td><span class="cat-badge {{ 'cat-badge-owned' if owned else 'cat-badge-other' }}">{{ code }}</span></td>
+            {% if owned %}
+              <td class="cat-cell-id"><i class="fas {{ icon_class }} cat-icon-table"></i> {{ details.identifiant if details and details.identifiant else '—' }}</td>
+              <td class="cat-cell-date">{{ details.date if details and details.date else '—' }}</td>
+            {% else %}
+              <td class="cat-cell-id cat-cell-empty"><i class="fas {{ icon_class }} cat-icon-table"></i> —</td>
+              <td class="cat-cell-date cat-cell-empty">—</td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 
   <!-- Footer -->

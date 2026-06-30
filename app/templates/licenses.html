@@ -284,7 +284,7 @@
             <input type="date" id="f-issue_date" class="form-control">
           </div>
           <div class="col-md-4" id="expiry-date-wrap" style="display:none;">
-            <label class="form-label">Jusqu'au</label>
+            <label class="form-label" id="expiry-date-label">Jusqu'au</label>
             <input type="date" id="f-expiry_date" class="form-control">
           </div>
           <div class="col-12">
@@ -298,11 +298,21 @@
           </div>
           <div class="col-12">
             <label class="form-label">Catégories</label>
-            <div class="d-flex flex-wrap gap-2 mt-1" id="categories-checkboxes">
-              {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F'] %}
-              <div class="form-check form-check-inline">
-                <input class="form-check-input cat-checkbox" type="checkbox" id="cat-{{ cat }}" value="{{ cat }}">
-                <label class="form-check-label" for="cat-{{ cat }}">{{ cat }}</label>
+            <div class="d-flex flex-column gap-2 mt-1" id="categories-checkboxes">
+              {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'P'] %}
+              <div class="border rounded p-2">
+                <div class="form-check">
+                  <input class="form-check-input cat-checkbox" type="checkbox" id="cat-{{ cat }}" value="{{ cat }}" onchange="onCategoryToggle('{{ cat }}')">
+                  <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}{% if cat == 'P' %} <span class="text-muted fw-normal">(Professionnelle)</span>{% endif %}</label>
+                </div>
+                <div class="row g-2 mt-1 cat-details" id="cat-details-{{ cat }}" style="display:none;">
+                  <div class="col-sm-6">
+                    <input type="text" class="form-control form-control-sm cat-identifiant" id="cat-identifiant-{{ cat }}" placeholder="N° d'identifiant">
+                  </div>
+                  <div class="col-sm-6">
+                    <input type="date" class="form-control form-control-sm cat-date" id="cat-date-{{ cat }}">
+                  </div>
+                </div>
               </div>
               {% endfor %}
             </div>
@@ -362,10 +372,11 @@
                     <th>Déduction</th>
                     <th>Après</th>
                     <th>Par</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody id="view-history-tbody">
-                  <tr><td colspan="6" class="text-center text-muted">Chargement…</td></tr>
+                  <tr><td colspan="7" class="text-center text-muted">Chargement…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -440,10 +451,32 @@
                   <span class="input-group-text">mois</span>
                 </div>
               </div>
-              <div class="col-md-4 text-end">
-                <button type="button" class="btn btn-outline-primary" id="settings-save-btn" onclick="saveSettings()">
-                  <i class="fas fa-save me-1"></i>Enregistrer
-                </button>
+              <div class="col-md-4">
+                <label class="form-label small">Validité Permanent par défaut</label>
+                <div class="input-group">
+                  <input type="number" id="s-permanent_years" class="form-control" min="1" max="50">
+                  <span class="input-group-text">ans</span>
+                </div>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label small">Nom du Directeur Général (carte digitale)</label>
+                <input type="text" id="s-directeur_general_name" class="form-control" placeholder="Ex : Ahmed Abdou">
+              </div>
+              <div class="col-md-8">
+                <label class="form-label small d-block">Signature du Directeur Général</label>
+                <div class="d-flex align-items-center gap-3">
+                  <div id="signature-preview-wrap" style="width:140px;height:50px;border:1px solid #dee2e6;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;overflow:hidden;">
+                    <img id="signature-preview-img" src="" alt="" style="max-width:100%;max-height:100%;display:none;">
+                    <span id="signature-preview-empty" class="text-muted small">Aucune</span>
+                  </div>
+                  <input type="file" id="s-signature-file" accept="image/png,image/jpeg,image/webp" class="form-control" style="max-width:220px;" onchange="uploadDirecteurSignature(this)">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openSignaturePad()" title="Signer directement à l'écran">
+                    <i class="fas fa-signature me-1"></i>Signer à l'écran
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-danger" id="signature-remove-btn" style="display:none;" onclick="removeDirecteurSignature()">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
               </div>
             </div>
             <p class="text-muted small mb-3">
@@ -542,8 +575,37 @@
 
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-outline-primary" id="settings-save-btn" onclick="saveSettings()">
+          <i class="fas fa-save me-1"></i>Enregistrer
+        </button>
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- ── Signature à l'écran Modal ── -->
+<div class="modal fade" id="signaturePadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-signature me-2"></i>Signer à l'écran</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">Dessinez la signature avec la souris, le trackpad ou le doigt (écran tactile).</p>
+        <canvas id="signature-pad-canvas" width="500" height="130" style="width:100%;aspect-ratio:108/28;border:1px solid #dee2e6;border-radius:8px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
+        <p class="text-muted small mt-1 mb-0">Le cadre a les proportions de l'emplacement sur la carte, pour que la signature s'affiche à la bonne taille.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" onclick="clearSignaturePad()">
+          <i class="fas fa-eraser me-1"></i>Effacer
+        </button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="signature-pad-save-btn" onclick="saveSignaturePad()">
+          <i class="fas fa-save me-1"></i>Enregistrer la signature
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -567,6 +629,42 @@
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
         <button type="button" class="btn btn-danger" id="reduction-confirm-btn" onclick="applyReduction()">
           <i class="fas fa-minus-circle me-1"></i>Appliquer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Réclamation Modal ── -->
+<div class="modal fade" id="reclamationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-gavel text-warning me-2"></i>Réclamation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3" id="reclamation-info"></p>
+        <div class="btn-group w-100 mb-3" role="group">
+          <input type="radio" class="btn-check" name="reclamation-action" id="reclamation-action-change" value="change_reason" checked onchange="onReclamationActionChange()">
+          <label class="btn btn-outline-primary btn-sm" for="reclamation-action-change">Changer le motif</label>
+          <input type="radio" class="btn-check" name="reclamation-action" id="reclamation-action-cancel" value="cancel" onchange="onReclamationActionChange()">
+          <label class="btn btn-outline-danger btn-sm" for="reclamation-action-cancel">Annuler le retrait</label>
+        </div>
+        <div id="reclamation-reason-wrap">
+          <label class="form-label fw-semibold">Nouveau motif</label>
+          <select id="reclamation-reason-select" class="form-select"></select>
+        </div>
+        <div id="reclamation-cancel-note" class="alert alert-warning small mb-0" style="display:none;">
+          Les points seront restitués et cette infraction sera définitivement supprimée de l'historique.
+        </div>
+        <input type="hidden" id="reclamation-history-id">
+        <input type="hidden" id="reclamation-license-id">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-warning" id="reclamation-confirm-btn" onclick="submitReclamation()">
+          <i class="fas fa-check me-1"></i>Confirmer
         </button>
       </div>
     </div>
