@@ -306,11 +306,17 @@
                   <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}{% if cat == 'P' %} <span class="text-muted fw-normal">(Professionnelle)</span>{% endif %}</label>
                 </div>
                 <div class="row g-2 mt-1 cat-details" id="cat-details-{{ cat }}" style="display:none;">
-                  <div class="col-sm-6">
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-0">N° d'identifiant</label>
                     <input type="text" class="form-control form-control-sm cat-identifiant" id="cat-identifiant-{{ cat }}" placeholder="N° d'identifiant">
                   </div>
-                  <div class="col-sm-6">
-                    <input type="date" class="form-control form-control-sm cat-date" id="cat-date-{{ cat }}">
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-0">Date d'obtention</label>
+                    <input type="date" class="form-control form-control-sm cat-date" id="cat-date-{{ cat }}" onchange="autoFillCategoryExpiration('{{ cat }}')">
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-0">Date d'expiration</label>
+                    <input type="date" class="form-control form-control-sm cat-expiration" id="cat-expiration-{{ cat }}">
                   </div>
                 </div>
               </div>
@@ -426,6 +432,11 @@
             </button>
           </li>
           <li class="nav-item">
+            <button class="nav-link" id="tab-catvalidity-btn" data-bs-toggle="tab" data-bs-target="#tab-catvalidity" type="button">
+              <i class="fas fa-id-card me-1"></i>Validité des catégories
+            </button>
+          </li>
+          <li class="nav-item">
             <button class="nav-link" id="tab-reasons-btn" data-bs-toggle="tab" data-bs-target="#tab-reasons" type="button" onclick="loadReasons()">
               <i class="fas fa-minus-circle me-1"></i>Motifs de réduction
             </button>
@@ -528,6 +539,39 @@
               <button class="btn btn-sm btn-outline-warning" onclick="applyStatusRules()">
                 <i class="fas fa-sync-alt me-1"></i>Appliquer aux permis existants
               </button>
+            </div>
+          </div>
+
+          <!-- Validité des catégories -->
+          <div class="tab-pane" id="tab-catvalidity">
+            <p class="text-muted small mb-3">
+              <i class="fas fa-info-circle me-1"></i>Par défaut, une catégorie expire à la même date que la carte (selon le type de permis). Vous pouvez définir une durée de validité spécifique pour une catégorie.
+            </p>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr><th>Catégorie</th><th>Validité</th><th style="width:160px;">Durée</th></tr>
+                </thead>
+                <tbody>
+                  {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'P'] %}
+                  <tr>
+                    <td class="fw-semibold">{{ cat }}</td>
+                    <td>
+                      <select class="form-select form-select-sm cat-validity-mode" id="catval-mode-{{ cat }}" onchange="onCatValidityModeChange('{{ cat }}')">
+                        <option value="card">Même durée que la carte</option>
+                        <option value="custom">Durée personnalisée</option>
+                      </select>
+                    </td>
+                    <td>
+                      <div class="input-group input-group-sm" id="catval-years-wrap-{{ cat }}" style="display:none;">
+                        <input type="number" class="form-control cat-validity-years" id="catval-years-{{ cat }}" min="1" max="50" value="5">
+                        <span class="input-group-text">ans</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
           </div>
 

@@ -276,13 +276,19 @@
         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46'%3E%3Cpath d='M-5 23 Q6.5 5 18 23 T41 23' stroke='%2314306e' stroke-opacity='0.07' fill='none' stroke-width='1'/%3E%3Cpath d='M-5 11.5 Q6.5 -6.5 18 11.5 T41 11.5' stroke='%2314306e' stroke-opacity='0.05' fill='none' stroke-width='1'/%3E%3Cpath d='M-5 34.5 Q6.5 16.5 18 34.5 T41 34.5' stroke='%2314306e' stroke-opacity='0.05' fill='none' stroke-width='1'/%3E%3C/svg%3E");
       background-repeat: repeat;
     }
-    .cat-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .back-body-grid { display: flex; gap: 12px; height: 100%; }
+    .cat-legend { flex-shrink: 0; width: 152px; padding-top: 4px; display: flex; flex-direction: column; align-items: center; }
+    .cat-desc-list { display: flex; flex-direction: column; gap: 8px; }
+    .cat-desc-spacer { height: 4px; flex-shrink: 0; }
+    .cat-desc-item { display: flex; align-items: flex-start; gap: 4px; }
+    .cat-desc-code { font-size: 7px; font-weight: 800; color: #14306e; flex-shrink: 0; width: 14px; padding-top: 1px; }
+    .cat-desc-text { font-size: 6.5px; color: #475569; line-height: 1.3; }
+    .cat-table { flex: 1; min-width: 0; border-collapse: collapse; table-layout: fixed; }
     .cat-table thead th {
       font-size: 8px; text-transform: uppercase; letter-spacing: .05em;
       color: #7c8aa3; font-weight: 700; text-align: left;
       padding: 0 8px 3px 0; border-bottom: 1.5px solid #c7d2e0;
     }
-    .cat-table thead th.cat-th-id { text-align: center; }
     .cat-table thead th.cat-th-date { text-align: center; }
     .cat-table tbody td {
       padding: 4.0px 8px 4.0px 0;
@@ -299,7 +305,7 @@
     }
     .cat-badge-owned { background: linear-gradient(160deg, #2348a3, #14306e); color: #fff; border-color: #14306e; }
     .cat-badge-other { background: transparent; color: #94a3b8; border-color: #e2e8f0; }
-    .cat-icon-table { font-size: 12px; color: #14306e; margin-right: 4px; }
+    .cat-icon-table { font-size: 12px; color: #14306e; margin-left: 5px; }
     .cat-tr-other .cat-icon-table { color: #cbd5e1; }
     .cat-cell-id { font-weight: 700; text-align: center; }
     .cat-cell-date { color: #64748b; text-align: center; }
@@ -563,36 +569,54 @@
       ('E',  'fa-caravan'),
       ('F',  'fa-wheelchair')
     ] %}
-    <table class="cat-table">
-      <colgroup>
-        <col style="width:19%">
-        <col style="width:46%">
-        <col style="width:35%">
-      </colgroup>
-      <thead>
-        <tr>
-          <th>Cat.</th>
-          <th class="cat-th-id">N° d'identifiant</th>
-          <th class="cat-th-date">Date d'obtention</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for code, icon_class in all_cats %}
-          {% set owned = code in holder_cats %}
-          {% set details = category_details.get(code) %}
-          <tr class="{{ 'cat-tr-owned' if owned else 'cat-tr-other' }}">
-            <td><span class="cat-badge {{ 'cat-badge-owned' if owned else 'cat-badge-other' }}">{{ code }}</span></td>
-            {% if owned %}
-              <td class="cat-cell-id"><i class="fas {{ icon_class }} cat-icon-table"></i> {{ details.identifiant if details and details.identifiant else '—' }}</td>
-              <td class="cat-cell-date">{{ details.date if details and details.date else '—' }}</td>
-            {% else %}
-              <td class="cat-cell-id cat-cell-empty"><i class="fas {{ icon_class }} cat-icon-table"></i> —</td>
-              <td class="cat-cell-date cat-cell-empty">—</td>
-            {% endif %}
+    <div class="back-body-grid">
+      <div class="cat-legend">
+        <div class="cat-desc-list">
+          <div class="cat-desc-spacer"></div>
+          <div class="cat-desc-item"><span class="cat-desc-code">A</span><span class="cat-desc-text">Motocyclette avec ou sans side-car à moteur de plus de 123 cm³</span></div>
+          <div class="cat-desc-item"><span class="cat-desc-code">A1</span><span class="cat-desc-text">Vélomoteur et véhicule à moteur de cylindrée 50 cm³ sans excéder 123 cm³</span></div>
+          <div class="cat-desc-item"><span class="cat-desc-code">A2</span><span class="cat-desc-text">Cyclomoteurs et véhicules à moteur dont la cylindrée ne dépasse pas 50 cm³</span></div>
+          <div class="cat-desc-item"><span class="cat-desc-code">B</span><span class="cat-desc-text">Véhicule de moins de 10 places et d'un poids total autorisé en charge n'excédant pas 3 500 kg</span></div>
+          <div class="cat-desc-item"><span class="cat-desc-code">C</span><span class="cat-desc-text">Véhicules affectés au transport de marchandises ou matériel de plus de 3 500 kg PTAC</span></div>
+          <div class="cat-desc-item"><span class="cat-desc-code">D</span><span class="cat-desc-text">Véhicules affectés au transport de personnes comportant plus de 9 places assises</span></div>
+          <div class="cat-desc-item"><span class="cat-desc-code">E</span><span class="cat-desc-text">Véhicules des catégories B, C, D ou F attelés d'une remorque de plus de 750 kg PTAC</span></div>
+          <div class="cat-desc-item"><span class="cat-desc-code">F</span><span class="cat-desc-text">Véhicules des catégories A, A1, A2 ou B spécialement aménagés</span></div>
+        </div>
+      </div>
+      <table class="cat-table">
+        <colgroup>
+          <col style="width:30%">
+          <col style="width:35%">
+          <col style="width:35%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="cat-th-date">Catégorie</th>
+            <th class="cat-th-date">Date d'obtention</th>
+            <th class="cat-th-date">Date d'expiration</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for code, icon_class in all_cats %}
+            {% set owned = code in holder_cats %}
+            {% set details = category_details.get(code) %}
+            <tr class="{{ 'cat-tr-owned' if owned else 'cat-tr-other' }}">
+              <td class="cat-cell-id">
+                <span class="cat-badge {{ 'cat-badge-owned' if owned else 'cat-badge-other' }}">{{ code }}</span>
+                <i class="fas {{ icon_class }} cat-icon-table"></i>
+              </td>
+              {% if owned %}
+                <td class="cat-cell-date">{{ details.date if details and details.date else '—' }}</td>
+                <td class="cat-cell-date">{{ details.expiration if details and details.expiration else '—' }}</td>
+              {% else %}
+                <td class="cat-cell-date cat-cell-empty">—</td>
+                <td class="cat-cell-date cat-cell-empty">—</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Footer -->

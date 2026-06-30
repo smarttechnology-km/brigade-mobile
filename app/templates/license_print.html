@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Permis {{ lic.license_number }}</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <style>
     html { color-scheme: light; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,24 +16,27 @@
     .btn-print:hover { background: #1240a0; }
 
     /* ── Document card ── */
-    .document { max-width: 780px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.12); }
+    .document { max-width: 780px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.12); position: relative; }
 
     /* ── Header band ── */
     .doc-header { background: linear-gradient(135deg, #1a3a6c 0%, #1a56db 100%); color: #fff; padding: 22px 28px; display: flex; align-items: center; justify-content: space-between; }
     .doc-header-left { display: flex; align-items: center; gap: 14px; }
-    .doc-header-emblem { width: 52px; height: 52px; background: rgba(255,255,255,.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; border: 2px solid rgba(255,255,255,.3); }
+    .doc-header-flag { font-size: 28px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.3)); }
     .doc-header-text h1 { font-size: 16px; font-weight: 700; letter-spacing: .03em; }
     .doc-header-text p { font-size: 11px; opacity: .8; margin-top: 2px; letter-spacing: .08em; text-transform: uppercase; }
-    .doc-header-right { text-align: right; }
-    .doc-header-right .license-num { font-family: 'Courier New', monospace; font-size: 18px; font-weight: 700; letter-spacing: .1em; }
-    .doc-header-right .license-type { font-size: 11px; opacity: .75; margin-top: 4px; }
+    .doc-header-stars { display: flex; align-items: center; gap: 10px; font-size: 18px; }
+    .doc-header-stars span:nth-child(1) { color: #f5e50b; }
+    .doc-header-stars span:nth-child(2) { color: #fff; }
+    .doc-header-stars span:nth-child(3) { color: #e41414; }
+    .doc-header-stars span:nth-child(4) { color: #2a5ff3; }
+    .doc-header-arabic { text-align: right; font-size: 13px; font-weight: 700; color: rgba(255,255,255,.9); line-height: 1.45; }
 
     /* ── Body ── */
     .doc-body { padding: 28px; }
 
     /* ── Identity row ── */
-    .identity { display: flex; gap: 24px; margin-bottom: 28px; }
-    .identity-photo { flex-shrink: 0; }
+    .identity { display: flex; align-items: center; gap: 24px; margin-bottom: 28px; }
+    .identity-photo { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
     .identity-photo img,
     .identity-photo .photo-placeholder {
       width: 110px; height: 135px; object-fit: cover;
@@ -40,6 +44,13 @@
       display: flex; align-items: center; justify-content: center;
       background: #f5f7fb; color: #c0c8d8; font-size: 3.5rem;
     }
+    .identity-photo-num { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700; color: #1a3a6c; letter-spacing: .04em; }
+    .doc-watermark {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 480px; height: 480px; object-fit: contain;
+      opacity: .11; pointer-events: none; z-index: 0;
+    }
+    .doc-header, .doc-body { position: relative; z-index: 1; }
     .identity-info { flex: 1; }
     .identity-name { font-size: 22px; font-weight: 700; color: #1a3a6c; line-height: 1.2; }
     .identity-sub { font-size: 13px; color: #666; margin-top: 4px; }
@@ -55,31 +66,36 @@
     /* ── Sections ── */
     .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     .sections-stacked { grid-template-columns: 1fr; }
-    .section { background: #f8faff; border: 1px solid #e8edf5; border-radius: 8px; padding: 16px 18px; }
+    .section { background: rgba(248,250,255,.82); border: 1px solid #e8edf5; border-radius: 8px; padding: 16px 18px; }
     .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #1a56db; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #dbeafe; }
     .field { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #e8edf5; }
     .field:last-child { border-bottom: none; }
-    .field-label { font-size: 13px; color: #6b7280; }
-    .field-value { font-size: 14px; font-weight: 600; color: #1a1a2e; text-align: right; max-width: 55%; }
+    .field-label { font-size: 14.5px; color: #6b7280; }
+    .field-value { font-size: 15.5px; font-weight: 600; color: #1a1a2e; text-align: right; max-width: 55%; }
 
     /* ── Categories ── */
     .cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-    .cat { background: #1a56db; color: #fff; border-radius: 4px; padding: 3px 9px; font-size: 12px; font-weight: 700; }
+    .cat { background: #1a56db; color: #fff; border-radius: 4px; padding: 3px 9px; font-size: 13px; font-weight: 700; }
+    .cat-other { background: transparent; color: #aab3c0; border: 1.5px solid #d8dee8; }
 
     /* ── Categories detail section ── */
     .cats-section { margin-top: 20px; }
-    .cats-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
-    .cat-detail-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dashed #e8edf5; }
-    .cat-detail-text { font-size: 12.5px; color: #1a1a2e; font-weight: 600; }
-    .cat-detail-empty { color: #9ca3af; font-weight: 400; font-style: italic; }
-
-    /* ── Points bar ── */
-    .points-section { margin-top: 20px; background: #f8faff; border: 1px solid #e8edf5; border-radius: 8px; padding: 16px 18px; }
-    .points-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .points-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #1a56db; }
-    .points-value { font-size: 14px; font-weight: 700; }
-    .points-bar-bg { height: 10px; background: #e8edf5; border-radius: 10px; overflow: hidden; }
-    .points-bar-fill { height: 100%; border-radius: 10px; transition: width .3s; }
+    .cats-table { width: 100%; border-collapse: collapse; }
+    .cats-table thead th {
+      font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+      color: #6b7280; font-weight: 700; text-align: center;
+      padding: 0 10px 4px; border-bottom: 1.5px solid #dbeafe;
+    }
+    .cats-table tbody td {
+      font-size: 14px; color: #1a1a2e; font-weight: 600; text-align: center;
+      padding: 3px 10px; border-bottom: 1px dashed #e8edf5;
+    }
+    .cats-table tbody tr:last-child td { border-bottom: none; }
+    .cats-table tbody tr.cats-table-row-other td { color: #9ca3af; font-weight: 400; }
+    .cats-table .cat,
+    .cats-table .cat-other { display: inline-block; width: 28px; padding: 2px 0; text-align: center; box-sizing: border-box; }
+    .cats-table-icon { display: inline-block; font-size: 13px; color: #1a56db; margin-left: 8px; width: 16px; text-align: center; }
+    .cats-table-row-other .cats-table-icon { color: #cbd5e1; }
 
     /* ── Signature ── */
     .signature-section { margin-top: 28px; display: flex; justify-content: flex-end; }
@@ -103,8 +119,7 @@
       .sections { gap: 14px; }
       .section { padding: 12px 16px; }
       .cats-section { margin-top: 14px; }
-      .points-section { margin-top: 14px; padding: 12px 16px; }
-      .signature-section { margin-top: 16px; page-break-inside: avoid; break-inside: avoid; }
+      .signature-section { margin-top: 14px; page-break-inside: avoid; break-inside: avoid; }
       .doc-body { padding-bottom: 70px; }
       .doc-footer { position: fixed; left: 0; bottom: 0; width: 100%; }
     }
@@ -122,18 +137,23 @@
 
 <div class="document">
 
+  <img class="doc-watermark" src="/static/img/logo_comores.png" alt="">
+
   <!-- Header -->
   <div class="doc-header">
     <div class="doc-header-left">
-      <div class="doc-header-emblem">🪪</div>
+      <span class="doc-header-flag">🇰🇲</span>
       <div class="doc-header-text">
-        <h1>Permis de Conduire</h1>
-        <p>République des Comores — Direction Générale de la Police</p>
+        <h1>UNION DES COMORES</h1>
+        <p>Permis de Conduire</p>
       </div>
     </div>
-    <div class="doc-header-right">
-      <div class="license-num">{{ lic.license_number }}</div>
-      <div class="license-type">{{ 'TEMPORAIRE' if (force_temporaire or lic.type_permis == 'temporaire') else 'PERMANENT' }}</div>
+    <div class="doc-header-stars">
+      <span>★</span><span>★</span><span>★</span><span>★</span>
+    </div>
+    <div class="doc-header-arabic" dir="rtl">
+      <span>جمهورية القمر المتحدة</span><br>
+      <span>رخصة قيادة</span>
     </div>
   </div>
 
@@ -148,6 +168,7 @@
         {% else %}
           <div class="photo-placeholder">👤</div>
         {% endif %}
+        <div class="identity-photo-num">{{ lic.license_number }}</div>
       </div>
       <div class="identity-info">
         <div class="identity-name">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
@@ -203,39 +224,37 @@
     </div>
 
     <!-- Categories detail -->
-    {% if lic.categories %}
+    {% set holder_cats = lic.categories.split(',') | map('trim') | list if lic.categories else [] %}
+    {% set all_cats = [
+      ('A',  'fa-motorcycle'), ('A1', 'fa-motorcycle'), ('A2', 'fa-motorcycle'),
+      ('B',  'fa-car'), ('C',  'fa-truck'), ('D',  'fa-bus'),
+      ('E',  'fa-caravan'), ('F',  'fa-wheelchair')
+    ] %}
     <div class="section cats-section">
       <div class="section-title">Catégories autorisées</div>
-      <div class="cats-detail-grid">
-        {% for code in lic.categories.split(',') %}
-          {% set code = code.strip() %}
-          {% set details = category_details.get(code) %}
-          <div class="cat-detail-row">
-            <span class="cat">{{ code }}</span>
-            {% if details and (details.identifiant or details.date) %}
-              <span class="cat-detail-text">N° {{ details.identifiant or '—' }} · Obtenu le {{ details.date or '—' }}</span>
-            {% else %}
-              <span class="cat-detail-text cat-detail-empty">Aucun détail enregistré</span>
-            {% endif %}
-          </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Points bar -->
-    {% set pts = lic.points if lic.points is not none else settings.initial_points %}
-    {% set max_pts = settings.initial_points %}
-    {% set pct = ((pts / max_pts) * 100)|int if max_pts > 0 else 0 %}
-    {% set bar_color = '#10b981' if pct >= 75 else ('#f59e0b' if pct >= 40 else '#ef4444') %}
-    <div class="points-section">
-      <div class="points-header">
-        <span class="points-label">Solde de points</span>
-        <span class="points-value" style="color:{{ bar_color }}">{{ pts }} / {{ max_pts }} pts</span>
-      </div>
-      <div class="points-bar-bg">
-        <div class="points-bar-fill" style="width:{{ pct }}%; background:{{ bar_color }};"></div>
-      </div>
+      <table class="cats-table">
+        <thead>
+          <tr><th>Catégorie</th><th>Date d'obtention</th><th>Date d'expiration</th></tr>
+        </thead>
+        <tbody>
+          {% for code, icon_class in all_cats %}
+            {% set owned = code in holder_cats %}
+            {% set details = category_details.get(code) %}
+            <tr class="{{ '' if owned else 'cats-table-row-other' }}">
+              <td>
+                <span class="cat{{ '' if owned else ' cat-other' }}">{{ code }}</span>
+                <i class="fas {{ icon_class }} cats-table-icon"></i>
+              </td>
+              {% if owned %}
+                <td>{{ details.date if details and details.date else '—' }}</td>
+                <td>{{ details.expiration if details and details.expiration else '—' }}</td>
+              {% else %}
+                <td>—</td><td>—</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
 
     <!-- Signature -->
