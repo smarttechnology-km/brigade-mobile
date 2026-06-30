@@ -1296,6 +1296,7 @@ class LicenseSetting(db.Model):
     permanent_validity_years = db.Column(db.Integer, nullable=False, default=10)
     directeur_general_name = db.Column(db.String(150), nullable=True)
     directeur_signature_filename = db.Column(db.String(255), nullable=True)
+    category_validity = db.Column(db.Text, nullable=True)
 
     @staticmethod
     def get():
@@ -1307,12 +1308,17 @@ class LicenseSetting(db.Model):
         return s
 
     def to_dict(self):
+        try:
+            cat_validity = json.loads(self.category_validity) if self.category_validity else {}
+        except (ValueError, TypeError):
+            cat_validity = {}
         return {
             'initial_points':       self.initial_points,
             'temp_validity_months': self.temp_validity_months,
             'permanent_validity_years': self.permanent_validity_years,
             'directeur_general_name': self.directeur_general_name or '',
             'directeur_signature_filename': self.directeur_signature_filename or '',
+            'category_validity': cat_validity,
         }
 
 

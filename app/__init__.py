@@ -471,6 +471,9 @@ def create_app():
                     if 'permanent_validity_years' not in ls_cols:
                         conn.execute(text("ALTER TABLE license_settings ADD COLUMN permanent_validity_years INTEGER NOT NULL DEFAULT 10"))
                         logger.info("Added missing license_settings.permanent_validity_years column")
+                    if 'category_validity' not in ls_cols:
+                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN category_validity TEXT"))
+                        logger.info("Added missing license_settings.category_validity column")
 
                     lpr_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='license_print_requests'")

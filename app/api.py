@@ -2889,6 +2889,8 @@ def api_licenses_settings_put():
             pass
     if 'directeur_general_name' in data:
         s.directeur_general_name = (data['directeur_general_name'] or '').strip() or None
+    if 'category_validity' in data:
+        s.category_validity = json.dumps(data['category_validity']) if data['category_validity'] else None
     # Propagate new initial_points to all existing licenses
     DriverLicense.query.update({'points': s.initial_points})
     # Recompute every license's expiry_date from its own issue_date using the

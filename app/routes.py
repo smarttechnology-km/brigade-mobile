@@ -771,6 +771,26 @@ def license_qrcode(license_id):
     return send_file(buf, mimetype='image/png')
 
 
+def parse_category_details(lic):
+    """Parse a DriverLicense.category_details JSON blob and reformat its
+    date/expiration fields from ISO (YYYY-MM-DD) to display (DD/MM/YYYY)."""
+    try:
+        raw_details = json.loads(lic.category_details) if lic.category_details else {}
+    except (ValueError, TypeError):
+        raw_details = {}
+    category_details = {}
+    for cat, d in raw_details.items():
+        formatted = dict(d)
+        for field in ('date', 'expiration'):
+            if d.get(field):
+                try:
+                    formatted[field] = datetime.strptime(d[field], '%Y-%m-%d').strftime('%d/%m/%Y')
+                except ValueError:
+                    pass
+        category_details[cat] = formatted
+    return category_details
+
+
 @main_bp.route('/licenses/<int:license_id>/print')
 @roles_required('administrateur', 'judiciaire')
 def license_print(license_id):
@@ -783,19 +803,7 @@ def license_print(license_id):
         months = settings.temp_validity_months or 12
         from dateutil.relativedelta import relativedelta
         computed_expiry = lic.issue_date + relativedelta(months=months)
-    try:
-        raw_details = json.loads(lic.category_details) if lic.category_details else {}
-    except (ValueError, TypeError):
-        raw_details = {}
-    category_details = {}
-    for cat, d in raw_details.items():
-        formatted = dict(d)
-        if d.get('date'):
-            try:
-                formatted['date'] = datetime.strptime(d['date'], '%Y-%m-%d').strftime('%d/%m/%Y')
-            except ValueError:
-                pass
-        category_details[cat] = formatted
+    category_details = parse_category_details(lic)
     return render_template('license_print.html', lic=lic, settings=settings,
                            force_temporaire=force_temporaire, computed_expiry=computed_expiry,
                            category_details=category_details)
@@ -807,19 +815,7 @@ def license_print_card(license_id):
     from app.models import DriverLicense, LicenseSetting
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
-    try:
-        raw_details = json.loads(lic.category_details) if lic.category_details else {}
-    except (ValueError, TypeError):
-        raw_details = {}
-    category_details = {}
-    for cat, d in raw_details.items():
-        formatted = dict(d)
-        if d.get('date'):
-            try:
-                formatted['date'] = datetime.strptime(d['date'], '%Y-%m-%d').strftime('%d/%m/%Y')
-            except ValueError:
-                pass
-        category_details[cat] = formatted
+    category_details = parse_category_details(lic)
     return render_template('license_card.html', lic=lic, settings=settings, now_comoros=now_comoros,
                             category_details=category_details)
 
