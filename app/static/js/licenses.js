@@ -191,7 +191,7 @@
         document.getElementById('photo-preview-icon').style.display = '';
         document.querySelectorAll('.cat-checkbox').forEach(cb => cb.checked = false);
         document.querySelectorAll('.cat-details').forEach(d => d.style.display = 'none');
-        document.querySelectorAll('.cat-identifiant, .cat-date').forEach(i => i.value = '');
+        document.querySelectorAll('.cat-identifiant, .cat-date, .cat-expiration').forEach(i => i.value = '');
     }
 
     function populateForm(l) {
@@ -224,8 +224,10 @@
             const d = catDetails[cat] || {};
             const idInput   = document.getElementById(`cat-identifiant-${cat}`);
             const dateInput = document.getElementById(`cat-date-${cat}`);
-            if (idInput)   idInput.value = d.identifiant || '';
+            const expInput  = document.getElementById(`cat-expiration-${cat}`);
+            if (idInput)   idInput.value = d.identifiant || (cb.checked ? (l.license_number || '') : '');
             if (dateInput) dateInput.value = d.date || '';
+            if (expInput)  expInput.value = d.expiration || '';
         });
         if (l.photo_filename) {
             const img = document.getElementById('photo-preview-img');
@@ -245,8 +247,9 @@
             const cat = cb.value;
             const identifiant = document.getElementById(`cat-identifiant-${cat}`)?.value.trim() || '';
             const date = document.getElementById(`cat-date-${cat}`)?.value || '';
-            if (identifiant || date) {
-                details[cat] = { identifiant, date };
+            const expiration = document.getElementById(`cat-expiration-${cat}`)?.value || '';
+            if (identifiant || date || expiration) {
+                details[cat] = { identifiant, date, expiration };
             }
         });
         return details;
@@ -257,11 +260,20 @@
         const detailsDiv = document.getElementById(`cat-details-${cat}`);
         if (!detailsDiv) return;
         detailsDiv.style.display = cb && cb.checked ? '' : 'none';
+        if (cb && cb.checked) {
+            const idInput = document.getElementById(`cat-identifiant-${cat}`);
+            if (idInput && !idInput.value.trim()) {
+                idInput.value = document.getElementById('f-license_number')?.value || '';
+            }
+            window.autoFillCategoryExpiration(cat);
+        }
         if (!cb || !cb.checked) {
             const idInput   = document.getElementById(`cat-identifiant-${cat}`);
             const dateInput = document.getElementById(`cat-date-${cat}`);
+            const expInput  = document.getElementById(`cat-expiration-${cat}`);
             if (idInput)   idInput.value = '';
             if (dateInput) dateInput.value = '';
+            if (expInput)  expInput.value = '';
         }
     };
 
@@ -499,12 +511,63 @@
         }
     };
 
+    const ALL_CATS = ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'P'];
+
+    function populateCategoryValidityForm() {
+        const cfg = _settings.category_validity || {};
+        ALL_CATS.forEach(cat => {
+            const entry = cfg[cat] || { mode: 'card' };
+            const modeSel = document.getElementById(`catval-mode-${cat}`);
+            const yearsInput = document.getElementById(`catval-years-${cat}`);
+            if (modeSel) modeSel.value = entry.mode === 'custom' ? 'custom' : 'card';
+            if (yearsInput) yearsInput.value = entry.years || 5;
+            onCatValidityModeChange(cat);
+        });
+    }
+
+    window.onCatValidityModeChange = function (cat) {
+        const modeSel = document.getElementById(`catval-mode-${cat}`);
+        const wrap    = document.getElementById(`catval-years-wrap-${cat}`);
+        if (wrap) wrap.style.display = (modeSel && modeSel.value === 'custom') ? '' : 'none';
+    };
+
+    function getCategoryValidityConfig() {
+        const cfg = {};
+        ALL_CATS.forEach(cat => {
+            const mode = document.getElementById(`catval-mode-${cat}`)?.value || 'card';
+            if (mode === 'custom') {
+                cfg[cat] = { mode: 'custom', years: parseInt(document.getElementById(`catval-years-${cat}`)?.value) || 5 };
+            } else {
+                cfg[cat] = { mode: 'card' };
+            }
+        });
+        return cfg;
+    }
+
+    /* Auto-compute a category's expiration date from the validity settings. */
+    window.autoFillCategoryExpiration = function (cat) {
+        const expInput = document.getElementById(`cat-expiration-${cat}`);
+        if (!expInput) return;
+        const cfg = (_settings.category_validity || {})[cat] || { mode: 'card' };
+        if (cfg.mode === 'custom' && cfg.years) {
+            const baseStr = document.getElementById(`cat-date-${cat}`)?.value || document.getElementById('f-issue_date')?.value;
+            if (baseStr) {
+                const d = new Date(baseStr);
+                d.setFullYear(d.getFullYear() + Number(cfg.years));
+                expInput.value = d.toISOString().slice(0, 10);
+            }
+        } else {
+            expInput.value = document.getElementById('f-expiry_date')?.value || '';
+        }
+    };
+
     window.openSettingsModal = function () {
         document.getElementById('s-initial_points').value = _settings.initial_points;
         document.getElementById('s-temp_months').value    = _settings.temp_validity_months;
         document.getElementById('s-permanent_years').value = _settings.permanent_validity_years;
         document.getElementById('s-directeur_general_name').value = _settings.directeur_general_name || '';
         renderSignaturePreview();
+        populateCategoryValidityForm();
 
         // Reset to "Général" tab and show save button
         const generalTab = document.getElementById('tab-general-btn');
@@ -590,6 +653,7 @@
                     temp_validity_months: parseInt(document.getElementById('s-temp_months').value)    || 12,
                     permanent_validity_years: parseInt(document.getElementById('s-permanent_years').value) || 10,
                     directeur_general_name: document.getElementById('s-directeur_general_name').value.trim(),
+                    category_validity: getCategoryValidityConfig(),
                 }),
             });
             const d = await r.json().catch(() => ({}));
@@ -933,12 +997,13 @@
                     ? catList.map(c => `<span class="badge bg-info text-dark me-1">${esc(c)}</span>`).join('')
                     : '—';
                 const catDetailRows = catList
-                    .filter(c => catDetailsMap[c] && (catDetailsMap[c].identifiant || catDetailsMap[c].date))
+                    .filter(c => catDetailsMap[c] && (catDetailsMap[c].identifiant || catDetailsMap[c].date || catDetailsMap[c].expiration))
                     .map(c => `
                         <tr>
                             <td><span class="badge bg-info text-dark">${esc(c)}</span></td>
                             <td>${esc(catDetailsMap[c].identifiant || '—')}</td>
                             <td>${fmtDate(catDetailsMap[c].date)}</td>
+                            <td>${fmtDate(catDetailsMap[c].expiration)}</td>
                         </tr>`).join('');
                 const statusCls   = { actif: 'success', suspendu: 'warning', revoque: 'danger', expire: 'secondary' }[l.status] || 'secondary';
                 const statusLabel = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqué', expire: 'Expiré' }[l.is_expired ? 'expire' : l.status] || l.status;
@@ -989,7 +1054,7 @@
                         <div class="col-12">
                             <div class="text-muted mb-1">Détails par catégorie</div>
                             <table class="table table-sm mb-0">
-                                <thead><tr><th>Catégorie</th><th>N° d'identifiant</th><th>Date</th></tr></thead>
+                                <thead><tr><th>Catégorie</th><th>N° d'identifiant</th><th>Date d'obtention</th><th>Date d'expiration</th></tr></thead>
                                 <tbody>${catDetailRows}</tbody>
                             </table>
                         </div>` : ''}
