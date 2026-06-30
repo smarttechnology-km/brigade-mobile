@@ -5,6 +5,7 @@ from flask_login import UserMixin
 from sqlalchemy import event
 import uuid
 import os
+import json
 from app.timezone_utils import now_comoros
 
 
@@ -1140,6 +1141,7 @@ class DriverLicense(db.Model):
     centre_immatriculation = db.Column(db.String(150))
     type_permis = db.Column(db.String(20), nullable=False, default='permanent')  # 'permanent' | 'temporaire'
     categories = db.Column(db.String(100))  # comma-separated: "A,B,C"
+    category_details = db.Column(db.Text, nullable=True)  # JSON: {"A": {"identifiant": "...", "date": "YYYY-MM-DD"}, ...}
     issue_date = db.Column(db.Date)
     expiry_date = db.Column(db.Date)
     status = db.Column(db.String(20), nullable=False, default='actif')  # actif, suspendu, revoque, expire
@@ -1160,6 +1162,10 @@ class DriverLicense(db.Model):
         return self.expiry_date < now_comoros().date()
 
     def to_dict(self):
+        try:
+            category_details = json.loads(self.category_details) if self.category_details else {}
+        except (ValueError, TypeError):
+            category_details = {}
         return {
             'id': self.id,
             'license_number': self.license_number,
@@ -1176,6 +1182,7 @@ class DriverLicense(db.Model):
             'centre_immatriculation': self.centre_immatriculation or '',
             'type_permis': self.type_permis or 'permanent',
             'categories': self.categories or '',
+            'category_details': category_details,
             'issue_date': self.issue_date.strftime('%Y-%m-%d') if self.issue_date else '',
             'expiry_date': self.expiry_date.strftime('%Y-%m-%d') if self.expiry_date else '',
             'status': self.status,
@@ -1263,14 +1270,21 @@ class PointReductionHistory(db.Model):
     created_at      = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
     def to_dict(self):
+        from datetime import timedelta
+        from app.timezone_utils import now_comoros, ensure_comoros
+        is_reset = self.points_after > self.points_before
+        in_window = bool(self.created_at) and now_comoros() <= ensure_comoros(self.created_at) + timedelta(days=7)
         return {
             'id':              self.id,
+            'license_id':      self.license_id,
             'reason_label':    self.reason_label,
             'points_deducted': self.points_deducted,
             'points_before':   self.points_before,
             'points_after':    self.points_after,
             'created_by':      self.created_by,
             'created_at':      self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else None,
+            'is_reset':        is_reset,
+            'reclaimable':     (not is_reset) and in_window,
         }
 
 
@@ -1279,6 +1293,9 @@ class LicenseSetting(db.Model):
     id                   = db.Column(db.Integer, primary_key=True)
     initial_points       = db.Column(db.Integer, nullable=False, default=12)
     temp_validity_months = db.Column(db.Integer, nullable=False, default=12)
+    permanent_validity_years = db.Column(db.Integer, nullable=False, default=10)
+    directeur_general_name = db.Column(db.String(150), nullable=True)
+    directeur_signature_filename = db.Column(db.String(255), nullable=True)
 
     @staticmethod
     def get():
@@ -1293,6 +1310,9 @@ class LicenseSetting(db.Model):
         return {
             'initial_points':       self.initial_points,
             'temp_validity_months': self.temp_validity_months,
+            'permanent_validity_years': self.permanent_validity_years,
+            'directeur_general_name': self.directeur_general_name or '',
+            'directeur_signature_filename': self.directeur_signature_filename or '',
         }
 
 

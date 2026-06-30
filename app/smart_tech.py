@@ -1891,7 +1891,8 @@ def api_licences_list():
 @smart_tech_bp.route('/licences/<int:license_id>/card')
 @smart_tech_required
 def licences_card(license_id):
-    import io, base64, qrcode as _qrcode
+    import io, base64, json, qrcode as _qrcode
+    from datetime import datetime as _datetime
     from app.models import DriverLicense, LicenseSetting
     from app.timezone_utils import now_comoros as _nc
 
@@ -1907,8 +1908,23 @@ def licences_card(license_id):
     img.save(buf, format='PNG')
     qr_data_uri = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
 
+    try:
+        raw_details = json.loads(lic.category_details) if lic.category_details else {}
+    except (ValueError, TypeError):
+        raw_details = {}
+    category_details = {}
+    for cat, d in raw_details.items():
+        formatted = dict(d)
+        if d.get('date'):
+            try:
+                formatted['date'] = _datetime.strptime(d['date'], '%Y-%m-%d').strftime('%d/%m/%Y')
+            except ValueError:
+                pass
+        category_details[cat] = formatted
+
     return render_template('license_card.html', lic=lic, settings=settings,
-                           now_comoros=_nc, qr_data_uri=qr_data_uri)
+                           now_comoros=_nc, qr_data_uri=qr_data_uri,
+                           category_details=category_details)
 
 
 # ── Employés ──────────────────────────────────────────────────────────────────

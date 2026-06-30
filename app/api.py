@@ -10,6 +10,7 @@ from io import BytesIO
 import qrcode
 import os
 import re
+import json
 import uuid
 from werkzeug.utils import secure_filename
 
@@ -2881,9 +2882,65 @@ def api_licenses_settings_put():
             s.temp_validity_months = max(1, min(120, int(data['temp_validity_months'])))
         except (ValueError, TypeError):
             pass
+    if 'permanent_validity_years' in data:
+        try:
+            s.permanent_validity_years = max(1, min(50, int(data['permanent_validity_years'])))
+        except (ValueError, TypeError):
+            pass
+    if 'directeur_general_name' in data:
+        s.directeur_general_name = (data['directeur_general_name'] or '').strip() or None
     # Propagate new initial_points to all existing licenses
     DriverLicense.query.update({'points': s.initial_points})
+    # Recompute every license's expiry_date from its own issue_date using the
+    # (possibly just-changed) default validity periods, so updating these
+    # settings immediately reflects on all existing licenses.
+    from dateutil.relativedelta import relativedelta
+    for lic in DriverLicense.query.filter(DriverLicense.issue_date.isnot(None)).all():
+        if lic.type_permis == 'temporaire':
+            lic.expiry_date = lic.issue_date + relativedelta(months=s.temp_validity_months)
+        else:
+            lic.expiry_date = lic.issue_date + relativedelta(years=s.permanent_validity_years)
     db.session.commit()
+    return jsonify(s.to_dict())
+
+
+@api_bp.route('/licenses/settings/signature', methods=['POST'])
+@login_required
+def api_licenses_settings_signature():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    file = request.files.get('signature')
+    if not file or not file.filename:
+        return jsonify({'error': 'Aucun fichier reçu'}), 400
+    ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+        return jsonify({'error': 'Format non autorisé (jpg, png, webp)'}), 400
+    s = LicenseSetting.get()
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'signatures')
+    os.makedirs(upload_dir, exist_ok=True)
+    if s.directeur_signature_filename:
+        old_path = os.path.join(upload_dir, s.directeur_signature_filename)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    filename = f'{uuid.uuid4().hex}{ext}'
+    file.save(os.path.join(upload_dir, filename))
+    s.directeur_signature_filename = filename
+    db.session.commit()
+    return jsonify(s.to_dict())
+
+
+@api_bp.route('/licenses/settings/signature', methods=['DELETE'])
+@login_required
+def api_licenses_settings_signature_delete():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    s = LicenseSetting.get()
+    if s.directeur_signature_filename:
+        old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'signatures', s.directeur_signature_filename)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+        s.directeur_signature_filename = None
+        db.session.commit()
     return jsonify(s.to_dict())
 
 
@@ -3034,6 +3091,8 @@ def api_licenses_reduce_points(license_id):
 @api_bp.route('/licenses/<int:license_id>/reset-points', methods=['POST'])
 @login_required
 def api_licenses_reset_points(license_id):
+    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+        return jsonify({'error': 'Forbidden'}), 403
     lic = DriverLicense.query.get_or_404(license_id)
     err = check_island_access(lic.holder_island)
     if err:
@@ -3065,6 +3124,65 @@ def api_licenses_point_history(license_id):
     rows = PointReductionHistory.query.filter_by(license_id=license_id)\
         .order_by(PointReductionHistory.created_at.desc()).all()
     return jsonify([r.to_dict() for r in rows])
+
+
+def _apply_status_rules(lic, points):
+    """Set lic.status from LicenseStatusRule thresholds, defaulting to 'actif' if none match."""
+    rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.asc()).all()
+    matched_rule = None
+    for rule in rules:
+        matched = (rule.operator == 'lt'  and points <  rule.threshold) or \
+                  (rule.operator == 'lte' and points <= rule.threshold) or \
+                  (rule.operator == 'eq'  and points == rule.threshold)
+        if matched:
+            matched_rule = rule
+            break
+    lic.status = matched_rule.status if matched_rule else 'actif'
+
+
+@api_bp.route('/licenses/point-history/<int:history_id>/reclamation', methods=['POST'])
+@login_required
+def api_licenses_point_history_reclamation(history_id):
+    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+        return jsonify({'error': 'Forbidden'}), 403
+
+    history = PointReductionHistory.query.get_or_404(history_id)
+    lic = DriverLicense.query.get_or_404(history.license_id)
+    err = check_island_access(lic.holder_island)
+    if err:
+        return err
+
+    if history.points_after > history.points_before:
+        return jsonify({'error': "Cette ligne n'est pas un retrait de points."}), 400
+    if not history.to_dict()['reclaimable']:
+        return jsonify({'error': 'Le délai de réclamation (7 jours) est dépassé.'}), 400
+
+    data   = request.get_json() or {}
+    action = data.get('action')
+    s      = LicenseSetting.get()
+    restored = min(s.initial_points, (lic.points or 0) + history.points_deducted)
+
+    if action == 'cancel':
+        lic.points = restored
+        _apply_status_rules(lic, restored)
+        db.session.delete(history)
+        db.session.commit()
+        return jsonify(lic.to_dict())
+
+    elif action == 'change_reason':
+        reason_id = data.get('reason_id')
+        new_reason = PointReductionReason.query.get_or_404(reason_id)
+        new_after = max(0, restored - new_reason.points_to_deduct)
+        history.points_before   = restored
+        history.points_after    = new_after
+        history.points_deducted = new_reason.points_to_deduct
+        history.reason_label    = new_reason.label
+        lic.points = new_after
+        _apply_status_rules(lic, new_after)
+        db.session.commit()
+        return jsonify(lic.to_dict())
+
+    return jsonify({'error': 'Action invalide.'}), 400
 
 
 @api_bp.route('/licenses/stats', methods=['GET'])
@@ -3172,6 +3290,7 @@ def api_licenses_create():
         centre_immatriculation= (data.get('centre_immatriculation') or '').strip() or None,
         type_permis           = data.get('type_permis') or 'permanent',
         categories            = (data.get('categories') or '').strip() or None,
+        category_details      = json.dumps(data.get('category_details')) if data.get('category_details') else None,
         status                = data.get('status') or 'actif',
         notes                 = (data.get('notes') or '').strip() or None,
         created_by            = current_user.username,
@@ -3349,6 +3468,8 @@ def api_licenses_update(license_id):
                   'nationalite', 'sexe', 'lieu_naissance', 'centre_immatriculation', 'type_permis', 'categories', 'status', 'notes']:
         if field in data:
             setattr(lic, field, (data[field] or '').strip() or None)
+    if 'category_details' in data:
+        lic.category_details = json.dumps(data['category_details']) if data['category_details'] else None
     if 'holder_name' in data and not (data['holder_name'] or '').strip():
         return jsonify({'error': 'Nom obligatoire'}), 400
 

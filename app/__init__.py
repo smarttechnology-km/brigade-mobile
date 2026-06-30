@@ -454,11 +454,23 @@ def create_app():
                         'type_permis':           "ALTER TABLE driver_licenses ADD COLUMN type_permis VARCHAR(20) NOT NULL DEFAULT 'permanent'",
                         'registered_phone':      "ALTER TABLE driver_licenses ADD COLUMN registered_phone VARCHAR(20)",
                         'registered_at':         "ALTER TABLE driver_licenses ADD COLUMN registered_at DATETIME",
+                        'category_details':      "ALTER TABLE driver_licenses ADD COLUMN category_details TEXT",
                     }
                     for col, sql in dl_col_defs.items():
                         if col not in dl_cols:
                             conn.execute(text(sql))
                             logger.info(f"Added missing driver_licenses.{col} column")
+
+                    ls_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(license_settings)")).fetchall()}
+                    if 'directeur_general_name' not in ls_cols:
+                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN directeur_general_name VARCHAR(150)"))
+                        logger.info("Added missing license_settings.directeur_general_name column")
+                    if 'directeur_signature_filename' not in ls_cols:
+                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN directeur_signature_filename VARCHAR(255)"))
+                        logger.info("Added missing license_settings.directeur_signature_filename column")
+                    if 'permanent_validity_years' not in ls_cols:
+                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN permanent_validity_years INTEGER NOT NULL DEFAULT 10"))
+                        logger.info("Added missing license_settings.permanent_validity_years column")
 
                     lpr_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='license_print_requests'")
