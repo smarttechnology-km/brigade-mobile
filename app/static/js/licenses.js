@@ -94,7 +94,7 @@
                 <td>${l.type_permis === 'temporaire'
                     ? '<span class="badge bg-warning text-dark">T</span>'
                     : '<span class="badge bg-success">P</span>'}</td>
-                <td class="text-muted">${l.type_permis === 'temporaire' ? fmtDate(l.expiry_date) : '<i class="fas fa-infinity text-success"></i>'}</td>
+                <td class="text-muted">${fmtDate(l.expiry_date)}</td>
                 <td>${pointsBadge(l.points)}</td>
                 <td>${statusBadge(l.status, l.is_expired)}</td>
                 <td style="white-space:nowrap;">
@@ -190,6 +190,8 @@
         document.getElementById('photo-preview-img').style.display = 'none';
         document.getElementById('photo-preview-icon').style.display = '';
         document.querySelectorAll('.cat-checkbox').forEach(cb => cb.checked = false);
+        document.querySelectorAll('.cat-details').forEach(d => d.style.display = 'none');
+        document.querySelectorAll('.cat-identifiant, .cat-date').forEach(i => i.value = '');
     }
 
     function populateForm(l) {
@@ -213,7 +215,18 @@
         document.getElementById('f-status').value       = l.status || 'actif';
         document.getElementById('f-notes').value        = l.notes || '';
         const cats = (l.categories || '').split(',').map(c => c.trim()).filter(Boolean);
-        document.querySelectorAll('.cat-checkbox').forEach(cb => { cb.checked = cats.includes(cb.value); });
+        const catDetails = l.category_details || {};
+        document.querySelectorAll('.cat-checkbox').forEach(cb => {
+            const cat = cb.value;
+            cb.checked = cats.includes(cat);
+            const detailsDiv = document.getElementById(`cat-details-${cat}`);
+            if (detailsDiv) detailsDiv.style.display = cb.checked ? '' : 'none';
+            const d = catDetails[cat] || {};
+            const idInput   = document.getElementById(`cat-identifiant-${cat}`);
+            const dateInput = document.getElementById(`cat-date-${cat}`);
+            if (idInput)   idInput.value = d.identifiant || '';
+            if (dateInput) dateInput.value = d.date || '';
+        });
         if (l.photo_filename) {
             const img = document.getElementById('photo-preview-img');
             img.src = `/uploads/license_photos/${l.photo_filename}`;
@@ -225,6 +238,32 @@
     function getCategories() {
         return Array.from(document.querySelectorAll('.cat-checkbox:checked')).map(cb => cb.value).join(',');
     }
+
+    function getCategoryDetails() {
+        const details = {};
+        document.querySelectorAll('.cat-checkbox:checked').forEach(cb => {
+            const cat = cb.value;
+            const identifiant = document.getElementById(`cat-identifiant-${cat}`)?.value.trim() || '';
+            const date = document.getElementById(`cat-date-${cat}`)?.value || '';
+            if (identifiant || date) {
+                details[cat] = { identifiant, date };
+            }
+        });
+        return details;
+    }
+
+    window.onCategoryToggle = function (cat) {
+        const cb = document.getElementById(`cat-${cat}`);
+        const detailsDiv = document.getElementById(`cat-details-${cat}`);
+        if (!detailsDiv) return;
+        detailsDiv.style.display = cb && cb.checked ? '' : 'none';
+        if (!cb || !cb.checked) {
+            const idInput   = document.getElementById(`cat-identifiant-${cat}`);
+            const dateInput = document.getElementById(`cat-date-${cat}`);
+            if (idInput)   idInput.value = '';
+            if (dateInput) dateInput.value = '';
+        }
+    };
 
     /* ── Settings ── */
     let _reasons = [];
@@ -327,22 +366,157 @@
         loadStats();
     };
 
+    function renderSignaturePreview() {
+        const img    = document.getElementById('signature-preview-img');
+        const empty  = document.getElementById('signature-preview-empty');
+        const delBtn = document.getElementById('signature-remove-btn');
+        if (_settings.directeur_signature_filename) {
+            img.src = `/uploads/signatures/${_settings.directeur_signature_filename}`;
+            img.style.display = '';
+            empty.style.display = 'none';
+            delBtn.style.display = '';
+        } else {
+            img.style.display = 'none';
+            empty.style.display = '';
+            delBtn.style.display = 'none';
+        }
+    }
+
+    async function uploadSignatureBlob(blob, filename) {
+        const fd = new FormData();
+        fd.append('signature', blob, filename);
+        const r = await fetch('/api/licenses/settings/signature', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: fd,
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'Erreur lors de l\'envoi.');
+        _settings = d;
+        renderSignaturePreview();
+    }
+
+    window.uploadDirecteurSignature = async function (input) {
+        const file = input.files[0];
+        if (!file) return;
+        try {
+            await uploadSignatureBlob(file, file.name);
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            input.value = '';
+        }
+    };
+
+    /* ── Signature pad (draw on screen) ── */
+    let sigPadCtx = null;
+    let sigPadDrawing = false;
+    let sigPadHasStrokes = false;
+
+    function sigPadPos(e, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
+    function setupSignaturePad() {
+        const canvas = document.getElementById('signature-pad-canvas');
+        if (!canvas || canvas._sigPadBound) return;
+        canvas._sigPadBound = true;
+        canvas.addEventListener('pointerdown', (e) => {
+            sigPadDrawing = true;
+            sigPadHasStrokes = true;
+            const { x, y } = sigPadPos(e, canvas);
+            sigPadCtx.beginPath();
+            sigPadCtx.moveTo(x, y);
+        });
+        canvas.addEventListener('pointermove', (e) => {
+            if (!sigPadDrawing) return;
+            const { x, y } = sigPadPos(e, canvas);
+            sigPadCtx.lineTo(x, y);
+            sigPadCtx.stroke();
+        });
+        const stop = () => { sigPadDrawing = false; };
+        canvas.addEventListener('pointerup', stop);
+        canvas.addEventListener('pointerleave', stop);
+        canvas.addEventListener('pointercancel', stop);
+    }
+
+    window.openSignaturePad = function () {
+        const canvas = document.getElementById('signature-pad-canvas');
+        setupSignaturePad();
+        const modalEl = document.getElementById('signaturePadModal');
+        modalEl.addEventListener('shown.bs.modal', function onShown() {
+            modalEl.removeEventListener('shown.bs.modal', onShown);
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            sigPadCtx = canvas.getContext('2d');
+            sigPadCtx.strokeStyle = '#14306e';
+            sigPadCtx.lineWidth = 4;
+            sigPadCtx.lineCap = 'round';
+            sigPadCtx.lineJoin = 'round';
+            sigPadHasStrokes = false;
+        });
+        new bootstrap.Modal(modalEl).show();
+    };
+
+    window.clearSignaturePad = function () {
+        const canvas = document.getElementById('signature-pad-canvas');
+        if (sigPadCtx) sigPadCtx.clearRect(0, 0, canvas.width, canvas.height);
+        sigPadHasStrokes = false;
+    };
+
+    window.saveSignaturePad = function () {
+        if (!sigPadHasStrokes) {
+            alert('Veuillez dessiner une signature avant d\'enregistrer.');
+            return;
+        }
+        const canvas = document.getElementById('signature-pad-canvas');
+        const btn = document.getElementById('signature-pad-save-btn');
+        btn.disabled = true;
+        canvas.toBlob(async (blob) => {
+            try {
+                await uploadSignatureBlob(blob, 'signature.png');
+                bootstrap.Modal.getInstance(document.getElementById('signaturePadModal'))?.hide();
+            } catch (e) {
+                alert(e.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }, 'image/png');
+    };
+
+    window.removeDirecteurSignature = async function () {
+        if (!confirm('Retirer la signature actuelle ?')) return;
+        try {
+            const r = await fetch('/api/licenses/settings/signature', { method: 'DELETE', credentials: 'same-origin' });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || 'Erreur');
+            _settings = d;
+            renderSignaturePreview();
+        } catch (e) {
+            alert(e.message);
+        }
+    };
+
     window.openSettingsModal = function () {
         document.getElementById('s-initial_points').value = _settings.initial_points;
         document.getElementById('s-temp_months').value    = _settings.temp_validity_months;
+        document.getElementById('s-permanent_years').value = _settings.permanent_validity_years;
+        document.getElementById('s-directeur_general_name').value = _settings.directeur_general_name || '';
+        renderSignaturePreview();
 
         // Reset to "Général" tab and show save button
         const generalTab = document.getElementById('tab-general-btn');
         if (generalTab) bootstrap.Tab.getOrCreateInstance(generalTab).show();
-        document.getElementById('settings-save-btn')?.closest('.modal-footer')?.classList.remove('d-none');
+        document.getElementById('settings-save-btn')?.classList.remove('d-none');
 
-        // Toggle save button visibility based on active tab
+        // Toggle save button visibility based on active tab (it doesn't apply to
+        // "Motifs de réduction", which has its own inline add/edit controls)
         const tabBtns = document.querySelectorAll('#settings-tabs .nav-link');
         tabBtns.forEach(btn => {
             btn.addEventListener('shown.bs.tab', () => {
-                const footer = document.getElementById('settings-save-btn')?.closest('.modal-footer');
-                if (!footer) return;
-                footer.classList.toggle('d-none', btn.id === 'tab-reasons-btn');
+                document.getElementById('settings-save-btn')?.classList.toggle('d-none', btn.id === 'tab-reasons-btn');
             });
         });
 
@@ -414,6 +588,8 @@
                 body: JSON.stringify({
                     initial_points:       parseInt(document.getElementById('s-initial_points').value) || 12,
                     temp_validity_months: parseInt(document.getElementById('s-temp_months').value)    || 12,
+                    permanent_validity_years: parseInt(document.getElementById('s-permanent_years').value) || 10,
+                    directeur_general_name: document.getElementById('s-directeur_general_name').value.trim(),
                 }),
             });
             const d = await r.json().catch(() => ({}));
@@ -437,6 +613,16 @@
         if (!r.ok) { alert(d.error || 'Erreur'); return; }
         loadLicenses(false);
         loadStats();
+    };
+
+    window.renewLicensePoints = async function (licId) {
+        if (!confirm('Renouveler les points de ce permis et repasser le statut en Actif ?')) return;
+        const r = await fetch(`/api/licenses/${licId}/reset-points`, { method: 'POST', credentials: 'same-origin' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { alert(d.error || 'Erreur'); return; }
+        loadLicenses(false);
+        loadStats();
+        viewLicense(licId);
     };
 
     /* ── Réduction points ── */
@@ -502,9 +688,13 @@
         const isTemp  = document.getElementById('f-type_permis').value === 'temporaire';
         const issueEl = document.getElementById('f-issue_date');
         const expEl   = document.getElementById('f-expiry_date');
-        if (!isTemp || !issueEl.value || !expEl) return;
+        if (!issueEl.value || !expEl) return;
         const d = new Date(issueEl.value);
-        d.setMonth(d.getMonth() + (_settings.temp_validity_months || 12));
+        if (isTemp) {
+            d.setMonth(d.getMonth() + (_settings.temp_validity_months || 12));
+        } else {
+            d.setFullYear(d.getFullYear() + (_settings.permanent_validity_years || 10));
+        }
         expEl.value = d.toISOString().slice(0, 10);
     }
 
@@ -512,14 +702,11 @@
         const isTemp = document.getElementById('f-type_permis').value === 'temporaire';
         const wrap   = document.getElementById('expiry-date-wrap');
         const lbl    = document.getElementById('issue-date-label');
-        if (wrap) wrap.style.display = isTemp ? '' : 'none';
+        const expLbl = document.getElementById('expiry-date-label');
+        if (wrap) wrap.style.display = '';
         if (lbl)  lbl.textContent    = isTemp ? 'Depuis le' : 'Date de début';
-        if (!isTemp) {
-            const exp = document.getElementById('f-expiry_date');
-            if (exp) exp.value = '';
-        } else {
-            autoFillExpiry();
-        }
+        if (expLbl) expLbl.textContent = isTemp ? 'Jusqu\'au' : 'Date de validité';
+        autoFillExpiry();
     };
 
     document.getElementById('f-issue_date')?.addEventListener('change', autoFillExpiry);
@@ -567,6 +754,7 @@
             issue_date:     document.getElementById('f-issue_date').value,
             expiry_date:    document.getElementById('f-expiry_date').value,
             categories:     getCategories(),
+            category_details: getCategoryDetails(),
             status:         document.getElementById('f-status').value,
             notes:          document.getElementById('f-notes').value.trim(),
         };
@@ -739,9 +927,19 @@
                 syncPrintButton(l.id, l.type_permis === 'permanent');
                 const btnRenouveler = document.getElementById('btn-renouveler');
                 if (btnRenouveler) btnRenouveler.style.display = (l.type_permis === 'temporaire' && l.is_expired) ? '' : 'none';
-                const cats = l.categories
-                    ? l.categories.split(',').map(c => `<span class="badge bg-info text-dark me-1">${esc(c.trim())}</span>`).join('')
+                const catList = l.categories ? l.categories.split(',').map(c => c.trim()).filter(Boolean) : [];
+                const catDetailsMap = l.category_details || {};
+                const cats = catList.length
+                    ? catList.map(c => `<span class="badge bg-info text-dark me-1">${esc(c)}</span>`).join('')
                     : '—';
+                const catDetailRows = catList
+                    .filter(c => catDetailsMap[c] && (catDetailsMap[c].identifiant || catDetailsMap[c].date))
+                    .map(c => `
+                        <tr>
+                            <td><span class="badge bg-info text-dark">${esc(c)}</span></td>
+                            <td>${esc(catDetailsMap[c].identifiant || '—')}</td>
+                            <td>${fmtDate(catDetailsMap[c].date)}</td>
+                        </tr>`).join('');
                 const statusCls   = { actif: 'success', suspendu: 'warning', revoque: 'danger', expire: 'secondary' }[l.status] || 'secondary';
                 const statusLabel = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqué', expire: 'Expiré' }[l.is_expired ? 'expire' : l.status] || l.status;
                 document.getElementById('view-body').innerHTML = `
@@ -767,7 +965,15 @@
                         <div class="col-md-4"><div class="text-muted mb-1">Lieu de naissance</div><strong>${esc(l.lieu_naissance || '—')}</strong></div>
                         <div class="col-md-4"><div class="text-muted mb-1">Sexe</div><strong>${l.sexe === 'masculin' ? 'Masculin' : l.sexe === 'feminin' ? 'Féminin' : '—'}</strong></div>
                         <div class="col-md-4"><div class="text-muted mb-1">Nationalité</div><strong>${esc(l.nationalite || '—')}</strong></div>
-                        <div class="col-md-4"><div class="text-muted mb-1">Points</div>${pointsBadge(l.points)}</div>
+                        <div class="col-md-4">
+                            <div class="text-muted mb-1">Points</div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                ${pointsBadge(l.points)}
+                                ${l.status === 'suspendu' && window.CURRENT_USER_ROLE === 'administrateur'
+                                    ? `<button class="btn btn-sm btn-outline-success" onclick="renewLicensePoints(${l.id})"><i class="fas fa-redo me-1"></i>Renouveler les points</button>`
+                                    : ''}
+                            </div>
+                        </div>
                         <div class="col-md-4">
                             <div class="text-muted mb-1">Type de permis</div>
                             ${l.type_permis === 'temporaire'
@@ -779,6 +985,14 @@
                         <div class="col-md-4"><div class="text-muted mb-1">Centre d'immatriculation</div><strong>${esc(l.centre_immatriculation || '—')}</strong></div>
                         <div class="col-md-4"><div class="text-muted mb-1">Adresse</div><span>${esc(l.holder_address || '—')}</span></div>
                         <div class="col-md-6"><div class="text-muted mb-1">Catégories</div><div class="mt-1">${cats || '—'}</div></div>
+                        ${catDetailRows ? `
+                        <div class="col-12">
+                            <div class="text-muted mb-1">Détails par catégorie</div>
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Catégorie</th><th>N° d'identifiant</th><th>Date</th></tr></thead>
+                                <tbody>${catDetailRows}</tbody>
+                            </table>
+                        </div>` : ''}
                         ${l.notes ? `<div class="col-12"><div class="text-muted mb-1">Notes</div><span>${esc(l.notes)}</span></div>` : ''}
                     </div>
                     <hr>
@@ -793,12 +1007,12 @@
     function loadPointHistory(licId) {
         const tbody = document.getElementById('view-history-tbody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Chargement…</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Chargement…</td></tr>';
         fetch(`/api/licenses/${licId}/point-history`, { credentials: 'same-origin' })
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(rows => {
                 if (!rows.length) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucun retrait de points enregistré.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Aucun retrait de points enregistré.</td></tr>';
                     return;
                 }
                 const max = _settings.initial_points || 12;
@@ -808,6 +1022,10 @@
                     const deductCell = isReset
                         ? `<span class="badge bg-success">↺ Réinitialisation</span>`
                         : `<span class="badge bg-danger">−${r.points_deducted}</span>`;
+                    const canReclaim = r.reclaimable && window.CURRENT_USER_ROLE === 'administrateur';
+                    const actionCell = canReclaim
+                        ? `<button class="btn btn-sm btn-outline-warning" title="Réclamation" onclick="openReclamationModal(${r.id}, ${licId}, '${esc(r.reason_label)}', ${r.points_deducted}, '${esc(r.created_at)}')"><i class="fas fa-gavel"></i></button>`
+                        : '<span class="text-muted">—</span>';
                     return `
                     <tr>
                         <td class="text-muted small">${r.created_at}</td>
@@ -816,13 +1034,67 @@
                         <td>${deductCell}</td>
                         <td><span class="badge ${ptsCls(r.points_after)}">${r.points_after}/${max}</span></td>
                         <td class="text-muted small">${esc(r.created_by || '—')}</td>
+                        <td>${actionCell}</td>
                     </tr>`;
                 }).join('');
             })
             .catch(() => {
-                if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erreur de chargement.</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erreur de chargement.</td></tr>';
             });
     }
+
+    /* ── Réclamation ── */
+    window.openReclamationModal = function (historyId, licId, reasonLabel, pointsDeducted, createdAt) {
+        document.getElementById('reclamation-history-id').value = historyId;
+        document.getElementById('reclamation-license-id').value = licId;
+        document.getElementById('reclamation-info').textContent =
+            `Infraction « ${reasonLabel} » (−${pointsDeducted} pts) du ${createdAt}.`;
+        document.getElementById('reclamation-action-change').checked = true;
+        const sel = document.getElementById('reclamation-reason-select');
+        sel.innerHTML = _reasons.map(r => `<option value="${r.id}">${esc(r.label)} (−${r.points_to_deduct} pts)</option>`).join('');
+        onReclamationActionChange();
+        new bootstrap.Modal(document.getElementById('reclamationModal')).show();
+    };
+
+    window.onReclamationActionChange = function () {
+        const isCancel = document.getElementById('reclamation-action-cancel').checked;
+        document.getElementById('reclamation-reason-wrap').style.display = isCancel ? 'none' : '';
+        document.getElementById('reclamation-cancel-note').style.display = isCancel ? '' : 'none';
+    };
+
+    window.submitReclamation = async function () {
+        const historyId = document.getElementById('reclamation-history-id').value;
+        const licId     = document.getElementById('reclamation-license-id').value;
+        const action    = document.querySelector('input[name="reclamation-action"]:checked').value;
+        const body = { action };
+        if (action === 'change_reason') {
+            const reasonId = document.getElementById('reclamation-reason-select').value;
+            if (!reasonId) { alert('Sélectionnez un motif.'); return; }
+            body.reason_id = reasonId;
+        } else if (!confirm('Confirmer l\'annulation de ce retrait de points ? Cette action est irréversible.')) {
+            return;
+        }
+        const btn = document.getElementById('reclamation-confirm-btn');
+        btn.disabled = true;
+        try {
+            const r = await fetch(`/api/licenses/point-history/${historyId}/reclamation`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) { alert(d.error || 'Erreur'); return; }
+            bootstrap.Modal.getInstance(document.getElementById('reclamationModal'))?.hide();
+            loadPointHistory(licId);
+            loadLicenses(false);
+            loadStats();
+        } catch (e) {
+            alert('Erreur réseau.');
+        } finally {
+            btn.disabled = false;
+        }
+    };
 
     /* ── Delete ── */
     window.deleteLicense = function (id, num) {
