@@ -3654,6 +3654,20 @@ def api_alerts_public_list():
     return jsonify(items)
 
 
+@api_bp.route('/alerts/public/<int:alert_id>', methods=['GET'])
+def api_alerts_public_detail(alert_id):
+    """Public, unauthenticated fetch of a single alert by ID (used by push notification tap)."""
+    a = Alert.query.get(alert_id)
+    if not a:
+        return jsonify({'error': 'Not found'}), 404
+    d = a.to_dict()
+    d.pop('created_by', None)
+    d['vehicles'] = [{'license_plate': v['license_plate']} for v in d.get('vehicles', [])]
+    d['description_html'] = d.get('description')
+    d['description'] = _html_to_plain_text(d.get('description'))
+    return jsonify(d)
+
+
 @api_bp.route('/alerts/mobile', methods=['GET'])
 @jwt_required()
 def api_alerts_mobile_list():
