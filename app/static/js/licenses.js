@@ -287,20 +287,103 @@
             .catch(() => {});
     }
 
+    // ── Articles de retrait de point ─────────────────────────────────────
+    let _pointArticles = [];
+
+    window.loadPointArticles = async function loadPointArticles() {
+        try {
+            const r = await fetch('/api/licenses/point-articles', { credentials: 'same-origin' });
+            const data = r.ok ? await r.json() : [];
+            _pointArticles = data;
+            renderPointArticlesList();
+            const sel = document.getElementById('s-reason-article');
+            if (sel) {
+                const cur = sel.value;
+                sel.innerHTML = '<option value="">— aucun —</option>' +
+                    data.map(a => `<option value="${a.id}">${esc(a.code)}${a.description ? ' — ' + esc(a.description) : ''}</option>`).join('');
+                sel.value = cur;
+            }
+        } catch {}
+    };
+
+    function renderPointArticlesList() {
+        const el = document.getElementById('point-articles-list');
+        if (!el) return;
+        if (!_pointArticles.length) {
+            el.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aucun article défini.</td></tr>';
+            return;
+        }
+        el.innerHTML = _pointArticles.map(a => `
+            <tr>
+                <td><strong>${esc(a.code)}</strong></td>
+                <td class="text-muted small">${esc(a.description || '—')}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-warning me-1" onclick="editPointArticle(${a.id})" title="Modifier"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deletePointArticle(${a.id})" title="Supprimer"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`).join('');
+    }
+
+    window.savePointArticle = async function () {
+        const editingId  = document.getElementById('s-article-editing-id').value;
+        const code       = document.getElementById('s-article-code').value.trim();
+        const description = document.getElementById('s-article-description').value.trim();
+        if (!code) { alert('N° article obligatoire.'); return; }
+        const url    = editingId ? `/api/licenses/point-articles/${editingId}` : '/api/licenses/point-articles';
+        const method = editingId ? 'PUT' : 'POST';
+        const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, credentials: 'same-origin', body: JSON.stringify({ code, description }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { alert(d.error || 'Erreur'); return; }
+        resetPointArticleForm();
+        loadPointArticles();
+    };
+
+    window.editPointArticle = function (id) {
+        const a = _pointArticles.find(x => x.id === id);
+        if (!a) return;
+        document.getElementById('s-article-editing-id').value = a.id;
+        document.getElementById('s-article-code').value        = a.code;
+        document.getElementById('s-article-description').value = a.description || '';
+        const btn = document.getElementById('s-article-submit-btn');
+        if (btn) { btn.innerHTML = '<i class="fas fa-save me-1"></i>Modifier'; btn.className = 'btn btn-warning'; }
+        document.getElementById('s-article-cancel-btn')?.classList.remove('d-none');
+    };
+
+    window.cancelEditPointArticle = function () { resetPointArticleForm(); };
+
+    window.deletePointArticle = async function (id) {
+        if (!confirm('Supprimer cet article ?')) return;
+        await fetch(`/api/licenses/point-articles/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+        resetPointArticleForm();
+        loadPointArticles();
+    };
+
+    function resetPointArticleForm() {
+        document.getElementById('s-article-editing-id').value = '';
+        document.getElementById('s-article-code').value = '';
+        document.getElementById('s-article-description').value = '';
+        const btn = document.getElementById('s-article-submit-btn');
+        if (btn) { btn.innerHTML = '<i class="fas fa-plus me-1"></i>Ajouter'; btn.className = 'btn btn-outline-primary'; }
+        document.getElementById('s-article-cancel-btn')?.classList.add('d-none');
+    }
+
+    // ── Motifs de réduction ───────────────────────────────────────────────
     window.loadReasons = function loadReasons() {
-        fetch('/api/licenses/point-reasons', { credentials: 'same-origin' })
-            .then(r => r.ok ? r.json() : [])
-            .then(data => {
-                _reasons = data;
-                renderReasonsList();
-            }).catch(() => {});
+        loadPointArticles().then(() => {
+            fetch('/api/licenses/point-reasons', { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : [])
+                .then(data => {
+                    _reasons = data;
+                    renderReasonsList();
+                }).catch(() => {});
+        });
     }
 
     function renderReasonsList() {
         const el = document.getElementById('reasons-list');
         if (!el) return;
         if (!_reasons.length) {
-            el.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Aucun motif défini.</td></tr>';
+            el.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Aucun motif défini.</td></tr>';
             return;
         }
         el.innerHTML = _reasons.map((r, i) => `
@@ -308,8 +391,9 @@
                 <td>${i + 1}</td>
                 <td>${esc(r.label)}</td>
                 <td><span class="badge bg-danger">−${r.points_to_deduct} pt${r.points_to_deduct > 1 ? 's' : ''}</span></td>
+                <td>${r.article_code ? `<span class="badge bg-secondary">${esc(r.article_code)}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-warning me-1" onclick="editReason(this)" data-id="${r.id}" data-label="${esc(r.label)}" data-pts="${r.points_to_deduct}" title="Modifier">
+                    <button class="btn btn-sm btn-outline-warning me-1" onclick="editReason(this)" data-id="${r.id}" data-label="${esc(r.label)}" data-pts="${r.points_to_deduct}" data-article="${r.article_id || ''}" title="Modifier">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteReason(${r.id})" title="Supprimer">
@@ -591,15 +675,18 @@
         document.getElementById('s-reason-label').value      = '';
         document.getElementById('s-reason-pts').value        = '1';
         document.getElementById('s-reason-editing-id').value = '';
+        const artSel = document.getElementById('s-reason-article');
+        if (artSel) artSel.value = '';
         const submitBtn = document.getElementById('s-reason-submit-btn');
-        if (submitBtn) { submitBtn.innerHTML = '<i class="fas fa-plus me-1"></i>Ajouter'; submitBtn.className = 'btn btn-danger'; }
+        if (submitBtn) { submitBtn.innerHTML = '<i class="fas fa-plus me-1"></i>Ajouter'; submitBtn.className = 'btn btn-outline-primary'; }
         document.getElementById('s-reason-cancel-btn')?.classList.add('d-none');
     }
 
     window.addReason = async function () {
-        const label     = document.getElementById('s-reason-label').value.trim();
-        const pts       = parseInt(document.getElementById('s-reason-pts').value) || 1;
-        const editingId = document.getElementById('s-reason-editing-id').value;
+        const label      = document.getElementById('s-reason-label').value.trim();
+        const pts        = parseInt(document.getElementById('s-reason-pts').value) || 1;
+        const article_id = document.getElementById('s-reason-article')?.value || null;
+        const editingId  = document.getElementById('s-reason-editing-id').value;
         if (!label) { alert('Libellé obligatoire.'); return; }
 
         const isEdit = !!editingId;
@@ -610,7 +697,7 @@
             method,
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ label, points_to_deduct: pts }),
+            body: JSON.stringify({ label, points_to_deduct: pts, article_id: article_id || null }),
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { alert(d.error || 'Erreur'); return; }
@@ -619,12 +706,15 @@
     };
 
     window.editReason = function (el) {
-        const id    = el.dataset.id;
-        const label = el.dataset.label;
-        const pts   = el.dataset.pts;
+        const id         = el.dataset.id;
+        const label      = el.dataset.label;
+        const pts        = el.dataset.pts;
+        const article_id = el.dataset.article || '';
         document.getElementById('s-reason-label').value      = label;
         document.getElementById('s-reason-pts').value        = pts;
         document.getElementById('s-reason-editing-id').value = id;
+        const artSel = document.getElementById('s-reason-article');
+        if (artSel) artSel.value = article_id;
         const submitBtn = document.getElementById('s-reason-submit-btn');
         if (submitBtn) { submitBtn.innerHTML = '<i class="fas fa-save me-1"></i>Modifier'; submitBtn.className = 'btn btn-warning'; }
         document.getElementById('s-reason-cancel-btn')?.classList.remove('d-none');

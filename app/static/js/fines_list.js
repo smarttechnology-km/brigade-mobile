@@ -66,13 +66,15 @@ document.addEventListener('DOMContentLoaded', function(){
     const modalEl = document.getElementById('fine-types-modal');
     if(modalEl){
         modalEl.addEventListener('show.bs.modal', function(){
-            try{ 
-                // reset form to add mode when opening modal
+            try{
                 document.getElementById('fine-type-form').reset();
                 document.getElementById('fine-type-id').value = '';
                 toggleFineTypeFormAddMode(true);
-                loadFineTypes();
-            }catch(e){console.error(e);} 
+                document.getElementById('fine-article-form').reset();
+                document.getElementById('fine-article-id').value = '';
+                toggleFineArticleFormAddMode(true);
+                loadFineArticles().then(()=>loadFineTypes());
+            }catch(e){console.error(e);}
         });
     }
 
@@ -363,11 +365,93 @@ function finesGoToNextPage() {
 
 // vehicle-select removed; users input immatriculation and we resolve via /api/vehicles/query
 
+function loadFineArticles(){
+    return fetch('/api/vehicles/fines/articles')
+        .then(r=>r.json())
+        .then(data=>{
+            window.fineArticlesCache = data;
+            // populate article selects
+            const opts = '<option value="">— aucun —</option>' + data.map(a=>`<option value="${a.id}">${a.code}${a.description ? ' — '+a.description : ''}</option>`).join('');
+            ['fine-type-article'].forEach(id=>{
+                const el = document.getElementById(id);
+                if(el){ const cur = el.value; el.innerHTML = opts; el.value = cur; }
+            });
+            renderFineArticlesTable(data);
+        }).catch(()=>{});
+}
+
+function renderFineArticlesTable(items){
+    const tbody = document.getElementById('fine-articles-tbody');
+    if(!tbody) return;
+    if(!items || items.length===0){
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aucun article</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(a=>`<tr>
+        <td><strong>${a.code}</strong></td>
+        <td class="text-muted small">${a.description || '—'}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-secondary me-1" data-edit-article-id="${a.id}">Éditer</button>
+          <button class="btn btn-sm btn-outline-danger" data-delete-article-id="${a.id}">Supprimer</button>
+        </td>
+    </tr>`).join('');
+    document.querySelectorAll('[data-delete-article-id]').forEach(btn=>{
+        btn.addEventListener('click', function(){
+            const id = this.dataset.deleteArticleId;
+            if(!confirm('Supprimer cet article ?')) return;
+            fetch(`/api/vehicles/fines/articles/${id}`, { method:'DELETE' })
+                .then(r=>{ if(!r.ok) throw new Error(); return r.json(); })
+                .then(()=>loadFineArticles())
+                .catch(()=>alert('Impossible de supprimer'));
+        });
+    });
+    document.querySelectorAll('[data-edit-article-id]').forEach(btn=>{
+        btn.addEventListener('click', function(){
+            const id = this.dataset.editArticleId;
+            const a = (window.fineArticlesCache||[]).find(x=>String(x.id)===String(id));
+            if(!a) return;
+            document.getElementById('fine-article-id').value = a.id;
+            document.getElementById('fine-article-code').value = a.code;
+            document.getElementById('fine-article-description').value = a.description || '';
+            toggleFineArticleFormAddMode(false);
+        });
+    });
+}
+
+const fineArticleForm = document.getElementById('fine-article-form');
+if(fineArticleForm) fineArticleForm.addEventListener('submit', function(e){
+    e.preventDefault();
+    const id = document.getElementById('fine-article-id').value;
+    const code = document.getElementById('fine-article-code').value.trim();
+    const description = document.getElementById('fine-article-description').value.trim();
+    if(!code){ alert('N° article requis'); return; }
+    const payload = { code, description };
+    const url = id ? `/api/vehicles/fines/articles/${id}` : '/api/vehicles/fines/articles';
+    fetch(url, { method: id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+        .then(r=>{ if(!r.ok) return r.json().then(x=>{throw x;}); return r.json(); })
+        .then(()=>{ fineArticleForm.reset(); document.getElementById('fine-article-id').value=''; toggleFineArticleFormAddMode(true); loadFineArticles(); })
+        .catch(err=>alert(err.error || 'Erreur'));
+});
+
+const fineArticleCancelBtn = document.getElementById('fine-article-cancel');
+if(fineArticleCancelBtn) fineArticleCancelBtn.addEventListener('click', function(){
+    document.getElementById('fine-article-form').reset();
+    document.getElementById('fine-article-id').value='';
+    toggleFineArticleFormAddMode(true);
+});
+
+function toggleFineArticleFormAddMode(isAdd){
+    const btn = document.querySelector('#fine-article-form button[type="submit"]');
+    const cancel = document.getElementById('fine-article-cancel');
+    if(btn) btn.textContent = isAdd ? 'Ajouter' : 'Enregistrer';
+    if(cancel){ if(isAdd) cancel.classList.add('d-none'); else cancel.classList.remove('d-none'); }
+}
+
 function loadFineTypes(){
     fetch('/api/vehicles/fines/types')
         .then(r=>r.json())
         .then(data=>{
-            window.fineTypesCache = data; // cache pour l'édition inline
+            window.fineTypesCache = data;
             // populate select for creating fines
             const typeSel = document.getElementById('fine-type-select');
             if(typeSel){
@@ -375,19 +459,17 @@ function loadFineTypes(){
                 typeSel.addEventListener('change', function(){
                     const opt = this.options[this.selectedIndex];
                     if(!opt || !opt.value) return;
-                    const a = opt.dataset.amount;
-                    const l = opt.dataset.label;
                     const amtEl = document.getElementById('fine-amount');
                     const reasonEl = document.getElementById('fine-reason');
-                    if(amtEl) amtEl.value = a || '';
-                    if(reasonEl) reasonEl.value = l || '';
+                    if(amtEl) amtEl.value = opt.dataset.amount || '';
+                    if(reasonEl) reasonEl.value = opt.dataset.label || '';
                 });
             }
             renderFineTypesTable(data);
         }).catch(err=>{
             console.error('Erreur chargement types amandes',err);
             const tbody = document.getElementById('fine-types-tbody');
-            if(tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Erreur chargement</td></tr>';
+            if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Erreur chargement</td></tr>';
         });
 }
 
@@ -395,13 +477,14 @@ function renderFineTypesTable(items){
     const tbody = document.getElementById('fine-types-tbody');
     if(!tbody) return;
     if(!items || items.length===0){
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center">Aucun type</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucun type</td></tr>';
         return;
     }
     tbody.innerHTML = items.map((t,i)=>`<tr>
         <td>${i+1}</td>
         <td>${t.label}</td>
         <td>${Math.round(t.amount)} KMF</td>
+        <td>${t.article_code ? `<span class="badge bg-secondary">${t.article_code}</span>` : '<span class="text-muted">—</span>'}</td>
         <td>
           <button class="btn btn-sm btn-outline-secondary me-1" data-edit-type-id="${t.id}">Éditer</button>
           <button class="btn btn-sm btn-outline-danger" data-delete-type-id="${t.id}">Supprimer</button>
@@ -432,23 +515,19 @@ function submitFineTypeForm(e){
     const id = document.getElementById('fine-type-id').value;
     const label = document.getElementById('fine-type-label').value;
     const amount = document.getElementById('fine-type-amount').value;
+    const article_id = document.getElementById('fine-type-article').value || null;
     if(!label || !amount){ alert('Veuillez remplir label et montant'); return; }
-    const payload = { label, amount };
-    if(id){
-        // Edit existing type
-        fetch(`/api/vehicles/fines/types/${id}`, {
-            method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
-        }).then(r=>{ if(!r.ok) return r.json().then(x=>{ throw x; }); return r.json(); })
-        .then(res=>{ document.getElementById('fine-type-form').reset(); document.getElementById('fine-type-id').value=''; toggleFineTypeFormAddMode(true); loadFineTypes(); alert('Type mis à jour'); })
-        .catch(err=>{ alert(err.error || 'Erreur mise à jour type'); });
-    } else {
-        // Create new type
-        fetch('/api/vehicles/fines/types', {
-            method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
-        }).then(r=>{ if(!r.ok) return r.json().then(x=>{ throw x; }); return r.json(); })
-        .then(res=>{ document.getElementById('fine-type-form').reset(); loadFineTypes(); alert('Type ajouté'); })
-        .catch(err=>{ alert(err.error || 'Erreur création type'); });
-    }
+    const payload = { label, amount, article_id };
+    const url = id ? `/api/vehicles/fines/types/${id}` : '/api/vehicles/fines/types';
+    fetch(url, { method: id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+        .then(r=>{ if(!r.ok) return r.json().then(x=>{ throw x; }); return r.json(); })
+        .then(()=>{
+            document.getElementById('fine-type-form').reset();
+            document.getElementById('fine-type-id').value='';
+            toggleFineTypeFormAddMode(true);
+            loadFineTypes();
+        })
+        .catch(err=>{ alert(err.error || 'Erreur'); });
 }
 
 // Cancel edit button handler
@@ -462,17 +541,14 @@ if(fineTypeCancelBtn){
 }
 
 function openEditFineType(id){
-    // fetch single type details from list already loaded
-    fetch('/api/vehicles/fines/types')
-        .then(r=>{ if(!r.ok) throw new Error('Erreur'); return r.json(); })
-        .then(list=>{
-            const t = (list || []).find(x=>String(x.id)===String(id));
-            if(!t) return alert('Type introuvable');
-            document.getElementById('fine-type-id').value = t.id;
-            document.getElementById('fine-type-label').value = t.label;
-            document.getElementById('fine-type-amount').value = t.amount;
-            toggleFineTypeFormAddMode(false);
-        }).catch(err=>{ alert('Impossible de charger le type'); });
+    const t = (window.fineTypesCache || []).find(x=>String(x.id)===String(id));
+    if(!t) return alert('Type introuvable');
+    document.getElementById('fine-type-id').value = t.id;
+    document.getElementById('fine-type-label').value = t.label;
+    document.getElementById('fine-type-amount').value = t.amount;
+    const artSel = document.getElementById('fine-type-article');
+    if(artSel) artSel.value = t.article_id || '';
+    toggleFineTypeFormAddMode(false);
 }
 
 function toggleFineTypeFormAddMode(isAdd){
