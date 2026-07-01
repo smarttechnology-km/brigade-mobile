@@ -437,6 +437,11 @@
             </button>
           </li>
           <li class="nav-item">
+            <button class="nav-link" id="tab-articles-btn" data-bs-toggle="tab" data-bs-target="#tab-articles" type="button" onclick="loadPointArticles()">
+              <i class="fas fa-book me-1"></i>Articles
+            </button>
+          </li>
+          <li class="nav-item">
             <button class="nav-link" id="tab-reasons-btn" data-bs-toggle="tab" data-bs-target="#tab-reasons" type="button" onclick="loadReasons()">
               <i class="fas fa-minus-circle me-1"></i>Motifs de réduction
             </button>
@@ -576,21 +581,59 @@
           </div>
 
           <!-- Motifs de réduction -->
+          <!-- Tab Articles de retrait de point -->
+          <div class="tab-pane" id="tab-articles">
+            <div class="row g-2 align-items-end mb-3">
+              <input type="hidden" id="s-article-editing-id">
+              <div class="col-md-3">
+                <label class="form-label small">N° Article</label>
+                <input type="text" id="s-article-code" class="form-control" placeholder="Ex : Contravention du #eme classe">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small">Description</label>
+                <input type="text" id="s-article-description" class="form-control" placeholder="Texte de l'article (optionnel)">
+              </div>
+              <div class="col-md-3 text-end">
+                <button type="button" class="btn btn-outline-secondary me-1 d-none" id="s-article-cancel-btn" onclick="cancelEditPointArticle()">Annuler</button>
+                <button type="button" class="btn btn-outline-primary" id="s-article-submit-btn" onclick="savePointArticle()">
+                  <i class="fas fa-plus me-1"></i>Ajouter
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr><th>N° Article</th><th>Description</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="point-articles-list">
+                  <tr><td colspan="3" class="text-center text-muted">Chargement…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab Motifs de réduction -->
           <div class="tab-pane" id="tab-reasons">
             <div class="row g-2 align-items-end mb-3">
               <input type="hidden" id="s-reason-editing-id">
-              <div class="col-md-6">
+              <div class="col-md-5">
                 <label class="form-label small">Libellé du motif</label>
                 <input type="text" id="s-reason-label" class="form-control" placeholder="Ex : Excès de vitesse">
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="form-label small">Points à déduire</label>
                 <div class="input-group">
                   <input type="number" id="s-reason-pts" class="form-control" min="1" max="20" value="1">
                   <span class="input-group-text">pts</span>
                 </div>
               </div>
-              <div class="col-md-3 text-end">
+              <div class="col-md-3">
+                <label class="form-label small">Article</label>
+                <select id="s-reason-article" class="form-select">
+                  <option value="">— aucun —</option>
+                </select>
+              </div>
+              <div class="col-md-2 text-end">
                 <button type="button" class="btn btn-outline-secondary me-1 d-none" id="s-reason-cancel-btn" onclick="cancelEditReason()">Annuler</button>
                 <button type="button" class="btn btn-outline-primary" id="s-reason-submit-btn" onclick="addReason()">
                   <i class="fas fa-plus me-1"></i>Ajouter
@@ -604,11 +647,12 @@
                     <th>#</th>
                     <th>Motif</th>
                     <th>Points déduits</th>
+                    <th>Article</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="reasons-list">
-                  <tr><td colspan="4" class="text-center text-muted">Chargement…</td></tr>
+                  <tr><td colspan="5" class="text-center text-muted">Chargement…</td></tr>
                 </tbody>
               </table>
             </div>
