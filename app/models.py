@@ -362,13 +362,32 @@ def _fine_delete_photo_on_delete(mapper, connection, target):
     _delete_fine_photo_file(target.photo_filename)
 
 
+class FineArticle(db.Model):
+    __tablename__ = 'fine_articles'
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), nullable=False)          # e.g. "Art. 234-2"
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'code': self.code,
+            'description': self.description,
+            'created_at': self.created_at.isoformat(),
+        }
+
+
 class FineType(db.Model):
     __tablename__ = 'fine_types'
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(50), unique=True, nullable=True)
     label = db.Column(db.String(150), nullable=False)
     amount = db.Column(db.Numeric(10,2), nullable=False)
+    article_id = db.Column(db.Integer, db.ForeignKey('fine_articles.id'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    article = db.relationship('FineArticle', backref='fine_types', lazy=True)
 
     def __repr__(self):
         return f'<FineType {self.label} ({self.amount})>'
@@ -379,7 +398,9 @@ class FineType(db.Model):
             'code': self.code,
             'label': self.label,
             'amount': float(self.amount),
-            'created_at': self.created_at.isoformat()
+            'article_id': self.article_id,
+            'article_code': self.article.code if self.article else None,
+            'created_at': self.created_at.isoformat(),
         }
 
 
@@ -1232,18 +1253,39 @@ class LicensePrintRequest(db.Model):
         }
 
 
+class PointReductionArticle(db.Model):
+    __tablename__ = 'point_reduction_articles'
+    id          = db.Column(db.Integer, primary_key=True)
+    code        = db.Column(db.String(50), nullable=False)   # e.g. "Art. R234-2"
+    description = db.Column(db.Text, nullable=True)
+    created_at  = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'code': self.code,
+            'description': self.description,
+            'created_at': self.created_at.isoformat(),
+        }
+
+
 class PointReductionReason(db.Model):
     __tablename__ = 'point_reduction_reasons'
     id               = db.Column(db.Integer, primary_key=True)
     label            = db.Column(db.String(200), nullable=False)
     points_to_deduct = db.Column(db.Integer, nullable=False, default=1)
+    article_id       = db.Column(db.Integer, db.ForeignKey('point_reduction_articles.id'), nullable=True)
     created_at       = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    article = db.relationship('PointReductionArticle', backref='reasons', lazy=True)
 
     def to_dict(self):
         return {
             'id': self.id,
             'label': self.label,
             'points_to_deduct': self.points_to_deduct,
+            'article_id': self.article_id,
+            'article_code': self.article.code if self.article else None,
         }
 
 

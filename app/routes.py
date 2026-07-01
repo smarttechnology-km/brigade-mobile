@@ -1536,6 +1536,43 @@ def list_all_fines():
     return jsonify(result)
 
 
+@vehicle_bp.route('/fines/articles', methods=['GET', 'POST'])
+@login_required
+def manage_fine_articles():
+    """GET: list fine articles. POST: create a new fine article."""
+    from app.models import FineArticle
+    if request.method == 'GET':
+        articles = FineArticle.query.order_by(FineArticle.code).all()
+        return jsonify([a.to_dict() for a in articles])
+    data = request.get_json() or request.form
+    code = (data.get('code') or '').strip()
+    description = (data.get('description') or '').strip()
+    if not code:
+        return jsonify({'error': 'code requis'}), 400
+    article = FineArticle(code=code, description=description or None)
+    db.session.add(article)
+    db.session.commit()
+    return jsonify(article.to_dict()), 201
+
+
+@vehicle_bp.route('/fines/articles/<int:article_id>', methods=['PUT', 'DELETE'])
+@login_required
+def fine_article_detail(article_id):
+    from app.models import FineArticle
+    article = FineArticle.query.get_or_404(article_id)
+    if request.method == 'DELETE':
+        db.session.delete(article)
+        db.session.commit()
+        return jsonify({'message': 'Supprimé'})
+    data = request.get_json() or request.form
+    if 'code' in data:
+        article.code = (data['code'] or '').strip()
+    if 'description' in data:
+        article.description = (data['description'] or '').strip() or None
+    db.session.commit()
+    return jsonify(article.to_dict())
+
+
 @vehicle_bp.route('/fines/types', methods=['GET', 'POST'])
 @login_required
 def manage_fine_types():
@@ -1549,13 +1586,15 @@ def manage_fine_types():
     label = data.get('label')
     amount = data.get('amount')
     code = data.get('code')
+    article_id = data.get('article_id') or None
     if not label or not amount:
         return jsonify({'error': 'label et amount requis'}), 400
     try:
         amt = Decimal(str(amount))
     except Exception:
         return jsonify({'error': 'Montant invalide'}), 400
-    ft = FineType(label=label, amount=amt, code=code)
+    ft = FineType(label=label, amount=amt, code=code,
+                  article_id=int(article_id) if article_id else None)
     db.session.add(ft)
     db.session.commit()
     return jsonify(ft.to_dict()), 201
@@ -1581,6 +1620,8 @@ def fine_type_detail(type_id):
             return jsonify({'error': 'Montant invalide'}), 400
     if 'code' in data:
         ft.code = data.get('code')
+    if 'article_id' in data:
+        ft.article_id = int(data['article_id']) if data['article_id'] else None
     db.session.commit()
     return jsonify(ft.to_dict())
 

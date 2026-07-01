@@ -244,7 +244,9 @@ def api_fine_types_list():
         "fine_types": [{
             "id": ft.id,
             "name": ft.label,
-            "default_amount": float(ft.amount)
+            "default_amount": float(ft.amount),
+            "article_code": ft.article.code if ft.article else None,
+            "article_description": ft.article.description if ft.article else None,
         } for ft in fine_types]
     })
 
@@ -2946,6 +2948,59 @@ def api_licenses_settings_signature_delete():
     return jsonify(s.to_dict())
 
 
+@api_bp.route('/licenses/point-articles', methods=['GET'])
+@login_required
+def api_point_articles_list():
+    from app.models import PointReductionArticle
+    articles = PointReductionArticle.query.order_by(PointReductionArticle.code).all()
+    return jsonify([a.to_dict() for a in articles])
+
+
+@api_bp.route('/licenses/point-articles', methods=['POST'])
+@login_required
+def api_point_articles_create():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    from app.models import PointReductionArticle
+    data = request.get_json() or {}
+    code = (data.get('code') or '').strip()
+    if not code:
+        return jsonify({'error': 'Code requis'}), 400
+    description = (data.get('description') or '').strip() or None
+    a = PointReductionArticle(code=code, description=description)
+    db.session.add(a)
+    db.session.commit()
+    return jsonify(a.to_dict()), 201
+
+
+@api_bp.route('/licenses/point-articles/<int:article_id>', methods=['PUT'])
+@login_required
+def api_point_articles_update(article_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    from app.models import PointReductionArticle
+    a = PointReductionArticle.query.get_or_404(article_id)
+    data = request.get_json() or {}
+    if 'code' in data:
+        a.code = (data['code'] or '').strip()
+    if 'description' in data:
+        a.description = (data['description'] or '').strip() or None
+    db.session.commit()
+    return jsonify(a.to_dict())
+
+
+@api_bp.route('/licenses/point-articles/<int:article_id>', methods=['DELETE'])
+@login_required
+def api_point_articles_delete(article_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    from app.models import PointReductionArticle
+    a = PointReductionArticle.query.get_or_404(article_id)
+    db.session.delete(a)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 @api_bp.route('/licenses/point-reasons', methods=['GET'])
 @login_required
 def api_point_reasons_list():
@@ -2966,7 +3021,9 @@ def api_point_reasons_create():
         pts = max(1, int(data.get('points_to_deduct', 1)))
     except (ValueError, TypeError):
         pts = 1
-    r = PointReductionReason(label=label, points_to_deduct=pts)
+    article_id = data.get('article_id') or None
+    r = PointReductionReason(label=label, points_to_deduct=pts,
+                             article_id=int(article_id) if article_id else None)
     db.session.add(r)
     db.session.commit()
     return jsonify(r.to_dict()), 201
@@ -2983,6 +3040,8 @@ def api_point_reasons_update(reason_id):
         r.label = data['label'].strip()
     if 'points_to_deduct' in data:
         r.points_to_deduct = int(data['points_to_deduct'])
+    if 'article_id' in data:
+        r.article_id = int(data['article_id']) if data['article_id'] else None
     db.session.commit()
     return jsonify(r.to_dict())
 

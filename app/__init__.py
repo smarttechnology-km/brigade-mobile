@@ -496,6 +496,26 @@ def create_app():
                             conn.execute(text("ALTER TABLE alerts ADD COLUMN is_pinned BOOLEAN NOT NULL DEFAULT 0"))
                             logger.info("Added missing alerts.is_pinned column")
 
+                    # Patch fine_types: add article_id column
+                    ft_table_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='fine_types'")
+                    ).first() is not None
+                    if ft_table_exists:
+                        ft_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(fine_types)")).fetchall()}
+                        if 'article_id' not in ft_cols:
+                            conn.execute(text("ALTER TABLE fine_types ADD COLUMN article_id INTEGER REFERENCES fine_articles(id)"))
+                            logger.info("Added fine_types.article_id column")
+
+                    # Patch point_reduction_reasons: add article_id column
+                    prr_table_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='point_reduction_reasons'")
+                    ).first() is not None
+                    if prr_table_exists:
+                        prr_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(point_reduction_reasons)")).fetchall()}
+                        if 'article_id' not in prr_cols:
+                            conn.execute(text("ALTER TABLE point_reduction_reasons ADD COLUMN article_id INTEGER REFERENCES point_reduction_articles(id)"))
+                            logger.info("Added point_reduction_reasons.article_id column")
+
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
 
