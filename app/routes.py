@@ -5019,7 +5019,7 @@ def get_mobile_money_archive():
         vignette_penalties += penalty_amount
         vignette_included_fines += fines_amount
 
-    # QR code renewals archive — only those recorded by mobile_money_agent accounts
+    # QR code renewals archive — mobile agents OR citizen app (recorded_by not a system user)
     from app.models import QRCodePayment
     qr_query = QRCodePayment.query.filter(
         QRCodePayment.payment_type == 'renewal',
@@ -5027,7 +5027,10 @@ def get_mobile_money_archive():
         QRCodePayment.paid_at.isnot(None),
         QRCodePayment.paid_at >= start_date,
         QRCodePayment.paid_at <= end_date,
-        QRCodePayment.recorded_by.in_(mobile_agent_usernames) if mobile_agent_usernames else db.false(),
+        db.or_(
+            QRCodePayment.recorded_by.in_(mobile_agent_usernames),
+            QRCodePayment.recorded_by.notin_(other_system_usernames),
+        ) if other_system_usernames else QRCodePayment.recorded_by.isnot(None),
     )
     if user_country:
         qr_query = qr_query.join(Vehicle, QRCodePayment.vehicle_id == Vehicle.id)\
