@@ -128,7 +128,6 @@
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
-            <a class="nav-link text-white {% if request.path.startswith('/payments') or request.path.startswith('/fines/receipt') %}active{% endif %}" href="/payments"><i class="fas fa-credit-card me-2"></i> Paiements</a>
             <a class="nav-link text-white {% if request.path.startswith('/reports') %}active{% endif %}" href="/reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
             {% endif %}
 
@@ -159,8 +158,9 @@
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'mobile_money_agent') %}
-            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-dashboard') %}active{% endif %}" href="/mobile-money-dashboard"><i class="fas fa-wallet me-2"></i> Dashboard Mobile Money</a>
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-dashboard') %}active{% endif %}" href="/mobile-money-dashboard"><i class="fas fa-wallet me-2"></i> Dashboard Money</a>
             <a class="nav-link text-white {% if request.path.startswith('/mobile-money-vignettes') %}active{% endif %}" href="/mobile-money-vignettes"><i class="fas fa-ticket-alt me-2"></i> Paiement Vignettes</a>
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-qr-renewal') %}active{% endif %}" href="/mobile-money-qr-renewal"><i class="fas fa-qrcode me-2"></i> Renouvellement QR</a>
             <a class="nav-link text-white {% if request.path.startswith('/mobile-money-archive') %}active{% endif %}" href="/mobile-money-archive"><i class="fas fa-archive me-2"></i> Archive Paiements</a>
             {% endif %}
 

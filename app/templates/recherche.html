@@ -1,152 +1,305 @@
 {% extends "base.html" %}
 
-{% block title %}Recherche - Contrôle Policier{% endblock %}
+{% block title %}Investigation — Contrôle Policier{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ══ LAYOUT — always ══ */
+  #fbi-page { min-height:100vh; padding:32px 24px; }
+
+  .fbi-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:32px; padding-bottom:24px; border-bottom:1px solid var(--bs-border-color); }
+  .fbi-logo-row { display:flex; align-items:center; gap:16px; }
+  .fbi-shield { width:58px; height:58px; background:linear-gradient(145deg,#c0392b,#7b0000); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.6rem; color:#fff; box-shadow:0 0 18px rgba(192,57,43,.4); flex-shrink:0; }
+  .fbi-title { font-size:1.45rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; line-height:1.2; }
+  .fbi-subtitle { font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; margin-top:3px; opacity:.55; }
+  .fbi-badge-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; }
+  .fbi-chip { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; padding:3px 10px; border-radius:20px; }
+  .fbi-chip-red   { background:rgba(192,57,43,.12); color:#c0392b; border:1px solid rgba(192,57,43,.3); }
+  .fbi-chip-gray  { background:rgba(108,117,125,.1); color:#6c757d; border:1px solid rgba(108,117,125,.25); }
+  .fbi-chip-green { background:rgba(22,163,74,.1); color:#16a34a; border:1px solid rgba(22,163,74,.3); }
+  .fbi-pulse { width:7px; height:7px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px #22c55e; animation:pulse 1.8s infinite; display:inline-block; margin-right:4px; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  .fbi-stamp { font-size:.62rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase; border:2px solid rgba(192,57,43,.45); color:rgba(192,57,43,.6); padding:6px 14px; border-radius:4px; transform:rotate(-3deg); white-space:nowrap; align-self:center; }
+
+  .fbi-panel { background:var(--bs-body-bg); border:1px solid var(--bs-border-color); border-top:3px solid #c0392b; border-radius:10px; padding:24px 28px; margin-bottom:28px; box-shadow:0 1px 6px rgba(0,0,0,.06); }
+  .fbi-panel-title { font-size:.68rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#c0392b; margin-bottom:18px; display:flex; align-items:center; gap:8px; }
+  .fbi-panel-title::after { content:''; flex:1; height:1px; background:linear-gradient(to right,rgba(192,57,43,.35),transparent); }
+
+  .fbi-label { font-size:.68rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--bs-secondary-color); margin-bottom:6px; display:block; }
+  .fbi-input, .fbi-select { font-family:'Courier New',monospace; font-size:.9rem; transition:border-color .2s,box-shadow .2s; }
+  .fbi-input:focus, .fbi-select:focus { border-color:#c0392b !important; box-shadow:0 0 0 3px rgba(192,57,43,.18) !important; }
+
+  .btn-fbi-search { background:linear-gradient(135deg,#c0392b,#96281b); color:#fff; border:none; font-size:.78rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; padding:10px 28px; border-radius:6px; transition:all .2s; box-shadow:0 4px 14px rgba(192,57,43,.3); cursor:pointer; }
+  .btn-fbi-search:hover:not(:disabled) { background:linear-gradient(135deg,#e74c3c,#c0392b); box-shadow:0 4px 20px rgba(192,57,43,.5); color:#fff; transform:translateY(-1px); }
+  .btn-fbi-search:disabled { opacity:.65; cursor:default; }
+  .btn-fbi-clear { background:transparent; border:1px solid var(--bs-border-color); color:var(--bs-secondary-color); font-size:.78rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; padding:10px 20px; border-radius:6px; transition:all .2s; cursor:pointer; }
+  .btn-fbi-clear:hover { border-color:var(--bs-secondary-color); }
+
+  .fbi-results-label { font-size:.65rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--bs-secondary-color); margin-bottom:16px; }
+  .fbi-results-label span { color:#c0392b; }
+
+  .fbi-vehicle-card { background:var(--bs-body-bg); border:1px solid var(--bs-border-color); border-radius:10px; overflow:hidden; margin-bottom:20px; box-shadow:0 1px 6px rgba(0,0,0,.06); }
+  .fbi-vehicle-header { background:linear-gradient(135deg,#2c3e50,#3d5a80); border-bottom:1px solid var(--bs-border-color); padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .fbi-plate { font-family:'Courier New',monospace; font-size:1.2rem; font-weight:900; letter-spacing:3px; color:#fff; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); border-radius:6px; padding:4px 14px; }
+  .fbi-vehicle-meta { display:flex; flex-wrap:wrap; gap:8px; }
+  .fbi-meta-chip { font-size:.7rem; color:rgba(255,255,255,.8); background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.15); border-radius:4px; padding:2px 8px; text-transform:capitalize; }
+
+  .fbi-licenses-grid { display:flex; flex-wrap:wrap; gap:14px; padding:18px; }
+
+  .fbi-tile { background:var(--bs-body-bg); border:1px solid var(--bs-border-color); border-radius:8px; padding:14px; width:260px; display:flex; flex-direction:column; gap:8px; position:relative; transition:border-color .2s,box-shadow .2s; }
+  .fbi-tile:hover { border-color:#c0392b; box-shadow:0 4px 18px rgba(192,57,43,.1); }
+  .fbi-tile-corner { position:absolute; top:8px; right:8px; font-size:.58rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--bs-secondary-color); opacity:.4; }
+  .fbi-tile-photo { width:52px; height:52px; border-radius:6px; object-fit:cover; border:2px solid var(--bs-border-color); flex-shrink:0; }
+  .fbi-tile-photo-ph { width:52px; height:52px; border-radius:6px; background:var(--bs-secondary-bg); border:2px solid var(--bs-border-color); display:flex; align-items:center; justify-content:center; color:var(--bs-secondary-color); font-size:1.3rem; flex-shrink:0; }
+  .fbi-tile-header { display:flex; align-items:center; gap:10px; }
+  .fbi-tile-name { font-weight:700; font-size:.92rem; line-height:1.2; }
+  .fbi-tile-firstname { font-size:.8rem; color:var(--bs-secondary-color); }
+  .fbi-tile-num { font-family:'Courier New',monospace; font-size:.72rem; color:var(--bs-secondary-color); background:var(--bs-secondary-bg); border:1px solid var(--bs-border-color); border-radius:4px; padding:2px 6px; display:inline-block; margin-top:2px; }
+  .fbi-tile-row { display:flex; justify-content:space-between; font-size:.78rem; }
+  .fbi-tile-row .lbl { color:var(--bs-secondary-color); text-transform:uppercase; font-size:.65rem; letter-spacing:.06em; }
+  .fbi-tile-cats { display:flex; flex-wrap:wrap; gap:4px; }
+  .fbi-cat { background:rgba(192,57,43,.1); color:#c0392b; border:1px solid rgba(192,57,43,.25); border-radius:4px; padding:1px 6px; font-size:.7rem; font-weight:700; font-family:monospace; }
+
+  .fbi-status-actif    { color:#16a34a; font-weight:700; }
+  .fbi-status-suspendu { color:#d97706; font-weight:700; }
+  .fbi-status-revoque  { color:#dc2626; font-weight:700; }
+  .fbi-status-expire   { color:#6b7280; font-weight:700; }
+
+  .btn-fbi-details { background:var(--bs-secondary-bg); border:1px solid var(--bs-border-color); color:var(--bs-secondary-color); font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; padding:6px 12px; border-radius:5px; margin-top:4px; transition:all .2s; cursor:pointer; }
+  .btn-fbi-details:hover { border-color:#c0392b; color:#c0392b; background:rgba(192,57,43,.06); }
+
+  .fbi-no-license { color:var(--bs-secondary-color); font-size:.85rem; padding:16px 18px; font-style:italic; }
+  .fbi-not-found  { color:#dc2626; font-size:.82rem; padding:12px 14px; }
+  .fbi-empty { text-align:center; padding:56px 24px; color:var(--bs-secondary-color); }
+  .fbi-empty i { font-size:3rem; margin-bottom:12px; display:block; opacity:.3; }
+  .fbi-empty p { font-size:.85rem; text-transform:uppercase; letter-spacing:.1em; }
+
+  /* ── Detail Modal (always) ── */
+  .dm-section-title { font-size:.65rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#c0392b; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .dm-section-title::after { content:''; flex:1; height:1px; background:linear-gradient(to right,rgba(192,57,43,.3),transparent); }
+  .dm-info-row .lbl { font-size:.65rem; color:var(--bs-secondary-color); text-transform:uppercase; letter-spacing:.06em; }
+  .dm-info-row .val { font-size:.88rem; font-weight:500; }
+  .fbi-modal-badge { font-size:.75rem; padding:4px 12px; border-radius:20px; font-weight:700; letter-spacing:.04em; }
+  #dm-photo-wrap img { width:120px; height:140px; object-fit:cover; border-radius:8px; border:2px solid var(--bs-border-color); }
+  .dm-photo-placeholder { width:120px; height:120px; border-radius:8px; background:var(--bs-secondary-bg); border:2px solid var(--bs-border-color); display:flex; align-items:center; justify-content:center; color:var(--bs-secondary-color); font-size:2.5rem; }
+  .cat-detail-badge { background:rgba(192,57,43,.1); color:#c0392b; border:1px solid rgba(192,57,43,.2); border-radius:6px; padding:4px 10px; font-size:.75rem; font-family:monospace; font-weight:700; }
+  .cat-detail-badge small { display:block; font-weight:400; opacity:.75; font-size:.68rem; }
+  #dm-suspend-section { background:rgba(239,68,68,.06); border:1px solid rgba(239,68,68,.2); border-radius:8px; padding:14px; }
+  .dm-type-badge { background:rgba(0,0,0,.06); color:#6b7280; border:1px solid rgba(0,0,0,.15); }
+  .dm-points-val { color:var(--bs-body-color); }
+  .dm-dl-btn { background:rgba(192,57,43,.1); border:1px solid rgba(192,57,43,.3); color:#c0392b; }
+  .dm-close-btn { background:var(--bs-secondary-bg); border:1px solid var(--bs-border-color); color:var(--bs-secondary-color); }
+  .tile-val { color:var(--bs-secondary-color); }
+  [data-bs-theme="dark"] .dm-type-badge { background:rgba(255,255,255,.07); color:#9ca3af; border-color:#2d3748; }
+  [data-bs-theme="dark"] .dm-points-val { color:#e2e8f0; }
+  [data-bs-theme="dark"] .dm-dl-btn { background:rgba(192,57,43,.15); color:#f87171; }
+
+  /* ══ DARK MODE ══ */
+  [data-bs-theme="dark"] #fbi-page { background:#0b0c10; color:#c9d1d9; }
+  [data-bs-theme="dark"] .fbi-chip-gray { background:rgba(255,255,255,.06); color:#9ca3af; border-color:rgba(255,255,255,.1); }
+  [data-bs-theme="dark"] .fbi-panel { background:#111318; border-color:#1f2937; box-shadow:none; }
+  [data-bs-theme="dark"] .fbi-input, [data-bs-theme="dark"] .fbi-select { background:#0d0f14 !important; border:1px solid #2d3748 !important; color:#e2e8f0 !important; }
+  [data-bs-theme="dark"] .fbi-input::placeholder { color:#4b5563 !important; }
+  [data-bs-theme="dark"] .fbi-select option { background:#0d0f14; color:#e2e8f0; }
+  [data-bs-theme="dark"] .fbi-vehicle-card { background:#111318; border-color:#1f2937; box-shadow:none; }
+  [data-bs-theme="dark"] .fbi-vehicle-header { background:linear-gradient(135deg,#0d0f14,#161923); border-color:#1f2937; }
+  [data-bs-theme="dark"] .fbi-tile { background:#0d0f14; border-color:#1f2937; }
+  [data-bs-theme="dark"] .fbi-tile:hover { border-color:#374151; box-shadow:0 4px 18px rgba(0,0,0,.4); }
+  [data-bs-theme="dark"] .fbi-tile-name { color:#f0f0f0; }
+  [data-bs-theme="dark"] .fbi-cat { background:rgba(192,57,43,.2); color:#f87171; border-color:rgba(248,113,113,.2); }
+  [data-bs-theme="dark"] .fbi-status-actif    { color:#22c55e; }
+  [data-bs-theme="dark"] .fbi-status-suspendu { color:#f59e0b; }
+  [data-bs-theme="dark"] .fbi-status-revoque  { color:#ef4444; }
+  [data-bs-theme="dark"] .btn-fbi-details { background:rgba(255,255,255,.05); border-color:#2d3748; color:#9ca3af; }
+  [data-bs-theme="dark"] .btn-fbi-details:hover { border-color:#c0392b; color:#f87171; }
+  [data-bs-theme="dark"] #detailsModal .modal-content { background:#111318; border-color:#2d3748; color:#c9d1d9; }
+  [data-bs-theme="dark"] #detailsModal .modal-header { background:linear-gradient(135deg,#0d0f14,#161923) !important; border-bottom-color:#1f2937; color:#f0f0f0 !important; }
+  [data-bs-theme="dark"] #detailsModal .modal-footer { background:#0d0f14; border-top-color:#1f2937; }
+  [data-bs-theme="dark"] #detailsModal .modal-body { background:#111318; }
+  [data-bs-theme="dark"] .dm-left-panel { background:#0d0f14 !important; border-right-color:#1f2937 !important; }
+  [data-bs-theme="dark"] #dm-motif { background:#0d0f14 !important; border-color:#374151 !important; color:#e2e8f0 !important; }
+  [data-bs-theme="dark"] #dm-motif::placeholder { color:#4b5563 !important; }
+  [data-bs-theme="dark"] #dm-notes { background:#0d0f14 !important; border-color:#1f2937 !important; color:#9ca3af !important; }
+  [data-bs-theme="dark"] .cat-detail-badge { background:rgba(192,57,43,.15); color:#f87171; border-color:rgba(248,113,113,.2); }
+
+  /* ── Scan animation ── */
+  .fbi-scan-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:56px 24px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:10px; gap:28px; min-height:320px; position:relative; overflow:hidden; }
+  .fbi-scan-wrap::before { content:''; position:absolute; inset:0; background-image:radial-gradient(circle,#dee2e6 1px,transparent 1px); background-size:28px 28px; opacity:.8; }
+  .scan-coord { font-family:'Courier New',monospace; font-size:.72rem; color:#6b7280; letter-spacing:.06em; }
+  .scan-status { font-family:'Courier New',monospace; font-size:.68rem; color:#9ca3af; }
+  .scan-bar-wrap { width:220px; height:3px; background:#e5e7eb; border-radius:2px; position:relative; overflow:hidden; }
+  [data-bs-theme="dark"] .fbi-scan-wrap { background:#0b0c10; border-color:#1f2937; }
+  [data-bs-theme="dark"] .fbi-scan-wrap::before { background-image:radial-gradient(circle,#1f2937 1px,transparent 1px); opacity:.5; }
+  [data-bs-theme="dark"] .scan-coord { color:#4b5563; }
+  [data-bs-theme="dark"] .scan-status { color:#374151; }
+  [data-bs-theme="dark"] .scan-bar-wrap { background:#1f2937; }
+  .scan-radar-wrap { position:relative; width:160px; height:160px; flex-shrink:0; }
+  .scan-ring { position:absolute; border-radius:50%; border:1px solid rgba(192,57,43,.25); top:50%; left:50%; transform:translate(-50%,-50%); }
+  .scan-ring-1 { width:160px; height:160px; }
+  .scan-ring-2 { width:110px; height:110px; }
+  .scan-ring-3 { width:60px;  height:60px; }
+  .scan-sweep { position:absolute; inset:0; border-radius:50%; background:conic-gradient(from 0deg,transparent 70%,rgba(192,57,43,.55) 100%); animation:radarSpin 2s linear infinite; }
+  @keyframes radarSpin { to { transform:rotate(360deg); } }
+  .scan-ping { position:absolute; top:50%; left:50%; width:20px; height:20px; border-radius:50%; border:2px solid #c0392b; transform:translate(-50%,-50%); animation:pingExpand 2s ease-out infinite; opacity:0; }
+  .scan-ping:nth-child(2) { animation-delay:.7s; }
+  .scan-ping:nth-child(3) { animation-delay:1.4s; }
+  @keyframes pingExpand { 0%{width:12px;height:12px;opacity:.9;} 100%{width:90px;height:90px;opacity:0;} }
+  .scan-cross-h,.scan-cross-v { position:absolute; background:rgba(192,57,43,.5); top:50%; left:50%; transform:translate(-50%,-50%); }
+  .scan-cross-h { width:160px; height:1px; }
+  .scan-cross-v { width:1px; height:160px; }
+  .scan-pin { position:absolute; top:50%; left:50%; width:10px; height:10px; border-radius:50%; background:#e74c3c; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(231,76,60,.3),0 0 12px #e74c3c; animation:pinPulse 1s ease-in-out infinite; z-index:2; }
+  @keyframes pinPulse { 0%,100%{box-shadow:0 0 0 3px rgba(231,76,60,.3),0 0 12px #e74c3c;} 50%{box-shadow:0 0 0 7px rgba(231,76,60,.15),0 0 24px #e74c3c;} }
+  .scan-text-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; position:relative; z-index:1; }
+  .scan-label { font-size:.7rem; font-weight:800; letter-spacing:.22em; text-transform:uppercase; color:#c0392b; animation:scanBlink 1.2s ease-in-out infinite; }
+  @keyframes scanBlink { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+  .scan-bar { position:absolute; top:0; left:-100%; width:100%; height:100%; background:linear-gradient(90deg,transparent,#c0392b,#e74c3c,transparent); animation:scanBar 1.6s ease-in-out infinite; }
+  @keyframes scanBar { to { left:100%; } }
+
+  .fbi-results-in { animation:fadeInUp .4s ease both; }
+  @keyframes fadeInUp { from{opacity:0;transform:translateY(12px);} to{opacity:1;transform:translateY(0);} }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-  <div class="row mb-4">
-    <div class="col-12">
-      <h1 class="mb-1"><i class="fas fa-search me-2"></i>Recherche de Permis</h1>
-      <p class="text-muted">Rechercher les permis de conduire assignés à un véhicule</p>
+<div id="fbi-page">
+
+  <!-- ── Header ── -->
+  <div class="fbi-header">
+    <div>
+      <div class="fbi-logo-row">
+        <div class="fbi-shield"><i class="fas fa-shield-alt"></i></div>
+        <div>
+          <div class="fbi-title"><i class="fas fa-search me-2" style="color:#c0392b;"></i>Système d'Investigation</div>
+          <div class="fbi-subtitle">Police Nationale des Comores — Unité de contrôle</div>
+          <div class="fbi-badge-row mt-2">
+            <span class="fbi-chip fbi-chip-green"><span class="fbi-pulse"></span>Système actif</span>
+            <span class="fbi-chip fbi-chip-red">Accès restreint</span>
+            <span class="fbi-chip fbi-chip-gray">Permis &amp; Conducteurs</span>
+          </div>
+        </div>
+      </div>
     </div>
+    <div class="fbi-stamp">Confidentiel</div>
   </div>
 
-  <!-- Search form -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <div class="row g-3">
-        <div class="col-12 col-md-4">
-          <label class="form-label fw-semibold">Numéro d'immatriculation</label>
-          <input type="text" class="form-control" id="s-plate" placeholder="ex: 1234 AB">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label fw-semibold">Type de véhicule</label>
-          <select class="form-select" id="s-type">
-            <option value="">— Tous —</option>
-            <option value="voiture">Voiture</option>
-            <option value="taxi">Taxi</option>
-            <option value="moto">Moto</option>
-            <option value="camion">Camion</option>
-            <option value="minibus">Minibus</option>
-            <option value="ambulance">Ambulance</option>
-            <option value="suv">SUV</option>
-          </select>
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label fw-semibold">Marque</label>
-          <input type="text" class="form-control" id="s-make" placeholder="ex: Toyota, kia, RENAULT…">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label fw-semibold">Modèle</label>
-          <input type="text" class="form-control" id="s-model" placeholder="ex: Corolla, clio, CIVIC…">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label fw-semibold">Couleur</label>
-          <input type="text" class="form-control" id="s-color" placeholder="ex: blanc, ROUGE, Noir…">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label fw-semibold">Usage</label>
-          <select class="form-select" id="s-usage">
-            <option value="">— Tous —</option>
-            <option>Personnelle</option>
-            <option>Taxi</option>
-            <option>Transport public</option>
-            <option>Location</option>
-            <option>Véhicule de service</option>
-            <option>Véhicule utilitaire</option>
-            <option>Transport scolaire</option>
-            <option>Transport touristique</option>
-            <option>Auto-école</option>
-          </select>
-        </div>
-        <div class="col-12 d-flex gap-2">
-          <button class="btn btn-primary px-4" id="btn-search" onclick="doSearch()">
-            <i class="fas fa-search me-1"></i> Rechercher
-          </button>
-          <button class="btn btn-outline-secondary" onclick="clearSearch()">
-            <i class="fas fa-times me-1"></i> Effacer
-          </button>
-        </div>
+  <!-- ── Search panel ── -->
+  <div class="fbi-panel">
+    <div class="fbi-panel-title"><i class="fas fa-filter me-1"></i>Critères de recherche</div>
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <label class="fbi-label">Numéro d'immatriculation</label>
+        <input type="text" class="form-control fbi-input" id="s-plate" placeholder="ex: 1234 AB">
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="fbi-label">Type de véhicule</label>
+        <select class="form-select fbi-select" id="s-type">
+          <option value="">— Tous —</option>
+          <option value="voiture">Voiture</option>
+          <option value="taxi">Taxi</option>
+          <option value="moto">Moto</option>
+          <option value="camion">Camion</option>
+          <option value="minibus">Minibus</option>
+          <option value="ambulance">Ambulance</option>
+          <option value="suv">SUV</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="fbi-label">Marque</label>
+        <input type="text" class="form-control fbi-input" id="s-make" placeholder="ex: Toyota, Kia, Renault…">
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="fbi-label">Modèle</label>
+        <input type="text" class="form-control fbi-input" id="s-model" placeholder="ex: Corolla, Clio, Civic…">
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="fbi-label">Couleur</label>
+        <input type="text" class="form-control fbi-input" id="s-color" placeholder="ex: Blanc, Rouge, Noir…">
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="fbi-label">Usage</label>
+        <select class="form-select fbi-select" id="s-usage">
+          <option value="">— Tous —</option>
+          <option>Personnelle</option>
+          <option>Taxi</option>
+          <option>Transport public</option>
+          <option>Location</option>
+          <option>Véhicule de service</option>
+          <option>Véhicule utilitaire</option>
+          <option>Transport scolaire</option>
+          <option>Transport touristique</option>
+          <option>Auto-école</option>
+        </select>
+      </div>
+      <div class="col-12 d-flex gap-2 mt-2">
+        <button class="btn-fbi-search" id="btn-search" onclick="doSearch()">
+          <i class="fas fa-search me-2"></i>Lancer la recherche
+        </button>
+        <button class="btn-fbi-clear" onclick="clearSearch()">
+          <i class="fas fa-times me-1"></i>Effacer
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- Results -->
+  <!-- ── Results ── -->
   <div id="search-results"></div>
+
 </div>
 
 <!-- ===== Details Modal ===== -->
 <div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
-      <div class="modal-header" id="dm-header" style="background:linear-gradient(135deg,#2c3e50,#3d5a80);color:#fff;">
-        <h5 class="modal-title" id="dm-title">Détails du permis</h5>
+      <div class="modal-header" id="dm-header">
+        <h5 class="modal-title" id="dm-title" style="font-family:'Courier New',monospace;letter-spacing:.04em;">Dossier</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body p-0">
         <div class="row g-0">
 
-          <!-- Left: photo + download -->
-          <div class="col-12 col-md-3 d-flex flex-column align-items-center justify-content-start p-4 border-end" style="background:#f4f6f9;min-height:300px;">
-            <div id="dm-photo-wrap" class="mb-3">
-              <div class="dm-photo-placeholder"><i class="fas fa-user fa-3x"></i></div>
-            </div>
-            <button class="btn btn-outline-primary btn-sm w-100" id="dm-dl-btn" style="display:none;" onclick="downloadPhoto()">
-              <i class="fas fa-download me-1"></i> Télécharger la photo
+          <!-- Left: photo -->
+          <div class="col-12 col-md-3 d-flex flex-column align-items-center justify-content-start p-4 dm-left-panel" style="min-height:300px;">
+            <div id="dm-photo-wrap" class="mb-3"></div>
+            <button class="btn btn-sm w-100 dm-dl-btn" id="dm-dl-btn" style="display:none;" onclick="downloadPhoto()">
+              <i class="fas fa-download me-1"></i>Télécharger la photo
             </button>
           </div>
 
-          <!-- Right: license + vehicle info -->
+          <!-- Right: details -->
           <div class="col-12 col-md-9 p-4">
 
-            <!-- Status badge row -->
             <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
-              <span id="dm-status-badge" class="badge fs-6 px-3 py-2"></span>
-              <span id="dm-type-badge" class="badge bg-secondary fs-6 px-3 py-2"></span>
-              <span class="text-muted" style="font-size:.85rem;">Points: <strong id="dm-points">—</strong></span>
+              <span id="dm-status-badge" class="fbi-modal-badge"></span>
+              <span id="dm-type-badge" class="fbi-modal-badge dm-type-badge"></span>
+              <span style="font-size:.8rem;" class="text-secondary">Points: <strong id="dm-points" class="dm-points-val">—</strong></span>
             </div>
 
-            <!-- License details -->
-            <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.08em;">
-              <i class="fas fa-id-card me-1"></i> Informations du conducteur
-            </h6>
+            <div class="dm-section-title"><i class="fas fa-id-card me-1"></i>Informations du conducteur</div>
             <div class="row g-2 mb-3" id="dm-license-rows"></div>
 
-            <!-- Categories -->
             <div id="dm-cats-wrap" class="mb-3" style="display:none;">
-              <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.08em;">
-                <i class="fas fa-layer-group me-1"></i> Catégories
-              </h6>
+              <div class="dm-section-title"><i class="fas fa-layer-group me-1"></i>Catégories</div>
               <div id="dm-cats" class="d-flex flex-wrap gap-2"></div>
             </div>
 
-            <hr>
+            <hr class="dm-hr">
 
-            <!-- Vehicle details -->
-            <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.08em;">
-              <i class="fas fa-car me-1"></i> Véhicule associé
-            </h6>
+            <div class="dm-section-title"><i class="fas fa-car me-1"></i>Véhicule associé</div>
             <div class="row g-2 mb-3" id="dm-vehicle-rows"></div>
 
-            <!-- Notes -->
             <div id="dm-notes-wrap" style="display:none;" class="mb-3">
-              <h6 class="fw-bold text-uppercase text-muted mb-1" style="font-size:.75rem;letter-spacing:.08em;">
-                <i class="fas fa-sticky-note me-1"></i> Notes
-              </h6>
-              <pre id="dm-notes" class="bg-light border rounded p-2 mb-0" style="font-size:.82rem;white-space:pre-wrap;"></pre>
+              <div class="dm-section-title"><i class="fas fa-sticky-note me-1"></i>Notes</div>
+              <pre id="dm-notes" class="border rounded p-2 mb-0" style="font-size:.82rem;white-space:pre-wrap;"></pre>
             </div>
 
-            <!-- Suspension section -->
             <div id="dm-suspend-section" style="display:none;">
-              <hr>
-              <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.08em;color:#dc3545;">
-                <i class="fas fa-ban me-1"></i> Suspendre ce permis
-              </h6>
+              <hr class="dm-hr">
+              <h6 class="fw-bold text-uppercase mb-2" style="font-size:.72rem;letter-spacing:.08em;"><i class="fas fa-ban me-1"></i>Suspendre ce permis</h6>
               <div class="mb-2">
                 <input type="text" class="form-control" id="dm-motif" placeholder="Motif de suspension (obligatoire)">
               </div>
-              <button class="btn btn-danger" onclick="confirmSuspend()">
-                <i class="fas fa-ban me-1"></i> Confirmer la suspension
+              <button class="btn btn-danger btn-sm" onclick="confirmSuspend()">
+                <i class="fas fa-ban me-1"></i>Confirmer la suspension
               </button>
               <div id="dm-suspend-error" class="text-danger mt-2" style="display:none;font-size:.85rem;"></div>
             </div>
@@ -155,45 +308,11 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-sm dm-close-btn" data-bs-dismiss="modal">Fermer</button>
       </div>
     </div>
   </div>
 </div>
-
-<style>
-  .vehicle-card { border: 1px solid #dee2e6; border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; }
-  .vehicle-header { background: linear-gradient(135deg, #2c3e50 0%, #3d5a80 100%); color: #fff; padding: 14px 20px; }
-  .vehicle-plate { font-size: 1.3rem; font-weight: 700; letter-spacing: 2px; }
-  .vehicle-meta span { font-size: 0.82rem; opacity: 0.85; margin-right: 14px; }
-  .licenses-grid { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; background: #f8f9fa; }
-  .license-tile { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px; width: 260px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
-  .lt-photo { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; border: 2px solid #ccc; flex-shrink: 0; }
-  .lt-photo-placeholder { width: 54px; height: 54px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #999; font-size: 1.4rem; flex-shrink: 0; }
-  .lt-header { display: flex; align-items: center; gap: 12px; }
-  .lt-name { font-weight: 700; font-size: 0.95rem; line-height: 1.2; }
-  .lt-firstname { font-size: 0.82rem; color: #555; }
-  .lt-num { font-family: monospace; font-size: 0.78rem; color: #666; background: #f0f0f0; border-radius: 4px; padding: 2px 6px; display: inline-block; margin-top: 2px; }
-  .lt-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: #444; }
-  .lt-row .lbl { color: #888; }
-  .lt-cats { display: flex; flex-wrap: wrap; gap: 4px; }
-  .cat-badge { background: #3d5a80; color: #fff; border-radius: 4px; padding: 1px 6px; font-size: 0.72rem; font-weight: 600; }
-  .lt-view-btn { margin-top: 4px; font-size: 0.78rem; }
-  .status-actif { color: #198754; font-weight: 600; }
-  .status-suspendu { color: #fd7e14; font-weight: 600; }
-  .status-revoque { color: #dc3545; font-weight: 600; }
-  .status-expire { color: #6c757d; font-weight: 600; }
-  .lt-not-found { color: #dc3545; font-size: 0.85rem; padding: 10px; }
-  .no-licenses { color: #888; font-size: 0.9rem; padding: 12px 16px; background: #f8f9fa; }
-  #search-results .empty-state { text-align: center; padding: 48px; color: #aaa; }
-  .dm-photo-placeholder { width: 120px; height: 120px; border-radius: 10px; background: #dde; display: flex; align-items: center; justify-content: center; color: #aaa; }
-  #dm-photo-wrap img { width: 120px; height: 140px; object-fit: cover; border-radius: 10px; border: 2px solid #ccc; }
-  .dm-info-row { display: flex; flex-direction: column; }
-  .dm-info-row .lbl { font-size: .72rem; color: #888; text-transform: uppercase; letter-spacing: .04em; }
-  .dm-info-row .val { font-size: .9rem; font-weight: 500; color: #222; }
-  .cat-detail-badge { background: #3d5a80; color: #fff; border-radius: 6px; padding: 4px 10px; font-size: .78rem; line-height: 1.5; }
-  .cat-detail-badge small { display: block; font-weight: 300; opacity: .85; font-size: .7rem; }
-</style>
 
 <script>
 const STATUS_LABELS = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqué', expire: 'Expiré' };
@@ -207,8 +326,8 @@ function fmt(dateStr) {
 }
 
 function getStatusClass(status, is_expired) {
-  if (is_expired) return 'status-expire';
-  return `status-${status}`;
+  if (is_expired) return 'fbi-status-expire';
+  return 'fbi-status-' + status;
 }
 
 function getStatusLabel(status, is_expired) {
@@ -218,39 +337,40 @@ function getStatusLabel(status, is_expired) {
 
 function renderLicenseTile(lic, vehicle) {
   if (lic.not_found) {
-    return `<div class="license-tile">
-      <div class="lt-not-found"><i class="fas fa-exclamation-triangle me-1"></i>Permis introuvable: <span class="lt-num">${lic.license_number}</span></div>
+    return `<div class="fbi-tile">
+      <div class="fbi-not-found"><i class="fas fa-exclamation-triangle me-1"></i>Permis introuvable : <span class="fbi-tile-num">${lic.license_number}</span></div>
     </div>`;
   }
 
   const photoHtml = lic.photo_url
-    ? `<img src="${lic.photo_url}" class="lt-photo" alt="photo">`
-    : `<div class="lt-photo-placeholder"><i class="fas fa-user"></i></div>`;
+    ? `<img src="${lic.photo_url}" class="fbi-tile-photo" alt="photo">`
+    : `<div class="fbi-tile-photo-ph"><i class="fas fa-user"></i></div>`;
 
   const cats = (lic.categories || '').split(',').map(c => c.trim()).filter(Boolean);
   const catsHtml = cats.length
-    ? `<div class="lt-cats">${cats.map(c => `<span class="cat-badge">${c}</span>`).join('')}</div>`
+    ? `<div class="fbi-tile-cats">${cats.map(c => `<span class="fbi-cat">${c}</span>`).join('')}</div>`
     : '';
 
   const typeLabel = lic.type_permis === 'temporaire' ? 'Temporaire' : 'Permanent';
   const vehicleId = vehicle ? vehicle.id : '';
 
-  return `<div class="license-tile" id="tile-${lic.id}">
-    <div class="lt-header">
+  return `<div class="fbi-tile" id="tile-${lic.id}">
+    <div class="fbi-tile-corner">Dossier</div>
+    <div class="fbi-tile-header">
       ${photoHtml}
       <div>
-        <div class="lt-name">${lic.holder_name || '—'}</div>
-        <div class="lt-firstname">${lic.holder_firstname || ''}</div>
-        <span class="lt-num">${lic.license_number}</span>
+        <div class="fbi-tile-name">${lic.holder_firstname || '—'}</div>
+        <div class="fbi-tile-firstname">${lic.holder_name || ''}</div>
+        <span class="fbi-tile-num">${lic.license_number}</span>
       </div>
     </div>
-    <div class="lt-row"><span class="lbl">Type</span><span>${typeLabel}</span></div>
-    <div class="lt-row"><span class="lbl">Statut</span><span class="${getStatusClass(lic.status, lic.is_expired)}">${getStatusLabel(lic.status, lic.is_expired)}</span></div>
-    <div class="lt-row"><span class="lbl">Délivré le</span><span>${fmt(lic.issue_date)}</span></div>
-    <div class="lt-row"><span class="lbl">Expire le</span><span>${fmt(lic.expiry_date)}</span></div>
-    ${catsHtml ? `<div class="lt-row"><span class="lbl">Catégories</span></div>${catsHtml}` : ''}
-    <button class="btn btn-outline-primary btn-sm lt-view-btn" onclick="openDetails(${lic.id}, ${vehicleId})">
-      <i class="fas fa-eye me-1"></i> Voir les détails
+    <div class="fbi-tile-row"><span class="lbl">Type</span><span class="tile-val">${typeLabel}</span></div>
+    <div class="fbi-tile-row"><span class="lbl">Statut</span><span class="${getStatusClass(lic.status, lic.is_expired)}">${getStatusLabel(lic.status, lic.is_expired)}</span></div>
+    <div class="fbi-tile-row"><span class="lbl">Délivré</span><span class="tile-val">${fmt(lic.issue_date)}</span></div>
+    <div class="fbi-tile-row"><span class="lbl">Expire</span><span class="tile-val">${fmt(lic.expiry_date)}</span></div>
+    ${catsHtml ? `<div>${catsHtml}</div>` : ''}
+    <button class="btn-fbi-details" onclick="openDetails(${lic.id}, ${vehicleId})">
+      <i class="fas fa-folder-open me-1"></i>Ouvrir le dossier
     </button>
   </div>`;
 }
@@ -260,14 +380,14 @@ function renderVehicleCard(item) {
   const metaParts = [v.vehicle_type, v.make, v.model, v.color, v.usage_type].filter(Boolean);
 
   const licHtml = item.licenses.length === 0
-    ? `<div class="no-licenses"><i class="fas fa-info-circle me-1"></i>Aucun permis enregistré pour ce véhicule.</div>`
-    : `<div class="licenses-grid">${item.licenses.map(l => renderLicenseTile(l, v)).join('')}</div>`;
+    ? `<div class="fbi-no-license"><i class="fas fa-folder-open me-1"></i>Aucun permis enregistré pour ce véhicule.</div>`
+    : `<div class="fbi-licenses-grid">${item.licenses.map(l => renderLicenseTile(l, v)).join('')}</div>`;
 
-  return `<div class="vehicle-card">
-    <div class="vehicle-header">
-      <div class="vehicle-plate"><i class="fas fa-car me-2"></i>${v.license_plate}</div>
-      <div class="vehicle-meta mt-1">
-        ${metaParts.map(p => `<span><i class="fas fa-circle" style="font-size:5px;vertical-align:middle;margin-right:4px;"></i>${p}</span>`).join('')}
+  return `<div class="fbi-vehicle-card">
+    <div class="fbi-vehicle-header">
+      <div class="fbi-plate"><i class="fas fa-car me-2" style="color:#c0392b;font-size:.9rem;"></i>${v.license_plate}</div>
+      <div class="fbi-vehicle-meta">
+        ${metaParts.map(p => `<span class="fbi-meta-chip">${p}</span>`).join('')}
       </div>
     </div>
     ${licHtml}
@@ -297,20 +417,20 @@ function openDetails(licId, vehicleId) {
   currentLicenseId = licId;
   currentPhotoUrl = lic.photo_url || null;
 
-  // Title
   document.getElementById('dm-title').textContent = `Permis N° ${lic.license_number}`;
 
-  // Status badges
   const statusBadge = document.getElementById('dm-status-badge');
   const isExp = lic.is_expired;
   const statusKey = isExp ? 'expire' : lic.status;
-  const statusColors = { actif: 'success', suspendu: 'warning', revoque: 'danger', expire: 'secondary' };
-  statusBadge.className = `badge fs-6 px-3 py-2 bg-${statusColors[statusKey] || 'secondary'}`;
+  const statusColors = { actif: 'rgba(34,197,94,.15)', suspendu: 'rgba(245,158,11,.15)', revoque: 'rgba(239,68,68,.15)', expire: 'rgba(107,114,128,.15)' };
+  const statusTextColors = { actif: '#22c55e', suspendu: '#f59e0b', revoque: '#ef4444', expire: '#6b7280' };
+  statusBadge.style.background = statusColors[statusKey] || 'rgba(107,114,128,.15)';
+  statusBadge.style.color = statusTextColors[statusKey] || '#6b7280';
+  statusBadge.style.border = `1px solid ${statusTextColors[statusKey] || '#6b7280'}40`;
   statusBadge.textContent = getStatusLabel(lic.status, isExp);
   document.getElementById('dm-type-badge').textContent = lic.type_permis === 'temporaire' ? 'Temporaire' : 'Permanent';
   document.getElementById('dm-points').textContent = lic.points ?? '—';
 
-  // Photo
   const photoWrap = document.getElementById('dm-photo-wrap');
   const dlBtn = document.getElementById('dm-dl-btn');
   if (lic.photo_url) {
@@ -321,7 +441,6 @@ function openDetails(licId, vehicleId) {
     dlBtn.style.display = 'none';
   }
 
-  // License rows
   document.getElementById('dm-license-rows').innerHTML =
     infoRow('Nom', lic.holder_firstname) +
     infoRow('Prénom', lic.holder_name) +
@@ -337,7 +456,6 @@ function openDetails(licId, vehicleId) {
     infoRow('Créé par', lic.created_by) +
     infoRow('Créé le', lic.created_at);
 
-  // Categories
   const cats = (lic.categories || '').split(',').map(c => c.trim()).filter(Boolean);
   const catDetails = lic.category_details || {};
   const catsWrap = document.getElementById('dm-cats-wrap');
@@ -353,7 +471,6 @@ function openDetails(licId, vehicleId) {
     catsWrap.style.display = 'none';
   }
 
-  // Vehicle rows
   document.getElementById('dm-vehicle-rows').innerHTML = vehicle
     ? infoRow('Immatriculation', vehicle.license_plate) +
       infoRow('Type', vehicle.vehicle_type) +
@@ -364,7 +481,6 @@ function openDetails(licId, vehicleId) {
       infoRow('Propriétaire', vehicle.owner_name)
     : '<div class="col-12 text-muted">Véhicule inconnu</div>';
 
-  // Notes
   const notesWrap = document.getElementById('dm-notes-wrap');
   const notesEl = document.getElementById('dm-notes');
   if (lic.notes && lic.notes.trim()) {
@@ -374,7 +490,6 @@ function openDetails(licId, vehicleId) {
     notesWrap.style.display = 'none';
   }
 
-  // Suspend section: show only if status is 'actif' and not expired
   const suspendSection = document.getElementById('dm-suspend-section');
   document.getElementById('dm-motif').value = '';
   document.getElementById('dm-suspend-error').style.display = 'none';
@@ -392,11 +507,9 @@ async function confirmSuspend() {
     errEl.style.display = '';
     return;
   }
-
   const btn = document.querySelector('#dm-suspend-section .btn-danger');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Suspension…';
-
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Suspension…';
   try {
     const resp = await fetch(`/api/licenses/${currentLicenseId}/suspend`, {
       method: 'PATCH',
@@ -409,33 +522,24 @@ async function confirmSuspend() {
       errEl.style.display = '';
       return;
     }
-
-    // Update local data
     for (const item of searchResults) {
       for (let i = 0; i < item.licenses.length; i++) {
-        if (item.licenses[i].id === currentLicenseId) {
-          item.licenses[i] = { ...item.licenses[i], ...data };
-        }
+        if (item.licenses[i].id === currentLicenseId) item.licenses[i] = { ...item.licenses[i], ...data };
       }
     }
-
-    // Refresh tile in the results list
     const tile = document.getElementById(`tile-${currentLicenseId}`);
     if (tile) {
       const vehicle = searchResults.find(r => r.licenses.some(l => l.id === currentLicenseId))?.vehicle;
       const lic = searchResults.flatMap(r => r.licenses).find(l => l.id === currentLicenseId);
-      if (lic && vehicle) {
-        tile.outerHTML = renderLicenseTile(lic, vehicle);
-      }
+      if (lic && vehicle) tile.outerHTML = renderLicenseTile(lic, vehicle);
     }
-
     bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).hide();
   } catch (e) {
     errEl.textContent = 'Erreur réseau.';
     errEl.style.display = '';
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-ban me-1"></i> Confirmer la suspension';
+    btn.innerHTML = '<i class="fas fa-ban me-1"></i>Confirmer la suspension';
   }
 }
 
@@ -456,6 +560,62 @@ async function downloadPhoto() {
   }
 }
 
+const SCAN_MESSAGES = [
+  'Connexion au système central…',
+  'Analyse des plaques d\'immatriculation…',
+  'Interrogation de la base de données…',
+  'Vérification des permis associés…',
+  'Compilation des résultats…',
+];
+
+function showScanAnimation() {
+  const coords = () => {
+    const lat = (11.7 + Math.random() * .4).toFixed(4);
+    const lon = (43.2 + Math.random() * .4).toFixed(4);
+    return `${lat}°N  ${lon}°E`;
+  };
+  document.getElementById('search-results').innerHTML = `
+    <div class="fbi-scan-wrap">
+      <div class="scan-radar-wrap">
+        <div class="scan-ring scan-ring-1"></div>
+        <div class="scan-ring scan-ring-2"></div>
+        <div class="scan-ring scan-ring-3"></div>
+        <div class="scan-sweep"></div>
+        <div class="scan-ping"></div>
+        <div class="scan-ping"></div>
+        <div class="scan-ping"></div>
+        <div class="scan-cross-h"></div>
+        <div class="scan-cross-v"></div>
+        <div class="scan-pin"></div>
+      </div>
+      <div class="scan-text-wrap">
+        <div class="scan-label">Localisation en cours</div>
+        <div class="scan-coord" id="scan-coord">${coords()}</div>
+        <div class="scan-status" id="scan-status">${SCAN_MESSAGES[0]}</div>
+      </div>
+      <div class="scan-bar-wrap"><div class="scan-bar"></div></div>
+    </div>`;
+
+  let msgIdx = 0;
+  const iv = setInterval(() => {
+    const coordEl = document.getElementById('scan-coord');
+    const statusEl = document.getElementById('scan-status');
+    if (!coordEl) { clearInterval(iv); return; }
+    coordEl.textContent = coords();
+    msgIdx = (msgIdx + 1) % SCAN_MESSAGES.length;
+    if (statusEl) statusEl.textContent = SCAN_MESSAGES[msgIdx];
+  }, 380);
+  return iv;
+}
+
+function showResults(html) {
+  const el = document.getElementById('search-results');
+  el.innerHTML = html;
+  el.classList.remove('fbi-results-in');
+  void el.offsetWidth;
+  el.classList.add('fbi-results-in');
+}
+
 async function doSearch() {
   const plate = document.getElementById('s-plate').value.trim();
   const type  = document.getElementById('s-type').value.trim();
@@ -466,14 +626,18 @@ async function doSearch() {
 
   if (!plate && !type && !make && !model && !color && !usage) {
     document.getElementById('search-results').innerHTML =
-      `<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Veuillez saisir au moins un critère de recherche.</div>`;
+      `<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:14px 18px;color:#f59e0b;font-size:.85rem;">
+        <i class="fas fa-exclamation-triangle me-2"></i>Veuillez saisir au moins un critère de recherche.
+      </div>`;
     return;
   }
 
   const btn = document.getElementById('btn-search');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Recherche...';
-  document.getElementById('search-results').innerHTML = '';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyse…';
+
+  const iv = showScanAnimation();
+  const minDelay = new Promise(r => setTimeout(r, 2500));
 
   const params = new URLSearchParams();
   if (plate) params.append('license_plate', plate);
@@ -484,49 +648,54 @@ async function doSearch() {
   if (usage) params.append('usage_type', usage);
 
   try {
-    const resp = await fetch(`/api/vehicles/search-drivers?${params}`);
+    const [resp] = await Promise.all([
+      fetch(`/api/vehicles/search-drivers?${params}`),
+      minDelay,
+    ]);
+    clearInterval(iv);
     const data = await resp.json();
 
     if (!resp.ok) {
-      document.getElementById('search-results').innerHTML =
-        `<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>${data.error || 'Erreur de recherche'}</div>`;
+      showResults(`<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:14px 18px;color:#ef4444;font-size:.85rem;">
+        <i class="fas fa-times-circle me-2"></i>${data.error || 'Erreur de recherche'}
+      </div>`);
       return;
     }
 
     if (!data.length) {
-      document.getElementById('search-results').innerHTML =
-        `<div class="empty-state"><i class="fas fa-search fa-3x mb-3 d-block"></i>Aucun véhicule trouvé pour ces critères.</div>`;
+      showResults(`<div class="fbi-empty">
+        <i class="fas fa-search"></i>
+        <p>Aucun véhicule trouvé</p>
+        <small style="color:#374151;">Modifiez vos critères et relancez la recherche</small>
+      </div>`);
       return;
     }
 
     searchResults = data;
-    document.getElementById('search-results').innerHTML =
-      `<p class="text-muted mb-3">${data.length} véhicule${data.length > 1 ? 's' : ''} trouvé${data.length > 1 ? 's' : ''}</p>` +
-      data.map(renderVehicleCard).join('');
+    showResults(
+      `<div class="fbi-results-label"><i class="fas fa-database me-1"></i><span>${data.length}</span> véhicule${data.length > 1 ? 's' : ''} trouvé${data.length > 1 ? 's' : ''}</div>` +
+      data.map(renderVehicleCard).join('')
+    );
   } catch (e) {
-    document.getElementById('search-results').innerHTML =
-      `<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Erreur réseau. Veuillez réessayer.</div>`;
+    clearInterval(iv);
+    showResults(`<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:14px 18px;color:#ef4444;font-size:.85rem;">
+      <i class="fas fa-times-circle me-2"></i>Erreur réseau. Veuillez réessayer.
+    </div>`);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-search me-1"></i> Rechercher';
+    btn.innerHTML = '<i class="fas fa-search me-2"></i>Lancer la recherche';
   }
 }
 
 function clearSearch() {
-  ['s-plate','s-make','s-model','s-color'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  ['s-type','s-usage'].forEach(id => {
-    document.getElementById(id).selectedIndex = 0;
-  });
+  ['s-plate','s-make','s-model','s-color'].forEach(id => document.getElementById(id).value = '');
+  ['s-type','s-usage'].forEach(id => document.getElementById(id).selectedIndex = 0);
   document.getElementById('search-results').innerHTML = '';
   searchResults = [];
 }
 
 ['s-plate','s-make','s-model','s-color'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', e => {
-    if (e.key === 'Enter') doSearch();
-  });
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 });
 </script>
 {% endblock %}

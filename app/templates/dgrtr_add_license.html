@@ -349,7 +349,16 @@ async function saveLicenseDgrtr() {
     }
 
     showAlert('Permis enregistré avec succès.', 'success');
-    setTimeout(function(){ window.location.href = '/dgrtr-dashboard'; }, 1200);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-1"></i>Enregistrer';
+    ['f-license_number','f-holder_firstname','f-holder_name','f-date_of_birth','f-lieu_naissance',
+     'f-nationalite','f-holder_phone','f-holder_address','f-issue_date','f-expiry_date','f-notes']
+      .forEach(function(id){ var el = document.getElementById(id); if(el) el.value = ''; });
+    ['f-status','f-sexe','f-holder_island','f-type_permis','f-centre_immatriculation']
+      .forEach(function(id){ var el = document.getElementById(id); if(el) el.selectedIndex = 0; });
+    document.querySelectorAll('input[name="categories"]').forEach(function(cb){ cb.checked = false; });
+    document.getElementById('f-photo').value = '';
+    var prev = document.getElementById('photo-preview'); if(prev) prev.style.display = 'none';
   } catch (err) {
     showAlert(err.message || "Erreur lors de l'enregistrement.", 'danger');
     btn.disabled = false;

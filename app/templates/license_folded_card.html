@@ -750,7 +750,7 @@
         </div>
 
         <div class="qr-block">
-          <img src="/licenses/{{ lic.id }}/qrcode" alt="QR Code">
+          <img src="{{ qr_data_uri if qr_data_uri is defined and qr_data_uri else '/licenses/' ~ lic.id ~ '/qrcode' }}" alt="QR Code">
           <div class="qr-lbl">Vérification</div>
         </div>
       </div>

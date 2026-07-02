@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Renouvellement QR Code - Mobile Money{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+      <h2><i class="fas fa-qrcode me-2"></i>Renouvellement QR Code</h2>
+      <p class="text-muted mb-0">Véhicules dont le QR code est expiré. Traitez le paiement et renouvelez le code pour 1 an.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+        <span class="badge bg-warning text-dark align-self-center" id="qr-count">0 véhicule(s)</span>
+        <span class="badge bg-info align-self-center fw-normal" id="qr-price-badge" style="font-size:0.72rem;">Prix: {{ renewal_price|int }} KMF</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" id="qr-search" class="form-control" placeholder="Rechercher par immatriculation ou propriétaire...">
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Immatriculation</th>
+              <th>Propriétaire</th>
+              <th>Île</th>
+              <th>Expiration QR</th>
+              <th>Prix</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="qr-tbody">
+            <tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmation -->
+<div class="modal fade" id="qrRenewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-qrcode me-2"></i>Renouveler le QR Code</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1" id="qr-modal-text">Confirmer le renouvellement du QR code ?</p>
+        <p class="text-muted small mb-3" id="qr-modal-plate"></p>
+        <div class="alert alert-info py-2 small mb-3">
+          <i class="fas fa-info-circle me-1"></i>
+          Le QR code sera renouvelé pour <strong>1 an</strong>. Le token du véhicule reste inchangé.
+        </div>
+        <div class="mb-2">
+          <label class="form-label small">Mode de paiement</label>
+          <select id="qr-pay-method" class="form-select">
+            <option value="mobile_money_manual">Mobile Money (manuel)</option>
+            <option value="cash_manual">Espèces (manuel)</option>
+            <option value="bank_manual">Virement (manuel)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="qr-confirm-btn">
+          <i class="fas fa-check me-1"></i>Confirmer le renouvellement
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast success -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:1100">
+  <div id="qr-toast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="qr-toast-msg"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var RENEWAL_PRICE = {{ renewal_price|tojson }};
+var allVehicles = [];
+var selectedVehicleId = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadExpiredQR();
+  document.getElementById('qr-search').addEventListener('input', renderTable);
+  document.getElementById('qr-confirm-btn').addEventListener('click', confirmRenewal);
+});
+
+function loadExpiredQR() {
+  fetch('/api/vehicles/query?qr_expired=true', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      allVehicles = Array.isArray(data) ? data : (data.vehicles || []);
+      renderTable();
+    })
+    .catch(function() {
+      document.getElementById('qr-tbody').innerHTML =
+        '<tr><td colspan="7" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+    });
+}
+
+function renderTable() {
+  var q = (document.getElementById('qr-search').value || '').toLowerCase();
+  var filtered = allVehicles.filter(function(v) {
+    return !q
+      || (v.license_plate || '').toLowerCase().includes(q)
+      || (v.owner_name || '').toLowerCase().includes(q);
+  });
+
+  document.getElementById('qr-count').textContent = filtered.length + ' véhicule(s)';
+
+  if (!filtered.length) {
+    document.getElementById('qr-tbody').innerHTML =
+      '<tr><td colspan="7" class="text-center text-muted py-4">' +
+      (q ? 'Aucun résultat pour "' + q + '".' : 'Aucun véhicule avec QR expiré.') + '</td></tr>';
+    return;
+  }
+
+  var rows = filtered.map(function(v, i) {
+    var expiry = v.qr_code_expiry
+      ? new Date(v.qr_code_expiry).toLocaleDateString('fr-FR')
+      : '—';
+    var daysAgo = v.qr_code_expiry
+      ? Math.floor((Date.now() - new Date(v.qr_code_expiry)) / 86400000)
+      : null;
+    var daysLabel = daysAgo !== null
+      ? '<br><span class="text-danger small">expiré il y a ' + daysAgo + ' j</span>'
+      : '';
+    return '<tr>' +
+      '<td>' + (i + 1) + '</td>' +
+      '<td><strong>' + (v.license_plate || '—') + '</strong></td>' +
+      '<td>' + (v.owner_name || '—') + '</td>' +
+      '<td>' + (v.owner_island || '—') + '</td>' +
+      '<td>' + expiry + daysLabel + '</td>' +
+      '<td><span class="badge bg-primary">' + RENEWAL_PRICE.toLocaleString('fr-FR') + ' KMF</span></td>' +
+      '<td><button class="btn btn-sm btn-warning" onclick="openRenewModal(' + v.id + ', \'' + (v.license_plate || '') + '\')">' +
+        '<i class="fas fa-sync-alt me-1"></i>Renouveler' +
+      '</button></td>' +
+      '</tr>';
+  });
+
+  document.getElementById('qr-tbody').innerHTML = rows.join('');
+}
+
+function openRenewModal(vehicleId, plate) {
+  selectedVehicleId = vehicleId;
+  document.getElementById('qr-modal-text').textContent =
+    'Confirmer le paiement de ' + RENEWAL_PRICE.toLocaleString('fr-FR') + ' KMF et le renouvellement du QR code ?';
+  document.getElementById('qr-modal-plate').textContent = 'Véhicule : ' + plate;
+  document.getElementById('qr-pay-method').selectedIndex = 0;
+  new bootstrap.Modal(document.getElementById('qrRenewModal')).show();
+}
+
+function confirmRenewal() {
+  if (!selectedVehicleId) return;
+  var btn = document.getElementById('qr-confirm-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>En cours...';
+
+  fetch('/api/vehicles/' + selectedVehicleId + '/qrcode/renew', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payment_method: document.getElementById('qr-pay-method').value })
+  })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+      bootstrap.Modal.getInstance(document.getElementById('qrRenewModal')).hide();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer le renouvellement';
+      if (res.ok) {
+        showToast('QR code renouvelé jusqu\'au ' + (res.data.new_expiry || ''), 'success');
+        allVehicles = allVehicles.filter(function(v) { return v.id !== selectedVehicleId; });
+        renderTable();
+      } else {
+        showToast(res.data.error || 'Erreur lors du renouvellement.', 'danger');
+      }
+    })
+    .catch(function() {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer le renouvellement';
+      showToast('Erreur réseau.', 'danger');
+    });
+}
+
+function showToast(msg, type) {
+  var toast = document.getElementById('qr-toast');
+  var toastMsg = document.getElementById('qr-toast-msg');
+  toast.className = 'toast align-items-center text-white border-0 bg-' + type;
+  toastMsg.textContent = msg;
+  new bootstrap.Toast(toast, { delay: 4000 }).show();
+}
+</script>
+{% endblock %}
