@@ -756,8 +756,50 @@ def licenses_page():
     return render_template('licenses.html')
 
 
+@main_bp.route('/dgrtr-dashboard')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_dashboard():
+    return render_template('dgrtr_dashboard.html')
+
+
+@main_bp.route('/dgrtr-statistiques')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_statistiques():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
+        abort(403)
+    return render_template('dgrtr_stats.html')
+
+
+@main_bp.route('/dgrtr-dossiers-complets')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_dossiers_complets():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
+        from flask import abort
+        abort(403)
+    return render_template('dgrtr_dossiers_complets.html')
+
+
+@main_bp.route('/dgrtr/ajouter-permis')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_add_license():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'employe':
+        abort(403)
+    return render_template('dgrtr_add_license.html')
+
+
+@main_bp.route('/dgrtr/licenses/<int:license_id>/print-a4')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_license_print_a4(license_id):
+    from app.models import DriverLicense, LicenseSetting
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    category_details = parse_category_details(lic)
+    return render_template('dgrtr_license_a4.html', lic=lic, settings=settings,
+                           category_details=category_details)
+
+
 @main_bp.route('/licenses/<int:license_id>/qrcode')
-@roles_required('administrateur', 'judiciaire')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_qrcode(license_id):
     from app.models import DriverLicense
     lic = DriverLicense.query.get_or_404(license_id)
@@ -792,7 +834,7 @@ def parse_category_details(lic):
 
 
 @main_bp.route('/licenses/<int:license_id>/print')
-@roles_required('administrateur', 'judiciaire')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_print(license_id):
     from app.models import DriverLicense, LicenseSetting
     lic = DriverLicense.query.get_or_404(license_id)
@@ -807,6 +849,50 @@ def license_print(license_id):
     return render_template('license_print.html', lic=lic, settings=settings,
                            force_temporaire=force_temporaire, computed_expiry=computed_expiry,
                            category_details=category_details)
+
+
+@main_bp.route('/licenses/<int:license_id>/print-folded')
+@roles_required('administrateur', 'judiciaire')
+def license_print_folded(license_id):
+    from app.models import DriverLicense, LicenseSetting
+    from dateutil.relativedelta import relativedelta
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    computed_expiry = None
+    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
+        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    category_details = parse_category_details(lic)
+    return render_template('license_folded_card.html', lic=lic, settings=settings,
+                           computed_expiry=computed_expiry, category_details=category_details)
+
+
+@main_bp.route('/licenses/insurance-view/<license_number>')
+@login_required
+def license_insurance_view(license_number):
+    """View a folded license card for an insurance account (only for their registered drivers)."""
+    from app.models import DriverLicense, LicenseSetting, VehicleInsuranceAssignment, InsuranceAccount
+    from dateutil.relativedelta import relativedelta
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    num = license_number.strip().upper()
+    assignments = VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    allowed = set()
+    for a in assignments:
+        if a.driver_license_numbers:
+            try:
+                allowed.update(json.loads(a.driver_license_numbers))
+            except Exception:
+                pass
+    if num not in allowed:
+        return "Permis non autorisé", 403
+    lic = DriverLicense.query.filter_by(license_number=num).first_or_404()
+    settings = LicenseSetting.get()
+    computed_expiry = None
+    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
+        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    category_details = parse_category_details(lic)
+    return render_template('license_folded_card.html', lic=lic, settings=settings,
+                           computed_expiry=computed_expiry, category_details=category_details)
 
 
 @main_bp.route('/licenses/<int:license_id>/print-card')
@@ -870,6 +956,13 @@ def exoneration_page():
 def alerts_page():
     """Page de gestion des alertes (accidents, travaux, recherches de véhicule...)"""
     return render_template('alerts.html')
+
+
+@main_bp.route('/recherche')
+@roles_required('administrateur', 'policier')
+def recherche_page():
+    """Page de recherche de permis par véhicule (policier)"""
+    return render_template('recherche.html')
 
 
 @vehicle_bp.route('/stats', methods=['GET'])
@@ -2916,6 +3009,7 @@ def api_users_create():
     u.phone = phone
     u.country = country
     u.region = region
+    u.dgrtr_type = data.get('dgrtr_type') or None
     u.is_active = bool(is_active)
     u.set_password(password)
     # if role is administrateur mark is_admin True for backwards compatibility
@@ -2956,6 +3050,8 @@ def api_users_update(user_id):
             u.is_admin = False
     if 'is_active' in data:
         u.is_active = bool(data.get('is_active'))
+    if 'dgrtr_type' in data:
+        u.dgrtr_type = data.get('dgrtr_type') or None
     if 'password' in data and data.get('password'):
         u.set_password(data.get('password'))
 
@@ -2972,10 +3068,10 @@ def api_users_delete(user_id):
     if u.role == 'administrateur' and User.query.filter_by(role='administrateur').count() <= 1:
         return jsonify({'error': 'Impossible de supprimer le dernier administrateur.'}), 400
     
-    # Delete related phone_usages records first (to avoid foreign key constraint)
-    from app.models import PhoneUsage
+    from app.models import PhoneUsage, UserHistory
     PhoneUsage.query.filter_by(user_id=user_id).delete()
-    
+    UserHistory.query.filter_by(user_id=user_id).delete()
+
     db.session.delete(u)
     db.session.commit()
     return jsonify({'ok': True})
@@ -4011,6 +4107,8 @@ def get_insurance_vehicles():
             if p.vehicle_id not in last_payments:
                 last_payments[p.vehicle_id] = p.paid_at
 
+    assignment_map = {a.vehicle_id: a for a in assignments}
+
     vehicles_payload = []
     for vehicle in vehicles:
         vehicle_data = vehicle.to_dict()
@@ -4019,6 +4117,8 @@ def get_insurance_vehicles():
         vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
         lp = last_payments.get(vehicle.id)
         vehicle_data['last_payment_at'] = lp.isoformat() if lp else None
+        a = assignment_map.get(vehicle.id)
+        vehicle_data['driver_license_numbers'] = json.loads(a.driver_license_numbers) if (a and a.driver_license_numbers) else []
         vehicles_payload.append(vehicle_data)
 
     # Sort: vehicles with recent QR payments first (most recent on top), then others by license plate
@@ -5277,9 +5377,12 @@ def assign_vehicle_to_insurance():
     data = request.get_json()
     vehicle_id = data.get('vehicle_id')
     insurance_expiry = data.get('insurance_expiry')
-    
+    driver_license_numbers = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
+
     if not vehicle_id:
         return jsonify({"error": "vehicle_id required"}), 400
+    if not driver_license_numbers:
+        return jsonify({"error": "Au moins un numéro de permis conducteur est requis"}), 400
     
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     
@@ -5322,7 +5425,8 @@ def assign_vehicle_to_insurance():
             vehicle_id=vehicle.id,
             insurance_account_id=current_user.id,
             assigned_by=current_user.username,
-            notes='Assigned by insurance account'
+            notes='Assigned by insurance account',
+            driver_license_numbers=json.dumps(driver_license_numbers)
         )
         db.session.add(assignment)
         
@@ -5336,6 +5440,96 @@ def assign_vehicle_to_insurance():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/assignment-licenses', methods=['PATCH'])
+@login_required
+def update_assignment_licenses(vehicle_id):
+    """Update driver license numbers on an insurance assignment (insurance accounts only)."""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    assignment = VehicleInsuranceAssignment.query.filter_by(
+        vehicle_id=vehicle_id, insurance_account_id=current_user.id
+    ).first_or_404()
+    data = request.get_json() or {}
+    nums = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
+    if not nums:
+        return jsonify({"error": "Au moins un numéro de permis conducteur est requis"}), 400
+    assignment.driver_license_numbers = json.dumps(nums)
+    db.session.commit()
+    return jsonify({"success": True, "driver_license_numbers": nums})
+
+
+@vehicle_bp.route('/check-driver-license', methods=['GET'])
+@login_required
+def check_driver_license():
+    """Check whether a driver license number exists. Used by insurance account forms."""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    num = (request.args.get('number') or '').strip().upper()
+    if not num:
+        return jsonify({"exists": False}), 200
+    from app.models import DriverLicense
+    lic = DriverLicense.query.filter_by(license_number=num).first()
+    if lic:
+        return jsonify({
+            "exists": True,
+            "holder": f"{lic.holder_firstname or ''} {lic.holder_name}".strip(),
+            "status": lic.status,
+            "is_expired": lic.is_expired
+        })
+    return jsonify({"exists": False})
+
+
+@vehicle_bp.route('/driver-license-preview', methods=['GET'])
+@login_required
+def driver_license_preview():
+    """Return license data for the Côté A preview modal (insurance accounts only)."""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    num = (request.args.get('number') or '').strip().upper()
+    if not num:
+        return jsonify({"error": "number required"}), 400
+    # Security: number must be registered on one of this account's vehicles
+    assignments = VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    allowed = set()
+    for a in assignments:
+        if a.driver_license_numbers:
+            try:
+                allowed.update(json.loads(a.driver_license_numbers))
+            except Exception:
+                pass
+    if num not in allowed:
+        return jsonify({"error": "Permis non autorisé"}), 403
+    from app.models import DriverLicense, LicenseSetting
+    from dateutil.relativedelta import relativedelta
+    lic = DriverLicense.query.filter_by(license_number=num).first()
+    if not lic:
+        return jsonify({"error": "Permis introuvable"}), 404
+    settings = LicenseSetting.get()
+    computed_expiry = None
+    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
+        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    category_details = parse_category_details(lic)
+    holder_cats = [c.strip() for c in lic.categories.split(',') if c.strip()] if lic.categories else []
+    display_cats = [c for c in holder_cats if c != 'P']
+    expiry = lic.expiry_date or computed_expiry
+    return jsonify({
+        "license_number":        lic.license_number,
+        "holder_name":           lic.holder_name or '',
+        "holder_firstname":      lic.holder_firstname or '',
+        "holder_island":         lic.holder_island or '',
+        "centre_immatriculation":lic.centre_immatriculation or '',
+        "type_permis":           lic.type_permis or '',
+        "issue_date":            lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else None,
+        "expiry_date":           expiry.strftime('%d/%m/%Y') if expiry else None,
+        "status":                lic.status,
+        "is_expired":            lic.is_expired,
+        "is_pro":                'P' in holder_cats,
+        "categories":            display_cats,
+        "category_details":      category_details,
+        "photo_url":             f"/uploads/license_photos/{lic.photo_filename}" if lic.photo_filename else None,
+    })
 
 
 # ==================== VEHICLE INSURANCE ASSIGNMENT ====================
@@ -5387,11 +5581,15 @@ def create_vehicle_assignment():
     if existing:
         return jsonify({"error": "This assignment already exists"}), 400
     
+    driver_nums = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
+    if not driver_nums:
+        return jsonify({"error": "Au moins un numéro de permis conducteur est requis"}), 400
     assignment = VehicleInsuranceAssignment(
         vehicle_id=vehicle_id,
         insurance_account_id=insurance_account_id,
         assigned_by=current_user.username,
-        notes=data.get('notes', '')
+        notes=data.get('notes', ''),
+        driver_license_numbers=json.dumps(driver_nums)
     )
     
     db.session.add(assignment)

@@ -237,6 +237,22 @@ def create_app():
 
     # Créer les tables et s'assurer que l'admin existe
     with app.app_context():
+        # Si license_dossiers.nom est NOT NULL (ancienne version), on recrée la table proprement
+        try:
+            if str(app.config.get('SQLALCHEMY_DATABASE_URI', '')).startswith('sqlite'):
+                from sqlalchemy import text as _text
+                with db.engine.connect() as _conn:
+                    _tbl = _conn.execute(_text(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='license_dossiers'"
+                    )).first()
+                    if _tbl:
+                        _cols = {row[1]: row[3] for row in _conn.execute(_text("PRAGMA table_info(license_dossiers)")).fetchall()}
+                        if _cols.get('nom', 0) == 1:
+                            _conn.execute(_text("DROP TABLE license_dossiers"))
+                            logger.info("Dropped license_dossiers (nom was NOT NULL) — will recreate")
+        except Exception as _e:
+            logger.warning(f"Could not check/drop license_dossiers: {_e}")
+
         db.create_all()
 
         # SQLite compatibility guard:
@@ -258,6 +274,11 @@ def create_app():
                                 text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
                             )
                             logger.info("Added missing users.session_version column for SQLite compatibility")
+                        if 'dgrtr_type' not in existing_columns:
+                            conn.execute(
+                                text("ALTER TABLE users ADD COLUMN dgrtr_type VARCHAR(30)")
+                            )
+                            logger.info("Added missing users.dgrtr_type column for SQLite compatibility")
 
                     vehicle_owners_table_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicle_owners'")
@@ -370,6 +391,11 @@ def create_app():
                                 )
                             if null_tokens:
                                 logger.info(f"Backfilled track_token for {len(null_tokens)} vehicle(s)")
+                    via_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(vehicle_insurance_assignments)")).fetchall()}
+                    if 'driver_license_numbers' not in via_cols:
+                        conn.execute(text("ALTER TABLE vehicle_insurance_assignments ADD COLUMN driver_license_numbers TEXT"))
+                        logger.info("Added missing vehicle_insurance_assignments.driver_license_numbers column")
+
                     st_subs_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_subscriptions'")
                     ).first() is not None
@@ -515,6 +541,55 @@ def create_app():
                         if 'article_id' not in prr_cols:
                             conn.execute(text("ALTER TABLE point_reduction_reasons ADD COLUMN article_id INTEGER REFERENCES point_reduction_articles(id)"))
                             logger.info("Added point_reduction_reasons.article_id column")
+
+                    # license_dossiers — colonnes ajoutées progressivement
+                    ld_table_exists = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='license_dossiers'")
+                    ).first() is not None
+                    if ld_table_exists:
+                        ld_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(license_dossiers)")).fetchall()}
+                        ld_col_defs = {
+                            'nom':                  "ALTER TABLE license_dossiers ADD COLUMN nom VARCHAR(150)",
+                            'prenom':               "ALTER TABLE license_dossiers ADD COLUMN prenom VARCHAR(100)",
+                            'date_naissance':       "ALTER TABLE license_dossiers ADD COLUMN date_naissance DATE",
+                            'telephone':            "ALTER TABLE license_dossiers ADD COLUMN telephone VARCHAR(30)",
+                            'country':              "ALTER TABLE license_dossiers ADD COLUMN country VARCHAR(50)",
+                            'doc_recu_paiement':      "ALTER TABLE license_dossiers ADD COLUMN doc_recu_paiement BOOLEAN NOT NULL DEFAULT 0",
+                            'photo_filename':         "ALTER TABLE license_dossiers ADD COLUMN photo_filename VARCHAR(255)",
+                            'final_status':           "ALTER TABLE license_dossiers ADD COLUMN final_status VARCHAR(20) DEFAULT 'actif'",
+                            'lieu_naissance':         "ALTER TABLE license_dossiers ADD COLUMN lieu_naissance VARCHAR(150)",
+                            'sexe':                   "ALTER TABLE license_dossiers ADD COLUMN sexe VARCHAR(10)",
+                            'nationalite':            "ALTER TABLE license_dossiers ADD COLUMN nationalite VARCHAR(100)",
+                            'holder_address':         "ALTER TABLE license_dossiers ADD COLUMN holder_address VARCHAR(255)",
+                            'license_number_proposed':"ALTER TABLE license_dossiers ADD COLUMN license_number_proposed VARCHAR(50)",
+                            'type_permis':            "ALTER TABLE license_dossiers ADD COLUMN type_permis VARCHAR(20)",
+                            'issue_date':             "ALTER TABLE license_dossiers ADD COLUMN issue_date DATE",
+                            'expiry_date':            "ALTER TABLE license_dossiers ADD COLUMN expiry_date DATE",
+                            'centre_immatriculation': "ALTER TABLE license_dossiers ADD COLUMN centre_immatriculation VARCHAR(150)",
+                            'categories':             "ALTER TABLE license_dossiers ADD COLUMN categories VARCHAR(100)",
+                            'category_details':       "ALTER TABLE license_dossiers ADD COLUMN category_details TEXT",
+                            'step2_data':             "ALTER TABLE license_dossiers ADD COLUMN step2_data TEXT",
+                            'step2_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step2_validated_at DATETIME",
+                            'step2_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step2_validated_by VARCHAR(100)",
+                            'step3_data':           "ALTER TABLE license_dossiers ADD COLUMN step3_data TEXT",
+                            'step3_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step3_validated_at DATETIME",
+                            'step3_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step3_validated_by VARCHAR(100)",
+                            'step4_data':           "ALTER TABLE license_dossiers ADD COLUMN step4_data TEXT",
+                            'step4_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step4_validated_at DATETIME",
+                            'step4_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step4_validated_by VARCHAR(100)",
+                            'step5_data':           "ALTER TABLE license_dossiers ADD COLUMN step5_data TEXT",
+                            'step5_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step5_validated_at DATETIME",
+                            'step5_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step5_validated_by VARCHAR(100)",
+                            'license_id':           "ALTER TABLE license_dossiers ADD COLUMN license_id INTEGER REFERENCES driver_licenses(id)",
+                            'updated_at':           "ALTER TABLE license_dossiers ADD COLUMN updated_at DATETIME",
+                            'rejected_at':          "ALTER TABLE license_dossiers ADD COLUMN rejected_at DATETIME",
+                            'rejected_by':          "ALTER TABLE license_dossiers ADD COLUMN rejected_by VARCHAR(100)",
+                            'rejection_reason':     "ALTER TABLE license_dossiers ADD COLUMN rejection_reason TEXT",
+                        }
+                        for col, sql in ld_col_defs.items():
+                            if col not in ld_cols:
+                                conn.execute(text(sql))
+                                logger.info(f"Added license_dossiers.{col} column")
 
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")

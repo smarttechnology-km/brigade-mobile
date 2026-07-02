@@ -45,6 +45,8 @@ def login():
             return redirect(url_for('main.insurance_dashboard'))
         if getattr(current_user, 'role', None) == 'mobile_money_agent':
             return redirect(url_for('main.mobile_money_dashboard'))
+        if getattr(current_user, 'role', None) == 'dgrtr':
+            return redirect(url_for('main.dgrtr_dashboard'))
         return redirect(url_for('main.index'))
 
     if request.method == 'POST':
@@ -84,6 +86,8 @@ def login():
             next_page = request.args.get('next')
             if getattr(user, 'role', None) == 'mobile_money_agent':
                 return redirect(next_page or url_for('main.mobile_money_dashboard'))
+            if getattr(user, 'role', None) == 'dgrtr':
+                return redirect(next_page or url_for('main.dgrtr_dashboard'))
             return redirect(next_page or url_for('main.index'))
         
         flash('Nom d\'utilisateur ou mot de passe incorrect', 'danger')

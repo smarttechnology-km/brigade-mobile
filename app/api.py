@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, g, current_app
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest, Alert, AlertPhoto
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest, Alert, AlertPhoto, VehicleInsuranceAssignment, LicenseDossier
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -3182,8 +3182,15 @@ def api_licenses_point_history(license_id):
     err = check_island_access(lic.holder_island)
     if err:
         return err
-    rows = PointReductionHistory.query.filter_by(license_id=license_id)\
-        .order_by(PointReductionHistory.created_at.desc()).all()
+    last_reset = PointReductionHistory.query.filter_by(
+        license_id=license_id,
+        reason_label='Réinitialisation des points'
+    ).order_by(PointReductionHistory.created_at.desc()).first()
+
+    q = PointReductionHistory.query.filter_by(license_id=license_id)
+    if last_reset:
+        q = q.filter(PointReductionHistory.created_at >= last_reset.created_at)
+    rows = q.order_by(PointReductionHistory.created_at.desc()).all()
     return jsonify([r.to_dict() for r in rows])
 
 
@@ -3549,6 +3556,28 @@ def api_licenses_update(license_id):
     return jsonify(lic.to_dict())
 
 
+@api_bp.route('/licenses/<int:license_id>/suspend', methods=['PATCH'])
+@login_required
+def api_licenses_suspend(license_id):
+    if not (current_user.is_admin or getattr(current_user, 'role', '') == 'policier'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    lic = DriverLicense.query.get_or_404(license_id)
+    if lic.status == 'suspendu':
+        return jsonify({'error': 'Ce permis est déjà suspendu'}), 400
+    if lic.status in ('revoque', 'expire') or lic.is_expired:
+        return jsonify({'error': 'Impossible de suspendre un permis révoqué ou expiré'}), 400
+    data = request.get_json() or {}
+    motif = (data.get('motif') or '').strip()
+    if not motif:
+        return jsonify({'error': 'Le motif est obligatoire'}), 400
+    lic.status = 'suspendu'
+    timestamp = now_comoros().strftime('%d/%m/%Y %H:%M')
+    note_line = f"[Suspendu le {timestamp} par {current_user.username}] Motif: {motif}"
+    lic.notes = (lic.notes + '\n' + note_line) if lic.notes else note_line
+    db.session.commit()
+    return jsonify(lic.to_dict())
+
+
 @api_bp.route('/licenses/<int:license_id>', methods=['DELETE'])
 @login_required
 def api_licenses_delete(license_id):
@@ -3564,6 +3593,11 @@ def api_licenses_delete(license_id):
                 os.remove(photo_path)
         except Exception:
             pass
+    # Supprimer le dossier DGRTR lié s'il existe
+    from app.models import LicenseDossier
+    dossier = LicenseDossier.query.filter_by(license_id=lic.id).first()
+    if dossier:
+        db.session.delete(dossier)
     db.session.delete(lic)
     db.session.commit()
     return jsonify({'ok': True})
@@ -4034,3 +4068,496 @@ def api_alerts_mark_expired(alert_id):
     alert.manually_expired = True
     db.session.commit()
     return jsonify(alert.to_dict())
+
+
+@api_bp.route('/vehicles/search-drivers', methods=['GET'])
+@login_required
+def api_search_drivers():
+    """Search vehicles by plate/details and return their assigned driver licenses."""
+    if not (current_user.is_admin or current_user.role == 'policier'):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    license_plate = (request.args.get('license_plate') or '').strip()
+    vehicle_type  = (request.args.get('vehicle_type')  or '').strip()
+    make          = (request.args.get('make')          or '').strip()
+    model         = (request.args.get('model')         or '').strip()
+    color         = (request.args.get('color')         or '').strip()
+    usage_type    = (request.args.get('usage_type')    or '').strip()
+
+    if not any([license_plate, vehicle_type, make, model, color, usage_type]):
+        return jsonify({'error': 'Au moins un critère de recherche est requis'}), 400
+
+    q = Vehicle.query
+    if license_plate:
+        q = q.filter(Vehicle.license_plate.ilike(f'%{license_plate}%'))
+    if vehicle_type:
+        q = q.filter(Vehicle.vehicle_type.ilike(f'%{vehicle_type}%'))
+    if make:
+        q = q.filter(Vehicle.make.ilike(f'%{make}%'))
+    if model:
+        q = q.filter(Vehicle.model.ilike(f'%{model}%'))
+    if color:
+        q = q.filter(Vehicle.color.ilike(f'%{color}%'))
+    if usage_type:
+        q = q.filter(Vehicle.usage_type.ilike(f'%{usage_type}%'))
+
+    vehicles = q.limit(50).all()
+
+    results = []
+    for vehicle in vehicles:
+        assignments = VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle.id).all()
+        all_license_numbers = []
+        for assignment in assignments:
+            if assignment.driver_license_numbers:
+                try:
+                    nums = json.loads(assignment.driver_license_numbers)
+                    if isinstance(nums, list):
+                        all_license_numbers.extend(nums)
+                except (ValueError, TypeError):
+                    pass
+
+        all_license_numbers = list(dict.fromkeys(all_license_numbers))  # dedupe, preserve order
+
+        licenses = []
+        for num in all_license_numbers:
+            lic = DriverLicense.query.filter_by(license_number=num).first()
+            if lic:
+                d = lic.to_dict()
+                d['photo_url'] = f'/uploads/license_photos/{lic.photo_filename}' if lic.photo_filename else None
+                licenses.append(d)
+            else:
+                licenses.append({'license_number': num, 'not_found': True})
+
+        results.append({
+            'vehicle': {
+                'id': vehicle.id,
+                'license_plate': vehicle.license_plate,
+                'vehicle_type': vehicle.vehicle_type,
+                'make': vehicle.make or '',
+                'model': vehicle.model or '',
+                'color': vehicle.color or '',
+                'usage_type': vehicle.usage_type or '',
+                'owner_name': vehicle.owner_name or '',
+            },
+            'licenses': licenses,
+        })
+
+    return jsonify(results)
+
+
+# ─────────────────────────────────────────────
+#  DGRTR — Comptes
+# ─────────────────────────────────────────────
+
+@api_bp.route('/dgrtr-users', methods=['GET'])
+@login_required
+def list_dgrtr_users():
+    if not (hasattr(current_user, 'is_admin') and current_user.is_admin):
+        return jsonify({'error': 'Accès refusé'}), 403
+    users = User.query.filter_by(role='dgrtr').order_by(User.full_name).all()
+    return jsonify([{
+        'id': u.id,
+        'username': u.username,
+        'full_name': u.full_name or '',
+        'country': u.country or '',
+        'dgrtr_type': u.dgrtr_type or '',
+        'is_active': u.is_active,
+        'created_at': u.created_at.strftime('%d/%m/%Y') if u.created_at else '',
+    } for u in users])
+
+
+# ─────────────────────────────────────────────
+#  DGRTR — Dossiers de permis
+# ─────────────────────────────────────────────
+
+def _generate_dossier_number():
+    year = now_comoros().year
+    prefix = f'DOS-{year}-'
+    last = LicenseDossier.query.filter(
+        LicenseDossier.dossier_number.like(f'{prefix}%')
+    ).order_by(LicenseDossier.id.desc()).first()
+    n = 1
+    if last and last.dossier_number:
+        try:
+            n = int(last.dossier_number.split('-')[-1]) + 1
+        except (ValueError, IndexError):
+            pass
+    return f'{prefix}{n:04d}'
+
+
+@api_bp.route('/dossiers-permis', methods=['GET'])
+@login_required
+def list_dossiers_permis():
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    q = LicenseDossier.query
+    if current_user.role == 'dgrtr' and getattr(current_user, 'country', None):
+        q = q.filter(db.or_(
+            LicenseDossier.country == current_user.country,
+            LicenseDossier.country == None,
+        ))
+
+    status_filter = request.args.get('status', '').strip()
+    if status_filter:
+        statuses = [s.strip() for s in status_filter.split(',')]
+        q = q.filter(LicenseDossier.status.in_(statuses))
+
+    search = request.args.get('q', '').strip()
+    if search:
+        like = f'%{search}%'
+        q = q.filter(db.or_(
+            LicenseDossier.nom.ilike(like),
+            LicenseDossier.prenom.ilike(like),
+            LicenseDossier.dossier_number.ilike(like),
+        ))
+
+    dossiers = q.order_by(LicenseDossier.created_at.desc()).all()
+    return jsonify([d.to_dict() for d in dossiers])
+
+
+@api_bp.route('/dossiers-permis', methods=['POST'])
+@login_required
+def create_dossier_permis():
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    data = request.get_json() or {}
+
+    d = LicenseDossier(
+        doc_autoecole=bool(data.get('doc_autoecole')),
+        doc_medical=bool(data.get('doc_medical')),
+        doc_residence=bool(data.get('doc_residence')),
+        doc_fiche_individuelle=bool(data.get('doc_fiche_individuelle')),
+        doc_carte_nationale=bool(data.get('doc_carte_nationale')),
+        doc_recu_paiement=bool(data.get('doc_recu_paiement')),
+        country=(data.get('country') or '').strip() or None,
+        created_by=current_user.username,
+    )
+
+    if d.all_docs_checked:
+        d.dossier_number   = _generate_dossier_number()
+        d.step1_validated_at = now_comoros()
+        d.step1_validated_by = current_user.username
+        d.current_step     = 1
+
+    db.session.add(d)
+    db.session.commit()
+    return jsonify(d.to_dict()), 201
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>', methods=['GET'])
+@login_required
+def get_dossier_permis(dossier_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    d = LicenseDossier.query.get_or_404(dossier_id)
+    return jsonify(d.to_dict())
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>/step2', methods=['POST'])
+@login_required
+def validate_dossier_step2(dossier_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    d    = LicenseDossier.query.get_or_404(dossier_id)
+    data = request.get_json() or {}
+
+    if not d.step1_validated_at:
+        return jsonify({'error': 'Étape 1 non validée'}), 400
+
+    from datetime import date as _date
+    def parse_date(v):
+        try: return _date.fromisoformat(v)
+        except: return None
+
+    d.nom                    = (data.get('nom') or '').strip() or None
+    d.prenom                 = (data.get('prenom') or '').strip() or None
+    d.date_naissance         = parse_date(data.get('date_naissance', ''))
+    d.lieu_naissance         = (data.get('lieu_naissance') or '').strip() or None
+    d.sexe                   = data.get('sexe') or None
+    d.nationalite            = (data.get('nationalite') or '').strip() or None
+    d.holder_address         = (data.get('holder_address') or '').strip() or None
+    d.telephone              = (data.get('telephone') or '').strip() or None
+    d.country                = (data.get('country') or '').strip() or None
+    d.type_permis            = data.get('type_permis') or None
+    d.issue_date             = parse_date(data.get('issue_date', ''))
+    d.expiry_date            = parse_date(data.get('expiry_date', ''))
+    d.centre_immatriculation = (data.get('centre_immatriculation') or '').strip() or None
+    d.categories             = (data.get('categories') or '').strip() or None
+
+    import json as _json
+    cat_details = data.get('category_details') or {}
+    d.category_details = _json.dumps(cat_details) if cat_details else None
+
+    d.step2_validated_at = now_comoros()
+    d.step2_validated_by = current_user.username
+    d.current_step       = 2
+
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>/step3', methods=['POST'])
+@login_required
+def validate_dossier_step3(dossier_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    d = LicenseDossier.query.get_or_404(dossier_id)
+    if not d.step2_validated_at:
+        return jsonify({'error': 'Étape 2 non validée'}), 400
+    import os, uuid as _uuid
+    from werkzeug.utils import secure_filename as _sf
+
+    file = request.files.get('photo')
+    if file and file.filename:
+        ext = os.path.splitext(_sf(file.filename))[1].lower()
+        if ext not in ('.jpg', '.jpeg', '.png', '.webp'):
+            return jsonify({'error': 'Format non supporté (jpg/png/webp)'}), 400
+
+        filename   = f"license_{_uuid.uuid4().hex}{ext}"
+        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'license_photos')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        if d.photo_filename:
+            old = os.path.join(upload_dir, d.photo_filename)
+            if os.path.exists(old):
+                os.remove(old)
+
+        file.save(os.path.join(upload_dir, filename))
+        d.photo_filename = filename
+    elif not d.photo_filename:
+        return jsonify({'error': 'Photo manquante'}), 400
+
+    d.step3_validated_at = now_comoros()
+    d.step3_validated_by = current_user.username
+    d.current_step       = 3
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>/step4', methods=['POST'])
+@login_required
+def validate_dossier_step4(dossier_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    d    = LicenseDossier.query.get_or_404(dossier_id)
+    data = request.get_json() or {}
+    if not d.step3_validated_at:
+        return jsonify({'error': 'Étape 3 non validée'}), 400
+
+    license_num = (data.get('license_number') or '').strip()
+    if not license_num:
+        return jsonify({'error': 'Numéro de permis obligatoire'}), 400
+    existing = DriverLicense.query.filter_by(license_number=license_num).first()
+    if existing:
+        return jsonify({'error': 'Ce numéro de permis existe déjà'}), 400
+
+    from datetime import date as _date
+    def parse_date(v):
+        try: return _date.fromisoformat(v)
+        except: return None
+
+    d.license_number_proposed = license_num
+    d.final_status            = data.get('status') or 'actif'
+    # Permit editing of personal info
+    d.nom                     = (data.get('nom') or d.nom or '').strip() or None
+    d.prenom                  = (data.get('prenom') or d.prenom or '').strip() or None
+    d.date_naissance          = parse_date(data.get('date_naissance', '')) or d.date_naissance
+    d.lieu_naissance          = (data.get('lieu_naissance') or d.lieu_naissance or '').strip() or None
+    d.sexe                    = data.get('sexe') or d.sexe
+    d.nationalite             = (data.get('nationalite') or d.nationalite or '').strip() or None
+    d.holder_address          = (data.get('holder_address') or d.holder_address or '').strip() or None
+    d.telephone               = (data.get('telephone') or d.telephone or '').strip() or None
+    d.country                 = (data.get('country') or d.country or '').strip() or None
+    d.centre_immatriculation  = (data.get('centre_immatriculation') or d.centre_immatriculation or '').strip() or None
+    d.type_permis             = data.get('type_permis') or d.type_permis
+    d.issue_date              = parse_date(data.get('issue_date', '')) or d.issue_date
+    d.expiry_date             = parse_date(data.get('expiry_date', '')) or d.expiry_date
+    d.categories              = (data.get('categories') or d.categories or '').strip() or None
+
+    import json as _json
+    if data.get('category_details'):
+        d.category_details = _json.dumps(data['category_details'])
+
+    d.step4_validated_at = now_comoros()
+    d.step4_validated_by = current_user.username
+    d.current_step       = 4
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>/step5', methods=['POST'])
+@login_required
+def validate_dossier_step5(dossier_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
+        return jsonify({'error': 'Réservé au Directeur Technique'}), 403
+    d = LicenseDossier.query.get_or_404(dossier_id)
+    if not d.step4_validated_at:
+        return jsonify({'error': 'Étape 4 non validée'}), 400
+    if not d.license_number_proposed:
+        return jsonify({'error': 'Numéro de permis manquant'}), 400
+
+    if DriverLicense.query.filter_by(license_number=d.license_number_proposed).first():
+        return jsonify({'error': 'Ce numéro de permis existe déjà dans le système'}), 400
+
+    settings = LicenseSetting.get()
+
+    lic = DriverLicense(
+        license_number         = d.license_number_proposed,
+        holder_name            = d.nom,
+        holder_firstname       = d.prenom,
+        date_of_birth          = d.date_naissance,
+        lieu_naissance         = d.lieu_naissance,
+        sexe                   = d.sexe,
+        nationalite            = d.nationalite,
+        holder_address         = d.holder_address,
+        holder_phone           = d.telephone,
+        holder_island          = d.country,
+        centre_immatriculation = d.centre_immatriculation,
+        type_permis            = d.type_permis or 'permanent',
+        issue_date             = d.issue_date,
+        expiry_date            = d.expiry_date,
+        categories             = d.categories,
+        category_details       = d.category_details,
+        photo_filename         = d.photo_filename,
+        status                 = d.final_status or 'actif',
+        points                 = settings.initial_points,
+        created_by             = current_user.username,
+    )
+    db.session.add(lic)
+    db.session.flush()
+
+    d.license_id          = lic.id
+    d.step5_validated_at  = now_comoros()
+    d.step5_validated_by  = current_user.username
+    d.current_step        = 5
+    d.status              = 'complet'
+    db.session.commit()
+    return jsonify({'dossier': d.to_dict(), 'license_id': lic.id, 'license_number': lic.license_number})
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>/reject', methods=['POST'])
+@login_required
+def reject_dossier_permis(dossier_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    d = LicenseDossier.query.get_or_404(dossier_id)
+    if d.status == 'complet':
+        return jsonify({'error': 'Impossible de rejeter un dossier déjà complété'}), 400
+    data = request.get_json() or {}
+    d.status           = 'rejete'
+    d.rejected_at      = now_comoros()
+    d.rejected_by      = current_user.username
+    d.rejection_reason = (data.get('reason') or '').strip() or None
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>', methods=['PATCH'])
+@login_required
+def update_dossier_permis(dossier_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    d    = LicenseDossier.query.get_or_404(dossier_id)
+    data = request.get_json() or {}
+
+    for field in ('doc_autoecole', 'doc_medical', 'doc_residence',
+                  'doc_fiche_individuelle', 'doc_carte_nationale', 'doc_recu_paiement'):
+        if field in data:
+            setattr(d, field, bool(data[field]))
+    if 'country' in data:
+        d.country = (data.get('country') or '').strip() or None
+
+    if d.all_docs_checked and not d.step1_validated_at:
+        d.dossier_number   = _generate_dossier_number()
+        d.step1_validated_at = now_comoros()
+        d.step1_validated_by = current_user.username
+        d.current_step     = 1
+
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+# ─────────────────────────────────────────────
+#  DGRTR — Statistiques
+# ─────────────────────────────────────────────
+
+@api_bp.route('/dgrtr/stats', methods=['GET'])
+@login_required
+def dgrtr_stats():
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    from sqlalchemy import func, extract
+    from datetime import timedelta
+
+    tz_now = now_comoros()
+    current_year  = tz_now.year
+    current_month = tz_now.month
+
+    total_dossiers   = LicenseDossier.query.count()
+    total_complets   = LicenseDossier.query.filter_by(status='complet').count()
+    total_rejetes    = LicenseDossier.query.filter_by(status='rejete').count()
+    total_en_cours   = LicenseDossier.query.filter_by(status='en_cours').count()
+    total_permanent  = LicenseDossier.query.filter(
+        LicenseDossier.status == 'complet', LicenseDossier.type_permis == 'permanent').count()
+    total_temporaire = LicenseDossier.query.filter(
+        LicenseDossier.status == 'complet', LicenseDossier.type_permis == 'temporaire').count()
+    this_month = LicenseDossier.query.filter(
+        LicenseDossier.status == 'complet',
+        extract('year',  LicenseDossier.step5_validated_at) == current_year,
+        extract('month', LicenseDossier.step5_validated_at) == current_month
+    ).count()
+
+    days_data = []
+    for i in range(29, -1, -1):
+        day = (tz_now - timedelta(days=i)).date()
+        count = LicenseDossier.query.filter(
+            LicenseDossier.status == 'complet',
+            func.date(LicenseDossier.step5_validated_at) == day
+        ).count()
+        days_data.append({'date': day.strftime('%d/%m'), 'count': count})
+
+    months_data = []
+    month_names = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
+    for m in range(1, 13):
+        count = LicenseDossier.query.filter(
+            LicenseDossier.status == 'complet',
+            extract('year',  LicenseDossier.step5_validated_at) == current_year,
+            extract('month', LicenseDossier.step5_validated_at) == m
+        ).count()
+        months_data.append({'month': month_names[m - 1], 'count': count})
+
+    year_rows = db.session.query(
+        extract('year', LicenseDossier.step5_validated_at).label('yr'),
+        func.count().label('cnt')
+    ).filter(
+        LicenseDossier.status == 'complet',
+        LicenseDossier.step5_validated_at != None
+    ).group_by('yr').order_by('yr').all()
+    years_data = [{'year': int(r.yr), 'count': r.cnt} for r in year_rows]
+
+    island_rows = db.session.query(
+        LicenseDossier.country,
+        func.count().label('cnt')
+    ).filter(LicenseDossier.status == 'complet').group_by(LicenseDossier.country).all()
+    islands_data = [{'island': r.country or 'Non spécifiée', 'count': r.cnt} for r in island_rows]
+
+    return jsonify({
+        'totals': {
+            'dossiers': total_dossiers, 'complets': total_complets,
+            'rejetes': total_rejetes,   'en_cours': total_en_cours,
+            'permanent': total_permanent, 'temporaire': total_temporaire,
+            'ce_mois': this_month,
+        },
+        'par_jour':   days_data,
+        'par_mois':   months_data,
+        'par_annee':  years_data,
+        'par_ile':    islands_data,
+        'current_year': current_year,
+    })

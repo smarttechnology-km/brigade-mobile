@@ -22,6 +22,7 @@ class User(UserMixin, db.Model):
     phone = db.Column(db.String(30), nullable=True)
     country = db.Column(db.String(50), nullable=True)  # Grand Comores, Anjouan, Moheli
     region = db.Column(db.String(100), nullable=True)  # Region based on country
+    dgrtr_type = db.Column(db.String(30), nullable=True)  # 'employe' | 'directeur_technique'
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     session_version = db.Column(db.Integer, nullable=False, default=0)  # Incremented on each login to invalidate old tokens
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
@@ -568,6 +569,7 @@ class VehicleInsuranceAssignment(db.Model):
     assigned_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     assigned_by = db.Column(db.String(100), nullable=True)  # Username who assigned it
     notes = db.Column(db.Text)
+    driver_license_numbers = db.Column(db.Text)  # JSON array of license number strings
     
     vehicle = db.relationship('Vehicle', backref=db.backref('insurance_assignments', lazy=True))
     insurance_account = db.relationship('InsuranceAccount', backref=db.backref('vehicle_assignments', lazy=True))
@@ -584,7 +586,8 @@ class VehicleInsuranceAssignment(db.Model):
             'insurance_account_id': self.insurance_account_id,
             'assigned_at': self.assigned_at.isoformat() if self.assigned_at else None,
             'assigned_by': self.assigned_by,
-            'notes': self.notes
+            'notes': self.notes,
+            'driver_license_numbers': self.driver_license_numbers
         }
 
 
@@ -1570,4 +1573,139 @@ class AlertPhoto(db.Model):
 @event.listens_for(AlertPhoto, 'before_delete')
 def _alert_photo_delete_file(mapper, connection, target):
     _delete_upload_file(target.filename, 'alert_photos')
+
+
+class LicenseDossier(db.Model):
+    """Dossier de demande de permis de conduire — workflow en 5 étapes.
+    Le permis est créé dans DriverLicense uniquement quand toutes les étapes sont validées."""
+    __tablename__ = 'license_dossiers'
+    id               = db.Column(db.Integer, primary_key=True)
+    dossier_number   = db.Column(db.String(30), unique=True, nullable=True, index=True)
+
+    # Informations du candidat (saisies à l'étape 2)
+    nom                    = db.Column(db.String(150), nullable=True)
+    prenom                 = db.Column(db.String(100), nullable=True)
+    date_naissance         = db.Column(db.Date, nullable=True)
+    lieu_naissance         = db.Column(db.String(150), nullable=True)
+    sexe                   = db.Column(db.String(10), nullable=True)
+    nationalite            = db.Column(db.String(100), nullable=True)
+    holder_address         = db.Column(db.String(255), nullable=True)
+    telephone              = db.Column(db.String(30), nullable=True)
+    country                = db.Column(db.String(50), nullable=True)
+    # Détails du permis (étape 2)
+    license_number_proposed = db.Column(db.String(50), nullable=True)
+    type_permis            = db.Column(db.String(20), nullable=True)
+    issue_date             = db.Column(db.Date, nullable=True)
+    expiry_date            = db.Column(db.Date, nullable=True)
+    centre_immatriculation = db.Column(db.String(150), nullable=True)
+    categories             = db.Column(db.String(100), nullable=True)
+    category_details       = db.Column(db.Text, nullable=True)
+
+    # Étape 1 — Validation des documents
+    doc_autoecole          = db.Column(db.Boolean, nullable=False, default=False)
+    doc_medical            = db.Column(db.Boolean, nullable=False, default=False)
+    doc_residence          = db.Column(db.Boolean, nullable=False, default=False)
+    doc_fiche_individuelle = db.Column(db.Boolean, nullable=False, default=False)
+    doc_carte_nationale    = db.Column(db.Boolean, nullable=False, default=False)
+    doc_recu_paiement      = db.Column(db.Boolean, nullable=False, default=False)
+    step1_validated_at     = db.Column(db.DateTime, nullable=True)
+    step1_validated_by     = db.Column(db.String(100), nullable=True)
+
+    # Step 3 — Photo du candidat
+    photo_filename         = db.Column(db.String(255), nullable=True)
+    # Step 4 — Statut final du permis à créer
+    final_status           = db.Column(db.String(20), nullable=True, default='actif')
+
+    # Étapes 2–5 — données JSON + validation
+    step2_data         = db.Column(db.Text, nullable=True)
+    step2_validated_at = db.Column(db.DateTime, nullable=True)
+    step2_validated_by = db.Column(db.String(100), nullable=True)
+
+    step3_data         = db.Column(db.Text, nullable=True)
+    step3_validated_at = db.Column(db.DateTime, nullable=True)
+    step3_validated_by = db.Column(db.String(100), nullable=True)
+
+    step4_data         = db.Column(db.Text, nullable=True)
+    step4_validated_at = db.Column(db.DateTime, nullable=True)
+    step4_validated_by = db.Column(db.String(100), nullable=True)
+
+    step5_data         = db.Column(db.Text, nullable=True)
+    step5_validated_at = db.Column(db.DateTime, nullable=True)
+    step5_validated_by = db.Column(db.String(100), nullable=True)
+
+    # État du workflow
+    current_step = db.Column(db.Integer, nullable=False, default=0)
+    status       = db.Column(db.String(20), nullable=False, default='en_cours')  # en_cours | complet | rejete
+
+    # Rejet
+    rejected_at     = db.Column(db.DateTime, nullable=True)
+    rejected_by     = db.Column(db.String(100), nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
+
+    # Permis créé en fin de chaîne (step 5)
+    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=True)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    created_by = db.Column(db.String(100), nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+
+    license = db.relationship('DriverLicense', foreign_keys=[license_id])
+
+    @property
+    def all_docs_checked(self):
+        return all([self.doc_autoecole, self.doc_medical, self.doc_residence,
+                    self.doc_fiche_individuelle, self.doc_carte_nationale,
+                    self.doc_recu_paiement])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'dossier_number': self.dossier_number or '',
+            'nom': self.nom or '',
+            'prenom': self.prenom or '',
+            'date_naissance': self.date_naissance.strftime('%Y-%m-%d') if self.date_naissance else '',
+            'lieu_naissance': self.lieu_naissance or '',
+            'sexe': self.sexe or '',
+            'nationalite': self.nationalite or '',
+            'holder_address': self.holder_address or '',
+            'telephone': self.telephone or '',
+            'country': self.country or '',
+            'license_number_proposed': self.license_number_proposed or '',
+            'type_permis': self.type_permis or '',
+            'issue_date': self.issue_date.strftime('%Y-%m-%d') if self.issue_date else '',
+            'expiry_date': self.expiry_date.strftime('%Y-%m-%d') if self.expiry_date else '',
+            'centre_immatriculation': self.centre_immatriculation or '',
+            'categories': self.categories or '',
+            'category_details': json.loads(self.category_details) if self.category_details else {},
+            'photo_filename': self.photo_filename or '',
+            'photo_url': f'/uploads/license_photos/{self.photo_filename}' if self.photo_filename else '',
+            'final_status': self.final_status or 'actif',
+            'doc_autoecole': self.doc_autoecole,
+            'doc_medical': self.doc_medical,
+            'doc_residence': self.doc_residence,
+            'doc_fiche_individuelle': self.doc_fiche_individuelle,
+            'doc_carte_nationale': self.doc_carte_nationale,
+            'doc_recu_paiement': self.doc_recu_paiement,
+            'step1_validated_at': self.step1_validated_at.strftime('%d/%m/%Y %H:%M') if self.step1_validated_at else '',
+            'step1_validated_by': self.step1_validated_by or '',
+            'step2_validated_at': self.step2_validated_at.strftime('%d/%m/%Y %H:%M') if self.step2_validated_at else '',
+            'step2_validated_by': self.step2_validated_by or '',
+            'step3_validated_at': self.step3_validated_at.strftime('%d/%m/%Y %H:%M') if self.step3_validated_at else '',
+            'step3_validated_by': self.step3_validated_by or '',
+            'step4_validated_at': self.step4_validated_at.strftime('%d/%m/%Y %H:%M') if self.step4_validated_at else '',
+            'step4_validated_by': self.step4_validated_by or '',
+            'step5_validated_at': self.step5_validated_at.strftime('%d/%m/%Y %H:%M') if self.step5_validated_at else '',
+            'step5_validated_by': self.step5_validated_by or '',
+            'current_step': self.current_step,
+            'all_docs_checked': self.all_docs_checked,
+            'status': self.status,
+            'rejected_at': self.rejected_at.strftime('%d/%m/%Y %H:%M') if self.rejected_at else '',
+            'rejected_by': self.rejected_by or '',
+            'rejection_reason': self.rejection_reason or '',
+            'license_id': self.license_id,
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else '',
+            'created_by': self.created_by or '',
+            'updated_at': self.updated_at.strftime('%d/%m/%Y %H:%M') if self.updated_at else '',
+        }
+
 
