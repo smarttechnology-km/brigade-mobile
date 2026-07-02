@@ -134,6 +134,20 @@
 
             {% if current_user.is_authenticated and (current_user.role == 'policier') %}
             <a class="nav-link text-white {% if request.path.startswith('/payments') or request.path.startswith('/fines/receipt') %}active{% endif %}" href="/payments"><i class="fas fa-credit-card me-2"></i> Paiements</a>
+            <a class="nav-link text-white {% if request.path.startswith('/recherche') %}active{% endif %}" href="/recherche"><i class="fas fa-search me-2"></i> Recherche</a>
+            {% endif %}
+
+            {% if current_user.is_authenticated and (current_user.role == 'dgrtr') %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis</a>
+            {% if current_user.dgrtr_type == 'employe' %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr/ajouter-permis' %}active{% endif %}" href="/dgrtr/ajouter-permis"><i class="fas fa-plus-circle me-2"></i> Ajouter un permis</a>
+            {% endif %}
+            {% if current_user.dgrtr_type == 'directeur_technique' %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr-dossiers-complets' %}active{% endif %}" href="/dgrtr-dossiers-complets"><i class="fas fa-check-circle me-2"></i> Dossiers Complétés</a>
+            {% endif %}
+            {% if current_user.dgrtr_type == 'directeur_technique' %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr-statistiques' %}active{% endif %}" href="/dgrtr-statistiques"><i class="fas fa-chart-bar me-2"></i> Statistiques</a>
+            {% endif %}
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'agent_impot') %}

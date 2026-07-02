@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Permis de Conduire — {{ lic.license_number }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/dom-to-image-more@2.10.1/dist/dom-to-image-more.min.js"></script>
+  <link href="/static/css/fa-icons-embedded.css" rel="stylesheet">
+  <style>
+    html { color-scheme: light; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #d8dde5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px 60px;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar { display: flex; gap: 10px; margin-bottom: 28px; }
+    .btn {
+      display: flex; align-items: center; gap: 7px;
+      padding: 9px 20px; border: none; border-radius: 6px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-print { background: #1e40af; color: #fff; }
+    .btn-print:hover { background: #1e3a8a; }
+    .btn-back  { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+    .btn-back:hover { background: #f9fafb; }
+
+    /* ── Instruction label ── */
+    .fold-hint {
+      font-size: 12px; color: #64748b; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .fold-hint::before, .fold-hint::after {
+      content: ''; flex: 1; max-width: 120px; height: 1px; background: #cbd5e1;
+    }
+
+    /* ── Card wrap — both panels side by side ── */
+    .card-wrap {
+      display: flex;
+      position: relative;
+      border-radius: 0;
+      overflow: hidden;
+      width: 21cm;
+      height: 9.9cm;
+      box-shadow: 0 24px 64px rgba(10,22,56,.28), 0 4px 16px rgba(10,22,56,.14);
+    }
+    .card-wrap-b {
+      width: 21cm;
+      height: 9.9cm;
+    }
+
+    /* ── Mise en page A4 portrait (3 volets de 9,9 cm) ── */
+    .a4-page {
+      width: 21cm;
+      height: calc(9.9cm + 9.9cm + 18mm);
+      background: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18);
+      overflow: hidden;
+    }
+    .cut-guide {
+      width: 21cm;
+      height: 18mm;
+      background: transparent;
+      flex-shrink: 0;
+    }
+    .cut-guide-label {
+      background: #f1f5f9;
+      padding: 2px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 20px;
+      font-size: 9px;
+      color: #94a3b8;
+      white-space: nowrap;
+      letter-spacing: .08em;
+      font-weight: 700;
+    }
+
+    /* ── Fold line (screen only) ── */
+    .fold-line-screen {
+      position: absolute;
+      left: 50%; top: 0; bottom: 0;
+      width: 0;
+      border-left: 2px dashed rgba(255,255,255,.45);
+      transform: translateX(-50%);
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    /* ══════════════════════════════════
+       PANEL COMMUN
+    ══════════════════════════════════ */
+    .panel {
+      width: 10.5cm;
+      height: 9.9cm;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    /* ── Header band (commun aux deux volets) ── */
+    .panel-header {
+      background:
+        radial-gradient(ellipse 420px 130px at 10% -40%, rgba(255,255,255,.18) 0%, transparent 65%),
+        linear-gradient(100deg, #050e2b 0%, #0f2660 45%, #1d4ed8 100%);
+      padding: 10px 16px 8px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .panel-header::after {
+      content: '';
+      position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+      background: linear-gradient(90deg, #92400e 0%, #fbbf24 35%, #fde68a 50%, #fbbf24 65%, #92400e 100%);
+    }
+    .ph-top {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .ph-left { display: flex; align-items: center; gap: 9px; }
+    .ph-flag { font-size: 22px; filter: drop-shadow(0 1px 3px rgba(0,0,0,.35)); }
+    .ph-titles { display: flex; flex-direction: column; gap: 1px; }
+    .ph-country { font-size: 11.5px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+    .ph-sub { font-size: 9.5px; color: #fbbf24; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .ph-arabic {
+      font-size: 11px; font-weight: 700; color: rgba(255,255,255,.88);
+      text-align: right; line-height: 1.4;
+      direction: rtl;
+    }
+    .ph-temp-badge {
+      display: inline-block;
+      margin-top: 5px;
+      background: linear-gradient(90deg, #7c3aed, #a855f7);
+      color: #fff;
+      font-size: 8.5px; font-weight: 800; letter-spacing: .12em;
+      text-transform: uppercase;
+      padding: 2px 10px; border-radius: 20px;
+    }
+
+    /* ══════════════════════════════════
+       VOLET 1 — FACE / RECTO
+    ══════════════════════════════════ */
+    .panel-front {
+      background: linear-gradient(170deg, #0a1638 0%, #163074 50%, #1e40af 100%);
+    }
+
+    /* ── Variante Professionnelle (catégorie P) ── */
+    .card-pro .panel-front {
+      background: linear-gradient(170deg, #1a0509 0%, #4a0d1c 50%, #7a1530 100%);
+    }
+    .card-pro .panel-header {
+      background:
+        radial-gradient(ellipse 420px 130px at 10% -40%, rgba(255,255,255,.18) 0%, transparent 65%),
+        linear-gradient(100deg, #1a0509 0%, #4a0d1c 45%, #9c1f3f 100%);
+    }
+    .card-pro .front-validity {
+      border-color: rgba(251,113,133,.25);
+    }
+    .card-pro .cat-pill {
+      background: linear-gradient(160deg, #9c1f3f, #6b1029);
+    }
+    .card-pro .cat-badge-owned {
+      background: linear-gradient(160deg, #9c1f3f, #6b1029);
+      border-color: #6b1029;
+    }
+    .card-pro .panel-b-cover {
+      background:
+        radial-gradient(ellipse 420px 200px at 50% -10%, rgba(255,255,255,.12) 0%, transparent 60%),
+        linear-gradient(170deg, #1a0509 0%, #4a0d1c 45%, #7a1530 100%);
+    }
+    .card-pro .b-inside-body { background-image: repeating-linear-gradient(135deg, rgba(120,21,48,.025) 0px, rgba(120,21,48,.025) 1px, transparent 1px, transparent 9px), linear-gradient(180deg, #fffbfc 0%, #fdf2f4 100%); }
+    .card-pro .cat-table-title,
+    .card-pro .info-section-title,
+    .card-pro .cats-title { color: #7a1530; border-bottom-color: #fdd; }
+    .card-pro .inside-body { background-image: repeating-linear-gradient(135deg, rgba(120,21,48,.02) 0px, rgba(120,21,48,.02) 1px, transparent 1px, transparent 9px), linear-gradient(180deg, #fffbfc 0%, #fdf2f4 100%); }
+
+    .front-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 20px 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Watermark on front */
+    .front-watermark {
+      position: absolute;
+      width: 260px; height: 260px;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      object-fit: contain;
+      opacity: .06;
+      pointer-events: none;
+    }
+
+    .front-photo-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      width: 100%;
+      position: relative;
+      z-index: 1;
+    }
+
+    .front-photo {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .front-photo img,
+    .front-photo .no-photo {
+      width: 100px; height: 124px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 2.5px solid #fbbf24;
+      box-shadow: 0 6px 20px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.2);
+    }
+    .front-photo .no-photo {
+      background: rgba(255,255,255,.1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 3rem; color: rgba(255,255,255,.4);
+    }
+    .front-photo-num {
+      font-family: 'Courier New', monospace;
+      font-size: 14px; font-weight: 800; color: #fbbf24;
+      letter-spacing: .05em; text-align: center;
+    }
+
+    .front-identity {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 4px;
+    }
+    .fi-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
+      color: rgba(255,255,255,.5); font-weight: 700;
+    }
+    .fi-name {
+      font-size: 16px; font-weight: 600; color: rgba(255,255,255,.85);
+      line-height: 1.15; text-transform: uppercase;
+    }
+    .fi-firstname {
+      font-size: 16px; font-weight: 600; color: rgba(255,255,255,.85);
+      text-transform: uppercase;
+    }
+    .fi-divider {
+      height: 1px;
+      background: linear-gradient(90deg, rgba(251,191,36,.5), transparent);
+      margin: 4px 0;
+    }
+    .fi-field {
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .fi-field-val {
+      font-size: 11px; font-weight: 700; color: #fff;
+    }
+
+    .front-validity {
+      width: 100%;
+      margin-top: 10px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(251,191,36,.25);
+      border-radius: 6px;
+      padding: 5px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+    .fv-item { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .fv-lbl { font-size: 8.5px; text-transform: uppercase; letter-spacing: .1em; color: rgba(255,255,255,.55); font-weight: 700; }
+    .fv-val { font-size: 12px; font-weight: 800; color: #fde68a; }
+    .fv-sep { font-size: 15px; color: rgba(255,255,255,.3); }
+    .front-cats {
+      width: 100%;
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      position: relative;
+      z-index: 1;
+    }
+    .fcc {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(251,191,36,.22);
+      border-radius: 4px;
+      padding: 3px 8px;
+      flex: 1;
+      min-width: 88px;
+    }
+    .fcc-icon { font-size: 12px; color: #fde68a; }
+    .fcc-exp  { font-size: 9px; color: rgba(255,255,255,.55); margin-left: auto; }
+
+    .front-footer {
+      background: rgba(0,0,0,.25);
+      border-top: 1px solid rgba(255,255,255,.1);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .front-footer-text {
+      font-size: 8px; font-weight: 700; color: rgba(255,255,255,.55);
+      text-transform: uppercase; letter-spacing: .08em; text-align: center;
+      line-height: 1.4;
+    }
+
+    /* ══════════════════════════════════
+       VOLET 2 — INTÉRIEUR / VERSO
+    ══════════════════════════════════ */
+    .panel-inside {
+      background: #fff;
+      border-left: 1px solid rgba(0,0,0,.1);
+    }
+
+    .inside-body {
+      flex: 1;
+      padding: 14px 18px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+      /* Subtle wave background */
+      background-image:
+        repeating-linear-gradient(135deg, rgba(15,38,96,.022) 0px, rgba(15,38,96,.022) 1px, transparent 1px, transparent 9px),
+        linear-gradient(180deg, #fbfcff 0%, #f3f6fc 100%);
+    }
+
+    .inside-watermark {
+      position: absolute;
+      width: 180px; height: 180px;
+      right: 8px; bottom: 24px;
+      object-fit: contain;
+      opacity: .06;
+      pointer-events: none;
+    }
+
+    /* Personal info rows */
+    .info-section { display: flex; flex-direction: column; gap: 0; }
+    .info-section-title {
+      font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
+      color: #1e40af; padding-bottom: 4px; margin-bottom: 4px;
+      border-bottom: 1.5px solid #dbeafe;
+      display: flex; justify-content: space-between; align-items: baseline;
+    }
+    .info-title-ar {
+      font-size: 9px; font-weight: 700; color: #1e40af;
+      letter-spacing: 0; text-transform: none;
+      direction: rtl;
+    }
+    .info-row {
+      display: flex; align-items: baseline; gap: 6px;
+      padding: 3.5px 0;
+      border-bottom: 1px dotted #e2e8f0;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-lbl {
+      font-size: 8px; text-transform: uppercase; letter-spacing: .06em;
+      color: #7c8aa3; font-weight: 700;
+      width: 88px; flex-shrink: 0;
+    }
+    .info-val {
+      font-size: 10px; font-weight: 700; color: #0f172a;
+      text-transform: uppercase; line-height: 1.3;
+      flex: 1;
+    }
+    .info-lbl-ar {
+      font-size: 8.5px; font-weight: 600; color: #94a3b8;
+      letter-spacing: 0; text-transform: none;
+      direction: rtl; white-space: nowrap;
+      width: 88px; flex-shrink: 0; text-align: right;
+    }
+    /* Categories */
+    .cats-section { display: flex; flex-direction: column; gap: 5px; }
+    .cats-title {
+      font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
+      color: #1e40af; padding-bottom: 4px;
+      border-bottom: 1.5px solid #dbeafe;
+    }
+    .cats-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+    .cat-pill {
+      background: linear-gradient(160deg, #2348a3, #14306e);
+      color: #fff; border-radius: 5px;
+      padding: 2px 10px;
+      font-size: 11px; font-weight: 800;
+      box-shadow: 0 1px 3px rgba(20,48,110,.35);
+    }
+    .cat-none { font-size: 10px; color: #94a3b8; font-style: italic; }
+
+    /* Bottom row: signature + QR */
+    .bottom-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid #e2e8f0;
+    }
+    .sig-block { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 160px; }
+    .sig-lbl { font-size: 7px; color: #8896ab; text-transform: uppercase; letter-spacing: .05em; text-align: center; line-height: 1.3; }
+    .sig-img { max-width: 130px; max-height: 36px; object-fit: contain; }
+    .sig-placeholder { width: 130px; height: 36px; }
+    .sig-name { font-size: 8.5px; font-weight: 800; color: #14306e; text-align: center; border-top: 1px solid #b9c2d4; padding-top: 2px; width: 100%; }
+    .qr-block img { width: 70px; height: 70px; border-radius: 4px; }
+    .qr-block .qr-lbl { font-size: 7px; color: #94a3b8; text-align: center; margin-top: 2px; letter-spacing: .05em; text-transform: uppercase; }
+
+    /* Inside footer */
+    .inside-footer {
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      padding: 7px 16px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-shrink: 0;
+    }
+    .if-note { font-size: 8px; color: #94a3b8; }
+    .if-warn { font-size: 8px; color: #b91c1c; font-weight: 700; }
+
+    /* ══════════════════════════════════
+       CÔTÉ B — DOS
+    ══════════════════════════════════ */
+
+    /* Séparateur écran entre les deux côtés */
+    .side-separator {
+      width: 21cm;
+      display: flex; align-items: center; gap: 12px;
+      margin: 36px 0 18px;
+      font-size: 11px; font-weight: 700; letter-spacing: .1em;
+      color: #64748b; text-transform: uppercase;
+    }
+    .side-separator::before, .side-separator::after {
+      content: ''; flex: 1; height: 1px; background: #cbd5e1;
+    }
+    .side-sub {
+      display: block;
+      font-size: 9.5px; font-weight: 500; color: #94a3b8;
+      letter-spacing: .04em; text-transform: none;
+      margin-top: 2px; text-align: center;
+    }
+
+    /* Panel intérieur gauche (côté B) */
+    .panel-b-inside {
+      background: #fff;
+      border-right: 1px solid rgba(0,0,0,.08);
+    }
+
+    .b-inside-body {
+      flex: 1;
+      padding: 14px 16px 10px;
+      display: flex; flex-direction: column; gap: 8px;
+      overflow: hidden;
+      background-image:
+        repeating-linear-gradient(135deg, rgba(15,38,96,.02) 0px, rgba(15,38,96,.02) 1px, transparent 1px, transparent 9px),
+        linear-gradient(180deg, #fbfcff 0%, #f3f6fc 100%);
+      position: relative;
+    }
+
+    /* Tableau des catégories */
+    .cat-table-title {
+      font-size: 8px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .1em; color: #1e40af;
+      padding-bottom: 4px; border-bottom: 1.5px solid #dbeafe; margin-bottom: 2px;
+    }
+    .cat-table {
+      width: 100%; border-collapse: collapse; table-layout: fixed;
+    }
+    .cat-table thead th {
+      font-size: 7.5px; text-transform: uppercase; letter-spacing: .06em;
+      color: #94a3b8; font-weight: 700; text-align: left;
+      padding: 2px 6px 3px 0; border-bottom: 1px solid #e2e8f0;
+    }
+    .cat-table thead th.th-c { text-align: center; }
+    .cat-table tbody td {
+      font-size: 9px; color: #1e293b; vertical-align: middle;
+      padding: 3.5px 6px 3.5px 0; border-bottom: 1px dotted #e8eef5; line-height: 1.3;
+    }
+    .cat-table tbody tr:last-child td { border-bottom: none; }
+    .cat-table tbody tr.tr-other td { color: #c0c8d8; }
+    .cat-badge {
+      display: inline-block; min-width: 22px; text-align: center;
+      border-radius: 4px; padding: 1px 5px; font-size: 9.5px; font-weight: 800;
+      border: 1.5px solid;
+    }
+    .cat-badge-owned { background: linear-gradient(160deg,#2348a3,#14306e); color:#fff; border-color:#14306e; }
+    .cat-badge-other { background: transparent; color:#c0c8d8; border-color:#e8eef5; }
+    .td-center { text-align: center; color: #64748b; }
+    .td-empty { text-align: center; color: #c0c8d8; font-style: italic; }
+
+    /* Panel couverture dos (côté B) */
+    .panel-b-cover {
+      background:
+        radial-gradient(ellipse 420px 200px at 50% -10%, rgba(255,255,255,.12) 0%, transparent 60%),
+        linear-gradient(170deg, #050e2b 0%, #0f2660 45%, #1a3b8c 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; padding: 24px 20px;
+      position: relative; overflow: hidden;
+    }
+    .b-cover-logo {
+      width: 110px; height: 110px; object-fit: contain;
+      opacity: .55; filter: brightness(1.5) saturate(0);
+    }
+    .b-cover-title {
+      font-size: 10.5px; font-weight: 800; color: #fff;
+      letter-spacing: .1em; text-transform: uppercase; text-align: center;
+      line-height: 1.55; text-shadow: 0 1px 3px rgba(0,0,0,.4);
+    }
+    .b-cover-divider {
+      width: 60px; height: 2px;
+      background: linear-gradient(90deg, transparent, #fbbf24, transparent);
+    }
+    .b-cover-note {
+      font-size: 7.5px; color: rgba(255,255,255,.45);
+      text-align: center; line-height: 1.5; max-width: 180px;
+      font-style: italic;
+    }
+    .b-cover-warn {
+      font-size: 7.5px; color: #fca5a5; font-weight: 700;
+      text-align: center; letter-spacing: .04em;
+    }
+
+    /* ══════════════════════════════════
+       PRINT
+    ══════════════════════════════════ */
+    @media print {
+      @page { size: A4 portrait; margin: 0; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { margin: 0; padding: 0; background: white; }
+      .print-img-page {
+        width: 100vw; height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+        page-break-after: always;
+      }
+      .print-img-page img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button class="btn btn-back" onclick="history.back()">← Retour</button>
+  <button class="btn btn-print" id="btn-print" onclick="printAsImages()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <polyline points="6 9 6 2 18 2 18 9"/>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+      <rect x="6" y="14" width="12" height="8"/>
+    </svg>
+    Imprimer
+  </button>
+</div>
+
+
+{% set all_cats = [
+  ('A',  'Motocyclette avec ou sans side-car, moteur >123 cm³', 'fa-motorcycle'),
+  ('A1', 'Vélomoteur, cylindrée 50–123 cm³',                   'fa-motorcycle'),
+  ('A2', 'Cyclomoteur, cylindrée ≤50 cm³',                     'fa-motorcycle'),
+  ('B',  'Véhicule <10 places, PTAC ≤3 500 kg',                'fa-car'),
+  ('C',  'Transport de marchandises, PTAC >3 500 kg',           'fa-truck'),
+  ('D',  'Transport de personnes, >9 places assises',           'fa-bus'),
+  ('E',  'Remorque attelée >750 kg PTAC (B/C/D/F)',            'fa-caravan'),
+  ('F',  'Véhicule aménagé pour personne handicapée',           'fa-wheelchair')
+] %}
+{% set holder_cats = lic.categories.split(',') | map('trim') | list if lic.categories else [] %}
+{% set is_temp = lic.type_permis == 'temporaire' %}
+{% set is_pro = 'P' in holder_cats %}
+{% set display_cats = holder_cats | reject('equalto', 'P') | list %}
+{% set display_expiry = lic.expiry_date or computed_expiry %}
+
+<div class="a4-page" id="a4-page">
+
+<div class="card-wrap{{ ' card-pro' if is_pro else '' }}">
+  <div class="fold-line-screen"></div>
+
+  <!-- ══ VOLET 1 — FACE ══ -->
+  <div class="panel panel-front">
+
+    <div class="panel-header">
+      <div class="ph-top">
+        <div class="ph-left">
+          <span class="ph-flag">🇰🇲</span>
+          <div class="ph-titles">
+            <span class="ph-country">Union des Comores</span>
+            <span class="ph-sub">Permis de Conduire</span>
+          </div>
+        </div>
+        <div class="ph-arabic" dir="rtl">
+          جمهورية القمر المتحدة<br>رخصة قيادة
+        </div>
+      </div>
+    </div>
+
+    <div class="front-body">
+      <img class="front-watermark" src="/static/img/logo_comores.png" alt="">
+
+      <div class="front-photo-row">
+        <div class="front-photo">
+          {% if lic.photo_filename %}
+            <img src="/uploads/license_photos/{{ lic.photo_filename }}" alt="Photo">
+          {% else %}
+            <div class="no-photo">👤</div>
+          {% endif %}
+          <div class="front-photo-num">{{ lic.license_number }}</div>
+        </div>
+
+        <div class="front-identity">
+          <div class="fi-label">Nom</div>
+          <div class="fi-name">{{ lic.holder_firstname or '—' }}</div>
+          <div class="fi-label" style="margin-top:4px;">Prénom</div>
+          <div class="fi-firstname">{{ lic.holder_name }}</div>
+          <div class="fi-divider"></div>
+          <div class="fi-field" style="margin-top:4px;">
+            <div class="fi-label" style="font-size:10px;">Centre d'immatriculation</div>
+            <div class="fi-field-val" style="font-size:13px;">{{ lic.centre_immatriculation or '—' }}</div>
+            {% if is_pro %}
+            <div class="fi-field" style="margin-top:6px;">
+              <div class="fi-field-val" style="font-size:10px;color:#fbbf24;font-weight:800;letter-spacing:.06em;">TYPE : PROFESSIONNEL</div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="front-validity">
+        <div class="fv-item">
+          <span class="fv-lbl">Délivré le</span>
+          <span class="fv-val">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
+        </div>
+        <span class="fv-sep">→</span>
+        <div class="fv-item">
+          <span class="fv-lbl">Expire le</span>
+          <span class="fv-val">{{ display_expiry.strftime('%d/%m/%Y') if display_expiry else '—' }}</span>
+        </div>
+      </div>
+
+      {% if display_cats %}
+      <div class="front-cats">
+        {% for code, desc, icon in all_cats %}
+          {% if code in display_cats %}
+            {% set det = category_details.get(code) %}
+            <div class="fcc">
+              <i class="fas {{ icon }} fcc-icon"></i>
+              <span class="fcc-exp">{{ det.expiration if det and det.expiration else '—' }}</span>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="front-footer">
+      <div class="front-footer-text">
+        Direction Générale des Routes et Transports Routiers<br>
+        Délivré par le Chef du Centre d'Immatriculation
+      </div>
+    </div>
+
+  </div><!-- /panel-front -->
+
+  <!-- ══ VOLET 2 — INTÉRIEUR ══ -->
+  <div class="panel panel-inside">
+
+    <div class="panel-header">
+      <div class="ph-top">
+        <div class="ph-titles">
+          <span class="ph-country">Informations du Titulaire</span>
+          <span class="ph-sub">{{ lic.holder_firstname or '' }} {{ lic.holder_name }} — {{ lic.license_number }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="inside-body">
+      <img class="inside-watermark" src="/static/img/logo_comores.png" alt="">
+
+      <!-- Personal info -->
+      <div class="info-section">
+        <div class="info-section-title">
+          Informations personnelles
+          <span class="info-title-ar">معلومات شخصية</span>
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Date de naissance</span>
+          <span class="info-val">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span>
+          <span class="info-lbl-ar">تاريخ الميلاد</span>
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Lieu de naissance</span>
+          <span class="info-val">{{ lic.lieu_naissance or '—' }}</span>
+          <span class="info-lbl-ar">مكان الميلاد</span>
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Sexe</span>
+          <span class="info-val">{{ 'Masculin' if lic.sexe == 'masculin' else ('Féminin' if lic.sexe == 'feminin' else '—') }}</span>
+          <span class="info-lbl-ar">الجنس</span>
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Nationalité</span>
+          <span class="info-val">{{ lic.nationalite or '—' }}</span>
+          <span class="info-lbl-ar">الجنسية</span>
+        </div>
+        <div class="info-row">
+          <span class="info-lbl">Adresse</span>
+          <span class="info-val">{{ lic.holder_address or '—' }}</span>
+          <span class="info-lbl-ar">العنوان</span>
+        </div>
+      </div>
+
+      <!-- Categories -->
+      <div class="cats-section">
+        <div class="cats-title">Catégories autorisées</div>
+        <div class="cats-pills">
+          {% if display_cats %}
+            {% for cat in display_cats %}
+              <span class="cat-pill">{{ cat }}</span>
+            {% endfor %}
+          {% else %}
+            <span class="cat-none">Aucune catégorie enregistrée</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Signature + QR -->
+      <div class="bottom-row">
+        <div class="sig-block">
+          <div class="sig-lbl">Directeur Général des Routes<br>et Transports Routiers</div>
+          {% if settings.directeur_signature_filename %}
+            <img class="sig-img" src="/uploads/signatures/{{ settings.directeur_signature_filename }}" alt="Signature">
+          {% else %}
+            <svg class="sig-placeholder" viewBox="0 0 130 36" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4,26 C14,10 20,34 28,20 C35,9 39,28 46,18 C53,8 58,30 65,18 C72,8 77,26 84,15 C89,7 94,22 100,14 C104,9 110,18 126,12"
+                    stroke="#14306e" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          {% endif %}
+          <div class="sig-name">{{ settings.directeur_general_name or '' }}</div>
+        </div>
+
+        <div class="qr-block">
+          <img src="/licenses/{{ lic.id }}/qrcode" alt="QR Code">
+          <div class="qr-lbl">Vérification</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inside-footer">
+      <div class="if-warn">⚠ Toute falsification est passible de sanctions pénales.</div>
+    </div>
+
+  </div><!-- /panel-inside -->
+
+</div><!-- /card-wrap -->
+
+<div class="cut-guide"></div>
+
+<div class="card-wrap card-wrap-b{{ ' card-pro' if is_pro else '' }}">
+  <div class="fold-line-screen"></div>
+
+  <!-- Volet B-gauche : tableau des catégories (intérieur gauche quand plié) -->
+  <div class="panel panel-b-inside">
+
+    <div class="panel-header">
+      <div class="ph-top">
+        <div class="ph-titles">
+          <span class="ph-country">Catégories de véhicules</span>
+          <span class="ph-sub">{{ lic.holder_firstname or '' }} {{ lic.holder_name }} — {{ lic.license_number }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="b-inside-body">
+      <div class="cat-table-title">Tableau des catégories autorisées</div>
+      <table class="cat-table">
+        <colgroup>
+          <col style="width:18%">
+          <col style="width:42%">
+          <col style="width:20%">
+          <col style="width:20%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="th-c">Cat.</th>
+            <th>Description</th>
+            <th class="th-c">Obtenue le</th>
+            <th class="th-c">Expire le</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for code, desc, icon in all_cats %}
+            {% set owned = code in holder_cats %}
+            {% set det = category_details.get(code) %}
+            <tr class="{{ '' if owned else 'tr-other' }}">
+              <td style="text-align:center;">
+                <span class="cat-badge {{ 'cat-badge-owned' if owned else 'cat-badge-other' }}">{{ code }}</span>
+                <i class="fas {{ icon }}" style="font-size:11px; margin-left:4px; color:{{ '#1e40af' if owned else '#cbd5e1' }};"></i>
+              </td>
+              <td>{{ desc }}</td>
+              {% if owned %}
+                <td class="td-center">{{ det.date if det and det.date else '—' }}</td>
+                <td class="td-center">{{ det.expiration if det and det.expiration else '—' }}</td>
+              {% else %}
+                <td class="td-empty">—</td>
+                <td class="td-empty">—</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="inside-footer">
+      <div class="if-note">Seules les catégories surlignées sont valides pour ce titulaire.</div>
+    </div>
+
+  </div><!-- /panel-b-inside -->
+
+  <!-- Volet B-droit : couverture dos (dos de la couverture quand plié) -->
+  <div class="panel panel-b-cover">
+    <img class="b-cover-logo" src="/static/img/logo_comores.png" alt="">
+    <div class="b-cover-title">
+      Direction Générale des<br>Routes et Transports Routiers<br>Union des Comores
+    </div>
+    <div class="b-cover-divider"></div>
+    <div class="b-cover-note">
+      Ce document est un titre officiel délivré par la République de l'Union des Comores.
+      Sa validité est soumise aux conditions inscrites à l'intérieur.
+    </div>
+  </div><!-- /panel-b-cover -->
+
+</div><!-- /card-wrap-b -->
+
+
+
+</div><!-- /a4-page -->
+
+<script>
+function printAsImages() {
+  var btn = document.getElementById('btn-print');
+  btn.disabled = true;
+  btn.textContent = 'Génération…';
+
+  var licNum = '{{ lic.license_number }}';
+  /* A4 portrait 300 DPI = 2480 × 3508 px. 29.7cm à 96 DPI = 1122.5 CSS px. Scale = 3508/1122.5 ≈ 3.125 */
+  var scale = 3.125;
+  var opts = { scale: scale, bgcolor: '#ffffff', style: { margin: '0' } };
+  var sideA = document.querySelector('.card-wrap:not(.card-wrap-b)');
+  var sideB = document.querySelector('.card-wrap-b');
+
+  // Masquer les lignes de pliage pendant la capture
+  var foldLines = document.querySelectorAll('.fold-line-screen');
+  foldLines.forEach(function(el) { el.style.display = 'none'; });
+
+  domtoimage.toPng(sideA, opts).then(function(urlA) {
+    var a1 = document.createElement('a');
+    a1.download = 'permis_' + licNum + '_cote_A.png';
+    a1.href = urlA;
+    a1.click();
+    return domtoimage.toPng(sideB, opts);
+  }).then(function(urlB) {
+    var a2 = document.createElement('a');
+    a2.download = 'permis_' + licNum + '_cote_B.png';
+    a2.href = urlB;
+    a2.click();
+    foldLines.forEach(function(el) { el.style.display = ''; });
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Imprimer';
+  }).catch(function(e) {
+    foldLines.forEach(function(el) { el.style.display = ''; });
+    console.error(e);
+    btn.disabled = false;
+    btn.textContent = 'Erreur';
+  });
+}
+</script>
+</body>
+</html>

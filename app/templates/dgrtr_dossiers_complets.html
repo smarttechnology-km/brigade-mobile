@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.page-header { background: linear-gradient(100deg,#0f2660,#1d4ed8); color:#fff; border-radius:16px; padding:28px 32px; margin-bottom:28px; }
+.stat-card   { background:#fff; border-radius:12px; padding:20px 24px; box-shadow:0 1px 4px rgba(0,0,0,.07); text-align:center; }
+.stat-num    { font-size:2rem; font-weight:800; line-height:1; }
+.stat-lbl    { font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+.badge-cat   { display:inline-block; background:#1e3a8a; color:#fff; font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px; margin:1px; }
+</style>
+
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="page-header d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h4 class="fw-bold mb-1"><i class="fas fa-id-card me-2"></i>Dossiers Complétés</h4>
+      <small class="opacity-75">Permis de conduire délivrés via le workflow DGRTR</small>
+    </div>
+    <a href="/dgrtr-dashboard" class="btn btn-light btn-sm">
+      <i class="fas fa-arrow-left me-2"></i>Retour au workflow
+    </a>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-success" id="stat-total">—</div>
+        <div class="stat-lbl">Total complétés</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-primary" id="stat-permanent">—</div>
+        <div class="stat-lbl">Permis permanents</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-warning" id="stat-temporaire">—</div>
+        <div class="stat-lbl">Permis temporaires</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-secondary" id="stat-mois">—</div>
+        <div class="stat-lbl">Ce mois-ci</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Barre de recherche -->
+  <div class="d-flex gap-2 mb-3 align-items-center">
+    <input type="search" id="search-input" class="form-control" style="max-width:380px;"
+      placeholder="Rechercher par nom, prénom, N° dossier ou N° permis…" oninput="filterDossiers()">
+    <span class="text-muted small ms-2" id="result-count"></span>
+  </div>
+
+  <!-- Tableau -->
+  <div class="card shadow-sm border-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead style="background:#f8fafc; border-bottom:2px solid #e5e7eb;">
+          <tr>
+            <th class="ps-4" style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">N° Dossier</th>
+            <th style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Candidat</th>
+            <th style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">N° Permis</th>
+            <th style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Type</th>
+            <th style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Catégories</th>
+            <th style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Île</th>
+            <th style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Délivré le</th>
+            <th style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Agent</th>
+            <th class="text-end pe-4" style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="dossiers-tbody">
+          <tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- Modal — Détail dossier complété -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header" style="background:linear-gradient(100deg,#0f2660,#1d4ed8);color:#fff;">
+        <h5 class="modal-title" id="detail-title"><i class="fas fa-folder-open me-2"></i>Dossier</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detail-body">Chargement…</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <a href="#" id="btn-imprimer-dossier" class="btn btn-primary d-none" target="_blank">
+          <i class="fas fa-print me-2"></i>Imprimer le dossier provisoire
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+var allDossiers = [];
+
+document.addEventListener('DOMContentLoaded', loadDossiers);
+
+function loadDossiers() {
+  fetch('/api/dossiers-permis?status=complet')
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      allDossiers = data;
+      updateStats(data);
+      renderTable(data);
+    })
+    .catch(function() {
+      document.getElementById('dossiers-tbody').innerHTML =
+        '<tr><td colspan="9" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+    });
+}
+
+function updateStats(data) {
+  document.getElementById('stat-total').textContent     = data.length;
+  document.getElementById('stat-permanent').textContent = data.filter(function(d){ return d.type_permis === 'permanent'; }).length;
+  document.getElementById('stat-temporaire').textContent= data.filter(function(d){ return d.type_permis === 'temporaire'; }).length;
+  var now = new Date();
+  var thisMonth = data.filter(function(d) {
+    if (!d.step5_validated_at) return false;
+    var parts = d.step5_validated_at.split('/');
+    if (parts.length < 2) return false;
+    return parseInt(parts[1]) === now.getMonth() + 1 && parseInt(parts[2]) === now.getFullYear();
+  });
+  document.getElementById('stat-mois').textContent = thisMonth.length;
+}
+
+function filterDossiers() {
+  var q = document.getElementById('search-input').value.trim().toLowerCase();
+  var filtered = q
+    ? allDossiers.filter(function(d) {
+        return ((d.nom + ' ' + d.prenom + ' ' + (d.dossier_number || '') + ' ' + (d.license_number_proposed || '')).toLowerCase().includes(q));
+      })
+    : allDossiers;
+  renderTable(filtered);
+}
+
+function catBadges(cats) {
+  if (!cats) return '<span class="text-muted">—</span>';
+  return cats.split(',').map(function(c) {
+    return '<span class="badge-cat">' + c.trim() + '</span>';
+  }).join('');
+}
+
+function renderTable(data) {
+  var count = document.getElementById('result-count');
+  count.textContent = data.length + ' dossier' + (data.length > 1 ? 's' : '');
+
+  var tbody = document.getElementById('dossiers-tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-folder-open me-2 opacity-25"></i>Aucun dossier complété trouvé</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(function(d) {
+    var typeBadge = d.type_permis === 'temporaire'
+      ? '<span class="badge bg-warning text-dark">Temporaire</span>'
+      : '<span class="badge bg-primary">Permanent</span>';
+    return `<tr>
+      <td class="ps-4 fw-bold font-monospace text-primary" style="white-space:nowrap;">${d.dossier_number || '—'}</td>
+      <td>
+        <div class="fw-semibold text-uppercase">${d.nom || ''}</div>
+        <div class="text-muted small">${d.prenom || ''}</div>
+      </td>
+      <td class="fw-semibold font-monospace small" style="white-space:nowrap;">${d.license_number_proposed || '—'}</td>
+      <td>${typeBadge}</td>
+      <td>${catBadges(d.categories)}</td>
+      <td class="text-muted small">${d.country || '—'}</td>
+      <td class="text-muted small" style="white-space:nowrap;">${d.step5_validated_at || '—'}</td>
+      <td class="text-muted small">${d.step5_validated_by || '—'}</td>
+      <td class="text-end pe-4" style="white-space:nowrap;">
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1" onclick="openDetail(${d.id})">
+          <i class="fas fa-eye me-1"></i>Détails
+        </button>
+        ${d.license_id
+          ? `<a href="/dgrtr/licenses/${d.license_id}/print-a4" target="_blank" class="btn btn-sm btn-primary py-0 px-2">
+              <i class="fas fa-print me-1"></i>Imprimer
+            </a>`
+          : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openDetail(id) {
+  var d = allDossiers.find(function(x){ return x.id === id; });
+  if (!d) return;
+
+  document.getElementById('detail-title').innerHTML =
+    `<i class="fas fa-folder-open me-2"></i>${d.nom || ''} ${d.prenom || ''} — <span class="font-monospace">${d.dossier_number || ''}</span>`;
+
+  var photoHtml = d.photo_filename
+    ? `<img src="/uploads/license_photos/${d.photo_filename}" style="width:90px;height:112px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb;">`
+    : `<div style="width:90px;height:112px;background:#f3f4f6;border-radius:8px;border:2px solid #e5e7eb;display:flex;align-items:center;justify-content:center;"><i class="fas fa-user-circle fa-3x text-muted"></i></div>`;
+
+  var catBadgesHtml = d.categories
+    ? d.categories.split(',').map(function(c){ return `<span class="badge-cat">${c.trim()}</span>`; }).join(' ')
+    : '—';
+
+  var typeBadge = d.type_permis === 'temporaire'
+    ? '<span class="badge bg-warning text-dark">Temporaire</span>'
+    : '<span class="badge bg-primary">Permanent</span>';
+
+  document.getElementById('detail-body').innerHTML = `
+    <div class="row g-4">
+      <div class="col-auto">${photoHtml}</div>
+      <div class="col">
+        <div class="row g-2" style="font-size:14px;">
+          <div class="col-md-4"><span class="text-muted">N° Dossier</span><br><strong class="font-monospace text-primary">${d.dossier_number || '—'}</strong></div>
+          <div class="col-md-4"><span class="text-muted">N° Permis</span><br><strong class="font-monospace">${d.license_number_proposed || '—'}</strong></div>
+          <div class="col-md-4"><span class="text-muted">Statut</span><br><span class="badge bg-success">Délivré</span></div>
+          <div class="col-md-4"><span class="text-muted">Nom</span><br><strong class="text-uppercase">${d.nom || '—'}</strong></div>
+          <div class="col-md-4"><span class="text-muted">Prénom</span><br><strong>${d.prenom || '—'}</strong></div>
+          <div class="col-md-4"><span class="text-muted">Date de naissance</span><br>${d.date_naissance || '—'}</div>
+          <div class="col-md-4"><span class="text-muted">Lieu de naissance</span><br>${d.lieu_naissance || '—'}</div>
+          <div class="col-md-4"><span class="text-muted">Sexe</span><br>${d.sexe || '—'}</div>
+          <div class="col-md-4"><span class="text-muted">Nationalité</span><br>${d.nationalite || '—'}</div>
+          <div class="col-md-6"><span class="text-muted">Adresse</span><br>${d.holder_address || '—'}</div>
+          <div class="col-md-3"><span class="text-muted">Téléphone</span><br>${d.telephone || '—'}</div>
+          <div class="col-md-3"><span class="text-muted">Île</span><br>${d.country || '—'}</div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-3">
+
+    <div class="row g-2" style="font-size:14px;">
+      <div class="col-md-3"><span class="text-muted">Type de permis</span><br>${typeBadge}</div>
+      <div class="col-md-3"><span class="text-muted">Date de délivrance</span><br><strong>${d.issue_date || '—'}</strong></div>
+      <div class="col-md-3"><span class="text-muted">Date d'expiration</span><br><strong>${d.expiry_date || '—'}</strong></div>
+      <div class="col-md-3"><span class="text-muted">Centre</span><br>${d.centre_immatriculation || '—'}</div>
+      <div class="col-12"><span class="text-muted">Catégories</span><br><div class="mt-1">${catBadgesHtml}</div></div>
+    </div>
+
+    <hr class="my-3">
+
+    <div class="row g-2" style="font-size:13px;">
+      <div class="col-12 text-muted fw-semibold mb-1" style="text-transform:uppercase;letter-spacing:.05em;">Traçabilité</div>
+      <div class="col-md-3"><span class="text-muted">Créé le</span><br>${d.created_at || '—'} <span class="text-muted">par</span> ${d.created_by || '—'}</div>
+      <div class="col-md-3"><span class="text-muted">Étape 2</span><br>${d.step2_validated_at || '—'} <span class="text-muted">par</span> ${d.step2_validated_by || '—'}</div>
+      <div class="col-md-3"><span class="text-muted">Étape 4 (vérif.)</span><br>${d.step4_validated_at || '—'} <span class="text-muted">par</span> ${d.step4_validated_by || '—'}</div>
+      <div class="col-md-3"><span class="text-muted">Délivré le</span><br><strong>${d.step5_validated_at || '—'}</strong> <span class="text-muted">par</span> <strong>${d.step5_validated_by || '—'}</strong></div>
+    </div>`;
+
+  // Bouton "Imprimer le dossier provisoire"
+  var btnImprimer = document.getElementById('btn-imprimer-dossier');
+  if (d.license_id) {
+    btnImprimer.href = '/dgrtr/licenses/' + d.license_id + '/print-a4';
+    btnImprimer.classList.remove('d-none');
+  } else {
+    btnImprimer.classList.add('d-none');
+  }
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).show();
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,532 @@
+{% extends "base.html" %}
+
+{% block title %}Recherche - Contrôle Policier{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1 class="mb-1"><i class="fas fa-search me-2"></i>Recherche de Permis</h1>
+      <p class="text-muted">Rechercher les permis de conduire assignés à un véhicule</p>
+    </div>
+  </div>
+
+  <!-- Search form -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <label class="form-label fw-semibold">Numéro d'immatriculation</label>
+          <input type="text" class="form-control" id="s-plate" placeholder="ex: 1234 AB">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label fw-semibold">Type de véhicule</label>
+          <select class="form-select" id="s-type">
+            <option value="">— Tous —</option>
+            <option value="voiture">Voiture</option>
+            <option value="taxi">Taxi</option>
+            <option value="moto">Moto</option>
+            <option value="camion">Camion</option>
+            <option value="minibus">Minibus</option>
+            <option value="ambulance">Ambulance</option>
+            <option value="suv">SUV</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label fw-semibold">Marque</label>
+          <input type="text" class="form-control" id="s-make" placeholder="ex: Toyota, kia, RENAULT…">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label fw-semibold">Modèle</label>
+          <input type="text" class="form-control" id="s-model" placeholder="ex: Corolla, clio, CIVIC…">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label fw-semibold">Couleur</label>
+          <input type="text" class="form-control" id="s-color" placeholder="ex: blanc, ROUGE, Noir…">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label fw-semibold">Usage</label>
+          <select class="form-select" id="s-usage">
+            <option value="">— Tous —</option>
+            <option>Personnelle</option>
+            <option>Taxi</option>
+            <option>Transport public</option>
+            <option>Location</option>
+            <option>Véhicule de service</option>
+            <option>Véhicule utilitaire</option>
+            <option>Transport scolaire</option>
+            <option>Transport touristique</option>
+            <option>Auto-école</option>
+          </select>
+        </div>
+        <div class="col-12 d-flex gap-2">
+          <button class="btn btn-primary px-4" id="btn-search" onclick="doSearch()">
+            <i class="fas fa-search me-1"></i> Rechercher
+          </button>
+          <button class="btn btn-outline-secondary" onclick="clearSearch()">
+            <i class="fas fa-times me-1"></i> Effacer
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="search-results"></div>
+</div>
+
+<!-- ===== Details Modal ===== -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header" id="dm-header" style="background:linear-gradient(135deg,#2c3e50,#3d5a80);color:#fff;">
+        <h5 class="modal-title" id="dm-title">Détails du permis</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="row g-0">
+
+          <!-- Left: photo + download -->
+          <div class="col-12 col-md-3 d-flex flex-column align-items-center justify-content-start p-4 border-end" style="background:#f4f6f9;min-height:300px;">
+            <div id="dm-photo-wrap" class="mb-3">
+              <div class="dm-photo-placeholder"><i class="fas fa-user fa-3x"></i></div>
+            </div>
+            <button class="btn btn-outline-primary btn-sm w-100" id="dm-dl-btn" style="display:none;" onclick="downloadPhoto()">
+              <i class="fas fa-download me-1"></i> Télécharger la photo
+            </button>
+          </div>
+
+          <!-- Right: license + vehicle info -->
+          <div class="col-12 col-md-9 p-4">
+
+            <!-- Status badge row -->
+            <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+              <span id="dm-status-badge" class="badge fs-6 px-3 py-2"></span>
+              <span id="dm-type-badge" class="badge bg-secondary fs-6 px-3 py-2"></span>
+              <span class="text-muted" style="font-size:.85rem;">Points: <strong id="dm-points">—</strong></span>
+            </div>
+
+            <!-- License details -->
+            <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.08em;">
+              <i class="fas fa-id-card me-1"></i> Informations du conducteur
+            </h6>
+            <div class="row g-2 mb-3" id="dm-license-rows"></div>
+
+            <!-- Categories -->
+            <div id="dm-cats-wrap" class="mb-3" style="display:none;">
+              <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.08em;">
+                <i class="fas fa-layer-group me-1"></i> Catégories
+              </h6>
+              <div id="dm-cats" class="d-flex flex-wrap gap-2"></div>
+            </div>
+
+            <hr>
+
+            <!-- Vehicle details -->
+            <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.08em;">
+              <i class="fas fa-car me-1"></i> Véhicule associé
+            </h6>
+            <div class="row g-2 mb-3" id="dm-vehicle-rows"></div>
+
+            <!-- Notes -->
+            <div id="dm-notes-wrap" style="display:none;" class="mb-3">
+              <h6 class="fw-bold text-uppercase text-muted mb-1" style="font-size:.75rem;letter-spacing:.08em;">
+                <i class="fas fa-sticky-note me-1"></i> Notes
+              </h6>
+              <pre id="dm-notes" class="bg-light border rounded p-2 mb-0" style="font-size:.82rem;white-space:pre-wrap;"></pre>
+            </div>
+
+            <!-- Suspension section -->
+            <div id="dm-suspend-section" style="display:none;">
+              <hr>
+              <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.08em;color:#dc3545;">
+                <i class="fas fa-ban me-1"></i> Suspendre ce permis
+              </h6>
+              <div class="mb-2">
+                <input type="text" class="form-control" id="dm-motif" placeholder="Motif de suspension (obligatoire)">
+              </div>
+              <button class="btn btn-danger" onclick="confirmSuspend()">
+                <i class="fas fa-ban me-1"></i> Confirmer la suspension
+              </button>
+              <div id="dm-suspend-error" class="text-danger mt-2" style="display:none;font-size:.85rem;"></div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .vehicle-card { border: 1px solid #dee2e6; border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; }
+  .vehicle-header { background: linear-gradient(135deg, #2c3e50 0%, #3d5a80 100%); color: #fff; padding: 14px 20px; }
+  .vehicle-plate { font-size: 1.3rem; font-weight: 700; letter-spacing: 2px; }
+  .vehicle-meta span { font-size: 0.82rem; opacity: 0.85; margin-right: 14px; }
+  .licenses-grid { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; background: #f8f9fa; }
+  .license-tile { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px; width: 260px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .lt-photo { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; border: 2px solid #ccc; flex-shrink: 0; }
+  .lt-photo-placeholder { width: 54px; height: 54px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #999; font-size: 1.4rem; flex-shrink: 0; }
+  .lt-header { display: flex; align-items: center; gap: 12px; }
+  .lt-name { font-weight: 700; font-size: 0.95rem; line-height: 1.2; }
+  .lt-firstname { font-size: 0.82rem; color: #555; }
+  .lt-num { font-family: monospace; font-size: 0.78rem; color: #666; background: #f0f0f0; border-radius: 4px; padding: 2px 6px; display: inline-block; margin-top: 2px; }
+  .lt-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: #444; }
+  .lt-row .lbl { color: #888; }
+  .lt-cats { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cat-badge { background: #3d5a80; color: #fff; border-radius: 4px; padding: 1px 6px; font-size: 0.72rem; font-weight: 600; }
+  .lt-view-btn { margin-top: 4px; font-size: 0.78rem; }
+  .status-actif { color: #198754; font-weight: 600; }
+  .status-suspendu { color: #fd7e14; font-weight: 600; }
+  .status-revoque { color: #dc3545; font-weight: 600; }
+  .status-expire { color: #6c757d; font-weight: 600; }
+  .lt-not-found { color: #dc3545; font-size: 0.85rem; padding: 10px; }
+  .no-licenses { color: #888; font-size: 0.9rem; padding: 12px 16px; background: #f8f9fa; }
+  #search-results .empty-state { text-align: center; padding: 48px; color: #aaa; }
+  .dm-photo-placeholder { width: 120px; height: 120px; border-radius: 10px; background: #dde; display: flex; align-items: center; justify-content: center; color: #aaa; }
+  #dm-photo-wrap img { width: 120px; height: 140px; object-fit: cover; border-radius: 10px; border: 2px solid #ccc; }
+  .dm-info-row { display: flex; flex-direction: column; }
+  .dm-info-row .lbl { font-size: .72rem; color: #888; text-transform: uppercase; letter-spacing: .04em; }
+  .dm-info-row .val { font-size: .9rem; font-weight: 500; color: #222; }
+  .cat-detail-badge { background: #3d5a80; color: #fff; border-radius: 6px; padding: 4px 10px; font-size: .78rem; line-height: 1.5; }
+  .cat-detail-badge small { display: block; font-weight: 300; opacity: .85; font-size: .7rem; }
+</style>
+
+<script>
+const STATUS_LABELS = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqué', expire: 'Expiré' };
+
+let searchResults = [];
+let currentLicenseId = null;
+let currentPhotoUrl = null;
+
+function fmt(dateStr) {
+  return dateStr ? dateStr.split('-').reverse().join('/') : '—';
+}
+
+function getStatusClass(status, is_expired) {
+  if (is_expired) return 'status-expire';
+  return `status-${status}`;
+}
+
+function getStatusLabel(status, is_expired) {
+  if (is_expired) return 'Expiré';
+  return STATUS_LABELS[status] || status;
+}
+
+function renderLicenseTile(lic, vehicle) {
+  if (lic.not_found) {
+    return `<div class="license-tile">
+      <div class="lt-not-found"><i class="fas fa-exclamation-triangle me-1"></i>Permis introuvable: <span class="lt-num">${lic.license_number}</span></div>
+    </div>`;
+  }
+
+  const photoHtml = lic.photo_url
+    ? `<img src="${lic.photo_url}" class="lt-photo" alt="photo">`
+    : `<div class="lt-photo-placeholder"><i class="fas fa-user"></i></div>`;
+
+  const cats = (lic.categories || '').split(',').map(c => c.trim()).filter(Boolean);
+  const catsHtml = cats.length
+    ? `<div class="lt-cats">${cats.map(c => `<span class="cat-badge">${c}</span>`).join('')}</div>`
+    : '';
+
+  const typeLabel = lic.type_permis === 'temporaire' ? 'Temporaire' : 'Permanent';
+  const vehicleId = vehicle ? vehicle.id : '';
+
+  return `<div class="license-tile" id="tile-${lic.id}">
+    <div class="lt-header">
+      ${photoHtml}
+      <div>
+        <div class="lt-name">${lic.holder_name || '—'}</div>
+        <div class="lt-firstname">${lic.holder_firstname || ''}</div>
+        <span class="lt-num">${lic.license_number}</span>
+      </div>
+    </div>
+    <div class="lt-row"><span class="lbl">Type</span><span>${typeLabel}</span></div>
+    <div class="lt-row"><span class="lbl">Statut</span><span class="${getStatusClass(lic.status, lic.is_expired)}">${getStatusLabel(lic.status, lic.is_expired)}</span></div>
+    <div class="lt-row"><span class="lbl">Délivré le</span><span>${fmt(lic.issue_date)}</span></div>
+    <div class="lt-row"><span class="lbl">Expire le</span><span>${fmt(lic.expiry_date)}</span></div>
+    ${catsHtml ? `<div class="lt-row"><span class="lbl">Catégories</span></div>${catsHtml}` : ''}
+    <button class="btn btn-outline-primary btn-sm lt-view-btn" onclick="openDetails(${lic.id}, ${vehicleId})">
+      <i class="fas fa-eye me-1"></i> Voir les détails
+    </button>
+  </div>`;
+}
+
+function renderVehicleCard(item) {
+  const v = item.vehicle;
+  const metaParts = [v.vehicle_type, v.make, v.model, v.color, v.usage_type].filter(Boolean);
+
+  const licHtml = item.licenses.length === 0
+    ? `<div class="no-licenses"><i class="fas fa-info-circle me-1"></i>Aucun permis enregistré pour ce véhicule.</div>`
+    : `<div class="licenses-grid">${item.licenses.map(l => renderLicenseTile(l, v)).join('')}</div>`;
+
+  return `<div class="vehicle-card">
+    <div class="vehicle-header">
+      <div class="vehicle-plate"><i class="fas fa-car me-2"></i>${v.license_plate}</div>
+      <div class="vehicle-meta mt-1">
+        ${metaParts.map(p => `<span><i class="fas fa-circle" style="font-size:5px;vertical-align:middle;margin-right:4px;"></i>${p}</span>`).join('')}
+      </div>
+    </div>
+    ${licHtml}
+  </div>`;
+}
+
+function infoRow(label, value) {
+  return `<div class="col-6 col-md-4">
+    <div class="dm-info-row">
+      <span class="lbl">${label}</span>
+      <span class="val">${value || '—'}</span>
+    </div>
+  </div>`;
+}
+
+function openDetails(licId, vehicleId) {
+  let lic = null, vehicle = null;
+  for (const item of searchResults) {
+    if (item.vehicle.id === vehicleId) vehicle = item.vehicle;
+    for (const l of item.licenses) {
+      if (l.id === licId) lic = l;
+    }
+    if (lic && vehicle) break;
+  }
+  if (!lic) return;
+
+  currentLicenseId = licId;
+  currentPhotoUrl = lic.photo_url || null;
+
+  // Title
+  document.getElementById('dm-title').textContent = `Permis N° ${lic.license_number}`;
+
+  // Status badges
+  const statusBadge = document.getElementById('dm-status-badge');
+  const isExp = lic.is_expired;
+  const statusKey = isExp ? 'expire' : lic.status;
+  const statusColors = { actif: 'success', suspendu: 'warning', revoque: 'danger', expire: 'secondary' };
+  statusBadge.className = `badge fs-6 px-3 py-2 bg-${statusColors[statusKey] || 'secondary'}`;
+  statusBadge.textContent = getStatusLabel(lic.status, isExp);
+  document.getElementById('dm-type-badge').textContent = lic.type_permis === 'temporaire' ? 'Temporaire' : 'Permanent';
+  document.getElementById('dm-points').textContent = lic.points ?? '—';
+
+  // Photo
+  const photoWrap = document.getElementById('dm-photo-wrap');
+  const dlBtn = document.getElementById('dm-dl-btn');
+  if (lic.photo_url) {
+    photoWrap.innerHTML = `<img src="${lic.photo_url}" alt="photo conducteur">`;
+    dlBtn.style.display = '';
+  } else {
+    photoWrap.innerHTML = `<div class="dm-photo-placeholder"><i class="fas fa-user fa-3x"></i></div>`;
+    dlBtn.style.display = 'none';
+  }
+
+  // License rows
+  document.getElementById('dm-license-rows').innerHTML =
+    infoRow('Nom', lic.holder_firstname) +
+    infoRow('Prénom', lic.holder_name) +
+    infoRow('Date de naissance', fmt(lic.date_of_birth)) +
+    infoRow('Lieu de naissance', lic.lieu_naissance) +
+    infoRow('Téléphone', lic.holder_phone) +
+    infoRow('Adresse', lic.holder_address) +
+    infoRow('Nationalité', lic.nationalite) +
+    infoRow('Sexe', lic.sexe === 'masculin' ? 'Masculin' : lic.sexe === 'feminin' ? 'Féminin' : lic.sexe) +
+    infoRow('Centre d\'immatriculation', lic.centre_immatriculation) +
+    infoRow('Délivré le', fmt(lic.issue_date)) +
+    infoRow('Expire le', fmt(lic.expiry_date)) +
+    infoRow('Créé par', lic.created_by) +
+    infoRow('Créé le', lic.created_at);
+
+  // Categories
+  const cats = (lic.categories || '').split(',').map(c => c.trim()).filter(Boolean);
+  const catDetails = lic.category_details || {};
+  const catsWrap = document.getElementById('dm-cats-wrap');
+  const catsEl = document.getElementById('dm-cats');
+  if (cats.length) {
+    catsWrap.style.display = '';
+    catsEl.innerHTML = cats.map(c => {
+      const det = catDetails[c];
+      const expLine = det && det.expiration ? `<small>Exp: ${det.expiration}</small>` : '';
+      return `<span class="cat-detail-badge">${c}${expLine}</span>`;
+    }).join('');
+  } else {
+    catsWrap.style.display = 'none';
+  }
+
+  // Vehicle rows
+  document.getElementById('dm-vehicle-rows').innerHTML = vehicle
+    ? infoRow('Immatriculation', vehicle.license_plate) +
+      infoRow('Type', vehicle.vehicle_type) +
+      infoRow('Marque', vehicle.make) +
+      infoRow('Modèle', vehicle.model) +
+      infoRow('Couleur', vehicle.color) +
+      infoRow('Usage', vehicle.usage_type) +
+      infoRow('Propriétaire', vehicle.owner_name)
+    : '<div class="col-12 text-muted">Véhicule inconnu</div>';
+
+  // Notes
+  const notesWrap = document.getElementById('dm-notes-wrap');
+  const notesEl = document.getElementById('dm-notes');
+  if (lic.notes && lic.notes.trim()) {
+    notesWrap.style.display = '';
+    notesEl.textContent = lic.notes;
+  } else {
+    notesWrap.style.display = 'none';
+  }
+
+  // Suspend section: show only if status is 'actif' and not expired
+  const suspendSection = document.getElementById('dm-suspend-section');
+  document.getElementById('dm-motif').value = '';
+  document.getElementById('dm-suspend-error').style.display = 'none';
+  suspendSection.style.display = (lic.status === 'actif' && !isExp) ? '' : 'none';
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();
+}
+
+async function confirmSuspend() {
+  const motif = document.getElementById('dm-motif').value.trim();
+  const errEl = document.getElementById('dm-suspend-error');
+  errEl.style.display = 'none';
+  if (!motif) {
+    errEl.textContent = 'Le motif est obligatoire.';
+    errEl.style.display = '';
+    return;
+  }
+
+  const btn = document.querySelector('#dm-suspend-section .btn-danger');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Suspension…';
+
+  try {
+    const resp = await fetch(`/api/licenses/${currentLicenseId}/suspend`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motif })
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      errEl.textContent = data.error || 'Erreur lors de la suspension.';
+      errEl.style.display = '';
+      return;
+    }
+
+    // Update local data
+    for (const item of searchResults) {
+      for (let i = 0; i < item.licenses.length; i++) {
+        if (item.licenses[i].id === currentLicenseId) {
+          item.licenses[i] = { ...item.licenses[i], ...data };
+        }
+      }
+    }
+
+    // Refresh tile in the results list
+    const tile = document.getElementById(`tile-${currentLicenseId}`);
+    if (tile) {
+      const vehicle = searchResults.find(r => r.licenses.some(l => l.id === currentLicenseId))?.vehicle;
+      const lic = searchResults.flatMap(r => r.licenses).find(l => l.id === currentLicenseId);
+      if (lic && vehicle) {
+        tile.outerHTML = renderLicenseTile(lic, vehicle);
+      }
+    }
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).hide();
+  } catch (e) {
+    errEl.textContent = 'Erreur réseau.';
+    errEl.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-ban me-1"></i> Confirmer la suspension';
+  }
+}
+
+async function downloadPhoto() {
+  if (!currentPhotoUrl) return;
+  try {
+    const resp = await fetch(currentPhotoUrl);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const ext = currentPhotoUrl.split('.').pop().split('?')[0] || 'jpg';
+    a.download = `photo_conducteur_${currentLicenseId}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Impossible de télécharger la photo.');
+  }
+}
+
+async function doSearch() {
+  const plate = document.getElementById('s-plate').value.trim();
+  const type  = document.getElementById('s-type').value.trim();
+  const make  = document.getElementById('s-make').value.trim();
+  const model = document.getElementById('s-model').value.trim();
+  const color = document.getElementById('s-color').value.trim();
+  const usage = document.getElementById('s-usage').value.trim();
+
+  if (!plate && !type && !make && !model && !color && !usage) {
+    document.getElementById('search-results').innerHTML =
+      `<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Veuillez saisir au moins un critère de recherche.</div>`;
+    return;
+  }
+
+  const btn = document.getElementById('btn-search');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Recherche...';
+  document.getElementById('search-results').innerHTML = '';
+
+  const params = new URLSearchParams();
+  if (plate) params.append('license_plate', plate);
+  if (type)  params.append('vehicle_type', type);
+  if (make)  params.append('make', make);
+  if (model) params.append('model', model);
+  if (color) params.append('color', color);
+  if (usage) params.append('usage_type', usage);
+
+  try {
+    const resp = await fetch(`/api/vehicles/search-drivers?${params}`);
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      document.getElementById('search-results').innerHTML =
+        `<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>${data.error || 'Erreur de recherche'}</div>`;
+      return;
+    }
+
+    if (!data.length) {
+      document.getElementById('search-results').innerHTML =
+        `<div class="empty-state"><i class="fas fa-search fa-3x mb-3 d-block"></i>Aucun véhicule trouvé pour ces critères.</div>`;
+      return;
+    }
+
+    searchResults = data;
+    document.getElementById('search-results').innerHTML =
+      `<p class="text-muted mb-3">${data.length} véhicule${data.length > 1 ? 's' : ''} trouvé${data.length > 1 ? 's' : ''}</p>` +
+      data.map(renderVehicleCard).join('');
+  } catch (e) {
+    document.getElementById('search-results').innerHTML =
+      `<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Erreur réseau. Veuillez réessayer.</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-search me-1"></i> Rechercher';
+  }
+}
+
+function clearSearch() {
+  ['s-plate','s-make','s-model','s-color'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  ['s-type','s-usage'].forEach(id => {
+    document.getElementById(id).selectedIndex = 0;
+  });
+  document.getElementById('search-results').innerHTML = '';
+  searchResults = [];
+}
+
+['s-plate','s-make','s-model','s-color'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+});
+</script>
+{% endblock %}

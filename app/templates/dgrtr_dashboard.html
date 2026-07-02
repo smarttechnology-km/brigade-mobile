@@ -1,0 +1,1602 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.step-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 11px; font-weight: 700; flex-shrink: 0;
+  border: 2px solid;
+}
+.step-dot.done   { background: #16a34a; border-color: #16a34a; color: #fff; }
+.step-dot.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+.step-dot.todo   { background: #fff; border-color: #d1d5db; color: #9ca3af; }
+.step-connector { width: 18px; height: 2px; flex-shrink: 0; }
+.step-connector.done   { background: #16a34a; }
+.step-connector.todo   { background: #e5e7eb; }
+.step-progress { display: flex; align-items: center; gap: 0; }
+
+.dossier-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 14px 18px; cursor: pointer; transition: box-shadow .15s, border-color .15s;
+}
+.dossier-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.09); border-color: #3b82f6; }
+
+.stat-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 16px 20px;
+}
+.stat-card .stat-num { font-size: 28px; font-weight: 800; color: #0f172a; }
+.stat-card .stat-lbl { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: .06em; }
+
+.doc-check { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; }
+.doc-check:last-child { border-bottom: none; }
+.doc-check label { cursor: pointer; font-size: 14px; flex: 1; }
+
+.step-timeline { display: flex; flex-direction: column; gap: 0; }
+.step-item {
+  display: flex; gap: 16px; align-items: flex-start;
+  padding: 14px 0; border-bottom: 1px solid #f3f4f6;
+}
+.step-item:last-child { border-bottom: none; }
+.step-icon-col { display: flex; flex-direction: column; align-items: center; }
+.step-vline { width: 2px; flex: 1; min-height: 20px; margin-top: 4px; }
+.step-badge-num {
+  width: 34px; height: 34px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0;
+}
+</style>
+
+<div class="container-fluid py-4 px-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h4 class="fw-bold mb-0"><i class="fas fa-folder-open text-primary me-2"></i>Dossiers Permis de Conduire</h4>
+      <small class="text-muted">Workflow de traitement — 5 étapes</small>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary" onclick="openNewDossier()">
+        <i class="fas fa-plus me-2"></i>Nouveau dossier
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4" id="stats-row">
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num" id="stat-total">—</div>
+        <div class="stat-lbl">Total dossiers</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-warning" id="stat-encours">—</div>
+        <div class="stat-lbl">En cours</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-danger" id="stat-rejete">—</div>
+        <div class="stat-lbl">Dossiers rejetés</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-success" id="stat-complet">—</div>
+        <div class="stat-lbl">Complétés</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step tabs -->
+  <div class="d-flex gap-1 mb-3 flex-wrap" id="step-tabs">
+    <button class="btn btn-sm btn-primary active" id="step-tab-0" onclick="setStepTab(0)">
+      <i class="fas fa-list me-1"></i>Tous
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" id="step-tab-1" onclick="setStepTab(1)">
+      <span class="badge bg-primary me-1">1</span>Validation des documents
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" id="step-tab-2" onclick="setStepTab(2)">
+      <span class="badge bg-primary me-1">2</span>Informations candidat
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" id="step-tab-3" onclick="setStepTab(3)">
+      <span class="badge bg-primary me-1">3</span>Photo du candidat
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" id="step-tab-4" onclick="setStepTab(4)">
+      <span class="badge bg-primary me-1">4</span>Vérification du dossier
+    </button>
+    {% if current_user.is_admin or current_user.dgrtr_type == 'directeur_technique' %}
+    <button class="btn btn-sm btn-outline-warning" id="step-tab-5" onclick="setStepTab(5)">
+      <span class="badge bg-warning text-dark me-1">5</span>Confirmation finale
+    </button>
+    {% endif %}
+  </div>
+
+  <!-- Search + Toggle vue -->
+  <div class="d-flex gap-2 mb-3 align-items-center flex-wrap">
+    <input type="search" id="search-input" class="form-control" style="max-width:340px;"
+      placeholder="Rechercher par nom, prénom ou N° dossier…" oninput="filterDossiers()">
+    <div class="btn-group ms-auto" role="group">
+      <button type="button" class="btn btn-outline-secondary active" id="btn-view-grid" onclick="setView('grid')" title="Vue grille">
+        <i class="fas fa-th-large"></i>
+      </button>
+      <button type="button" class="btn btn-outline-secondary" id="btn-view-list" onclick="setView('list')" title="Vue liste">
+        <i class="fas fa-list"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Dossier grid -->
+  <div id="dossiers-list" class="row g-3">
+    <div class="col-12 text-center text-muted py-5">
+      <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+    </div>
+  </div>
+
+  <!-- Dossier table (vue liste) -->
+  <div id="dossiers-table" style="display:none;">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>N° Dossier</th>
+            <th>Candidat</th>
+            <th>Île</th>
+            <th>Étape</th>
+            <th>Statut</th>
+            <th>Créé le</th>
+            <th class="text-end">Action</th>
+          </tr>
+        </thead>
+        <tbody id="dossiers-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODAL — Nouveau dossier (Step 1)
+══════════════════════════════════════ -->
+<div class="modal fade" id="newDossierModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="badge bg-primary me-2">Étape 1</span>Validation des documents
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Contexte Step 1 -->
+        <div class="alert alert-info d-flex gap-2 py-2 mb-3" style="font-size:13.5px;">
+          <i class="fas fa-info-circle mt-1 flex-shrink-0"></i>
+          <div>
+            Le candidat doit soumettre l'ensemble des documents ci-dessous avant toute validation.
+            Vérifiez chaque pièce physiquement et cochez uniquement les documents reçus et conformes.
+            La validation de cette étape génère automatiquement le numéro de dossier officiel.
+          </div>
+        </div>
+
+        <!-- Checklist documents -->
+        <div class="border rounded p-3">
+          <div class="doc-check">
+            <input type="checkbox" class="form-check-input doc-cb" id="doc-autoecole" onchange="checkDocProgress()">
+            <label for="doc-autoecole">
+              <span class="fw-semibold">Certificat d'Auto-école agréée</span>
+              <span class="text-muted small d-block">Délivré par une auto-école reconnue par l'État</span>
+            </label>
+          </div>
+          <div class="doc-check">
+            <input type="checkbox" class="form-check-input doc-cb" id="doc-medical" onchange="checkDocProgress()">
+            <label for="doc-medical">
+              <span class="fw-semibold">Certificat médical</span>
+              <span class="text-muted small d-block">Attestant l'aptitude physique et visuelle du candidat</span>
+            </label>
+          </div>
+          <div class="doc-check">
+            <input type="checkbox" class="form-check-input doc-cb" id="doc-residence" onchange="checkDocProgress()">
+            <label for="doc-residence">
+              <span class="fw-semibold">Certificat de résidence</span>
+              <span class="text-muted small d-block">Justificatif de domicile officiel</span>
+            </label>
+          </div>
+          <div class="doc-check">
+            <input type="checkbox" class="form-check-input doc-cb" id="doc-fiche" onchange="checkDocProgress()">
+            <label for="doc-fiche">
+              <span class="fw-semibold">Fiche individuelle</span>
+              <span class="text-muted small d-block">Formulaire de demande rempli et signé</span>
+            </label>
+          </div>
+          <div class="doc-check">
+            <input type="checkbox" class="form-check-input doc-cb" id="doc-cni" onchange="checkDocProgress()">
+            <label for="doc-cni">
+              <span class="fw-semibold">Copie de carte nationale d'identité</span>
+              <span class="text-muted small d-block">Pièce d'identité nationale en cours de validité</span>
+            </label>
+          </div>
+          <div class="doc-check">
+            <input type="checkbox" class="form-check-input doc-cb" id="doc-recu" onchange="checkDocProgress()">
+            <label for="doc-recu">
+              <span class="fw-semibold">Reçu de paiement</span>
+              <span class="text-muted small d-block">Preuve du règlement des frais de dossier</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Île -->
+        <div class="mt-3">
+          <label class="form-label small fw-semibold mb-1">Île <span class="text-danger">*</span></label>
+          <select id="s1-country" class="form-select" onchange="checkDocProgress()">
+            <option value="">— Sélectionner une île —</option>
+            <option value="Grande Comores">Grande Comores</option>
+            <option value="Anjouan">Anjouan</option>
+            <option value="Moheli">Moheli</option>
+          </select>
+        </div>
+
+        <!-- Progress hint -->
+        <div class="mt-3 d-flex align-items-center gap-2">
+          <div class="progress flex-fill" style="height:6px;">
+            <div id="doc-progress-bar" class="progress-bar bg-success" style="width:0%;transition:width .3s;"></div>
+          </div>
+          <span class="text-muted small"><span id="doc-checked-count">0</span>/6 documents vérifiés</span>
+        </div>
+
+        <!-- Aperçu numéro de dossier (affiché quand tout est coché) -->
+        <div id="dossier-number-preview" class="mt-3 d-none">
+          <div class="alert alert-success d-flex align-items-center gap-3 py-2 mb-0">
+            <i class="fas fa-check-circle fa-lg"></i>
+            <div>
+              <div class="fw-semibold small">Tous les documents sont vérifiés.</div>
+              <div class="small">Un numéro de dossier officiel sera généré automatiquement à l'enregistrement. <br>
+              <span class="text-muted">Le secrétaire devra inscrire ce numéro sur le chemisier cartonné du candidat.</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-validate-step1" onclick="submitStep1()" disabled>
+          <i class="fas fa-save me-2"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODAL — Détail dossier
+══════════════════════════════════════ -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="detail-title">Dossier</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detail-body">Chargement…</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-outline-danger d-none" id="detail-reject-btn" onclick="openRejectModal()"><i class="fas fa-times-circle me-2"></i>Rejeter</button>
+        <button type="button" class="btn btn-outline-secondary d-none" id="detail-prev-btn"><i class="fas fa-arrow-left me-2"></i><span id="detail-prev-label"></span></button>
+        <button type="button" class="btn btn-primary d-none" id="detail-next-btn"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODAL — Étape 2
+══════════════════════════════════════ -->
+<div class="modal fade" id="step2Modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="badge bg-primary me-2">Étape 2</span>Informations du candidat &amp; Détails du permis
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Informations personnelles -->
+        <p class="fw-semibold small text-uppercase text-muted mb-2" style="letter-spacing:.06em;">
+          <i class="fas fa-user me-1"></i>Informations personnelles
+        </p>
+        <div class="row g-2 mb-4">
+          <div class="col-md-3">
+            <label class="form-label small">Nom <span class="text-danger">*</span></label>
+            <input type="text" id="s2-nom" class="form-control text-uppercase" placeholder="NOM DE FAMILLE">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Prénom <span class="text-danger">*</span></label>
+            <input type="text" id="s2-prenom" class="form-control" placeholder="Prénom">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Date de naissance</label>
+            <input type="date" id="s2-dob" class="form-control">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Lieu de naissance</label>
+            <input type="text" id="s2-lieu-naissance" class="form-control" placeholder="Ex: Moroni">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small">Sexe</label>
+            <select id="s2-sexe" class="form-select">
+              <option value="">—</option>
+              <option value="masculin">Masculin</option>
+              <option value="feminin">Féminin</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Nationalité</label>
+            <input type="text" id="s2-nationalite" class="form-control" placeholder="Ex: Comorienne">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Adresse</label>
+            <input type="text" id="s2-adresse" class="form-control" placeholder="Adresse complète">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Téléphone</label>
+            <input type="tel" id="s2-tel" class="form-control" placeholder="Ex: 3321234">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Île</label>
+            <select id="s2-country" class="form-select">
+              <option value="">— Sélectionner —</option>
+              <option value="Grande Comores">Grande Comores</option>
+              <option value="Anjouan">Anjouan</option>
+              <option value="Moheli">Moheli</option>
+            </select>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <!-- Détails du permis -->
+        <p class="fw-semibold small text-uppercase text-muted mb-2" style="letter-spacing:.06em;">
+          <i class="fas fa-id-card me-1"></i>Détails du permis
+        </p>
+        <div class="row g-2 mb-4">
+          <div class="col-md-3">
+            <label class="form-label small">Type de permis <span class="text-danger">*</span></label>
+            <select id="s2-type-permis" class="form-select" onchange="onS2TypePermisChange()">
+              <option value="">— Sélectionner —</option>
+              <option value="temporaire">Temporaire</option>
+              <option value="permanent">Permanent</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Date de délivrance</label>
+            <input type="date" id="s2-issue-date" class="form-control" onchange="onS2TypePermisChange()">
+          </div>
+          <div class="col-md-3" id="s2-expiry-wrap">
+            <label class="form-label small">Date d'expiration <span id="s2-expiry-hint" class="text-muted" style="font-size:11px;font-weight:normal;"></span></label>
+            <input type="date" id="s2-expiry-date" class="form-control">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Centre d'immatriculation</label>
+            <select id="s2-centre" class="form-select">
+              <option value="">— Sélectionner —</option>
+              <option value="Centre de Moroni">Centre de Moroni</option>
+              <option value="Centre de Mutsamudu">Centre de Mutsamudu</option>
+              <option value="Centre de Fomboni">Centre de Fomboni</option>
+            </select>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <!-- Catégories -->
+        <p class="fw-semibold small text-uppercase text-muted mb-2" style="letter-spacing:.06em;">
+          <i class="fas fa-list-ul me-1"></i>Catégories autorisées
+        </p>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width:50px;">Cat.</th>
+                <th>Description</th>
+                <th style="width:90px;">Validité</th>
+                <th style="width:160px;">Date d'obtention</th>
+                <th style="width:60px;" class="text-center">Inclure</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for code, desc in [
+                ('A',  'Motocyclette avec ou sans side-car, moteur >123 cm³'),
+                ('A1', 'Vélomoteur, cylindrée 50–123 cm³'),
+                ('A2', 'Cyclomoteur, cylindrée ≤50 cm³'),
+                ('B',  'Véhicule <10 places, PTAC ≤3 500 kg'),
+                ('C',  'Transport de marchandises, PTAC >3 500 kg'),
+                ('D',  'Transport de personnes, >9 places assises'),
+                ('E',  'Remorque attelée >750 kg PTAC'),
+                ('F',  'Véhicule aménagé pour personne handicapée'),
+                ('P',  'Professionnel (transport rémunéré)'),
+              ] %}
+              <tr>
+                <td><span class="badge bg-dark">{{ code }}</span></td>
+                <td class="small text-muted">{{ desc }}</td>
+                <td><span id="s2-cat-hint-{{ code }}" class="badge bg-light text-secondary border" style="font-size:11px;">—</span></td>
+                <td><input type="date" class="form-control form-control-sm" id="s2-cat-date-{{ code }}" disabled></td>
+                <td class="text-center">
+                  <input type="checkbox" class="form-check-input" id="s2-cat-cb-{{ code }}"
+                    data-code="{{ code }}" onchange="onS2CatToggle('{{ code }}')">
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-save-step2" onclick="submitStep2()">
+          <i class="fas fa-save me-2"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODAL — Étape 3 : Photo ID
+══════════════════════════════════════ -->
+<div class="modal fade" id="step3Modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><span class="badge bg-primary me-2">Étape 3</span>Photo du candidat</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="text-muted small mb-3">Importez la photo d'identité du candidat. Elle sera intégrée au permis de conduire.</p>
+        <div id="s3-preview-wrap" style="width:140px;height:175px;border:2px dashed #d1d5db;border-radius:10px;margin:0 auto 16px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f9fafb;cursor:pointer;" onclick="document.getElementById('s3-file').click()">
+          <img id="s3-preview-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;">
+          <span id="s3-preview-icon" class="text-muted"><i class="fas fa-user-circle fa-4x"></i></span>
+        </div>
+        <input type="file" id="s3-file" accept="image/jpeg,image/png,image/webp" class="d-none" onchange="onS3FileChange(this)">
+        <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('s3-file').click()">
+          <i class="fas fa-upload me-1"></i>Choisir une photo
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-save-step3" onclick="submitStep3()" disabled>
+          <i class="fas fa-save me-2"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODAL — Étape 4 : Vérification & N° permis
+══════════════════════════════════════ -->
+<div class="modal fade" id="step4Modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><span class="badge bg-primary me-2">Étape 4</span>Vérification du dossier</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info small py-2"><i class="fas fa-info-circle me-1"></i>Vérifiez et corrigez les informations si nécessaire. Renseignez le numéro de permis officiel avant de valider.</div>
+
+        <div class="row g-3">
+          <!-- Photo -->
+          <div class="col-md-2 text-center">
+            <div style="width:100px;height:124px;border:2px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 auto;">
+              <img id="s4-photo" src="" alt="" style="width:100%;height:100%;object-fit:cover;">
+            </div>
+            <div class="text-muted small mt-1">Photo ID</div>
+          </div>
+          <div class="col-md-10">
+            <div class="row g-2">
+              <div class="col-md-3"><label class="form-label small">Nom <span class="text-danger">*</span></label><input type="text" id="s4-nom" class="form-control text-uppercase"></div>
+              <div class="col-md-3"><label class="form-label small">Prénom <span class="text-danger">*</span></label><input type="text" id="s4-prenom" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label small">Date de naissance</label><input type="date" id="s4-dob" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label small">Lieu de naissance</label><input type="text" id="s4-lieu-naissance" class="form-control"></div>
+              <div class="col-md-2"><label class="form-label small">Sexe</label><select id="s4-sexe" class="form-select"><option value="">—</option><option value="masculin">Masculin</option><option value="feminin">Féminin</option></select></div>
+              <div class="col-md-3"><label class="form-label small">Nationalité</label><input type="text" id="s4-nationalite" class="form-control"></div>
+              <div class="col-md-4"><label class="form-label small">Adresse</label><input type="text" id="s4-adresse" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label small">Téléphone</label><input type="tel" id="s4-tel" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label small">Île</label><select id="s4-country" class="form-select"><option value="">—</option><option value="Grande Comores">Grande Comores</option><option value="Anjouan">Anjouan</option><option value="Moheli">Moheli</option></select></div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="my-3">
+        <p class="fw-semibold small text-uppercase text-muted mb-2" style="letter-spacing:.06em;"><i class="fas fa-id-card me-1"></i>Détails du permis</p>
+        <div class="row g-2 mb-3">
+          <div class="col-md-3"><label class="form-label small">Type de permis <span class="text-danger">*</span></label><select id="s4-type-permis" class="form-select" onchange="onS4TypePermisChange()"><option value="">— Sélectionner —</option><option value="temporaire">Temporaire</option><option value="permanent">Permanent</option></select></div>
+          <div class="col-md-3"><label class="form-label small">Date de délivrance</label><input type="date" id="s4-issue-date" class="form-control" onchange="onS4TypePermisChange()"></div>
+          <div class="col-md-3" id="s4-expiry-wrap"><label class="form-label small">Date d'expiration <span id="s4-expiry-hint" class="text-muted" style="font-size:11px;font-weight:normal;"></span></label><input type="date" id="s4-expiry-date" class="form-control"></div>
+          <div class="col-md-3"><label class="form-label small">Centre d'immatriculation</label><select id="s4-centre" class="form-select"><option value="">— Sélectionner —</option><option value="Centre de Moroni">Centre de Moroni</option><option value="Centre de Mutsamudu">Centre de Mutsamudu</option><option value="Centre de Fomboni">Centre de Fomboni</option></select></div>
+        </div>
+
+        <hr class="my-3">
+        <p class="fw-semibold small text-uppercase text-muted mb-2" style="letter-spacing:.06em;"><i class="fas fa-list-ul me-1"></i>Catégories autorisées</p>
+        <div class="table-responsive mb-3">
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width:50px;">Cat.</th>
+                <th>Description</th>
+                <th style="width:90px;">Validité</th>
+                <th style="width:160px;">Date d'obtention</th>
+                <th style="width:60px;" class="text-center">Inclure</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for code, desc in [
+                ('A',  'Motocyclette avec ou sans side-car, moteur >123 cm³'),
+                ('A1', 'Vélomoteur, cylindrée 50–123 cm³'),
+                ('A2', 'Cyclomoteur, cylindrée ≤50 cm³'),
+                ('B',  'Véhicule <10 places, PTAC ≤3 500 kg'),
+                ('C',  'Transport de marchandises, PTAC >3 500 kg'),
+                ('D',  'Transport de personnes, >9 places assises'),
+                ('E',  'Remorque attelée >750 kg PTAC'),
+                ('F',  'Véhicule aménagé pour personne handicapée'),
+                ('P',  'Professionnel (transport rémunéré)'),
+              ] %}
+              <tr>
+                <td><span class="badge bg-dark">{{ code }}</span></td>
+                <td class="small text-muted">{{ desc }}</td>
+                <td><span id="s4-cat-hint-{{ code }}" class="badge bg-light text-secondary border" style="font-size:11px;">—</span></td>
+                <td><input type="date" class="form-control form-control-sm" id="s4-cat-date-{{ code }}" disabled></td>
+                <td class="text-center"><input type="checkbox" class="form-check-input" id="s4-cat-cb-{{ code }}" data-code="{{ code }}" onchange="onS4CatToggle('{{ code }}')"></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <hr class="my-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">Numéro de permis <span class="text-danger">*</span></label>
+            <input type="text" id="s4-license-num" class="form-control fw-bold" placeholder="Ex: PC-2026-0001" style="border-color:#2563eb;">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small fw-semibold">Statut</label>
+            <select id="s4-status" class="form-select">
+              <option value="actif" selected>Actif</option>
+              <option value="suspendu">Suspendu</option>
+              <option value="temporaire">Temporaire</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-save-step4" onclick="submitStep4()">
+          <i class="fas fa-save me-2"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODAL — Étape 5 : Confirmation finale
+══════════════════════════════════════ -->
+<div class="modal fade" id="step5Modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header" style="background:linear-gradient(100deg,#0f2660,#1d4ed8);color:#fff;">
+        <h5 class="modal-title"><span class="badge bg-warning text-dark me-2">Étape 5</span>Confirmation — Délivrance du permis</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="step5-summary">Chargement…</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success btn-lg" id="btn-save-step5" onclick="submitStep5()">
+          <i class="fas fa-check-double me-2"></i>Valider &amp; Délivrer le permis
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODAL — Rejeter un dossier
+══════════════════════════════════════ -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#fef2f2;border-bottom:1px solid #fecaca;">
+        <h5 class="modal-title text-danger"><i class="fas fa-times-circle me-2"></i>Rejeter le dossier</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning py-2 small mb-3">
+          <i class="fas fa-exclamation-triangle me-1"></i>Cette action marquera le dossier comme <strong>rejeté</strong>. Le dossier restera visible mais ne pourra plus avancer dans le workflow.
+        </div>
+        <label class="form-label small fw-semibold">Motif du rejet <span class="text-muted fw-normal">(optionnel)</span></label>
+        <textarea id="reject-reason" class="form-control" rows="3" placeholder="Ex: Documents non conformes, photo illisible…"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-reject" onclick="confirmReject()">
+          <i class="fas fa-times-circle me-2"></i>Confirmer le rejet
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+var allDossiers    = [];
+var licenseSettings = { temp_validity_months: 12, permanent_validity_years: 10, category_validity: {} };
+var DGRTR_TYPE    = {{ (current_user.dgrtr_type or '') | tojson }};
+var DGRTR_COUNTRY = {{ (current_user.country or '') | tojson }};
+var ALL_CATS = ['A','A1','A2','B','C','D','E','F','P'];
+
+// ── Load on page open ──────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  setView(currentView);
+  loadDossiers();
+  loadLicenseSettings();
+});
+
+function loadLicenseSettings() {
+  fetch('/api/licenses/settings')
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      if (data && !data.error) {
+        licenseSettings = data;
+        applyCategoryHints('s2');
+        applyCategoryHints('s4');
+      }
+    });
+}
+
+function applyCategoryHints(prefix) {
+  var cfg = licenseSettings.category_validity || {};
+  ALL_CATS.forEach(function(code) {
+    var el = document.getElementById(prefix + '-cat-hint-' + code);
+    if (!el) return;
+    var entry = cfg[code] || { mode: 'card' };
+    if (entry.mode === 'custom' && entry.years) {
+      el.textContent = entry.years + ' an' + (entry.years > 1 ? 's' : '');
+      el.className = 'badge bg-primary bg-opacity-10 text-primary border border-primary-subtle';
+    } else {
+      el.textContent = 'Avec permis';
+      el.className = 'badge bg-light text-secondary border';
+    }
+  });
+}
+
+function computeExpiry(issueDate, type) {
+  if (!issueDate) return '';
+  var d = new Date(issueDate);
+  if (type === 'temporaire') {
+    var months = licenseSettings.temp_validity_months || 12;
+    d.setMonth(d.getMonth() + months);
+  } else if (type === 'permanent') {
+    var years = licenseSettings.permanent_validity_years || 10;
+    d.setFullYear(d.getFullYear() + years);
+  } else {
+    return '';
+  }
+  return d.toISOString().split('T')[0];
+}
+
+function loadDossiers() {
+  Promise.all([
+    fetch('/api/dossiers-permis?status=en_cours,rejete').then(function(r){ return r.json(); }),
+    fetch('/api/dossiers-permis').then(function(r){ return r.json(); }),
+  ])
+  .then(function(results) {
+    allDossiers = results[0];
+    var allData  = results[1];
+    updateStats(allData, allDossiers);
+    if (currentView === 'list') { renderDossiersTable(allDossiers); } else { renderDossiers(allDossiers); }
+  })
+  .catch(function() {
+    document.getElementById('dossiers-list').innerHTML =
+      '<div class="col-12 text-danger text-center py-4">Erreur de chargement.</div>';
+  });
+}
+
+function updateStats(allData, activeData) {
+  document.getElementById('stat-total').textContent   = allData.length;
+  document.getElementById('stat-encours').textContent = activeData.filter(function(d){ return d.status === 'en_cours'; }).length;
+  document.getElementById('stat-rejete').textContent  = activeData.filter(function(d){ return d.status === 'rejete'; }).length;
+  document.getElementById('stat-complet').textContent = allData.filter(function(d){ return d.status === 'complet'; }).length;
+}
+
+var currentView = localStorage.getItem('dgrtr_view') || 'grid';
+var currentStepFilter = 0;
+
+function setStepTab(step) {
+  currentStepFilter = step;
+  for (var i = 0; i <= 5; i++) {
+    var btn = document.getElementById('step-tab-' + i);
+    if (!btn) continue;
+    if (i === step) {
+      btn.className = i === 5 ? 'btn btn-sm btn-warning active' : 'btn btn-sm btn-primary active';
+    } else {
+      btn.className = i === 5 ? 'btn btn-sm btn-outline-warning' : 'btn btn-sm btn-outline-secondary';
+    }
+  }
+  filterDossiers();
+}
+
+function setView(view) {
+  currentView = view;
+  localStorage.setItem('dgrtr_view', view);
+  document.getElementById('btn-view-grid').classList.toggle('active', view === 'grid');
+  document.getElementById('btn-view-list').classList.toggle('active', view === 'list');
+  document.getElementById('dossiers-list').style.display  = view === 'grid' ? '' : 'none';
+  document.getElementById('dossiers-table').style.display = view === 'list' ? '' : 'none';
+  filterDossiers();
+}
+
+function filterDossiers() {
+  var q       = document.getElementById('search-input').value.trim().toLowerCase();
+  var islandEl = document.getElementById('filter-island');
+  var island  = islandEl ? islandEl.value : '';
+
+  var filtered = allDossiers.filter(function(d) {
+    var matchSearch = !q || (d.nom + ' ' + d.prenom + ' ' + (d.dossier_number || '')).toLowerCase().includes(q);
+    var matchIsland = !island || (d.country || '') === island;
+    var matchStep  = !currentStepFilter || (d.current_step === currentStepFilter);
+    return matchSearch && matchIsland && matchStep;
+  });
+
+  if (currentView === 'grid') {
+    renderDossiers(filtered);
+  } else {
+    renderDossiersTable(filtered);
+  }
+}
+
+function renderDossiersTable(data) {
+  var tbody = document.getElementById('dossiers-tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-folder-open me-2 opacity-25"></i>Aucun dossier trouvé</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(function(d) {
+    var step = d.current_step || 0;
+    var stepDots = ['','','','',''].map(function(_, i) {
+      var done = i < step;
+      var cur  = i === step && step < 5;
+      var col  = done ? '#16a34a' : cur ? '#2563eb' : '#d1d5db';
+      return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${col};margin:0 2px;"></span>`;
+    }).join('');
+
+    var statusBadge = d.status === 'complet'
+      ? '<span class="badge bg-success">Complété</span>'
+      : `<span class="badge bg-primary">Étape ${step}/5</span>`;
+
+    return `<tr style="cursor:pointer;" onclick="openDetail(${d.id})">
+      <td class="fw-bold font-monospace text-primary" style="white-space:nowrap;">${d.dossier_number || '<span class="text-muted fst-italic small">—</span>'}</td>
+      <td>${(d.prenom || d.nom) ? '<span class="fw-semibold">' + (d.nom + ' ' + d.prenom).trim() + '</span>' : '<span class="text-muted fst-italic small">Non renseigné</span>'}</td>
+      <td class="small text-muted">${d.country || '—'}</td>
+      <td>${stepDots}</td>
+      <td>${statusBadge}</td>
+      <td class="small text-muted" style="white-space:nowrap;">${d.created_at}</td>
+      <td class="text-end"><button class="btn btn-sm btn-outline-primary py-0" onclick="event.stopPropagation();openDetail(${d.id})"><i class="fas fa-eye me-1"></i>Voir</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function stepProgress(d) {
+  var steps = [
+    !!d.step1_validated_at,
+    !!d.step2_validated_at,
+    !!d.step3_validated_at,
+    !!d.step4_validated_at,
+    !!d.step5_validated_at,
+  ];
+  var html = '<div class="step-progress">';
+  steps.forEach(function(done, i) {
+    var next = steps[i + 1];
+    var cls = done ? 'done' : (i === steps.filter(Boolean).length ? 'active' : 'todo');
+    html += `<span class="step-dot ${cls}">${i + 1}</span>`;
+    if (i < 4) {
+      html += `<span class="step-connector ${done && next ? 'done' : 'todo'}"></span>`;
+    }
+  });
+  html += '</div>';
+  return html;
+}
+
+function statusBadge(d) {
+  if (d.status === 'complet') return '<span class="badge bg-success">Complété</span>';
+  if (d.status === 'rejete')  return '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejeté</span>';
+  if (!d.dossier_number)      return '<span class="badge bg-secondary">Étape 1 en cours</span>';
+  var step = d.current_step;
+  return `<span class="badge bg-primary">Étape ${step}/5</span>`;
+}
+
+function renderDossiers(data) {
+  var el = document.getElementById('dossiers-list');
+  if (!data.length) {
+    el.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-2x mb-3 d-block opacity-25"></i>Aucun dossier trouvé</div>';
+    return;
+  }
+  el.innerHTML = data.map(function(d) {
+    return `
+      <div class="col-md-6 col-xl-4">
+        <div class="dossier-card" onclick="openDetail(${d.id})">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              ${d.dossier_number
+                ? `<div class="fw-bold text-primary" style="font-size:17px;letter-spacing:.04em;font-family:monospace;">${d.dossier_number}</div>`
+                : `<div class="text-muted small fst-italic">N° dossier en attente</div>`
+              }
+              ${(d.nom || d.prenom)
+                ? `<div class="fw-semibold mt-1">${(d.nom + ' ' + d.prenom).trim()}</div>`
+                : `<div class="text-muted small mt-1">Candidat non renseigné</div>`
+              }
+              <div class="text-muted small">${d.country || '—'}</div>
+            </div>
+            <div class="text-end">
+              ${statusBadge(d)}
+            </div>
+          </div>
+          <div class="mt-2">
+            ${stepProgress(d)}
+          </div>
+          <div class="text-muted small mt-2"><i class="fas fa-calendar-alt me-1"></i>${d.created_at}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── New dossier modal ──────────────────
+function openNewDossier() {
+  currentDossierId = null;
+  document.querySelectorAll('.doc-cb').forEach(cb => cb.checked = false);
+  document.getElementById('s1-country').value = '';
+  document.getElementById('doc-checked-count').textContent = '0';
+  document.getElementById('doc-progress-bar').style.width = '0%';
+  document.getElementById('btn-validate-step1').disabled = true;
+  document.getElementById('dossier-number-preview').classList.add('d-none');
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('newDossierModal')).show();
+}
+
+function checkDocProgress() {
+  var checked = document.querySelectorAll('.doc-cb:checked').length;
+  document.getElementById('doc-checked-count').textContent = checked;
+  document.getElementById('doc-progress-bar').style.width = (checked / 6 * 100) + '%';
+  var country = document.getElementById('s1-country').value;
+  var allDone = checked >= 6 && !!country;
+  document.getElementById('btn-validate-step1').disabled = !allDone;
+  document.getElementById('dossier-number-preview').classList.toggle('d-none', checked < 6);
+}
+
+function submitStep1() {
+  var btn = document.getElementById('btn-validate-step1');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Validation…';
+
+  var payload = {
+    doc_autoecole:          document.getElementById('doc-autoecole').checked,
+    doc_medical:            document.getElementById('doc-medical').checked,
+    doc_residence:          document.getElementById('doc-residence').checked,
+    doc_fiche_individuelle: document.getElementById('doc-fiche').checked,
+    doc_carte_nationale:    document.getElementById('doc-cni').checked,
+    doc_recu_paiement:      document.getElementById('doc-recu').checked,
+    country:                document.getElementById('s1-country').value,
+  };
+
+  var isEdit  = !!currentDossierId;
+  var url     = isEdit ? '/api/dossiers-permis/' + currentDossierId : '/api/dossiers-permis';
+  var method  = isEdit ? 'PATCH' : 'POST';
+
+  fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  .then(r => r.json())
+  .then(function(data) {
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('newDossierModal')).hide();
+    loadDossiers();
+    if (!isEdit && data.dossier_number) {
+      showDossierNumberAlert(data.dossier_number);
+    } else if (isEdit) {
+      showToast('Étape 1 mise à jour', 'success');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+  })
+  .catch(function() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+    alert('Erreur lors de l\'enregistrement.');
+  });
+}
+
+// ── Detail modal ───────────────────────
+var currentDossierId = null;
+
+function openDetail(id) {
+  var d = allDossiers.find(function(x) { return x.id === id; });
+  if (!d) return;
+  currentDossierId = d.id;
+
+  var candidatLabel = (d.nom || d.prenom)
+    ? (d.nom + ' ' + d.prenom).trim()
+    : '<span class="text-muted fst-italic">Candidat non renseigné</span>';
+  document.getElementById('detail-title').innerHTML =
+    `<i class="fas fa-folder-open me-2"></i>${candidatLabel}` +
+    (d.dossier_number ? ` — <span class="text-primary" style="font-family:monospace;">${d.dossier_number}</span>` : '');
+
+  var stepOpeners = [
+    function() { openStep1Edit(currentDossierId); },
+    function() { openStep2(currentDossierId); },
+    function() { openStep3(currentDossierId); },
+    function() { openStep4(currentDossierId); },
+  ];
+  var stepLabels = [
+    'Validation des documents',
+    'Informations &amp; Détails du permis',
+    'Photo ID',
+    'Vérification',
+    'Délivrance du permis',
+  ];
+
+  var steps = [
+    {
+      label: stepLabels[0],
+      done: !!d.step1_validated_at, by: d.step1_validated_by, at: d.step1_validated_at,
+      content: `<div class="row g-1 mt-1">
+        ${docRow('Certificat Auto-école agréée', d.doc_autoecole)}
+        ${docRow('Certificat médical', d.doc_medical)}
+        ${docRow('Certificat de résidence', d.doc_residence)}
+        ${docRow('Fiche individuelle', d.doc_fiche_individuelle)}
+        ${docRow('Copie carte nationale', d.doc_carte_nationale)}
+        ${docRow('Reçu de paiement', d.doc_recu_paiement)}
+      </div>`,
+    },
+    {
+      label: stepLabels[1],
+      done: !!d.step2_validated_at, by: d.step2_validated_by, at: d.step2_validated_at,
+      content: d.step2_validated_at ? `
+        <div class="row g-1 mt-1 text-muted small">
+          <div class="col-6"><b>Nom :</b> ${d.nom}</div>
+          <div class="col-6"><b>Prénom :</b> ${d.prenom}</div>
+          <div class="col-6"><b>Type :</b> ${d.type_permis || '—'}</div>
+          <div class="col-6"><b>N° permis proposé :</b> ${d.license_number_proposed || '—'}</div>
+          <div class="col-6"><b>Catégories :</b> ${d.categories || '—'}</div>
+        </div>` : '',
+    },
+    { label: stepLabels[2], done: !!d.step3_validated_at, by: d.step3_validated_by, at: d.step3_validated_at,
+      content: (d.step3_validated_at && d.photo_filename) ? `<div class="mt-1"><img src="/uploads/license_photos/${d.photo_filename}" style="height:60px;border-radius:4px;border:1px solid #e5e7eb;"></div>` : '' },
+    { label: stepLabels[3], done: !!d.step4_validated_at, by: d.step4_validated_by, at: d.step4_validated_at, content: '' },
+    { label: stepLabels[4], done: !!d.step5_validated_at, by: d.step5_validated_by, at: d.step5_validated_at, content: '' },
+  ];
+
+  var doneCount = steps.filter(function(s){ return s.done; }).length;
+
+  var timelineHtml = '<div class="step-timeline">' + steps.map(function(s, i) {
+    var isLast    = i === steps.length - 1;
+    var isCurrent = !s.done && i === doneCount;
+    var color     = s.done ? '#16a34a' : (isCurrent ? '#2563eb' : '#d1d5db');
+    var textColor = s.done ? '#16a34a' : (isCurrent ? '#1d4ed8' : '#9ca3af');
+    var iconColor = (s.done || isCurrent) ? '#fff' : '#d1d5db';
+    var editBtn   = (s.done && i >= 1 && i < 4)
+      ? `<button class="btn btn-outline-secondary btn-sm py-0 px-2 ms-2" style="font-size:11px;" onclick="editStep(${i + 1})"><i class="fas fa-pen me-1"></i>Modifier</button>`
+      : '';
+    return `
+      <div class="step-item">
+        <div class="step-icon-col">
+          <div class="step-badge-num" style="background:${color};color:${iconColor};">
+            ${s.done ? '<i class="fas fa-check" style="font-size:12px;"></i>' : (i + 1)}
+          </div>
+          ${!isLast ? `<div class="step-vline" style="background:${s.done ? '#16a34a' : '#e5e7eb'};"></div>` : ''}
+        </div>
+        <div class="flex-fill pt-1 pb-2">
+          <div class="d-flex align-items-center">
+            <span class="fw-semibold" style="color:${textColor};">Étape ${i + 1} — ${s.label}</span>
+            ${editBtn}
+          </div>
+          ${s.done
+            ? `<div class="text-success small mt-1"><i class="fas fa-check-circle me-1"></i>Enregistré le ${s.at} par ${s.by}</div>`
+            : isCurrent
+              ? `<div class="text-primary small mt-1"><i class="fas fa-circle-notch me-1"></i>En attente de saisie</div>`
+              : `<div class="text-muted small mt-1">À venir</div>`
+          }
+          ${s.content}
+        </div>
+      </div>`;
+  }).join('') + '</div>';
+
+  document.getElementById('detail-body').innerHTML = timelineHtml;
+
+  // Bouton "Étape suivante"
+  var nextBtn = document.getElementById('detail-next-btn');
+  var nextActions = [
+    { label: 'Commencer Étape 2', fn: function() { openStep2(currentDossierId); } },
+    { label: 'Commencer Étape 3', fn: function() { openStep3(currentDossierId); } },
+    { label: 'Commencer Étape 4', fn: function() { openStep4(currentDossierId); } },
+    { label: 'Commencer Étape 5', fn: function() { openStep5(currentDossierId); } },
+  ];
+  if (doneCount >= 1 && doneCount <= 4) {
+    var na = nextActions[doneCount - 1];
+    // Step 5 réservé au Directeur Technique
+    if (doneCount === 4 && DGRTR_TYPE && DGRTR_TYPE !== 'directeur_technique') {
+      nextBtn.className = 'btn btn-secondary disabled';
+      nextBtn.innerHTML = '<i class="fas fa-lock me-2"></i>Réservé au Directeur Technique';
+      nextBtn.onclick   = null;
+    } else {
+      nextBtn.className = 'btn btn-primary';
+      nextBtn.innerHTML = '<i class="fas fa-arrow-right me-2"></i>' + na.label;
+      nextBtn.onclick   = function() {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).hide();
+        na.fn();
+      };
+    }
+    nextBtn.classList.remove('d-none');
+  } else {
+    nextBtn.classList.add('d-none');
+  }
+
+  // Bouton "Étape précédente" (visible uniquement à partir du step 3)
+  var prevBtn   = document.getElementById('detail-prev-btn');
+  var prevLabel = document.getElementById('detail-prev-label');
+  var prevActions = [
+    null, null,
+    { label: 'Retour Étape 2', fn: function() { editStep(2); } },
+    { label: 'Retour Étape 3', fn: function() { editStep(3); } },
+    { label: 'Retour Étape 4', fn: function() { editStep(4); } },
+  ];
+  if (doneCount >= 3 && doneCount <= 5) {
+    var pa = prevActions[doneCount - 1];
+    prevLabel.textContent = pa.label;
+    prevBtn.onclick = function() {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).hide();
+      pa.fn();
+    };
+    prevBtn.classList.remove('d-none');
+  } else {
+    prevBtn.classList.add('d-none');
+  }
+
+  // Bouton Rejeter : uniquement au step 4, réservé au Directeur Technique et admin
+  var rejectBtn = document.getElementById('detail-reject-btn');
+  if (d.status === 'en_cours' && d.current_step === 4 && DGRTR_TYPE !== 'employe') {
+    rejectBtn.classList.remove('d-none');
+  } else {
+    rejectBtn.classList.add('d-none');
+  }
+
+  // Bandeau rejeté
+  var rejectedBanner = '';
+  if (d.status === 'rejete') {
+    rejectedBanner = `<div class="alert alert-danger py-2 mb-3 small">
+      <i class="fas fa-times-circle me-1"></i><strong>Dossier rejeté</strong> le ${d.rejected_at} par ${d.rejected_by}
+      ${d.rejection_reason ? `<br><span class="text-muted">Motif : ${d.rejection_reason}</span>` : ''}
+    </div>`;
+    document.getElementById('detail-body').innerHTML = rejectedBanner + document.getElementById('detail-body').innerHTML;
+  }
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).show();
+}
+
+
+function editStep(stepNum) {
+  var fns = [openStep1Edit, openStep2, openStep3, openStep4];
+  if (fns[stepNum - 1]) fns[stepNum - 1](currentDossierId);
+}
+
+function openStep1Edit(dossierId) {
+  currentDossierId = dossierId;
+  var d = allDossiers.find(function(x){ return x.id === dossierId; });
+  if (!d) return;
+  document.getElementById('doc-autoecole').checked = !!d.doc_autoecole;
+  document.getElementById('doc-medical').checked   = !!d.doc_medical;
+  document.getElementById('doc-residence').checked = !!d.doc_residence;
+  document.getElementById('doc-fiche').checked     = !!d.doc_fiche_individuelle;
+  document.getElementById('doc-cni').checked       = !!d.doc_carte_nationale;
+  document.getElementById('doc-recu').checked      = !!d.doc_recu_paiement;
+  document.getElementById('s1-country').value      = d.country || '';
+  checkDocProgress();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('newDossierModal')).show();
+}
+
+// ── Step 2 ─────────────────────────────
+function openStep2(dossierId) {
+  var d = allDossiers.find(function(x){ return x.id === dossierId; });
+  currentDossierId = dossierId;
+
+  // Pré-remplir si déjà renseigné
+  document.getElementById('s2-nom').value             = d ? (d.nom || '') : '';
+  document.getElementById('s2-prenom').value          = d ? (d.prenom || '') : '';
+  document.getElementById('s2-dob').value             = d ? (d.date_naissance || '') : '';
+  document.getElementById('s2-lieu-naissance').value  = d ? (d.lieu_naissance || '') : '';
+  document.getElementById('s2-sexe').value            = d ? (d.sexe || '') : '';
+  document.getElementById('s2-nationalite').value     = d ? (d.nationalite || '') : '';
+  document.getElementById('s2-adresse').value         = d ? (d.holder_address || '') : '';
+  document.getElementById('s2-tel').value             = d ? (d.telephone || '') : '';
+  document.getElementById('s2-country').value         = d ? (d.country || '') : '';
+  document.getElementById('s2-type-permis').value     = d ? (d.type_permis || '') : '';
+  document.getElementById('s2-issue-date').value      = d ? (d.issue_date || '') : '';
+  document.getElementById('s2-expiry-date').value     = d ? (d.expiry_date || '') : '';
+  document.getElementById('s2-centre').value          = d ? (d.centre_immatriculation || '') : '';
+
+  var catDetails   = d && d.category_details ? d.category_details : {};
+  var existingCats = d && d.categories ? d.categories.split(',').map(function(c){ return c.trim(); }) : [];
+  ['A','A1','A2','B','C','D','E','F','P'].forEach(function(code) {
+    var cb   = document.getElementById('s2-cat-cb-' + code);
+    var date = document.getElementById('s2-cat-date-' + code);
+    var checked = existingCats.indexOf(code) !== -1;
+    cb.checked    = checked;
+    date.disabled = !checked;
+    date.value    = (catDetails[code] && catDetails[code].date) ? catDetails[code].date : '';
+  });
+
+  applyCategoryHints('s2');
+  onS2TypePermisChange();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('step2Modal')).show();
+}
+
+function onS2CatToggle(code) {
+  var cb   = document.getElementById('s2-cat-cb-' + code);
+  var date = document.getElementById('s2-cat-date-' + code);
+  date.disabled = !cb.checked;
+  if (!cb.checked) date.value = '';
+}
+
+function onS2TypePermisChange() {
+  var type  = document.getElementById('s2-type-permis').value;
+  var issue = document.getElementById('s2-issue-date').value;
+  var expiry = computeExpiry(issue, type);
+  if (expiry) {
+    document.getElementById('s2-expiry-date').value = expiry;
+    var months = licenseSettings.temp_validity_months || 12;
+    var years  = licenseSettings.permanent_validity_years || 10;
+    document.getElementById('s2-expiry-hint').textContent =
+      type === 'temporaire' ? '(' + months + ' mois)' :
+      type === 'permanent'  ? '(' + years + ' ans)' : '';
+  } else {
+    document.getElementById('s2-expiry-hint').textContent = '';
+  }
+}
+
+function onS4CatToggle(code) {
+  var cb   = document.getElementById('s4-cat-cb-' + code);
+  var date = document.getElementById('s4-cat-date-' + code);
+  date.disabled = !cb.checked;
+  if (!cb.checked) date.value = '';
+}
+
+function onS4TypePermisChange() {
+  var type  = document.getElementById('s4-type-permis').value;
+  var issue = document.getElementById('s4-issue-date').value;
+  var expiry = computeExpiry(issue, type);
+  if (expiry) {
+    document.getElementById('s4-expiry-date').value = expiry;
+    var months = licenseSettings.temp_validity_months || 12;
+    var years  = licenseSettings.permanent_validity_years || 10;
+    document.getElementById('s4-expiry-hint').textContent =
+      type === 'temporaire' ? '(' + months + ' mois)' :
+      type === 'permanent'  ? '(' + years + ' ans)' : '';
+  } else {
+    document.getElementById('s4-expiry-hint').textContent = '';
+  }
+}
+
+function submitStep2() {
+  var btn = document.getElementById('btn-save-step2');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement…';
+
+  var s2cats = [];
+  var s2catDetails = {};
+  ['A','A1','A2','B','C','D','E','F','P'].forEach(function(code) {
+    if (document.getElementById('s2-cat-cb-' + code).checked) {
+      s2cats.push(code);
+      var dv = document.getElementById('s2-cat-date-' + code).value;
+      s2catDetails[code] = { date: dv || null };
+    }
+  });
+
+  var payload = {
+    nom:                    document.getElementById('s2-nom').value.trim(),
+    prenom:                 document.getElementById('s2-prenom').value.trim(),
+    date_naissance:         document.getElementById('s2-dob').value || null,
+    lieu_naissance:         document.getElementById('s2-lieu-naissance').value.trim(),
+    sexe:                   document.getElementById('s2-sexe').value,
+    nationalite:            document.getElementById('s2-nationalite').value.trim(),
+    holder_address:         document.getElementById('s2-adresse').value.trim(),
+    telephone:              document.getElementById('s2-tel').value.trim(),
+    country:                document.getElementById('s2-country').value,
+    type_permis:            document.getElementById('s2-type-permis').value,
+    issue_date:             document.getElementById('s2-issue-date').value || null,
+    expiry_date:            document.getElementById('s2-expiry-date').value || null,
+    centre_immatriculation: document.getElementById('s2-centre').value.trim(),
+    categories:             s2cats.join(','),
+    category_details:       s2catDetails,
+  };
+
+  fetch('/api/dossiers-permis/' + currentDossierId + '/step2', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      alert(data.error);
+    } else {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('step2Modal')).hide();
+      loadDossiers();
+      showToast('Étape 2 enregistrée — ' + (data.nom || '') + ' ' + (data.prenom || ''), 'success');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+  })
+  .catch(function() {
+    alert('Erreur réseau.');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+  });
+}
+
+// ── Step 3 — Photo ID ──────────────────
+function openStep3(dossierId) {
+  currentDossierId = dossierId;
+  // Reset
+  document.getElementById('s3-file').value = '';
+  document.getElementById('s3-preview-img').style.display = 'none';
+  document.getElementById('s3-preview-img').src = '';
+  document.getElementById('s3-preview-icon').style.display = '';
+  document.getElementById('btn-save-step3').disabled = true;
+
+  // Show existing photo if any
+  var d = allDossiers.find(function(x){ return x.id === dossierId; });
+  if (d && d.photo_filename) {
+    var img = document.getElementById('s3-preview-img');
+    img.src = '/uploads/license_photos/' + d.photo_filename;
+    img.style.display = 'block';
+    document.getElementById('s3-preview-icon').style.display = 'none';
+    document.getElementById('btn-save-step3').disabled = false;
+  }
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('step3Modal')).show();
+}
+
+function onS3FileChange(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = document.getElementById('s3-preview-img');
+    img.src = e.target.result;
+    img.style.display = 'block';
+    document.getElementById('s3-preview-icon').style.display = 'none';
+    document.getElementById('btn-save-step3').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+function submitStep3() {
+  var file = document.getElementById('s3-file').files[0];
+  var btn  = document.getElementById('btn-save-step3');
+
+  // Allow re-saving with existing photo (no new file selected)
+  if (!file) {
+    var d = allDossiers.find(function(x){ return x.id === currentDossierId; });
+    if (!d || !d.photo_filename) { alert('Veuillez sélectionner une photo.'); return; }
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement…';
+
+  var fd = new FormData();
+  if (file) fd.append('photo', file);
+
+  fetch('/api/dossiers-permis/' + currentDossierId + '/step3', {
+    method: 'POST',
+    body: fd,
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      alert(data.error);
+    } else {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('step3Modal')).hide();
+      loadDossiers();
+      showToast('Étape 3 enregistrée — photo ajoutée', 'success');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+  })
+  .catch(function() {
+    alert('Erreur réseau.');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+  });
+}
+
+
+// ── Step 4 — Vérification & N° permis ──
+function openStep4(dossierId) {
+  currentDossierId = dossierId;
+  var d = allDossiers.find(function(x){ return x.id === dossierId; });
+
+  document.getElementById('s4-nom').value           = d ? (d.nom || '') : '';
+  document.getElementById('s4-prenom').value         = d ? (d.prenom || '') : '';
+  document.getElementById('s4-dob').value            = d ? (d.date_naissance || '') : '';
+  document.getElementById('s4-lieu-naissance').value = d ? (d.lieu_naissance || '') : '';
+  document.getElementById('s4-sexe').value           = d ? (d.sexe || '') : '';
+  document.getElementById('s4-nationalite').value    = d ? (d.nationalite || '') : '';
+  document.getElementById('s4-adresse').value        = d ? (d.holder_address || '') : '';
+  document.getElementById('s4-tel').value            = d ? (d.telephone || '') : '';
+  document.getElementById('s4-country').value        = d ? (d.country || '') : '';
+  document.getElementById('s4-type-permis').value    = d ? (d.type_permis || '') : '';
+  document.getElementById('s4-issue-date').value     = d ? (d.issue_date || '') : '';
+  document.getElementById('s4-expiry-date').value    = d ? (d.expiry_date || '') : '';
+  document.getElementById('s4-centre').value         = d ? (d.centre_immatriculation || '') : '';
+  document.getElementById('s4-license-num').value    = d ? (d.license_number_proposed || '') : '';
+  document.getElementById('s4-status').value         = d ? (d.final_status || 'actif') : 'actif';
+
+  // Catégories
+  var catDetails   = d && d.category_details ? d.category_details : {};
+  var existingCats = d && d.categories ? d.categories.split(',').map(function(c){ return c.trim(); }) : [];
+  ['A','A1','A2','B','C','D','E','F','P'].forEach(function(code) {
+    var cb   = document.getElementById('s4-cat-cb-' + code);
+    var date = document.getElementById('s4-cat-date-' + code);
+    var checked = existingCats.indexOf(code) !== -1;
+    cb.checked    = checked;
+    date.disabled = !checked;
+    date.value    = (catDetails[code] && catDetails[code].date) ? catDetails[code].date : '';
+  });
+
+  // Photo preview
+  var photoEl = document.getElementById('s4-photo');
+  photoEl.src = (d && d.photo_filename) ? '/uploads/license_photos/' + d.photo_filename : '';
+
+  applyCategoryHints('s4');
+  onS4TypePermisChange();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('step4Modal')).show();
+}
+
+function submitStep4() {
+  var licNum = document.getElementById('s4-license-num').value.trim();
+  if (!licNum) { alert('Le numéro de permis est obligatoire.'); return; }
+
+  var btn = document.getElementById('btn-save-step4');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement…';
+
+  var s4cats = [];
+  var s4catDetails = {};
+  ['A','A1','A2','B','C','D','E','F','P'].forEach(function(code) {
+    if (document.getElementById('s4-cat-cb-' + code).checked) {
+      s4cats.push(code);
+      var dv = document.getElementById('s4-cat-date-' + code).value;
+      s4catDetails[code] = { date: dv || null };
+    }
+  });
+
+  var payload = {
+    nom:                    document.getElementById('s4-nom').value.trim(),
+    prenom:                 document.getElementById('s4-prenom').value.trim(),
+    date_naissance:         document.getElementById('s4-dob').value || null,
+    lieu_naissance:         document.getElementById('s4-lieu-naissance').value.trim(),
+    sexe:                   document.getElementById('s4-sexe').value,
+    nationalite:            document.getElementById('s4-nationalite').value.trim(),
+    holder_address:         document.getElementById('s4-adresse').value.trim(),
+    telephone:              document.getElementById('s4-tel').value.trim(),
+    country:                document.getElementById('s4-country').value,
+    type_permis:            document.getElementById('s4-type-permis').value,
+    issue_date:             document.getElementById('s4-issue-date').value || null,
+    expiry_date:            document.getElementById('s4-expiry-date').value || null,
+    centre_immatriculation: document.getElementById('s4-centre').value.trim(),
+    categories:             s4cats.join(','),
+    category_details:       s4catDetails,
+    license_number:         licNum,
+    status:                 document.getElementById('s4-status').value,
+  };
+
+  fetch('/api/dossiers-permis/' + currentDossierId + '/step4', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      alert(data.error);
+    } else {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('step4Modal')).hide();
+      loadDossiers();
+      showToast('Étape 4 enregistrée — vérification complète', 'success');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+  })
+  .catch(function() {
+    alert('Erreur réseau.');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+  });
+}
+
+
+// ── Step 5 — Confirmation finale ────────
+function openStep5(dossierId) {
+  currentDossierId = dossierId;
+  var d = allDossiers.find(function(x){ return x.id === dossierId; });
+
+  var html = '<p class="text-muted small mb-3">Vérifiez le récapitulatif ci-dessous avant de délivrer le permis de conduire.</p>';
+
+  if (d) {
+    var photoSrc = d.photo_filename ? '/uploads/license_photos/' + d.photo_filename : '';
+    html += `<div class="row g-3 align-items-start">
+      <div class="col-auto">
+        ${photoSrc ? `<img src="${photoSrc}" style="width:100px;height:124px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb;">` : '<div style="width:100px;height:124px;background:#f3f4f6;border-radius:8px;border:2px solid #e5e7eb;display:flex;align-items:center;justify-content:center;"><i class="fas fa-user-circle fa-3x text-muted"></i></div>'}
+      </div>
+      <div class="col">
+        <table class="table table-sm table-borderless mb-0" style="font-size:14px;">
+          <tbody>
+            <tr><td class="text-muted" style="width:170px;">Dossier n°</td><td class="fw-bold font-monospace text-primary">${d.dossier_number || '—'}</td></tr>
+            <tr><td class="text-muted">Nom complet</td><td class="fw-semibold text-uppercase">${d.nom || ''} ${d.prenom || ''}</td></tr>
+            <tr><td class="text-muted">Date de naissance</td><td>${d.date_naissance || '—'}</td></tr>
+            <tr><td class="text-muted">Lieu de naissance</td><td>${d.lieu_naissance || '—'}</td></tr>
+            <tr><td class="text-muted">Sexe</td><td>${d.sexe || '—'}</td></tr>
+            <tr><td class="text-muted">Nationalité</td><td>${d.nationalite || '—'}</td></tr>
+            <tr><td class="text-muted">Île</td><td>${d.country || '—'}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <hr>
+    <div class="row g-2" style="font-size:14px;">
+      <div class="col-md-6"><span class="text-muted">Numéro de permis :</span> <strong class="font-monospace">${d.license_number_proposed || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Type :</span> <strong>${d.type_permis || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Date de délivrance :</span> <strong>${d.issue_date || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Date d'expiration :</span> <strong>${d.expiry_date || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Catégories :</span> <strong>${d.categories || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Statut :</span> <span class="badge bg-success">${d.final_status || 'actif'}</span></div>
+      <div class="col-md-12"><span class="text-muted">Centre :</span> <strong>${d.centre_immatriculation || '—'}</strong></div>
+    </div>
+    <hr>
+    <div class="alert alert-warning py-2 small mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Cette action est irréversible. Le permis sera créé et visible dans le tableau de bord administratif.</div>`;
+  }
+
+  document.getElementById('step5-summary').innerHTML = html;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('step5Modal')).show();
+}
+
+function submitStep5() {
+  var btn = document.getElementById('btn-save-step5');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Délivrance en cours…';
+
+  fetch('/api/dossiers-permis/' + currentDossierId + '/step5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      alert(data.error);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check-double me-2"></i>Valider &amp; Délivrer le permis';
+    } else {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('step5Modal')).hide();
+      loadDossiers();
+      showSuccessDelivery(data);
+    }
+  })
+  .catch(function() {
+    alert('Erreur réseau.');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check-double me-2"></i>Valider &amp; Délivrer le permis';
+  });
+}
+
+function showSuccessDelivery(data) {
+  var el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;';
+  el.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:40px 48px;text-align:center;max-width:440px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,.35);">
+      <div style="color:#16a34a;font-size:3.5rem;margin-bottom:12px;"><i class="fas fa-id-card"></i></div>
+      <h5 style="margin-bottom:8px;color:#111827;">Permis délivré avec succès !</h5>
+      <p style="color:#6b7280;font-size:14px;margin-bottom:20px;">Le permis de conduire a été créé et est désormais disponible dans le tableau de bord administratif.</p>
+      <div style="font-size:1.3rem;font-weight:900;color:#1d4ed8;font-family:monospace;background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:10px 24px;margin-bottom:28px;">${data.license_number || '—'}</div>
+      <button onclick="this.closest('div[style*=fixed]').remove()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:10px 32px;font-size:15px;font-weight:600;cursor:pointer;">
+        <i class="fas fa-check me-2"></i>Fermer
+      </button>
+    </div>`;
+  document.body.appendChild(el);
+}
+
+
+// ── Rejet ──────────────────────────────
+function openRejectModal() {
+  document.getElementById('reject-reason').value = '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).hide();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectModal')).show();
+}
+
+function confirmReject() {
+  var btn = document.getElementById('btn-confirm-reject');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Rejet en cours…';
+
+  fetch('/api/dossiers-permis/' + currentDossierId + '/reject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: document.getElementById('reject-reason').value.trim() }),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      alert(data.error);
+    } else {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectModal')).hide();
+      loadDossiers();
+      showToast('Dossier rejeté', 'danger');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-times-circle me-2"></i>Confirmer le rejet';
+  })
+  .catch(function() {
+    alert('Erreur réseau.');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-times-circle me-2"></i>Confirmer le rejet';
+  });
+}
+
+function docRow(label, checked) {
+  return `<div class="col-12">
+    <span class="${checked ? 'text-success' : 'text-danger'}" style="font-size:13px;">
+      <i class="fas fa-${checked ? 'check-circle' : 'times-circle'} me-2"></i>${label}
+    </span>
+  </div>`;
+}
+
+// ── Numéro de dossier affiché après enregistrement ──
+function showDossierNumberAlert(num) {
+  var el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+  el.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:40px 48px;text-align:center;max-width:420px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,.3);">
+      <div style="color:#16a34a;font-size:3rem;margin-bottom:12px;"><i class="fas fa-check-circle"></i></div>
+      <div style="font-size:15px;color:#374151;margin-bottom:8px;">Dossier enregistré — Étape 1 validée</div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:24px;">Inscrivez ce numéro sur le chemisier cartonné du candidat :</div>
+      <div style="font-size:2.2rem;font-weight:900;color:#1d4ed8;letter-spacing:.08em;font-family:monospace;background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:12px 24px;margin-bottom:28px;">${num}</div>
+      <button onclick="this.closest('div[style*=fixed]').remove()" style="background:#1d4ed8;color:#fff;border:none;border-radius:8px;padding:10px 32px;font-size:15px;font-weight:600;cursor:pointer;">
+        <i class="fas fa-check me-2"></i>Compris
+      </button>
+    </div>`;
+  document.body.appendChild(el);
+}
+
+// ── Toast ──────────────────────────────
+function showToast(msg, type) {
+  var t = document.createElement('div');
+  t.className = `alert alert-${type === 'success' ? 'success' : 'danger'} shadow`;
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;min-width:280px;';
+  t.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>${msg}`;
+  document.body.appendChild(t);
+  setTimeout(function() { t.remove(); }, 4000);
+}
+</script>
+
+{% endblock %}

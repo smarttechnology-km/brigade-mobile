@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.page-header { background: linear-gradient(100deg,#0f2660,#1d4ed8); color:#fff; border-radius:16px; padding:28px 32px; margin-bottom:28px; }
+.stat-card   { background:#fff; border-radius:12px; padding:20px 24px; box-shadow:0 1px 6px rgba(0,0,0,.08); text-align:center; height:100%; }
+.stat-num    { font-size:2.2rem; font-weight:800; line-height:1.1; }
+.stat-lbl    { font-size:11.5px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+.chart-card  { background:#fff; border-radius:12px; padding:22px 24px; box-shadow:0 1px 6px rgba(0,0,0,.08); }
+.chart-title { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#374151; margin-bottom:16px; }
+.tab-btn     { border:none; background:none; padding:6px 16px; border-radius:20px; font-size:13px; font-weight:600; color:#6b7280; cursor:pointer; }
+.tab-btn.active { background:#1d4ed8; color:#fff; }
+</style>
+
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="page-header d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h4 class="fw-bold mb-1"><i class="fas fa-chart-bar me-2"></i>Statistiques DGRTR</h4>
+      <small class="opacity-75">Suivi de la délivrance des permis de conduire</small>
+    </div>
+    <a href="/dgrtr-dashboard" class="btn btn-light btn-sm">
+      <i class="fas fa-arrow-left me-2"></i>Retour
+    </a>
+  </div>
+
+
+  <!-- Graphique principal avec onglets Jour/Mois/Année -->
+  <div class="chart-card mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <div class="chart-title mb-0">Permis délivrés</div>
+      <div class="d-flex gap-1 bg-light rounded-pill p-1">
+        <button class="tab-btn active" id="tab-jour"  onclick="setTab('jour')">Par jour</button>
+        <button class="tab-btn"        id="tab-mois"  onclick="setTab('mois')">Par mois</button>
+        <button class="tab-btn"        id="tab-annee" onclick="setTab('annee')">Par année</button>
+      </div>
+    </div>
+    <div style="position:relative;height:280px;">
+      <canvas id="main-chart"></canvas>
+    </div>
+    <div class="text-muted small mt-2 text-end" id="chart-subtitle"></div>
+  </div>
+
+  <!-- Ligne basse : répartition par île + type -->
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="chart-card">
+        <div class="chart-title">Répartition par île</div>
+        <div style="position:relative;height:220px;">
+          <canvas id="island-chart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="chart-card">
+        <div class="chart-title">Permanents vs Temporaires</div>
+        <div style="position:relative;height:220px;">
+          <canvas id="type-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var statsData = null;
+var mainChart = null;
+var currentTab = 'jour';
+
+document.addEventListener('DOMContentLoaded', function() {
+  fetch('/api/dgrtr/stats')
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      statsData = data;
+      renderMainChart(data, 'jour');
+      renderIslandChart(data);
+      renderTypeChart(data);
+    })
+    .catch(function() {
+      document.getElementById('stat-cards').innerHTML =
+        '<div class="col-12 text-danger text-center py-4">Erreur de chargement des statistiques.</div>';
+    });
+});
+
+
+function setTab(tab) {
+  currentTab = tab;
+  ['jour','mois','annee'].forEach(function(t) {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+  });
+  renderMainChart(statsData, tab);
+}
+
+function renderMainChart(data, tab) {
+  var labels, values, subtitle;
+  if (tab === 'jour') {
+    labels   = data.par_jour.map(function(r){ return r.date; });
+    values   = data.par_jour.map(function(r){ return r.count; });
+    subtitle = '30 derniers jours';
+  } else if (tab === 'mois') {
+    labels   = data.par_mois.map(function(r){ return r.month; });
+    values   = data.par_mois.map(function(r){ return r.count; });
+    subtitle = 'Année ' + data.current_year;
+  } else {
+    labels   = data.par_annee.map(function(r){ return String(r.year); });
+    values   = data.par_annee.map(function(r){ return r.count; });
+    subtitle = 'Toutes les années';
+  }
+  document.getElementById('chart-subtitle').textContent = subtitle;
+
+  if (mainChart) mainChart.destroy();
+  var ctx = document.getElementById('main-chart').getContext('2d');
+  mainChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Permis délivrés',
+        data: values,
+        backgroundColor: 'rgba(29,78,216,0.75)',
+        borderColor: '#1d4ed8',
+        borderWidth: 1,
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { stepSize: 1, precision: 0 },
+          grid: { color: 'rgba(0,0,0,.05)' }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderIslandChart(data) {
+  var islands = data.par_ile;
+  if (!islands.length) {
+    document.getElementById('island-chart').closest('.chart-card').querySelector('.chart-title').insertAdjacentHTML('afterend','<p class="text-muted small text-center py-4">Aucune donnée</p>');
+    return;
+  }
+  var colors = ['#1d4ed8','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6'];
+  var ctx = document.getElementById('island-chart').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: islands.map(function(r){ return r.island; }),
+      datasets: [{
+        data: islands.map(function(r){ return r.count; }),
+        backgroundColor: colors.slice(0, islands.length),
+        borderWidth: 2,
+        borderColor: '#fff',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 12 } }
+      }
+    }
+  });
+}
+
+function renderTypeChart(data) {
+  var perm = data.totals.permanent;
+  var temp = data.totals.temporaire;
+  var ctx  = document.getElementById('type-chart').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Permanent', 'Temporaire'],
+      datasets: [{
+        data: [perm, temp],
+        backgroundColor: ['#1d4ed8', '#7c3aed'],
+        borderWidth: 2,
+        borderColor: '#fff',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 12 } }
+      }
+    }
+  });
+}
+</script>
+
+{% endblock %}

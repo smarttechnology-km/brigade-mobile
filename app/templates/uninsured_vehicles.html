@@ -139,6 +139,22 @@
                 <div class="row">
                     <div class="col-12 mb-3">
                         <label class="form-label fw-semibold">
+                            <i class="fas fa-id-card text-primary me-1"></i>Numéros de permis des conducteurs <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group mb-2">
+                            <input type="text" id="modal-license-input" class="form-control" placeholder="Ex: KM-2024-001" autocomplete="off" />
+                            <button class="btn btn-outline-primary" type="button" onclick="modalAddLicense()">
+                                <i class="fas fa-plus"></i> Ajouter
+                            </button>
+                        </div>
+                        <div id="modal-license-tags" class="d-flex flex-wrap gap-2 mb-1"></div>
+                        <small class="text-muted">Appuyez sur Entrée ou cliquez sur Ajouter pour chaque numéro.</small>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <label class="form-label fw-semibold">
                             <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
                         </label>
                         <div id="modal-warning-alert" class="alert alert-warning" style="display:none;">
@@ -213,6 +229,47 @@
 
 <script>
 let vehiclesCache = [];
+let modalLicenseNumbers = [];
+
+async function modalAddLicense() {
+    const input = document.getElementById('modal-license-input');
+    const val = (input.value || '').trim().toUpperCase();
+    if (!val) return;
+    if (modalLicenseNumbers.includes(val)) { input.value = ''; return; }
+
+    input.disabled = true;
+    try {
+        const r = await fetch(`/api/vehicles/check-driver-license?number=${encodeURIComponent(val)}`, { credentials: 'same-origin' });
+        const data = await r.json();
+        if (!data.exists) {
+            alert(`Numéro de permis "${val}" introuvable dans la base de données.`);
+            return;
+        }
+        modalLicenseNumbers.push(val);
+        input.value = '';
+        renderModalLicenseTags();
+    } catch(e) {
+        alert('Erreur lors de la vérification du permis.');
+    } finally {
+        input.disabled = false;
+        input.focus();
+    }
+}
+
+function modalRemoveLicense(num) {
+    modalLicenseNumbers = modalLicenseNumbers.filter(n => n !== num);
+    renderModalLicenseTags();
+}
+
+function renderModalLicenseTags() {
+    const container = document.getElementById('modal-license-tags');
+    if (!container) return;
+    container.innerHTML = modalLicenseNumbers.map(n => `
+        <span class="badge bg-primary fs-6 d-flex align-items-center gap-1" style="font-size:0.85rem!important;">
+            <i class="fas fa-id-card me-1"></i>${n}
+            <button type="button" class="btn-close btn-close-white ms-1" style="font-size:0.6rem;" onclick="modalRemoveLicense('${n}')"></button>
+        </span>`).join('');
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     loadUninsuredVehicles();
@@ -389,6 +446,15 @@ function addVehicleToInsurance(vehicleId, licensePlate) {
         }
     }
     
+    // Reset license tags
+    modalLicenseNumbers = [];
+    renderModalLicenseTags();
+    const licInput = document.getElementById('modal-license-input');
+    if (licInput) {
+        licInput.value = '';
+        licInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); modalAddLicense(); } };
+    }
+
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('addVehicleModal'));
     modal.show();
@@ -451,17 +517,21 @@ function confirmAddVehicle() {
         alert(getInactiveReason(vehicle) || 'Véhicule inactif.');
         return;
     }
-    
-    // Call the API to assign the vehicle to the insurance account
+
+    if (modalLicenseNumbers.length === 0) {
+        alert('Veuillez ajouter au moins un numéro de permis conducteur.');
+        document.getElementById('modal-license-input')?.focus();
+        return;
+    }
+
     fetch('/api/vehicles/assign-to-insurance', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
             vehicle_id: vehicleId,
-            insurance_expiry: insuranceExpiry || null
+            insurance_expiry: insuranceExpiry || null,
+            driver_license_numbers: modalLicenseNumbers
         })
     })
     .then(r => {

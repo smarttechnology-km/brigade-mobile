@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Dossier Provisoire — {{ lic.license_number }}</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    html { color-scheme: light; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Arial', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; padding: 32px 16px; }
+
+    /* ── Toolbar ── */
+    .toolbar { max-width: 780px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+    .toolbar-title { font-size: 13px; color: #666; }
+    .toolbar-actions { display: flex; gap: 10px; }
+    .btn-print { display: flex; align-items: center; gap: 8px; padding: 9px 20px; background: #1a56db; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-print:hover { background: #1240a0; }
+    .btn-back { display: flex; align-items: center; gap: 8px; padding: 9px 16px; background: #fff; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; text-decoration: none; }
+    .btn-back:hover { background: #f9fafb; }
+
+    /* ── Document card ── */
+    .document { max-width: 780px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.12); position: relative; }
+
+    /* ── Header ── */
+    .doc-header { background: linear-gradient(135deg, #1a3a6c 0%, #1a56db 100%); color: #fff; padding: 22px 28px; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 1; }
+    .doc-header-left { display: flex; align-items: center; gap: 14px; }
+    .doc-header-text h1 { font-size: 16px; font-weight: 700; letter-spacing: .03em; }
+    .doc-header-text p  { font-size: 11px; opacity: .8; margin-top: 2px; letter-spacing: .08em; text-transform: uppercase; }
+    .doc-header-stars { display: flex; gap: 10px; font-size: 18px; }
+    .doc-header-stars span:nth-child(1) { color: #f5e50b; }
+    .doc-header-stars span:nth-child(2) { color: #fff; }
+    .doc-header-stars span:nth-child(3) { color: #e41414; }
+    .doc-header-stars span:nth-child(4) { color: #2a5ff3; }
+    .doc-header-arabic { text-align: right; font-size: 13px; font-weight: 700; color: rgba(255,255,255,.9); line-height: 1.45; }
+
+    /* ── Watermark ── */
+    .doc-watermark { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 460px; height: 460px; object-fit: contain; opacity: .08; pointer-events: none; z-index: 0; }
+
+    /* ── Body ── */
+    .doc-body { padding: 28px; position: relative; z-index: 1; }
+
+    /* ── Identity ── */
+    .identity { display: flex; align-items: flex-start; gap: 24px; margin-bottom: 28px; }
+    .identity-photo { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .identity-photo img,
+    .identity-photo .photo-placeholder {
+      width: 110px; height: 135px; object-fit: cover;
+      border-radius: 8px; border: 3px solid #e8edf5;
+      display: flex; align-items: center; justify-content: center;
+      background: #f5f7fb; color: #c0c8d8; font-size: 3.5rem;
+    }
+    .identity-photo-num { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700; color: #1a3a6c; letter-spacing: .04em; }
+    .identity-info { flex: 1; }
+    .identity-name { font-size: 22px; font-weight: 700; color: #1a3a6c; line-height: 1.2; }
+    .identity-sub  { font-size: 13px; color: #666; margin-top: 4px; }
+    .badges { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .badge-blue   { background: #dbeafe; color: #1e40af; }
+    .badge-purple { background: #ede9fe; color: #5b21b6; }
+    .cat        { background: #1a56db; color: #fff; border-radius: 4px; padding: 3px 9px; font-size: 13px; font-weight: 700; }
+    .cat-other  { background: transparent; color: #aab3c0; border: 1.5px solid #d8dee8; }
+
+    /* ── Sections 2-col ── */
+    .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .section { background: rgba(248,250,255,.82); border: 1px solid #e8edf5; border-radius: 8px; padding: 16px 18px; }
+    .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #1a56db; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #dbeafe; }
+    .field { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #e8edf5; }
+    .field:last-child { border-bottom: none; }
+    .field-label { font-size: 14px; color: #6b7280; }
+    .field-value { font-size: 15px; font-weight: 600; color: #1a1a2e; text-align: right; max-width: 55%; }
+
+    /* ── Categories table ── */
+    .cats-section { margin-top: 20px; }
+    .cats-table { width: 100%; border-collapse: collapse; }
+    .cats-table thead th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; font-weight: 700; text-align: center; padding: 0 10px 6px; border-bottom: 1.5px solid #dbeafe; }
+    .cats-table tbody td { font-size: 14px; color: #1a1a2e; font-weight: 600; text-align: center; padding: 4px 10px; border-bottom: 1px dashed #e8edf5; }
+    .cats-table tbody tr:last-child td { border-bottom: none; }
+    .cats-table tbody tr.row-other td { color: #9ca3af; font-weight: 400; }
+    .cats-table .cat,
+    .cats-table .cat-other { display: inline-block; width: 28px; padding: 2px 0; text-align: center; }
+    .cat-icon { display: inline-block; font-size: 13px; color: #1a56db; margin-left: 8px; width: 16px; text-align: center; }
+    .row-other .cat-icon { color: #cbd5e1; }
+
+    /* ── Signature ── */
+    .signature-section { margin-top: 28px; display: flex; justify-content: flex-end; }
+    .signature-block { text-align: center; min-width: 230px; }
+    .signature-img  { max-width: 210px; max-height: 64px; object-fit: contain; }
+    .signature-line { width: 210px; height: 50px; }
+    .signature-name  { font-size: 13px; font-weight: 700; color: #1a3a6c; border-top: 1.5px solid #cbd5e1; padding-top: 6px; margin-top: 2px; }
+    .signature-title { font-size: 10.5px; color: #6b7280; margin-top: 2px; }
+
+    /* ── Footer ── */
+    .doc-footer { border-top: 1px solid #e8edf5; padding: 14px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafbff; }
+    .doc-footer-left  { font-size: 10px; color: #9ca3af; }
+    .doc-footer-right { font-size: 10px; color: #b91c1c; font-weight: 600; }
+
+    @media print {
+      body { background: #fff; padding: 0; }
+      .toolbar { display: none; }
+      .document { box-shadow: none; border-radius: 0; max-width: 100%; }
+      .doc-body { padding: 16px 28px 70px; }
+      .identity { margin-bottom: 16px; }
+      .sections { gap: 14px; }
+      .section { padding: 12px 16px; }
+      .cats-section { margin-top: 14px; }
+      .signature-section { margin-top: 14px; page-break-inside: avoid; }
+      .doc-footer { position: fixed; left: 0; bottom: 0; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="toolbar">
+  <span class="toolbar-title">Dossier provisoire — {{ lic.license_number }}</span>
+  <div class="toolbar-actions">
+    <a href="javascript:history.back()" class="btn-back">
+      <i class="fas fa-arrow-left"></i> Retour
+    </a>
+    <button class="btn-print" onclick="window.print()">
+      <i class="fas fa-print"></i> Imprimer
+    </button>
+  </div>
+</div>
+
+<div class="document">
+
+  <img class="doc-watermark" src="/static/img/logo_comores.png" alt="">
+
+  <!-- Header -->
+  <div class="doc-header">
+    <div class="doc-header-left">
+      <span style="font-size:28px;">🇰🇲</span>
+      <div class="doc-header-text">
+        <h1>UNION DES COMORES</h1>
+        <p>Permis de Conduire</p>
+      </div>
+    </div>
+    <div class="doc-header-stars">
+      <span>★</span><span>★</span><span>★</span><span>★</span>
+    </div>
+    <div class="doc-header-arabic" dir="rtl">
+      جمهورية القمر المتحدة<br>رخصة قيادة
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="doc-body">
+
+    <!-- Identity row -->
+    <div class="identity">
+      <div class="identity-photo">
+        {% if lic.photo_filename %}
+          <img src="/uploads/license_photos/{{ lic.photo_filename }}" alt="Photo">
+        {% else %}
+          <div class="photo-placeholder">👤</div>
+        {% endif %}
+        <div class="identity-photo-num">{{ lic.license_number }}</div>
+      </div>
+
+      <div class="identity-info">
+        <div class="identity-name">{{ lic.holder_name }} {{ lic.holder_firstname or '' }}</div>
+        <div class="identity-sub">
+          {{ lic.holder_island or '—' }}{% if lic.holder_phone %} · {{ lic.holder_phone }}{% endif %}
+        </div>
+        <div class="badges" style="margin-top:10px;">
+          {% if lic.type_permis == 'temporaire' %}
+            <span class="badge badge-purple">⏱ Temporaire</span>
+          {% else %}
+            <span class="badge badge-blue">∞ Permanent</span>
+          {% endif %}
+          {% if lic.categories %}
+            {% for cat in lic.categories.split(',') %}
+              <span class="cat">{{ cat.strip() }}</span>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="flex-shrink:0;text-align:center;">
+        <img src="/licenses/{{ lic.id }}/qrcode" alt="QR" style="width:130px;height:130px;border:1px solid #e8edf5;border-radius:6px;padding:4px;">
+      </div>
+    </div>
+
+    <!-- Informations personnelles + Détails du permis -->
+    <div class="sections">
+      <div class="section">
+        <div class="section-title">Informations personnelles</div>
+        <div class="field"><span class="field-label">Date de naissance</span><span class="field-value">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span></div>
+        <div class="field"><span class="field-label">Lieu de naissance</span><span class="field-value">{{ lic.lieu_naissance or '—' }}</span></div>
+        <div class="field"><span class="field-label">Sexe</span><span class="field-value">{{ 'Masculin' if lic.sexe == 'masculin' else ('Féminin' if lic.sexe == 'feminin' else '—') }}</span></div>
+        <div class="field"><span class="field-label">Nationalité</span><span class="field-value">{{ lic.nationalite or '—' }}</span></div>
+        <div class="field"><span class="field-label">Adresse</span><span class="field-value">{{ lic.holder_address or '—' }}</span></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Détails du permis</div>
+        <div class="field"><span class="field-label">Date de début</span><span class="field-value">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span></div>
+        <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ lic.expiry_date.strftime('%d/%m/%Y') if lic.expiry_date else ('—' if lic.type_permis != 'temporaire' else '—') }}</span></div>
+        <div class="field"><span class="field-label">Centre d'immatriculation</span><span class="field-value">{{ lic.centre_immatriculation or '—' }}</span></div>
+      </div>
+    </div>
+
+    <!-- Catégories autorisées -->
+    {% set holder_cats = lic.categories.split(',') | map('trim') | list if lic.categories else [] %}
+    {% set all_cats = [
+      ('A',  'fa-motorcycle'), ('A1', 'fa-motorcycle'), ('A2', 'fa-motorcycle'),
+      ('B',  'fa-car'),        ('C',  'fa-truck'),       ('D',  'fa-bus'),
+      ('E',  'fa-caravan'),    ('F',  'fa-wheelchair')
+    ] %}
+    <div class="section cats-section">
+      <div class="section-title">Catégories autorisées</div>
+      <table class="cats-table">
+        <thead>
+          <tr><th>Catégorie</th><th>Date d'obtention</th><th>Date d'expiration</th></tr>
+        </thead>
+        <tbody>
+          {% for code, icon_class in all_cats %}
+            {% set owned = code in holder_cats %}
+            {% set details = category_details.get(code) %}
+            <tr class="{{ '' if owned else 'row-other' }}">
+              <td>
+                <span class="cat{{ '' if owned else ' cat-other' }}">{{ code }}</span>
+                <i class="fas {{ icon_class }} cat-icon"></i>
+              </td>
+              {% if owned %}
+                <td>{{ details.date if details and details.date else '—' }}</td>
+                <td>{{ details.expiration if details and details.expiration else '—' }}</td>
+              {% else %}
+                <td>—</td><td>—</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Signature -->
+    <div class="signature-section">
+      <div class="signature-block">
+        {% if settings.directeur_signature_filename %}
+          <img class="signature-img" src="/uploads/signatures/{{ settings.directeur_signature_filename }}" alt="Signature">
+        {% else %}
+          <div class="signature-line"></div>
+        {% endif %}
+        <div class="signature-name">{{ settings.directeur_general_name or '—' }}</div>
+        <div class="signature-title">Directeur Général des Routes et Transports Routiers</div>
+      </div>
+    </div>
+
+  </div><!-- /doc-body -->
+
+  <!-- Footer -->
+  <div class="doc-footer">
+    <div class="doc-footer-left">Valable uniquement pour les catégories surlignées ci-dessus.</div>
+    <div class="doc-footer-right">⚠ Toute falsification est passible de sanctions pénales.</div>
+  </div>
+
+</div><!-- /document -->
+
+</body>
+</html>
