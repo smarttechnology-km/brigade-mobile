@@ -963,8 +963,11 @@
     window.printLicenseDetails = function () {
         if (!_currentLicense) return;
         const onHistory = document.getElementById('view-tab-history')?.classList.contains('active');
-        const route = onHistory ? 'print-history' : 'print';
-        window.open(`/licenses/${_currentLicense.id}/${route}?temporaire=1`, '_blank');
+        if (onHistory) {
+            window.open(`/licenses/${_currentLicense.id}/print-history?temporaire=1`, '_blank');
+        } else {
+            window.open(`/licenses/${_currentLicense.id}/print-folded`, '_blank');
+        }
     };
 
     window.printLicenseCard = function () {
@@ -1077,10 +1080,12 @@
             .then(l => {
                 _currentLicense = l;
                 const btnCarte = document.getElementById('btn-carte-digitale');
-                if (btnCarte) btnCarte.style.display = l.type_permis === 'permanent' ? '' : 'none';
-                syncPrintButton(l.id, l.type_permis === 'permanent');
+                if (btnCarte) btnCarte.style.display = (l.type_permis === 'permanent' && !l.is_expired) ? '' : 'none';
+                syncPrintButton(l.id, l.type_permis === 'permanent' && !l.is_expired);
+                const btnImprimer = document.getElementById('btn-imprimer');
+                if (btnImprimer) btnImprimer.style.display = l.is_expired ? 'none' : '';
                 const btnRenouveler = document.getElementById('btn-renouveler');
-                if (btnRenouveler) btnRenouveler.style.display = (l.type_permis === 'temporaire' && l.is_expired) ? '' : 'none';
+                if (btnRenouveler) btnRenouveler.style.display = l.is_expired ? '' : 'none';
                 const catList = l.categories ? l.categories.split(',').map(c => c.trim()).filter(Boolean) : [];
                 const catDetailsMap = l.category_details || {};
                 const cats = catList.length
