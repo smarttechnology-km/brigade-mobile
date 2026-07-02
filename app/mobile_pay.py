@@ -664,13 +664,14 @@ def webhook():
                 vehicle.generate_qr_code_with_expiry()
                 vehicle.status = 'active'
 
+                citizen_name = payment.payer_name or payment.phone_number or 'Inconnu'
                 db.session.add(QRCodePayment(
                     vehicle_id=vehicle.id,
                     payment_type='renewal',
                     amount=float(payment.amount or 0.0),
                     status='paid',
                     paid_at=payment_time,
-                    recorded_by=payment.payer_name or payment.phone_number or 'HuriMoney (App Citoyen)',
+                    recorded_by=f'App Citoyen / {citizen_name}',
                 ))
                 db.session.add(VehicleHistory(
                     vehicle_id=vehicle.id,

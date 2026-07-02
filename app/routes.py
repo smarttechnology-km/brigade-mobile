@@ -5040,6 +5040,15 @@ def get_mobile_money_archive():
     qr_total = 0.0
     for p in qr_query.order_by(QRCodePayment.paid_at.desc()).all():
         v = p.vehicle
+        raw = p.recorded_by or '-'
+        # Format display: citizen payments may have old raw format (phone/name/HuriMoney)
+        if raw.startswith('App Citoyen /'):
+            recorded_by_display = raw
+        elif raw in mobile_agent_usernames:
+            recorded_by_display = raw
+        else:
+            # Old citizen record without prefix — add it
+            recorded_by_display = f'App Citoyen / {raw}'
         qr_archive.append({
             'id': p.id,
             'license_plate': v.license_plate if v else '-',
@@ -5047,7 +5056,7 @@ def get_mobile_money_archive():
             'owner_island': v.owner_island if v else '-',
             'amount': float(p.amount or 0.0),
             'paid_at': p.paid_at.isoformat() if p.paid_at else None,
-            'recorded_by': p.recorded_by or '-',
+            'recorded_by': recorded_by_display,
             'new_expiry': v.qr_code_expiry.strftime('%d/%m/%Y') if v and v.qr_code_expiry else '-',
         })
         qr_total += float(p.amount or 0.0)
