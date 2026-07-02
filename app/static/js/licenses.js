@@ -1080,7 +1080,7 @@
             .then(l => {
                 _currentLicense = l;
                 const btnCarte = document.getElementById('btn-carte-digitale');
-                if (btnCarte) btnCarte.style.display = (l.type_permis === 'permanent' && !l.is_expired) ? '' : 'none';
+                if (btnCarte) btnCarte.style.display = 'none';
                 syncPrintButton(l.id, l.type_permis === 'permanent' && !l.is_expired);
                 const btnImprimer = document.getElementById('btn-imprimer');
                 if (btnImprimer) btnImprimer.style.display = l.is_expired ? 'none' : '';

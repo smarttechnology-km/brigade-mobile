@@ -1,4 +1,4 @@
-let archiveDataCache = { direct_paid_fines: [], vignette_archive: [], totals: {} };
+let archiveDataCache = { direct_paid_fines: [], vignette_archive: [], qr_archive: [], totals: {} };
 
 document.addEventListener('DOMContentLoaded', function () {
     const startDateInput = document.getElementById('archive-start-date');
@@ -35,8 +35,10 @@ function loadArchiveData() {
     const url = '/api/vehicles/mobile-money-archive?' + query.toString();
     const fineBody = document.getElementById('archive-fines-tbody');
     const vignetteBody = document.getElementById('archive-vignettes-tbody');
+    const qrBody = document.getElementById('archive-qr-tbody');
     if (fineBody) fineBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>';
     if (vignetteBody) vignetteBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>';
+    if (qrBody) qrBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>';
 
     fetch(url, { credentials: 'same-origin' })
         .then(function (r) {
@@ -44,7 +46,7 @@ function loadArchiveData() {
             return r.json();
         })
         .then(function (data) {
-            archiveDataCache = data || { direct_paid_fines: [], vignette_archive: [], totals: {} };
+            archiveDataCache = data || { direct_paid_fines: [], vignette_archive: [], qr_archive: [], totals: {} };
             renderArchiveTables();
             updateSummaryCards();
         })
@@ -52,6 +54,7 @@ function loadArchiveData() {
             console.error('Archive load error:', err);
             if (fineBody) fineBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
             if (vignetteBody) vignetteBody.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
+            if (qrBody) qrBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
         });
 }
 
@@ -59,6 +62,7 @@ function renderArchiveTables() {
     const search = (document.getElementById('archive-search').value || '').toLowerCase().trim();
     const fineBody = document.getElementById('archive-fines-tbody');
     const vignetteBody = document.getElementById('archive-vignettes-tbody');
+    const qrBody = document.getElementById('archive-qr-tbody');
 
     const fines = (archiveDataCache.direct_paid_fines || []).filter(function (item) {
         if (!search) return true;
@@ -69,6 +73,12 @@ function renderArchiveTables() {
     const vignettes = (archiveDataCache.vignette_archive || []).filter(function (item) {
         if (!search) return true;
         return [item.license_plate, item.owner_name, item.receipt_number, item.approved_by, item.payment_method]
+            .some(function (field) { return String(field || '').toLowerCase().includes(search); });
+    });
+
+    const qrs = (archiveDataCache.qr_archive || []).filter(function (item) {
+        if (!search) return true;
+        return [item.license_plate, item.owner_name, item.owner_island, item.recorded_by]
             .some(function (field) { return String(field || '').toLowerCase().includes(search); });
     });
 
@@ -110,6 +120,25 @@ function renderArchiveTables() {
             }).join('');
         }
     }
+
+    if (qrBody) {
+        if (!qrs.length) {
+            qrBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Aucun renouvellement QR trouvé</td></tr>';
+        } else {
+            qrBody.innerHTML = qrs.map(function (item, idx) {
+                return '<tr>' +
+                    '<td>' + (idx + 1) + '</td>' +
+                    '<td><strong>' + escapeHtml(item.license_plate || '-') + '</strong></td>' +
+                    '<td>' + escapeHtml(item.owner_name || '-') + '</td>' +
+                    '<td>' + escapeHtml(item.owner_island || '-') + '</td>' +
+                    '<td>' + formatDate(item.paid_at) + '</td>' +
+                    '<td><span class="badge bg-success">' + escapeHtml(item.new_expiry || '-') + '</span></td>' +
+                    '<td class="text-end fw-semibold text-primary">' + formatKMF(item.amount) + '</td>' +
+                    '<td>' + escapeHtml(item.recorded_by || '-') + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+    }
 }
 
 function updateSummaryCards() {
@@ -118,6 +147,8 @@ function updateSummaryCards() {
     document.getElementById('archive-direct-total').textContent = formatKMF(totals.direct_fines_total);
     document.getElementById('archive-vignette-count').textContent = totals.vignettes_count || 0;
     document.getElementById('archive-vignette-total').textContent = formatKMF(totals.vignette_total);
+    document.getElementById('archive-qr-count').textContent = totals.qr_renewals_count || 0;
+    document.getElementById('archive-qr-total').textContent = formatKMF(totals.qr_renewals_total);
     document.getElementById('archive-penalty-total').textContent = formatKMF(totals.vignette_penalties_total);
     document.getElementById('archive-included-fines-total').textContent = formatKMF(totals.vignette_included_fines_total);
 }
