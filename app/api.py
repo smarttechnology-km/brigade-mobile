@@ -3330,7 +3330,8 @@ def api_licenses_list():
 @api_bp.route('/licenses', methods=['POST'])
 @login_required
 def api_licenses_create():
-    if not (current_user.is_admin or getattr(current_user, 'role', '') in ['administrateur', 'judiciaire']):
+    is_dgrtr_employe = getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', '') == 'employe'
+    if not (current_user.is_admin or getattr(current_user, 'role', '') in ['administrateur', 'judiciaire'] or is_dgrtr_employe):
         return jsonify({'error': 'Accès refusé'}), 403
     data = request.get_json() or {}
     num = (data.get('license_number') or '').strip().upper()

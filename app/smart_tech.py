@@ -1910,8 +1910,13 @@ def licences_card(license_id):
 
     category_details = parse_category_details(lic)
 
-    return render_template('license_card.html', lic=lic, settings=settings,
-                           now_comoros=_nc, qr_data_uri=qr_data_uri,
+    computed_expiry = None
+    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
+        from dateutil.relativedelta import relativedelta
+        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+
+    return render_template('license_folded_card.html', lic=lic, settings=settings,
+                           computed_expiry=computed_expiry, qr_data_uri=qr_data_uri,
                            category_details=category_details)
 
 

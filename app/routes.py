@@ -684,6 +684,15 @@ def mobile_money_vignettes_page():
     return render_template('mobile_money_vignettes.html')
 
 
+@main_bp.route('/mobile-money-qr-renewal')
+@roles_required('mobile_money_agent')
+def mobile_money_qr_renewal_page():
+    """Page for mobile money agents to process QR code renewals."""
+    from app.models import SmartTechSetting
+    renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
+    return render_template('mobile_money_qr_renewal.html', renewal_price=renewal_price)
+
+
 @main_bp.route('/mobile-money-archive')
 @roles_required('mobile_money_agent')
 def mobile_money_archive_page():
@@ -2448,8 +2457,7 @@ def public_track(token):
 
 
 @main_bp.route('/payments')
-@main_bp.route('/payments')
-@roles_required('judiciaire', 'policier')
+@roles_required('policier')
 def payments_page():
     """Page de gestion des paiements des amandes"""
     return render_template('payments.html')
@@ -4927,12 +4935,27 @@ def get_mobile_money_archive():
     if getattr(current_user, 'role', None) == 'mobile_money_agent':
         user_country = None
 
-    # Direct paid fines only: exclude fines already bundled into a vignette payment.
+    # Show transactions made by mobile_money_agent accounts OR from the citizen app (Huri Money).
+    # Exclude only payments made by other system roles (admin, policier, judiciaire, etc.).
+    mobile_agent_usernames = [
+        u.username for u in User.query.filter_by(role='mobile_money_agent').all()
+    ]
+    other_system_usernames = [
+        u.username for u in User.query.filter(
+            User.role.notin_(['mobile_money_agent'])
+        ).all()
+    ]
+
+    # Direct paid fines: mobile agent OR citizen app (paid_by not a system user).
     fines_query = Fine.query.filter(
         Fine.paid == True,
         Fine.paid_at.isnot(None),
         Fine.paid_at >= start_date,
-        Fine.paid_at <= end_date
+        Fine.paid_at <= end_date,
+        db.or_(
+            Fine.paid_by.in_(mobile_agent_usernames),
+            Fine.paid_by.notin_(other_system_usernames),
+        ) if other_system_usernames else Fine.paid_by.isnot(None),
     )
     if user_country:
         fines_query = fines_query.join(Vehicle).filter(Vehicle.owner_island == user_country)
@@ -4954,11 +4977,15 @@ def get_mobile_money_archive():
         })
         direct_fines_total += float(fine.amount or 0.0)
 
-    # Vignette archive: use persisted vignette payment breakdown.
+    # Vignettes: mobile agent OR citizen app (vignette_last_paid_by not a system user).
     vignette_query = Vehicle.query.filter(
         Vehicle.vignette_last_paid_at.isnot(None),
         Vehicle.vignette_last_paid_at >= start_date,
-        Vehicle.vignette_last_paid_at <= end_date
+        Vehicle.vignette_last_paid_at <= end_date,
+        db.or_(
+            Vehicle.vignette_last_paid_by.in_(mobile_agent_usernames),
+            Vehicle.vignette_last_paid_by.notin_(other_system_usernames),
+        ) if other_system_usernames else Vehicle.vignette_last_paid_by.isnot(None),
     )
     if user_country:
         vignette_query = vignette_query.filter(Vehicle.owner_island == user_country)
@@ -4992,6 +5019,36 @@ def get_mobile_money_archive():
         vignette_penalties += penalty_amount
         vignette_included_fines += fines_amount
 
+    # QR code renewals archive — only those recorded by mobile_money_agent accounts
+    from app.models import QRCodePayment
+    qr_query = QRCodePayment.query.filter(
+        QRCodePayment.payment_type == 'renewal',
+        QRCodePayment.status == 'paid',
+        QRCodePayment.paid_at.isnot(None),
+        QRCodePayment.paid_at >= start_date,
+        QRCodePayment.paid_at <= end_date,
+        QRCodePayment.recorded_by.in_(mobile_agent_usernames) if mobile_agent_usernames else db.false(),
+    )
+    if user_country:
+        qr_query = qr_query.join(Vehicle, QRCodePayment.vehicle_id == Vehicle.id)\
+                           .filter(Vehicle.owner_island == user_country)
+
+    qr_archive = []
+    qr_total = 0.0
+    for p in qr_query.order_by(QRCodePayment.paid_at.desc()).all():
+        v = p.vehicle
+        qr_archive.append({
+            'id': p.id,
+            'license_plate': v.license_plate if v else '-',
+            'owner_name': v.owner_name if v else '-',
+            'owner_island': v.owner_island if v else '-',
+            'amount': float(p.amount or 0.0),
+            'paid_at': p.paid_at.isoformat() if p.paid_at else None,
+            'recorded_by': p.recorded_by or '-',
+            'new_expiry': v.qr_code_expiry.strftime('%d/%m/%Y') if v and v.qr_code_expiry else '-',
+        })
+        qr_total += float(p.amount or 0.0)
+
     return jsonify({
         'start_date': start_date.isoformat(),
         'end_date': end_date.isoformat(),
@@ -5002,10 +5059,13 @@ def get_mobile_money_archive():
             'vignette_total': round(vignette_total, 2),
             'vignette_penalties_total': round(vignette_penalties, 2),
             'vignette_included_fines_total': round(vignette_included_fines, 2),
-            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines, 2),
+            'qr_renewals_count': len(qr_archive),
+            'qr_renewals_total': round(qr_total, 2),
+            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines + qr_total, 2),
         },
         'direct_paid_fines': direct_paid_fines,
         'vignette_archive': vignette_archive,
+        'qr_archive': qr_archive,
     })
 
 
