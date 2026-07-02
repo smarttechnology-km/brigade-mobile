@@ -621,16 +621,17 @@ def webhook():
                 if not requested_expiry:
                     requested_expiry = get_vignette_expiry_date(payment_time)
 
+                citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
                 vehicle.vignette_payment_requested_at = payment_time
-                vehicle.vignette_payment_requested_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                vehicle.vignette_payment_requested_by = citizen_label
                 vehicle.vignette_payment_requested_expiry = requested_expiry
                 vehicle.vignette_payment_approved = True
                 vehicle.vignette_payment_approved_at = payment_time
-                vehicle.vignette_payment_approved_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                vehicle.vignette_payment_approved_by = citizen_label
                 vehicle.vignette_payment_method = 'huri_money' if payment.huri_payment_id else 'app_mobile'
                 vehicle.vignette_expiry = requested_expiry
                 vehicle.vignette_last_paid_at = payment_time
-                vehicle.vignette_last_paid_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                vehicle.vignette_last_paid_by = citizen_label
                 vehicle.vignette_last_paid_vignette_amount = float(fine_payload.get('vignette_price') or 0.0) + float(fine_payload.get('annual_ds_amount') or 0.0)
                 vehicle.vignette_last_paid_penalty_amount = float(fine_payload.get('penalty_amount') or 0.0)
                 vehicle.vignette_last_paid_fines_amount = float(fine_payload.get('fines_amount') or 0.0)
@@ -652,7 +653,7 @@ def webhook():
                     if f:
                         f.paid = True
                         f.paid_at = payment_time
-                        f.paid_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                        f.paid_by = citizen_label
                         f.receipt_number = f'VEN-{f.id}-{int(payment_time.timestamp())}'
 
                 db.session.commit()
@@ -681,12 +682,13 @@ def webhook():
                 ))
                 db.session.commit()
         else:
+            citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
             for fid in fine_payload:
                 f = Fine.query.get(int(fid))
                 if f:
                     f.paid = True
                     f.paid_at = now_comoros()
-                    f.paid_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                    f.paid_by = citizen_label
                     f.receipt_number = f'REC-{f.id}-{int(f.paid_at.timestamp())}'
             db.session.commit()
 

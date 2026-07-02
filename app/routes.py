@@ -4965,6 +4965,11 @@ def get_mobile_money_archive():
     for fine in fines_query.order_by(Fine.paid_at.desc()).all():
         if fine.receipt_number and str(fine.receipt_number).startswith('VIGN-'):
             continue
+        raw_paid_by = fine.paid_by or '-'
+        if raw_paid_by not in mobile_agent_usernames and not raw_paid_by.startswith('App Citoyen /'):
+            paid_by_display = f'App Citoyen / {raw_paid_by}'
+        else:
+            paid_by_display = raw_paid_by
         direct_paid_fines.append({
             'id': fine.id,
             'license_plate': fine.vehicle.license_plate if fine.vehicle else '-',
@@ -4973,7 +4978,7 @@ def get_mobile_money_archive():
             'reason': fine.reason,
             'receipt_number': fine.receipt_number,
             'paid_at': fine.paid_at.isoformat() if fine.paid_at else None,
-            'paid_by': fine.paid_by,
+            'paid_by': paid_by_display,
         })
         direct_fines_total += float(fine.amount or 0.0)
 
@@ -5010,7 +5015,7 @@ def get_mobile_money_archive():
             'penalty_amount': penalty_amount,
             'fines_amount': fines_amount,
             'total_amount': total_amount,
-            'approved_by': vehicle.vignette_last_paid_by or vehicle.vignette_payment_approved_by,
+            'approved_by': (lambda raw: f'App Citoyen / {raw}' if raw and raw not in mobile_agent_usernames and not raw.startswith('App Citoyen /') else (raw or '-'))(vehicle.vignette_last_paid_by or vehicle.vignette_payment_approved_by),
             'payment_method': vehicle.vignette_payment_method,
             'receipt_number': f"VIGN-{vehicle.id}-{int(vehicle.vignette_last_paid_at.timestamp())}" if vehicle.vignette_last_paid_at else None,
             'included_fines': float(fines_amount),
