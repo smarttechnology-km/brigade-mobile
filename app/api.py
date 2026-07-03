@@ -4085,47 +4085,74 @@ def api_search_drivers():
     color         = (request.args.get('color')         or '').strip()
     usage_type    = (request.args.get('usage_type')    or '').strip()
 
-    if not any([license_plate, vehicle_type, make, model, color, usage_type]):
+    try:
+        page     = max(1, int(request.args.get('page', 1)))
+        per_page = min(50, max(1, int(request.args.get('per_page', 50))))
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
+
+    vehicle_types = [v for v in vehicle_type.split(',') if v] if vehicle_type else []
+    usage_types   = [v for v in usage_type.split(',')   if v] if usage_type   else []
+
+    if not any([license_plate, vehicle_types, make, model, color, usage_types]):
         return jsonify({'error': 'Au moins un critère de recherche est requis'}), 400
 
     q = Vehicle.query
     if license_plate:
         q = q.filter(Vehicle.license_plate.ilike(f'%{license_plate}%'))
-    if vehicle_type:
-        q = q.filter(Vehicle.vehicle_type.ilike(f'%{vehicle_type}%'))
+    if vehicle_types:
+        q = q.filter(Vehicle.vehicle_type.in_(vehicle_types))
     if make:
         q = q.filter(Vehicle.make.ilike(f'%{make}%'))
     if model:
         q = q.filter(Vehicle.model.ilike(f'%{model}%'))
     if color:
         q = q.filter(Vehicle.color.ilike(f'%{color}%'))
-    if usage_type:
-        q = q.filter(Vehicle.usage_type.ilike(f'%{usage_type}%'))
+    if usage_types:
+        q = q.filter(Vehicle.usage_type.in_(usage_types))
 
-    vehicles = q.limit(50).all()
+    total      = q.count()
+    pagination = q.offset((page - 1) * per_page).limit(per_page).all()
+
+    vehicle_ids = [v.id for v in pagination]
+
+    # Fetch all assignments for this page's vehicles in one query
+    assignments_all = VehicleInsuranceAssignment.query.filter(
+        VehicleInsuranceAssignment.vehicle_id.in_(vehicle_ids)
+    ).all()
+
+    # Group license numbers by vehicle_id
+    license_nums_by_vehicle = {vid: [] for vid in vehicle_ids}
+    for asgn in assignments_all:
+        if asgn.driver_license_numbers:
+            try:
+                nums = json.loads(asgn.driver_license_numbers)
+                if isinstance(nums, list):
+                    license_nums_by_vehicle[asgn.vehicle_id].extend(nums)
+            except (ValueError, TypeError):
+                pass
+
+    # Collect all unique license numbers across the page
+    all_nums = list(dict.fromkeys(
+        n for nums in license_nums_by_vehicle.values() for n in nums
+    ))
+
+    # Fetch all licenses in one query
+    licenses_map = {}
+    if all_nums:
+        found = DriverLicense.query.filter(DriverLicense.license_number.in_(all_nums)).all()
+        for lic in found:
+            d = lic.to_dict()
+            d['photo_url'] = f'/uploads/license_photos/{lic.photo_filename}' if lic.photo_filename else None
+            licenses_map[lic.license_number] = d
 
     results = []
-    for vehicle in vehicles:
-        assignments = VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle.id).all()
-        all_license_numbers = []
-        for assignment in assignments:
-            if assignment.driver_license_numbers:
-                try:
-                    nums = json.loads(assignment.driver_license_numbers)
-                    if isinstance(nums, list):
-                        all_license_numbers.extend(nums)
-                except (ValueError, TypeError):
-                    pass
-
-        all_license_numbers = list(dict.fromkeys(all_license_numbers))  # dedupe, preserve order
-
+    for vehicle in pagination:
+        nums = list(dict.fromkeys(license_nums_by_vehicle[vehicle.id]))
         licenses = []
-        for num in all_license_numbers:
-            lic = DriverLicense.query.filter_by(license_number=num).first()
-            if lic:
-                d = lic.to_dict()
-                d['photo_url'] = f'/uploads/license_photos/{lic.photo_filename}' if lic.photo_filename else None
-                licenses.append(d)
+        for num in nums:
+            if num in licenses_map:
+                licenses.append(licenses_map[num])
             else:
                 licenses.append({'license_number': num, 'not_found': True})
 
@@ -4143,7 +4170,13 @@ def api_search_drivers():
             'licenses': licenses,
         })
 
-    return jsonify(results)
+    return jsonify({
+        'results': results,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'has_more': (page * per_page) < total,
+    })
 
 
 # ─────────────────────────────────────────────
