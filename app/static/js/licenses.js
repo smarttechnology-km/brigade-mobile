@@ -74,7 +74,7 @@
         }
         const offset = (data.page - 1) * data.per_page;
         tbody.innerHTML = data.items.map((l, i) => `
-            <tr>
+            <tr class="${l.print_status === 'pending' ? 'table-warning' : l.print_status === 'printed' ? 'table-success' : ''}">
                 <td class="text-muted">${offset + i + 1}</td>
                 <td><strong>${esc(l.license_number)}</strong></td>
                 <td>
@@ -1054,6 +1054,7 @@
         .then(({ ok, data }) => {
             if (ok) {
                 syncPrintButton(_currentLicense.id, _currentLicense.type_permis === 'permanent');
+                loadLicenses(false);
             } else {
                 alert(data.error || 'Erreur lors de la demande.');
                 syncPrintButton(_currentLicense.id, _currentLicense.type_permis === 'permanent');
