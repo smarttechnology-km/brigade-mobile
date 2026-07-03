@@ -3318,8 +3318,24 @@ def api_licenses_list():
 
     total   = query.count()
     items   = query.order_by(DriverLicense.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    ids     = [l.id for l in items]
+
+    # Statut d'impression par permis (batch, évite N+1)
+    print_rows = LicensePrintRequest.query.filter(
+        LicensePrintRequest.license_id.in_(ids)
+    ).order_by(LicensePrintRequest.requested_at.desc()).all()
+    print_status_map = {}
+    for pr in print_rows:
+        if pr.license_id not in print_status_map:
+            print_status_map[pr.license_id] = pr.status  # premier = plus récent
+
+    def item_dict(l):
+        d = l.to_dict()
+        d['print_status'] = print_status_map.get(l.id)  # 'pending'|'printed'|'cancelled'|None
+        return d
+
     return jsonify({
-        'items': [l.to_dict() for l in items],
+        'items': [item_dict(l) for l in items],
         'total': total,
         'page': page,
         'per_page': per_page,
@@ -3594,8 +3610,10 @@ def api_licenses_delete(license_id):
                 os.remove(photo_path)
         except Exception:
             pass
+    # Supprimer les demandes d'impression liées
+    from app.models import LicenseDossier, LicensePrintRequest
+    LicensePrintRequest.query.filter_by(license_id=lic.id).delete()
     # Supprimer le dossier DGRTR lié s'il existe
-    from app.models import LicenseDossier
     dossier = LicenseDossier.query.filter_by(license_id=lic.id).first()
     if dossier:
         db.session.delete(dossier)
@@ -4246,7 +4264,7 @@ def list_dossiers_permis():
             LicenseDossier.dossier_number.ilike(like),
         ))
 
-    dossiers = q.order_by(LicenseDossier.created_at.desc()).all()
+    dossiers = q.order_by(LicenseDossier.created_at.asc()).all()
     return jsonify([d.to_dict() for d in dossiers])
 
 
@@ -4273,7 +4291,7 @@ def create_dossier_permis():
         d.dossier_number   = _generate_dossier_number()
         d.step1_validated_at = now_comoros()
         d.step1_validated_by = current_user.username
-        d.current_step     = 1
+        d.current_step     = 2
 
     db.session.add(d)
     db.session.commit()
@@ -4298,8 +4316,8 @@ def validate_dossier_step2(dossier_id):
     d    = LicenseDossier.query.get_or_404(dossier_id)
     data = request.get_json() or {}
 
-    if not d.step1_validated_at:
-        return jsonify({'error': 'Étape 1 non validée'}), 400
+    if not d.step3_validated_at:
+        return jsonify({'error': 'Étape 2 (photo) non validée'}), 400
 
     from datetime import date as _date
     def parse_date(v):
@@ -4327,7 +4345,7 @@ def validate_dossier_step2(dossier_id):
 
     d.step2_validated_at = now_comoros()
     d.step2_validated_by = current_user.username
-    d.current_step       = 2
+    d.current_step       = 4
 
     db.session.commit()
     return jsonify(d.to_dict())
@@ -4339,8 +4357,8 @@ def validate_dossier_step3(dossier_id):
     if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
     d = LicenseDossier.query.get_or_404(dossier_id)
-    if not d.step2_validated_at:
-        return jsonify({'error': 'Étape 2 non validée'}), 400
+    if not d.step1_validated_at:
+        return jsonify({'error': 'Étape 1 non validée'}), 400
     import os, uuid as _uuid
     from werkzeug.utils import secure_filename as _sf
 
@@ -4378,8 +4396,8 @@ def validate_dossier_step4(dossier_id):
         return jsonify({'error': 'Accès refusé'}), 403
     d    = LicenseDossier.query.get_or_404(dossier_id)
     data = request.get_json() or {}
-    if not d.step3_validated_at:
-        return jsonify({'error': 'Étape 3 non validée'}), 400
+    if not d.step2_validated_at:
+        return jsonify({'error': 'Étape 3 (informations) non validée'}), 400
 
     license_num = (data.get('license_number') or '').strip()
     if not license_num:
@@ -4511,7 +4529,7 @@ def update_dossier_permis(dossier_id):
         d.dossier_number   = _generate_dossier_number()
         d.step1_validated_at = now_comoros()
         d.step1_validated_by = current_user.username
-        d.current_step     = 1
+        d.current_step     = 2
 
     db.session.commit()
     return jsonify(d.to_dict())

@@ -803,8 +803,13 @@ def dgrtr_license_print_a4(license_id):
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
     category_details = parse_category_details(lic)
+    from dateutil.relativedelta import relativedelta
+    months = settings.temp_validity_months or 12
+    computed_expiry = lic.issue_date + relativedelta(months=months) if lic.issue_date else None
+    # Le PDF A4 DGRTR est toujours un permis temporaire
     return render_template('dgrtr_license_a4.html', lic=lic, settings=settings,
-                           category_details=category_details)
+                           category_details=category_details, force_temporaire=True,
+                           computed_expiry=computed_expiry)
 
 
 @main_bp.route('/licenses/<int:license_id>/qrcode')

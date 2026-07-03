@@ -1657,6 +1657,18 @@ class LicenseDossier(db.Model):
                     self.doc_fiche_individuelle, self.doc_carte_nationale,
                     self.doc_recu_paiement])
 
+    def _ui_current_step(self):
+        # Ordre UI : step1 → step3(photo) → step2(info) → step4 → step5
+        if self.step5_validated_at or self.step4_validated_at:
+            return 5
+        if self.step2_validated_at:   # info (UI step 3) fait → prochain : vérification
+            return 4
+        if self.step3_validated_at:   # photo (UI step 2) fait → prochain : info
+            return 3
+        if self.step1_validated_at:   # validation fait → prochain : photo
+            return 2
+        return 1
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -1696,7 +1708,7 @@ class LicenseDossier(db.Model):
             'step4_validated_by': self.step4_validated_by or '',
             'step5_validated_at': self.step5_validated_at.strftime('%d/%m/%Y %H:%M') if self.step5_validated_at else '',
             'step5_validated_by': self.step5_validated_by or '',
-            'current_step': self.current_step,
+            'current_step': self._ui_current_step(),
             'all_docs_checked': self.all_docs_checked,
             'status': self.status,
             'rejected_at': self.rejected_at.strftime('%d/%m/%Y %H:%M') if self.rejected_at else '',
