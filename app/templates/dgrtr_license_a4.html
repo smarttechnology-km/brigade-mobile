@@ -163,7 +163,7 @@
           {{ lic.holder_island or '—' }}{% if lic.holder_phone %} · {{ lic.holder_phone }}{% endif %}
         </div>
         <div class="badges" style="margin-top:10px;">
-          {% if lic.type_permis == 'temporaire' %}
+          {% if force_temporaire or lic.type_permis == 'temporaire' %}
             <span class="badge badge-purple">⏱ Temporaire</span>
           {% else %}
             <span class="badge badge-blue">∞ Permanent</span>
@@ -195,7 +195,7 @@
       <div class="section">
         <div class="section-title">Détails du permis</div>
         <div class="field"><span class="field-label">Date de début</span><span class="field-value">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span></div>
-        <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ lic.expiry_date.strftime('%d/%m/%Y') if lic.expiry_date else ('—' if lic.type_permis != 'temporaire' else '—') }}</span></div>
+        <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ computed_expiry.strftime('%d/%m/%Y') if computed_expiry else '—' }}</span></div>
         <div class="field"><span class="field-label">Centre d'immatriculation</span><span class="field-value">{{ lic.centre_immatriculation or '—' }}</span></div>
       </div>
     </div>

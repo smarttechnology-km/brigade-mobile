@@ -55,9 +55,11 @@
             </button>
             <div class="flex-grow-1 text-center">
                 {% if current_user.is_authenticated and (current_user.is_insurance_account or (current_user.role == 'agent_impot')) %}
-                <span class="text-white fw-bold" style="font-size: 1.1rem;">Police Comores</span>
+                <span class="text-white fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</span>
+                {% elif current_user.is_authenticated and current_user.role == 'dgrtr' %}
+                <a href="/dgrtr-dashboard" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</a>
                 {% else %}
-                <a href="/" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">Police Comores</a>
+                <a href="/" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</a>
                 {% endif %}
             </div>
             <div style="width: 40px;"></div>
@@ -73,12 +75,17 @@
             {% if current_user.is_authenticated and (current_user.is_insurance_account or (current_user.role == 'agent_impot')) %}
             <span class="navbar-brand text-white d-inline-block">
                 <i class="fas fa-car"></i>
-                <span class="ms-2">Police Comores</span>
+                <span class="ms-2">S.I.G.V.A</span>
             </span>
+            {% elif current_user.is_authenticated and current_user.role == 'dgrtr' %}
+            <a class="navbar-brand text-white" href="/dgrtr-dashboard">
+                <i class="fas fa-car"></i>
+                <span class="ms-2">S.I.G.V.A</span>
+            </a>
             {% else %}
             <a class="navbar-brand text-white" href="/">
                 <i class="fas fa-car"></i>
-                <span class="ms-2">Police Comores</span>
+                <span class="ms-2">S.I.G.V.A</span>
             </a>
             {% endif %}
         </div>

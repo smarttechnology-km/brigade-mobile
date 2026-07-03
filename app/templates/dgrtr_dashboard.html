@@ -90,26 +90,29 @@
     </div>
   </div>
 
+  <!-- Indicateur temps réel -->
+  <div class="d-flex align-items-center gap-2 mb-2" style="font-size:12px;color:#6b7280;">
+    <span id="realtime-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#d1d5db;flex-shrink:0;"></span>
+    <span id="realtime-lbl">En attente…</span>
+  </div>
+
   <!-- Step tabs -->
   <div class="d-flex gap-1 mb-3 flex-wrap" id="step-tabs">
     <button class="btn btn-sm btn-primary active" id="step-tab-0" onclick="setStepTab(0)">
       <i class="fas fa-list me-1"></i>Tous
     </button>
-    <button class="btn btn-sm btn-outline-secondary" id="step-tab-1" onclick="setStepTab(1)">
-      <span class="badge bg-primary me-1">1</span>Validation des documents
-    </button>
     <button class="btn btn-sm btn-outline-secondary" id="step-tab-2" onclick="setStepTab(2)">
-      <span class="badge bg-primary me-1">2</span>Informations candidat
+      <span class="badge bg-primary me-1">2</span>Prise de photo ID
     </button>
     <button class="btn btn-sm btn-outline-secondary" id="step-tab-3" onclick="setStepTab(3)">
-      <span class="badge bg-primary me-1">3</span>Photo du candidat
+      <span class="badge bg-primary me-1">3</span>Informations &amp; Détails
     </button>
     <button class="btn btn-sm btn-outline-secondary" id="step-tab-4" onclick="setStepTab(4)">
-      <span class="badge bg-primary me-1">4</span>Vérification du dossier
+      <span class="badge bg-primary me-1">4</span>Vérification
     </button>
     {% if current_user.is_admin or current_user.dgrtr_type == 'directeur_technique' %}
     <button class="btn btn-sm btn-outline-warning" id="step-tab-5" onclick="setStepTab(5)">
-      <span class="badge bg-warning text-dark me-1">5</span>Confirmation finale
+      <span class="badge bg-warning text-dark me-1">5</span>Impression A4
     </button>
     {% endif %}
   </div>
@@ -166,7 +169,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">
-          <span class="badge bg-primary me-2">Étape 1</span>Validation des documents
+          <span class="badge bg-primary me-2">Étape 1</span>Validation des commentaires
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
@@ -301,7 +304,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">
-          <span class="badge bg-primary me-2">Étape 2</span>Informations du candidat &amp; Détails du permis
+          <span class="badge bg-primary me-2">Étape 3</span>Informations du candidat &amp; Détails du permis
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
@@ -456,7 +459,7 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><span class="badge bg-primary me-2">Étape 3</span>Photo du candidat</h5>
+        <h5 class="modal-title"><span class="badge bg-primary me-2">Étape 2</span>Prise de photo ID</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body text-center">
@@ -581,8 +584,8 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-primary" id="btn-save-step4" onclick="submitStep4()">
-          <i class="fas fa-save me-2"></i>Enregistrer
+        <button type="button" class="btn btn-success" id="btn-save-step4" onclick="submitStep4()">
+          <i class="fas fa-check me-2"></i>Valider
         </button>
       </div>
     </div>
@@ -597,14 +600,14 @@
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header" style="background:linear-gradient(100deg,#0f2660,#1d4ed8);color:#fff;">
-        <h5 class="modal-title"><span class="badge bg-warning text-dark me-2">Étape 5</span>Confirmation — Délivrance du permis</h5>
+        <h5 class="modal-title"><span class="badge bg-warning text-dark me-2">Étape 5</span>Impression du permis A4</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" id="step5-summary">Chargement…</div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-success btn-lg" id="btn-save-step5" onclick="submitStep5()">
-          <i class="fas fa-check-double me-2"></i>Valider &amp; Délivrer le permis
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary btn-lg" id="btn-print-step5" onclick="printLicenseA4()">
+          <i class="fas fa-print me-2"></i>Imprimer A4
         </button>
       </div>
     </div>
@@ -650,8 +653,10 @@ var ALL_CATS = ['A','A1','A2','B','C','D','E','F','P'];
 // ── Load on page open ──────────────────
 document.addEventListener('DOMContentLoaded', function() {
   setView(currentView);
+  setStepTab(currentStepFilter);
   loadDossiers();
   loadLicenseSettings();
+  startRealtime();
 });
 
 function loadLicenseSettings() {
@@ -697,21 +702,52 @@ function computeExpiry(issueDate, type) {
   return d.toISOString().split('T')[0];
 }
 
-function loadDossiers() {
+var _lastDossiersHash = '';
+
+function loadDossiers(silent) {
   Promise.all([
     fetch('/api/dossiers-permis?status=en_cours,rejete').then(function(r){ return r.json(); }),
     fetch('/api/dossiers-permis').then(function(r){ return r.json(); }),
   ])
   .then(function(results) {
+    var newHash = JSON.stringify(results[0]);
+    var changed = newHash !== _lastDossiersHash;
+    _lastDossiersHash = newHash;
     allDossiers = results[0];
     var allData  = results[1];
     updateStats(allData, allDossiers);
-    if (currentView === 'list') { renderDossiersTable(allDossiers); } else { renderDossiers(allDossiers); }
+    if (!silent || changed) filterDossiers();
+    updateRealtimeDot(true);
   })
   .catch(function() {
-    document.getElementById('dossiers-list').innerHTML =
-      '<div class="col-12 text-danger text-center py-4">Erreur de chargement.</div>';
+    if (!silent) {
+      document.getElementById('dossiers-list').innerHTML =
+        '<div class="col-12 text-danger text-center py-4">Erreur de chargement.</div>';
+    }
+    updateRealtimeDot(false);
   });
+}
+
+var _realtimeInterval = null;
+
+function startRealtime() {
+  _realtimeInterval = setInterval(function() {
+    var anyOpen = document.querySelector('.modal.show');
+    if (anyOpen) return;
+    loadDossiers(true);
+  }, 30000);
+}
+
+function updateRealtimeDot(ok) {
+  var dot = document.getElementById('realtime-dot');
+  var lbl = document.getElementById('realtime-lbl');
+  if (!dot) return;
+  var now = new Date();
+  var hh = String(now.getHours()).padStart(2,'0');
+  var mm = String(now.getMinutes()).padStart(2,'0');
+  var ss = String(now.getSeconds()).padStart(2,'0');
+  dot.style.background = ok ? '#16a34a' : '#ef4444';
+  lbl.textContent = 'Mis à jour ' + hh + ':' + mm + ':' + ss;
 }
 
 function updateStats(allData, activeData) {
@@ -722,10 +758,11 @@ function updateStats(allData, activeData) {
 }
 
 var currentView = localStorage.getItem('dgrtr_view') || 'grid';
-var currentStepFilter = 0;
+var currentStepFilter = parseInt(localStorage.getItem('dgrtr_step_filter') || '0', 10);
 
 function setStepTab(step) {
   currentStepFilter = step;
+  localStorage.setItem('dgrtr_step_filter', step);
   for (var i = 0; i <= 5; i++) {
     var btn = document.getElementById('step-tab-' + i);
     if (!btn) continue;
@@ -935,6 +972,11 @@ function openDetail(id) {
   if (!d) return;
   currentDossierId = d.id;
 
+  // À partir du step 3 : ouvrir directement le modal du step en cours
+  if (d.step4_validated_at && !d.step5_validated_at) { openStep5(id); return; }
+  if (d.step2_validated_at && !d.step4_validated_at) { openStep4(id); return; }
+  if (d.step3_validated_at && !d.step2_validated_at) { openStep2(id); return; }
+
   var candidatLabel = (d.nom || d.prenom)
     ? (d.nom + ' ' + d.prenom).trim()
     : '<span class="text-muted fst-italic">Candidat non renseigné</span>';
@@ -944,16 +986,16 @@ function openDetail(id) {
 
   var stepOpeners = [
     function() { openStep1Edit(currentDossierId); },
-    function() { openStep2(currentDossierId); },
     function() { openStep3(currentDossierId); },
+    function() { openStep2(currentDossierId); },
     function() { openStep4(currentDossierId); },
   ];
   var stepLabels = [
-    'Validation des documents',
+    'Validation des commentaires',
+    'Prise de photo ID',
     'Informations &amp; Détails du permis',
-    'Photo ID',
     'Vérification',
-    'Délivrance du permis',
+    'Impression du permis A4 PDF',
   ];
 
   var steps = [
@@ -969,8 +1011,10 @@ function openDetail(id) {
         ${docRow('Reçu de paiement', d.doc_recu_paiement)}
       </div>`,
     },
+    { label: stepLabels[1], done: !!d.step3_validated_at, by: d.step3_validated_by, at: d.step3_validated_at,
+      content: (d.step3_validated_at && d.photo_filename) ? `<div class="mt-1"><img src="/uploads/license_photos/${d.photo_filename}" style="height:60px;border-radius:4px;border:1px solid #e5e7eb;"></div>` : '' },
     {
-      label: stepLabels[1],
+      label: stepLabels[2],
       done: !!d.step2_validated_at, by: d.step2_validated_by, at: d.step2_validated_at,
       content: d.step2_validated_at ? `
         <div class="row g-1 mt-1 text-muted small">
@@ -981,8 +1025,6 @@ function openDetail(id) {
           <div class="col-6"><b>Catégories :</b> ${d.categories || '—'}</div>
         </div>` : '',
     },
-    { label: stepLabels[2], done: !!d.step3_validated_at, by: d.step3_validated_by, at: d.step3_validated_at,
-      content: (d.step3_validated_at && d.photo_filename) ? `<div class="mt-1"><img src="/uploads/license_photos/${d.photo_filename}" style="height:60px;border-radius:4px;border:1px solid #e5e7eb;"></div>` : '' },
     { label: stepLabels[3], done: !!d.step4_validated_at, by: d.step4_validated_by, at: d.step4_validated_at, content: '' },
     { label: stepLabels[4], done: !!d.step5_validated_at, by: d.step5_validated_by, at: d.step5_validated_at, content: '' },
   ];
@@ -1027,8 +1069,8 @@ function openDetail(id) {
   // Bouton "Étape suivante"
   var nextBtn = document.getElementById('detail-next-btn');
   var nextActions = [
-    { label: 'Commencer Étape 2', fn: function() { openStep2(currentDossierId); } },
-    { label: 'Commencer Étape 3', fn: function() { openStep3(currentDossierId); } },
+    { label: 'Commencer Étape 2', fn: function() { openStep3(currentDossierId); } },
+    { label: 'Commencer Étape 3', fn: function() { openStep2(currentDossierId); } },
     { label: 'Commencer Étape 4', fn: function() { openStep4(currentDossierId); } },
     { label: 'Commencer Étape 5', fn: function() { openStep5(currentDossierId); } },
   ];
@@ -1096,7 +1138,7 @@ function openDetail(id) {
 
 
 function editStep(stepNum) {
-  var fns = [openStep1Edit, openStep2, openStep3, openStep4];
+  var fns = [openStep1Edit, openStep3, openStep2, openStep4];
   if (fns[stepNum - 1]) fns[stepNum - 1](currentDossierId);
 }
 
@@ -1379,7 +1421,7 @@ function submitStep4() {
 
   var btn = document.getElementById('btn-save-step4');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement…';
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Validation…';
 
   var s4cats = [];
   var s4catDetails = {};
@@ -1418,30 +1460,30 @@ function submitStep4() {
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check me-2"></i>Valider';
     if (data.error) {
       alert(data.error);
     } else {
       bootstrap.Modal.getOrCreateInstance(document.getElementById('step4Modal')).hide();
       loadDossiers();
-      showToast('Étape 4 enregistrée — vérification complète', 'success');
+      showToast('Vérification validée', 'success');
     }
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
   })
   .catch(function() {
     alert('Erreur réseau.');
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+    btn.innerHTML = '<i class="fas fa-check me-2"></i>Valider';
   });
 }
 
 
-// ── Step 5 — Confirmation finale ────────
+// ── Step 5 — Impression A4 ────────
 function openStep5(dossierId) {
   currentDossierId = dossierId;
   var d = allDossiers.find(function(x){ return x.id === dossierId; });
 
-  var html = '<p class="text-muted small mb-3">Vérifiez le récapitulatif ci-dessous avant de délivrer le permis de conduire.</p>';
+  var html = '<p class="text-muted small mb-3"><i class="fas fa-check-circle text-success me-1"></i>Permis validé et délivré. Cliquez sur <strong>Imprimer A4</strong> pour générer le document officiel.</p>';
 
   if (d) {
     var photoSrc = d.photo_filename ? '/uploads/license_photos/' + d.photo_filename : '';
@@ -1474,17 +1516,17 @@ function openStep5(dossierId) {
       <div class="col-md-12"><span class="text-muted">Centre :</span> <strong>${d.centre_immatriculation || '—'}</strong></div>
     </div>
     <hr>
-    <div class="alert alert-warning py-2 small mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Cette action est irréversible. Le permis sera créé et visible dans le tableau de bord administratif.</div>`;
+    `;
   }
 
   document.getElementById('step5-summary').innerHTML = html;
   bootstrap.Modal.getOrCreateInstance(document.getElementById('step5Modal')).show();
 }
 
-function submitStep5() {
-  var btn = document.getElementById('btn-save-step5');
+function printLicenseA4() {
+  var btn = document.getElementById('btn-print-step5');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Délivrance en cours…';
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Délivrance…';
 
   fetch('/api/dossiers-permis/' + currentDossierId + '/step5', {
     method: 'POST',
@@ -1493,20 +1535,20 @@ function submitStep5() {
   })
   .then(function(r){ return r.json(); })
   .then(function(data) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-print me-2"></i>Imprimer A4';
     if (data.error) {
       alert(data.error);
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-check-double me-2"></i>Valider &amp; Délivrer le permis';
     } else {
       bootstrap.Modal.getOrCreateInstance(document.getElementById('step5Modal')).hide();
       loadDossiers();
-      showSuccessDelivery(data);
+      window.open('/dgrtr/licenses/' + data.license_id + '/print-a4', '_blank');
     }
   })
   .catch(function() {
-    alert('Erreur réseau.');
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-check-double me-2"></i>Valider &amp; Délivrer le permis';
+    btn.innerHTML = '<i class="fas fa-print me-2"></i>Imprimer A4';
+    alert('Erreur réseau.');
   });
 }
 
