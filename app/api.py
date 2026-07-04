@@ -3453,16 +3453,35 @@ def api_licenses_public_scan():
     if not lic:
         return jsonify({'error': 'Permis introuvable'}), 404
 
-    history = (PointReductionHistory.query
-               .filter_by(license_id=lic.id)
-               .order_by(PointReductionHistory.created_at.desc())
-               .all())
+    last_reset = (PointReductionHistory.query
+                  .filter_by(license_id=lic.id)
+                  .filter(PointReductionHistory.points_after > PointReductionHistory.points_before)
+                  .order_by(PointReductionHistory.created_at.desc())
+                  .first())
+    hist_q = PointReductionHistory.query.filter_by(license_id=lic.id)
+    if last_reset:
+        hist_q = hist_q.filter(PointReductionHistory.created_at > last_reset.created_at)
+    history = hist_q.order_by(PointReductionHistory.created_at.desc()).all()
+
+    # Batch-lookup article info by reason label
+    reason_labels = {h.reason_label for h in history if h.reason_label}
+    reasons = PointReductionReason.query.filter(PointReductionReason.label.in_(reason_labels)).all() if reason_labels else []
+    article_map = {
+        r.label: {
+            'article_code': r.article.code if r.article else None,
+            'article_description': r.article.description if r.article else None,
+        }
+        for r in reasons
+    }
 
     data = lic.to_dict()
-    data['point_history'] = [
-        {k: v for k, v in h.to_dict().items() if k != 'created_by'}
-        for h in history
-    ]
+    data['point_history'] = []
+    for h in history:
+        row = {k: v for k, v in h.to_dict().items() if k != 'created_by'}
+        info = article_map.get(h.reason_label, {})
+        row['article_code'] = info.get('article_code')
+        row['article_description'] = info.get('article_description')
+        data['point_history'].append(row)
     # is_registered tells the citizen app whether this license is already claimed by
     # SOME account, without leaking the actual phone number of whoever holds it.
     data['is_registered'] = bool(data.get('registered_phone'))
