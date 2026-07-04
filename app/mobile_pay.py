@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app, url_for, render_template, send_file
 from app import db
-from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting, QRCodePayment, SmartTechSetting, HuriDestinationSetting
+from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting, QRCodePayment, SmartTechSetting, HuriDestinationSetting, FineType
 from datetime import datetime, timedelta
 import io
 import json
@@ -219,7 +219,27 @@ def lookup():
         return jsonify({'fines': [], 'vehicle': None})
 
     # Return unpaid fines only
-    unpaid_fines = [f.to_dict() for f in vehicle.fines.filter_by(paid=False).order_by(Fine.issued_at.desc()).all()]
+    raw_fines = vehicle.fines.filter_by(paid=False).order_by(Fine.issued_at.desc()).all()
+
+    # Batch-lookup article info keyed by reason label (avoids N+1)
+    reasons = {f.reason for f in raw_fines if f.reason}
+    fine_types = FineType.query.filter(FineType.label.in_(reasons)).all() if reasons else []
+    article_map = {
+        ft.label: {
+            'article_code': ft.article.code if ft.article else None,
+            'article_description': ft.article.description if ft.article else None,
+        }
+        for ft in fine_types
+    }
+
+    unpaid_fines = []
+    for f in raw_fines:
+        d = f.to_dict()
+        info = article_map.get(f.reason, {})
+        d['article_code'] = info.get('article_code')
+        d['article_description'] = info.get('article_description')
+        unpaid_fines.append(d)
+
     unpaid_fines_amount = _calculate_unpaid_fines_amount(vehicle)
 
     now = now_comoros()
