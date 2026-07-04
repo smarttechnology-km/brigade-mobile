@@ -256,3 +256,54 @@ def send_fine_push_notification(vehicle, fine):
     except Exception as error:
         print(f"❌ Exception in send_fine_push_notification: {error}")
         return {'success': False, 'message': str(error)}
+
+
+def send_point_reduction_notification(license, points_deducted, points_after, reason_label):
+    """Notify the citizen who registered this license that points were deducted."""
+    try:
+        from app.models import VehicleOwner
+        if not license.registered_phone:
+            return {'success': False, 'message': 'No registered phone'}
+        owner = VehicleOwner.query.filter_by(phone=license.registered_phone).first()
+        if not owner or not owner.expo_push_token:
+            return {'success': False, 'message': 'No push token'}
+        title = '⚠️ Retrait de points'
+        body = (
+            f"Permis N° {license.license_number} — {reason_label}\n"
+            f"-{points_deducted} point(s) · Solde restant : {points_after} pt(s)"
+        )
+        return send_expo_push_notification(owner.expo_push_token, title, body, {
+            'type': 'point_reduction',
+            'license_id': license.id,
+            'license_number': license.license_number,
+            'points_deducted': points_deducted,
+            'points_after': points_after,
+        })
+    except Exception as error:
+        print(f"❌ Exception in send_point_reduction_notification: {error}")
+        return {'success': False, 'message': str(error)}
+
+
+def send_point_reset_notification(license, points_after):
+    """Notify the citizen that their license points were reset."""
+    try:
+        from app.models import VehicleOwner
+        if not license.registered_phone:
+            return {'success': False, 'message': 'No registered phone'}
+        owner = VehicleOwner.query.filter_by(phone=license.registered_phone).first()
+        if not owner or not owner.expo_push_token:
+            return {'success': False, 'message': 'No push token'}
+        title = '✅ Points réinitialisés'
+        body = (
+            f"Les points de votre permis N° {license.license_number} ont été réinitialisés.\n"
+            f"Nouveau solde : {points_after} point(s)"
+        )
+        return send_expo_push_notification(owner.expo_push_token, title, body, {
+            'type': 'point_reset',
+            'license_id': license.id,
+            'license_number': license.license_number,
+            'points_after': points_after,
+        })
+    except Exception as error:
+        print(f"❌ Exception in send_point_reset_notification: {error}")
+        return {'success': False, 'message': str(error)}

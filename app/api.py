@@ -5,7 +5,7 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from flask_login import login_required, current_user
 from datetime import timedelta, datetime
 from app.timezone_utils import now_comoros
-from app.push_notifications import send_fine_push_notification, send_alert_broadcast_notification
+from app.push_notifications import send_fine_push_notification, send_alert_broadcast_notification, send_point_reduction_notification, send_point_reset_notification
 from io import BytesIO
 import qrcode
 import os
@@ -3146,6 +3146,7 @@ def api_licenses_reduce_points(license_id):
     )
     db.session.add(history)
     db.session.commit()
+    send_point_reduction_notification(lic, reason.points_to_deduct, after, reason.label)
     return jsonify(lic.to_dict())
 
 
@@ -3172,6 +3173,7 @@ def api_licenses_reset_points(license_id):
     )
     db.session.add(history)
     db.session.commit()
+    send_point_reset_notification(lic, s.initial_points)
     return jsonify(lic.to_dict())
 
 
@@ -3543,6 +3545,7 @@ def api_mobile_reduce_points(license_id):
     )
     db.session.add(history)
     db.session.commit()
+    send_point_reduction_notification(lic, reason.points_to_deduct, after, reason.label)
     return jsonify(lic.to_dict())
 
 
