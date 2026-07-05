@@ -1086,19 +1086,21 @@ def api_reports_expired_registrations():
     if not user or user.role not in ['policier', 'administrateur']:
         return jsonify({"error": "Forbidden"}), 403
     
-    # Get vehicles with expired registrations
+    # Get vehicles with expired vignette
+    now = now_comoros()
     expired_vehicles_query = Vehicle.query.filter(
-        Vehicle.registration_expiry < now_comoros().date()
+        Vehicle.vignette_expiry != None,
+        Vehicle.vignette_expiry < now
     )
-    
+
     # Apply island filter for judiciaire and policier users
     if user.role in ['judiciaire', 'policier'] and user.country:
         expired_vehicles_query = expired_vehicles_query.filter(Vehicle.owner_island == user.country)
-    
+
     expired_vehicles = expired_vehicles_query.order_by(
-        Vehicle.registration_expiry.asc()
+        Vehicle.vignette_expiry.asc()
     ).all()
-    
+
     vehicles_data = []
     for vehicle in expired_vehicles:
         vehicles_data.append({
@@ -1106,7 +1108,7 @@ def api_reports_expired_registrations():
             'license_plate': vehicle.license_plate,
             'owner_name': vehicle.owner_name,
             'vehicle_type': vehicle.vehicle_type,
-            'registration_expiry': vehicle.registration_expiry.isoformat() if vehicle.registration_expiry else None,
+            'registration_expiry': vehicle.vignette_expiry.isoformat() if vehicle.vignette_expiry else None,
             'track_token': vehicle.track_token
         })
     
