@@ -109,6 +109,13 @@
   .dm-points-val { color:var(--bs-body-color); }
   .dm-dl-btn { background:rgba(192,57,43,.1); border:1px solid rgba(192,57,43,.3); color:#c0392b; }
   .dm-close-btn { background:var(--bs-secondary-bg); border:1px solid var(--bs-border-color); color:var(--bs-secondary-color); }
+  .dm-veh-section { margin-top:14px; width:100%; }
+  .dm-veh-section-title { font-size:.58rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--bs-secondary-color); margin-bottom:7px; }
+  .dm-veh-item { display:flex; align-items:center; gap:8px; background:var(--bs-secondary-bg); border:1px solid var(--bs-border-color); border-radius:6px; padding:7px 10px; cursor:pointer; transition:all .2s; margin-bottom:5px; color:var(--bs-body-color); }
+  .dm-veh-item:hover, .dm-veh-item-active { border-color:#c0392b !important; color:#c0392b !important; background:rgba(192,57,43,.06) !important; }
+  .dm-veh-plate { font-family:'Courier New',monospace; font-weight:700; font-size:.82rem; }
+  .dm-veh-meta { font-size:.68rem; color:var(--bs-secondary-color); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  [data-bs-theme="dark"] .dm-veh-item:hover, [data-bs-theme="dark"] .dm-veh-item-active { background:rgba(192,57,43,.12) !important; color:#f87171 !important; border-color:#f87171 !important; }
   .tile-val { color:var(--bs-secondary-color); }
   [data-bs-theme="dark"] .dm-type-badge { background:rgba(255,255,255,.07); color:#9ca3af; border-color:#2d3748; }
   [data-bs-theme="dark"] .dm-points-val { color:#e2e8f0; }
@@ -481,6 +488,7 @@
             <button class="btn btn-sm w-100 dm-dl-btn" id="dm-dl-btn" style="display:none;" onclick="downloadPhoto()">
               <i class="fas fa-download me-1"></i>Télécharger la photo
             </button>
+            <div id="dm-vehicles-list" class="w-100"></div>
           </div>
 
           <!-- Right: details -->
@@ -583,6 +591,7 @@ const STATUS_LABELS = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqu�
 let searchResults = [];
 let currentLicenseId = null;
 let currentPhotoUrl = null;
+let currentModalVehicles = [];
 let galleryItems = [];
 let lightboxIndex = 0;
 let searchPage = 1;
@@ -730,7 +739,7 @@ function infoRow(label, value) {
   </div>`;
 }
 
-function openDetails(licId, vehicleId) {
+async function openDetails(licId, vehicleId) {
   let lic = null, vehicle = null;
   for (const item of searchResults) {
     if (item.vehicle.id === vehicleId) vehicle = item.vehicle;
@@ -808,6 +817,38 @@ function openDetails(licId, vehicleId) {
       infoRow('Propriétaire', vehicle.owner_name)
     : '<div class="col-12 text-muted">Véhicule inconnu</div>';
 
+  // Show modal immediately, then load associated vehicles asynchronously
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();
+
+  const vehListEl = document.getElementById('dm-vehicles-list');
+  vehListEl.innerHTML = `<div class="dm-veh-section"><div style="text-align:center;padding:8px 0;"><span class="spinner-border spinner-border-sm text-secondary" style="width:14px;height:14px;border-width:2px;"></span></div></div>`;
+  try {
+    const resp = await fetch(`/api/licenses/${licId}/associated-vehicles`);
+    const data = await resp.json();
+    const vehicles = resp.ok ? (data.vehicles || []) : [];
+    currentModalVehicles = vehicles;
+    if (vehicles.length > 0) {
+      vehListEl.innerHTML = `<div class="dm-veh-section">
+        <div class="dm-veh-section-title"><i class="fas fa-car me-1"></i>Véhicules associés (${vehicles.length})</div>
+        ${vehicles.map(v => {
+          const meta = [v.vehicle_type, v.make, v.model].filter(Boolean).join(' · ');
+          const active = v.id === vehicleId;
+          return `<div class="dm-veh-item${active ? ' dm-veh-item-active' : ''}" onclick="navigateToVehicle(${v.id}, this)">
+            <i class="fas fa-car" style="font-size:.72rem;flex-shrink:0;color:#c0392b;"></i>
+            <div style="min-width:0;">
+              <div class="dm-veh-plate">${v.license_plate}</div>
+              ${meta ? `<div class="dm-veh-meta">${meta}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    } else {
+      vehListEl.innerHTML = '';
+    }
+  } catch(e) {
+    vehListEl.innerHTML = '';
+  }
+
   const notesWrap = document.getElementById('dm-notes-wrap');
   const notesEl = document.getElementById('dm-notes');
   if (lic.notes && lic.notes.trim()) {
@@ -821,8 +862,6 @@ function openDetails(licId, vehicleId) {
   document.getElementById('dm-motif').value = '';
   document.getElementById('dm-suspend-error').style.display = 'none';
   suspendSection.style.display = (lic.status === 'actif' && !isExp) ? '' : 'none';
-
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).show();
 }
 
 async function confirmSuspend() {
@@ -1027,7 +1066,8 @@ async function doSearch() {
     searchTotal    = total;
     searchHasMore  = has_more;
 
-    const totalLicenses = searchResults.reduce((acc, item) => acc + item.licenses.filter(l => !l.not_found).length, 0);
+    const uniqueLicIds = new Set(searchResults.flatMap(item => item.licenses.filter(l => !l.not_found).map(l => l.id)));
+    const totalLicenses = uniqueLicIds.size;
     const apercuLabel = totalLicenses > 0 ? `Aperçu photos (${totalLicenses})` : 'Aperçu photos';
     showResults(
       `<div class="fbi-results-label d-flex align-items-center justify-content-between">
@@ -1132,13 +1172,36 @@ async function loadMoreResults() {
   }
 }
 
+function navigateToVehicle(vehicleId, el) {
+  let v = currentModalVehicles.find(v => v.id === vehicleId);
+  if (!v) {
+    const item = searchResults.find(r => r.vehicle.id === vehicleId);
+    if (!item) return;
+    v = item.vehicle;
+  }
+  document.getElementById('dm-vehicle-rows').innerHTML =
+    infoRow('Immatriculation', v.license_plate) +
+    infoRow('Type', v.vehicle_type) +
+    infoRow('Marque', v.make) +
+    infoRow('Modèle', v.model) +
+    infoRow('Couleur', v.color) +
+    infoRow('Usage', v.usage_type) +
+    infoRow('Propriétaire', v.owner_name);
+  document.querySelectorAll('#dm-vehicles-list .dm-veh-item').forEach(e => e.classList.remove('dm-veh-item-active'));
+  el.classList.add('dm-veh-item-active');
+}
+
 function openPhotoGallery() {
-  const licenses = [];
+  // Deduplicate: each license appears only once regardless of how many vehicles it's linked to
+  const licMap = new Map();
   for (const item of searchResults) {
     for (const lic of item.licenses) {
-      if (!lic.not_found) licenses.push({ lic, vehicle: item.vehicle });
+      if (!lic.not_found && !licMap.has(lic.id)) {
+        licMap.set(lic.id, { lic, vehicle: item.vehicle });
+      }
     }
   }
+  const licenses = [...licMap.values()];
 
   const withPhoto    = licenses.filter(l => l.lic.photo_url);
   const withoutPhoto = licenses.filter(l => !l.lic.photo_url);
