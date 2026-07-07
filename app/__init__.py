@@ -43,7 +43,7 @@ def create_app():
     # JWT configuration (used by mobile app)
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-change')
     # Upload folder: persistent disk on Render (/data), local static folder in dev
-    _default_upload = os.path.join(os.path.dirname(__file__), 'static')
+    _default_upload = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
     app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', _default_upload)
 
     # Initialiser la base de données
