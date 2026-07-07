@@ -3619,6 +3619,35 @@ def api_licenses_suspend(license_id):
     return jsonify(lic.to_dict())
 
 
+@api_bp.route('/licenses/<int:license_id>/associated-vehicles', methods=['GET'])
+@login_required
+def api_license_associated_vehicles(license_id):
+    if not (current_user.is_admin or getattr(current_user, 'role', '') == 'policier'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    lic = DriverLicense.query.get_or_404(license_id)
+    # Find all assignments that contain this license number in their JSON array
+    assignments = VehicleInsuranceAssignment.query.filter(
+        VehicleInsuranceAssignment.driver_license_numbers.like(f'%"{lic.license_number}"%')
+    ).all()
+    vehicle_ids = list({a.vehicle_id for a in assignments})
+    vehicles = Vehicle.query.filter(Vehicle.id.in_(vehicle_ids)).all() if vehicle_ids else []
+    return jsonify({
+        'vehicles': [
+            {
+                'id': v.id,
+                'license_plate': v.license_plate,
+                'vehicle_type': v.vehicle_type or '',
+                'make': v.make or '',
+                'model': v.model or '',
+                'color': v.color or '',
+                'usage_type': v.usage_type or '',
+                'owner_name': v.owner_name or '',
+            }
+            for v in vehicles
+        ]
+    })
+
+
 @api_bp.route('/licenses/<int:license_id>', methods=['DELETE'])
 @login_required
 def api_licenses_delete(license_id):
