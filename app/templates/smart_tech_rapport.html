@@ -783,7 +783,8 @@
                 if (c.confirmed && c.confirmed_at) {
                     var dt = new Date(c.confirmed_at);
                     var dtStr = dt.toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'});
-                    rcptCell = '<td><span style="background:rgba(63,185,80,0.12);color:var(--st-green);border:1px solid rgba(63,185,80,0.3);border-radius:6px;font-size:.72rem;padding:.15em .55em;white-space:nowrap;"><i class="fas fa-check me-1"></i>' + dtStr + '</span></td>';
+                    var byStr = c.confirmed_by ? '<span style="opacity:.65;margin-left:.35em;">· ' + esc(c.confirmed_by) + '</span>' : '';
+                    rcptCell = '<td><span style="background:rgba(63,185,80,0.12);color:var(--st-green);border:1px solid rgba(63,185,80,0.3);border-radius:6px;font-size:.72rem;padding:.15em .55em;white-space:nowrap;"><i class="fas fa-check me-1"></i>' + dtStr + byStr + '</span></td>';
                 } else {
                     rcptCell = '<td><span style="background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:.72rem;padding:.15em .55em;white-space:nowrap;"><i class="fas fa-clock me-1"></i>En attente</span></td>';
                 }

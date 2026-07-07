@@ -765,8 +765,11 @@ var IS_ADMIN = {{ 'true' if current_user.role == 'admin' else 'false' }};
                   var el = document.getElementById('rcpt-btn-'+_pendingReceiptId);
                   if(el){
                       var dt = new Date(d.confirmed_at);
-                      var title = 'Reçue le '+dt.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
-                      el.outerHTML = '<span class="rcpt-confirmed-badge" id="rcpt-btn-'+_pendingReceiptId+'" title="'+title+'"><i class="fas fa-check-circle"></i></span>';
+                      var dtStr = dt.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+                      var byLabel = d.confirmed_by ? ' · '+d.confirmed_by : '';
+                      var title = 'Reçue le '+dtStr+byLabel;
+                      var badgeLabel = d.confirmed_by ? '<span style="font-size:.72rem;font-weight:600;margin-left:.35em;opacity:.85;">'+d.confirmed_by+'</span>' : '';
+                      el.outerHTML = '<span class="rcpt-confirmed-badge" id="rcpt-btn-'+_pendingReceiptId+'" title="'+title+'" style="display:inline-flex;align-items:center;gap:.25em;"><i class="fas fa-check-circle"></i>'+badgeLabel+'</span>';
                   }
               }
               confirmBtn.disabled = false;
@@ -836,8 +839,11 @@ var IS_ADMIN = {{ 'true' if current_user.role == 'admin' else 'false' }};
             if(isMonth){
                 if(row.confirmed){
                     var dt = row.confirmed_at ? new Date(row.confirmed_at) : null;
-                    var title = dt ? 'Reçue le '+dt.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}) : 'Commission reçue';
-                    rcptCell = '<td style="text-align:center;"><span class="rcpt-confirmed-badge" id="rcpt-btn-'+row.insurance_id+'" title="'+title+'"><i class="fas fa-check-circle"></i></span></td>';
+                    var dtStr = dt ? dt.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}) : '';
+                    var byLabel = row.confirmed_by ? ' · '+esc(row.confirmed_by) : '';
+                    var title = (dtStr ? 'Reçue le '+dtStr : 'Commission reçue') + byLabel;
+                    var badgeLabel = row.confirmed_by ? '<span style="font-size:.72rem;font-weight:600;margin-left:.35em;opacity:.85;">'+esc(row.confirmed_by)+'</span>' : '';
+                    rcptCell = '<td style="text-align:center;"><span class="rcpt-confirmed-badge" id="rcpt-btn-'+row.insurance_id+'" title="'+title+'" style="display:inline-flex;align-items:center;gap:.25em;"><i class="fas fa-check-circle"></i>'+badgeLabel+'</span></td>';
                 } else if(canConfirm){
                     rcptCell = '<td style="text-align:center;"><button class="btn-receipt-pending" id="rcpt-btn-'+row.insurance_id+'" data-ins-id="'+row.insurance_id+'" data-name="'+esc(row.company_name)+'" onclick="confirmReceiptPrompt(this)" title="Confirmer la réception"><i class="fas fa-clock"></i></button></td>';
                 } else {
