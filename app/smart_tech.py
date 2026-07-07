@@ -1107,12 +1107,12 @@ def _build_report(period_type, period_value):
     start_dt, end_dt = _period_bounds(period_type, period_value)
     start_d, end_d   = start_dt.date(), end_dt.date()
 
-    # QR payments — compare aware datetimes
+    # QR payments — filter by paid_at (the actual payment date)
     qr_all = QRCodePayment.query.filter(
         QRCodePayment.status == 'paid'
     ).all()
     qr_in  = [q for q in qr_all
-              if q.created_at and start_dt <= ensure_comoros(q.created_at) <= end_dt]
+              if q.paid_at and start_dt <= ensure_comoros(q.paid_at) <= end_dt]
     activations = [q for q in qr_in if q.payment_type == 'activation']
     renewals    = [q for q in qr_in if q.payment_type == 'renewal']
 
@@ -1191,18 +1191,21 @@ def _build_report(period_type, period_value):
         comp_comm = (comp_acts + comp_rens) * commission_rate
         confirmed = False
         confirmed_at = None
+        confirmed_by = None
         if receipt_month:
             rval = SmartTechSetting.get('commission_received_%s_%s' % (ins.id, receipt_month), '')
             if rval and rval != '0':
                 confirmed = True
-                confirmed_at = str(rval)
-        if comp_acts or comp_rens:
-            insurance_commissions.append({
-                'id': ins.id, 'company_name': ins.company_name, 'island': ins.island or '',
-                'activations': comp_acts, 'renewals': comp_rens,
-                'commission': comp_comm, 'confirmed': confirmed, 'confirmed_at': confirmed_at,
-            })
-            commission_total += comp_comm
+                parts = str(rval).split('|', 1)
+                confirmed_at = parts[0]
+                confirmed_by = parts[1] if len(parts) > 1 else None
+        insurance_commissions.append({
+            'id': ins.id, 'company_name': ins.company_name, 'island': ins.island or '',
+            'activations': comp_acts, 'renewals': comp_rens,
+            'commission': comp_comm, 'confirmed': confirmed,
+            'confirmed_at': confirmed_at, 'confirmed_by': confirmed_by,
+        })
+        commission_total += comp_comm
 
     return {
         'period_type':        period_type,
@@ -2406,11 +2409,14 @@ def api_assurance_movements():
         is_month = re.match(r'^\d{4}-\d{2}$', period)
         confirmed = False
         confirmed_at = None
+        confirmed_by = None
         if is_month:
             rval = SmartTechSetting.get('commission_received_%s_%s' % (ins.id, period), '')
             if rval and rval != '0':
                 confirmed = True
-                confirmed_at = str(rval)
+                parts = str(rval).split('|', 1)
+                confirmed_at = parts[0]
+                confirmed_by = parts[1] if len(parts) > 1 else None
 
         result.append({
             'insurance_id':    ins.id,
@@ -2423,6 +2429,7 @@ def api_assurance_movements():
             'commission':      (activations + renewals) * commission_rate,
             'confirmed':       confirmed,
             'confirmed_at':    confirmed_at,
+            'confirmed_by':    confirmed_by,
         })
 
     return jsonify(result)
@@ -2439,10 +2446,16 @@ def api_commission_received_toggle():
         return jsonify({'error': 'Invalid period or insurance_id'}), 400
     key = 'commission_received_%s_%s' % (insurance_id, period)
     current = SmartTechSetting.get(key, '')
+    name = getattr(current_user, 'full_name', None) or getattr(current_user, 'username', '') or ''
     if current and current != '0':
-        # Already confirmed — irreversible, return current state
-        return jsonify({'confirmed': True, 'confirmed_at': str(current)})
+        parts = str(current).split('|', 1)
+        orig_ts = parts[0]
+        if len(parts) == 1:
+            # Old format without name — backfill with current user
+            SmartTechSetting.set(key, f'{orig_ts}|{name}')
+            return jsonify({'confirmed': True, 'confirmed_at': orig_ts, 'confirmed_by': name})
+        return jsonify({'confirmed': True, 'confirmed_at': orig_ts, 'confirmed_by': parts[1]})
     from app.timezone_utils import now_comoros
     ts = now_comoros().strftime('%Y-%m-%dT%H:%M:%S')
-    SmartTechSetting.set(key, ts)
-    return jsonify({'confirmed': True, 'confirmed_at': ts})
+    SmartTechSetting.set(key, f'{ts}|{name}')
+    return jsonify({'confirmed': True, 'confirmed_at': ts, 'confirmed_by': name})
