@@ -583,6 +583,9 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-outline-danger me-auto" onclick="openRejectFromStep4()">
+          <i class="fas fa-times-circle me-2"></i>Rejeter le dossier
+        </button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
         <button type="button" class="btn btn-success" id="btn-save-step4" onclick="submitStep4()">
           <i class="fas fa-check me-2"></i>Valider
@@ -793,7 +796,7 @@ function filterDossiers() {
   var filtered = allDossiers.filter(function(d) {
     var matchSearch = !q || (d.nom + ' ' + d.prenom + ' ' + (d.dossier_number || '')).toLowerCase().includes(q);
     var matchIsland = !island || (d.country || '') === island;
-    var matchStep  = !currentStepFilter || (d.current_step === currentStepFilter);
+    var matchStep  = !currentStepFilter || (d.current_step === currentStepFilter && d.status === 'en_cours');
     return matchSearch && matchIsland && matchStep;
   });
 
@@ -973,8 +976,13 @@ function openDetail(id) {
   currentDossierId = d.id;
 
   // À partir du step 3 : ouvrir directement le modal du step en cours
+  // Exception : vérification (step4) — seul le DT est redirigé vers le form ;
+  // les autres voient le detailModal (pour pouvoir rejeter)
   if (d.step4_validated_at && !d.step5_validated_at) { openStep5(id); return; }
-  if (d.step2_validated_at && !d.step4_validated_at) { openStep4(id); return; }
+  if (d.step2_validated_at && !d.step4_validated_at && d.status === 'en_cours') {
+    if (DGRTR_TYPE === 'directeur_technique') { openStep4(id); return; }
+    // admin, chef → tomber sur le detailModal qui a le bouton Rejeter
+  }
   if (d.step3_validated_at && !d.step2_validated_at) { openStep2(id); return; }
 
   var candidatLabel = (d.nom || d.prenom)
@@ -1573,6 +1581,12 @@ function showSuccessDelivery(data) {
 function openRejectModal() {
   document.getElementById('reject-reason').value = '';
   bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).hide();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectModal')).show();
+}
+
+function openRejectFromStep4() {
+  document.getElementById('reject-reason').value = '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('step4Modal')).hide();
   bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectModal')).show();
 }
 
