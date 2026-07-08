@@ -4666,3 +4666,100 @@ def dgrtr_stats():
         'par_ile':    islands_data,
         'current_year': current_year,
     })
+
+
+@api_bp.route('/insurance/sigva-commissions')
+@login_required
+def api_insurance_sigva_commissions():
+    """Commission data for the current insurance account (S.I.G.V.A page)."""
+    from app.models import InsuranceAccount, QRCodePayment, SmartTechSetting
+    from app.timezone_utils import ensure_comoros
+    from datetime import timezone, timedelta
+    import calendar
+
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    ins = current_user.insurance
+    if not ins:
+        return jsonify({'error': 'Compagnie introuvable'}), 404
+
+    commission_rate = int(SmartTechSetting.get('insurance_commission', 0))
+    COMOROS_TZ = timezone(timedelta(hours=3))
+
+    # Vehicles assigned to this account
+    assignments = VehicleInsuranceAssignment.query.filter_by(
+        insurance_account_id=current_user.id
+    ).all()
+    vehicle_ids = list({a.vehicle_id for a in assignments})
+
+    # All paid QR payments for these vehicles
+    if vehicle_ids:
+        qr_all = QRCodePayment.query.filter(
+            QRCodePayment.vehicle_id.in_(vehicle_ids),
+            QRCodePayment.status == 'paid'
+        ).all()
+    else:
+        qr_all = []
+
+    # Determine which year to show
+    today = now_comoros()
+    current_year = today.year
+    try:
+        selected_year = int(request.args.get('year', current_year))
+    except (ValueError, TypeError):
+        selected_year = current_year
+    # Clamp: don't go more than 5 years back or into the future
+    selected_year = max(current_year - 5, min(current_year + 1, selected_year))
+
+    MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                 'Juillet','Août','Septembre','Octobre','Novembre','Décembre']
+
+    months = []
+    for month_n in range(1, 13):
+        month_str = f'{selected_year}-{month_n:02d}'
+        last_day  = calendar.monthrange(selected_year, month_n)[1]
+        m_start   = datetime(selected_year, month_n, 1, 0, 0, 0, tzinfo=COMOROS_TZ)
+        m_end     = datetime(selected_year, month_n, last_day, 23, 59, 59, tzinfo=COMOROS_TZ)
+
+        m_qr = [q for q in qr_all
+                if q.paid_at and m_start <= ensure_comoros(q.paid_at) <= m_end]
+        acts = sum(1 for q in m_qr if q.payment_type == 'activation')
+        rens = sum(1 for q in m_qr if q.payment_type == 'renewal')
+        comm = (acts + rens) * commission_rate
+
+        rval = SmartTechSetting.get('commission_received_%s_%s' % (ins.id, month_str), '')
+        confirmed = False
+        confirmed_at = None
+        confirmed_by = None
+        if rval and rval != '0':
+            confirmed = True
+            parts = str(rval).split('|', 1)
+            confirmed_at = parts[0]
+            confirmed_by = parts[1] if len(parts) > 1 else None
+
+        months.append({
+            'month': month_str,
+            'month_label': MONTHS_FR[month_n - 1],
+            'activations': acts,
+            'renewals': rens,
+            'commission': comm,
+            'confirmed': confirmed,
+            'confirmed_at': confirmed_at,
+            'confirmed_by': confirmed_by,
+        })
+
+    total_due = sum(m['commission'] for m in months if not m['confirmed'])
+    total_confirmed = sum(m['commission'] for m in months if m['confirmed'])
+
+    return jsonify({
+        'company_name': ins.company_name,
+        'island': ins.island or '',
+        'commission_rate': commission_rate,
+        'months': months,
+        'total_due': total_due,
+        'total_confirmed': total_confirmed,
+        'vehicle_count': len(vehicle_ids),
+        'selected_year': selected_year,
+        'current_year': current_year,
+    })

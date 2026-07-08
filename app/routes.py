@@ -670,6 +670,352 @@ def insurance_dashboard():
     return render_template('insurance_dashboard.html')
 
 
+@main_bp.route('/insurance-sigva')
+@login_required
+def insurance_sigva():
+    """S.I.G.V.A commission page for insurance accounts."""
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    return render_template('insurance_sigva.html')
+
+
+@main_bp.route('/insurance-sigva/receipt/<month>')
+@login_required
+def insurance_sigva_receipt(month):
+    """Generate a PDF receipt for a confirmed commission month."""
+    import re as _re, io
+    from flask import send_file
+    from app.models import InsuranceAccount, QRCodePayment, SmartTechSetting, VehicleInsuranceAssignment
+    from app.timezone_utils import ensure_comoros, now_comoros
+    from datetime import timezone, timedelta, datetime
+    import calendar
+
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    if not _re.match(r'^\d{4}-\d{2}$', month):
+        abort(400)
+
+    ins = current_user.insurance
+    commission_rate = int(SmartTechSetting.get('insurance_commission', 0))
+    COMOROS_TZ = timezone(timedelta(hours=3))
+
+    # Check the month is confirmed
+    rval = SmartTechSetting.get('commission_received_%s_%s' % (ins.id, month), '')
+    if not rval or rval == '0':
+        abort(404)
+    parts = str(rval).split('|', 1)
+    confirmed_at_str = parts[0]
+    confirmed_by     = parts[1] if len(parts) > 1 else None
+
+    # Commission data for the month
+    year_n, month_n = map(int, month.split('-'))
+    last_day = calendar.monthrange(year_n, month_n)[1]
+    m_start  = datetime(year_n, month_n, 1, 0, 0, 0, tzinfo=COMOROS_TZ)
+    m_end    = datetime(year_n, month_n, last_day, 23, 59, 59, tzinfo=COMOROS_TZ)
+
+    assignments = VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    vehicle_ids = list({a.vehicle_id for a in assignments})
+    if vehicle_ids:
+        from app.models import QRCodePayment
+        qr_all = QRCodePayment.query.filter(
+            QRCodePayment.vehicle_id.in_(vehicle_ids),
+            QRCodePayment.status == 'paid'
+        ).all()
+    else:
+        qr_all = []
+    m_qr = [q for q in qr_all if q.paid_at and m_start <= ensure_comoros(q.paid_at) <= m_end]
+    acts = sum(1 for q in m_qr if q.payment_type == 'activation')
+    rens = sum(1 for q in m_qr if q.payment_type == 'renewal')
+    commission = (acts + rens) * commission_rate
+
+    MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                 'Juillet','Août','Septembre','Octobre','Novembre','Décembre']
+    month_label = MONTHS_FR[month_n - 1] + ' ' + str(year_n)
+
+    # ── Build PDF ──
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm, mm
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                    Table, TableStyle, HRFlowable, KeepTogether)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+    # ── Palette ──
+    NAVY     = colors.HexColor('#0B1D35')
+    NAVY2    = colors.HexColor('#122540')
+    CYAN     = colors.HexColor('#00B4CC')
+    CYAN_LT  = colors.HexColor('#E5F7FA')
+    GREEN    = colors.HexColor('#0D7A45')
+    GREEN_LT = colors.HexColor('#EAF7F0')
+    GREEN_BD = colors.HexColor('#A8D5BE')
+    SLATE    = colors.HexColor('#556070')
+    STEEL    = colors.HexColor('#E4EAF1')
+    WHITE    = colors.white
+
+    confirmed_at_display = '—'
+    try:
+        from datetime import datetime as _dt2
+        confirmed_at_display = _dt2.fromisoformat(confirmed_at_str).strftime('%d/%m/%Y à %H:%M')
+    except Exception:
+        confirmed_at_display = confirmed_at_str
+
+    receipt_ref = f'SIGVA/{ins.id:04d}/{year_n}/{month_n:02d}'
+    generated_at = now_comoros().strftime('%d/%m/%Y à %H:%M')
+
+    buf = io.BytesIO()
+    MX, MY = 1.8*cm, 1.5*cm
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=MX, rightMargin=MX,
+                            topMargin=MY, bottomMargin=MY)
+    W = A4[0] - 2*MX
+    styles = getSampleStyleSheet()
+
+    # ── Typography ──
+    def ps(name, **kw):
+        return ParagraphStyle(name, parent=styles['Normal'], **kw)
+
+    hdr_brand  = ps('HB', fontSize=15, fontName='Helvetica-Bold', textColor=WHITE, leading=18)
+    hdr_sub    = ps('HS', fontSize=8,  fontName='Helvetica',      textColor=colors.HexColor('#90B8D4'), leading=11, spaceBefore=2)
+    hdr_ref_l  = ps('RL', fontSize=8,  fontName='Helvetica',      textColor=colors.HexColor('#90B8D4'), alignment=TA_RIGHT, leading=11)
+    hdr_ref_v  = ps('RV', fontSize=13, fontName='Helvetica-Bold', textColor=WHITE, alignment=TA_RIGHT, leading=16)
+    hdr_recu   = ps('RC', fontSize=9,  fontName='Helvetica-Bold', textColor=CYAN,  alignment=TA_RIGHT, leading=11, spaceBefore=3)
+
+    meta_s     = ps('ME', fontSize=7.5, textColor=SLATE, alignment=TA_RIGHT)
+    sec_s      = ps('SE', fontSize=8.5, fontName='Helvetica-Bold', textColor=SLATE,
+                    spaceBefore=14, spaceAfter=5, letterSpacing=0.8)
+    lbl_s      = ps('LB', fontSize=8,  textColor=SLATE, leading=11)
+    val_s      = ps('VL', fontSize=10, fontName='Helvetica-Bold', textColor=NAVY, leading=13)
+    val_sm     = ps('VS', fontSize=8.5,fontName='Helvetica-Bold', textColor=NAVY, leading=11)
+    amt_lbl_s  = ps('AL', fontSize=8,  fontName='Helvetica-Bold', textColor=CYAN,
+                    alignment=TA_CENTER, letterSpacing=1.2, spaceAfter=2)
+    amt_val_s  = ps('AV', fontSize=28, fontName='Helvetica-Bold', textColor=NAVY, alignment=TA_CENTER)
+    amt_sub_s  = ps('AS', fontSize=8,  textColor=SLATE, alignment=TA_CENTER, spaceBefore=2)
+    det_hdr_s  = ps('DH', fontSize=8,  fontName='Helvetica-Bold', textColor=WHITE,
+                    alignment=TA_CENTER, leading=11)
+    det_val_s  = ps('DV', fontSize=9,  alignment=TA_CENTER, leading=12, textColor=NAVY)
+    det_amt_s  = ps('DA', fontSize=9,  fontName='Helvetica-Bold', alignment=TA_CENTER,
+                    leading=12, textColor=NAVY)
+    cert_ttl_s = ps('CT', fontSize=13, fontName='Helvetica-Bold', textColor=GREEN,
+                    alignment=TA_CENTER, spaceAfter=2)
+    cert_lbl_s = ps('CL', fontSize=8,  textColor=SLATE, leading=11)
+    cert_val_s = ps('CV', fontSize=9.5,fontName='Helvetica-Bold', textColor=NAVY, leading=13)
+    foot_s     = ps('FT', fontSize=7,  textColor=SLATE, alignment=TA_CENTER)
+
+    def p(text, style=None): return Paragraph(str(text) if text else '—', style or det_val_s)
+    def fmt(n):              return f'{round(n):,}'.replace(',', ' ') + ' KMF'
+
+    story = []
+
+    # ══════════════════════════════════════════════
+    # HEADER BAND
+    # ══════════════════════════════════════════════
+    hdr_left = [
+        Paragraph('Smart Technology', hdr_brand),
+        Paragraph('Système S.I.G.V.A · Commission Assurance', hdr_sub),
+    ]
+    hdr_right = [
+        Paragraph('REÇU DE COMMISSION', hdr_recu),
+        Paragraph(receipt_ref, hdr_ref_v),
+        Paragraph('Référence document', hdr_ref_l),
+    ]
+    hdr_tbl = Table(
+        [[hdr_left, hdr_right]],
+        colWidths=[W*0.55, W*0.45],
+    )
+    hdr_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), NAVY),
+        ('TOPPADDING',    (0,0), (-1,-1), 16),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 16),
+        ('LEFTPADDING',   (0,0), (0,0),  16),
+        ('RIGHTPADDING',  (-1,0),(-1,-1),16),
+        ('LEFTPADDING',   (1,0), (1,-1), 8),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(hdr_tbl)
+
+    # Cyan accent stripe
+    story.append(Table([['']], colWidths=[W]))
+    story[-1].setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), CYAN),
+        ('TOPPADDING',    (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+    ]))
+
+    # Meta line (ref + date) right-aligned
+    story.append(Spacer(1, 0.25*cm))
+    story.append(Paragraph(
+        f'Réf. {receipt_ref}  ·  Généré le {generated_at}',
+        meta_s))
+    story.append(Spacer(1, 0.5*cm))
+
+    # ══════════════════════════════════════════════
+    # PARTIES : Émetteur | Destinataire
+    # ══════════════════════════════════════════════
+    emetteur = [
+        Paragraph('ÉMETTEUR', sec_s),
+        Paragraph('Smart Technology', val_s),
+        Paragraph('Système S.I.G.V.A', ps('e2', fontSize=8.5, textColor=SLATE, leading=11)),
+        Paragraph('République des Comores', ps('e3', fontSize=8.5, textColor=SLATE, leading=11)),
+    ]
+    destinataire = [
+        Paragraph('DESTINATAIRE', ps('DS', fontSize=8.5, fontName='Helvetica-Bold',
+                  textColor=SLATE, spaceBefore=0, spaceAfter=5, letterSpacing=0.8)),
+        Paragraph(ins.company_name, val_s),
+        Paragraph(ins.island or 'Comores', ps('d2', fontSize=8.5, textColor=SLATE, leading=11)),
+        Paragraph('Compagnie d\'assurance', ps('d3', fontSize=8.5, textColor=SLATE, leading=11)),
+    ]
+    parties_tbl = Table([[emetteur, destinataire]], colWidths=[W*0.5, W*0.5])
+    parties_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (1,0), (1,-1), STEEL),
+        ('TOPPADDING',    (0,0), (-1,-1), 12),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+        ('LEFTPADDING',   (0,0), (0,-1), 0),
+        ('RIGHTPADDING',  (0,0), (0,-1), 16),
+        ('LEFTPADDING',   (1,0), (1,-1), 16),
+        ('VALIGN',        (0,0), (-1,-1), 'TOP'),
+        ('LINEAFTER',     (0,0), (0,-1), 0.5, STEEL),
+    ]))
+    story.append(parties_tbl)
+    story.append(Spacer(1, 0.6*cm))
+
+    # ══════════════════════════════════════════════
+    # PÉRIODE
+    # ══════════════════════════════════════════════
+    period_data = [
+        [p('PÉRIODE', ps('PL', fontSize=8, fontName='Helvetica-Bold', textColor=SLATE,
+                          letterSpacing=0.8, alignment=TA_CENTER)),
+         p('TAUX UNITAIRE', ps('TL', fontSize=8, fontName='Helvetica-Bold', textColor=SLATE,
+                                letterSpacing=0.8, alignment=TA_CENTER))],
+        [p(month_label, ps('PV', fontSize=12, fontName='Helvetica-Bold', textColor=NAVY,
+                            alignment=TA_CENTER)),
+         p(f'{commission_rate:,} KMF / véhicule'.replace(',', ' '),
+           ps('TV', fontSize=11, fontName='Helvetica-Bold', textColor=NAVY,
+               alignment=TA_CENTER))],
+    ]
+    period_tbl = Table(period_data, colWidths=[W*0.5, W*0.5])
+    period_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,0), CYAN_LT),
+        ('BACKGROUND',    (0,1), (-1,1), colors.white),
+        ('BOX',           (0,0), (-1,-1), 0.8, CYAN),
+        ('LINEAFTER',     (0,0), (0,-1), 0.5, CYAN),
+        ('TOPPADDING',    (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(period_tbl)
+    story.append(Spacer(1, 0.55*cm))
+
+    # ══════════════════════════════════════════════
+    # AMOUNT BOX
+    # ══════════════════════════════════════════════
+    amt_box = Table([
+        [Paragraph('MONTANT DE LA COMMISSION', amt_lbl_s)],
+        [Paragraph(fmt(commission), amt_val_s)],
+        [Paragraph(f'{acts + rens} véhicule(s) × {commission_rate:,} KMF'.replace(',', ' '), amt_sub_s)],
+    ], colWidths=[W])
+    amt_box.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), colors.white),
+        ('BOX',           (0,0), (-1,-1), 1.5, CYAN),
+        ('TOPPADDING',    (0,0), (-1,-1), 12),
+        ('BOTTOMPADDING', (0,0), (-1,0),  4),
+        ('BOTTOMPADDING', (0,1), (-1,1),  4),
+        ('BOTTOMPADDING', (0,2), (-1,2), 12),
+        ('LEFTPADDING',   (0,0), (-1,-1), 10),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 10),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(amt_box)
+    story.append(Spacer(1, 0.6*cm))
+
+    # ══════════════════════════════════════════════
+    # BREAKDOWN TABLE
+    # ══════════════════════════════════════════════
+    story.append(Paragraph('DÉTAIL DU CALCUL', sec_s))
+    det_data = [
+        [p('Activations', det_hdr_s), p('Renouvellements', det_hdr_s),
+         p('Total véhicules', det_hdr_s), p('Taux unitaire', det_hdr_s), p('Commission', det_hdr_s)],
+        [p(str(acts), det_val_s), p(str(rens), det_val_s), p(str(acts + rens), det_val_s),
+         p(fmt(commission_rate), det_val_s), p(fmt(commission), det_amt_s)],
+    ]
+    det_tbl = Table(det_data, colWidths=[W*0.17, W*0.22, W*0.21, W*0.2, W*0.2])
+    det_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,0), NAVY),
+        ('BACKGROUND',    (0,1), (-1,1), colors.HexColor('#F7F9FC')),
+        ('BOX',           (0,0), (-1,-1), 0.5, STEEL),
+        ('LINEBELOW',     (0,0), (-1,0), 0.5, NAVY2),
+        ('GRID',          (0,0), (-1,-1), 0.4, STEEL),
+        ('TOPPADDING',    (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+        # Highlight commission column
+        ('BACKGROUND',    (4,1), (4,1), CYAN_LT),
+        ('TEXTCOLOR',     (4,1), (4,1), NAVY),
+    ]))
+    story.append(det_tbl)
+    story.append(Spacer(1, 0.7*cm))
+
+    # ══════════════════════════════════════════════
+    # CERTIFICATION BLOCK
+    # ══════════════════════════════════════════════
+    cert_inner = [
+        [Paragraph('✓  RÉCEPTION CONFIRMÉE', cert_ttl_s)],
+        [Spacer(1, 0.15*cm)],
+        [Table([
+            [p('Date de confirmation', cert_lbl_s), p(confirmed_at_display, cert_val_s)],
+            [p('Validé par',           cert_lbl_s), p(confirmed_by or '—',   cert_val_s)],
+        ], colWidths=[W*0.32, W*0.50],
+        style=TableStyle([
+            ('TOPPADDING',    (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ('LEFTPADDING',   (0,0), (-1,-1), 0),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 0),
+            ('LINEBELOW',     (0,0), (-1,-2), 0.3, GREEN_BD),
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+        ]))],
+    ]
+    cert_content_tbl = Table(cert_inner, colWidths=[W*0.86])
+    cert_content_tbl.setStyle(TableStyle([
+        ('TOPPADDING',    (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('LEFTPADDING',   (0,0), (-1,-1), 0),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 0),
+        ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+    ]))
+    cert_outer = Table([[cert_content_tbl]], colWidths=[W])
+    cert_outer.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), GREEN_LT),
+        ('BOX',           (0,0), (-1,-1), 1.2, GREEN),
+        ('TOPPADDING',    (0,0), (-1,-1), 14),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 14),
+        ('LEFTPADDING',   (0,0), (-1,-1), 20),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 20),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(KeepTogether(cert_outer))
+    story.append(Spacer(1, 0.8*cm))
+
+    # ══════════════════════════════════════════════
+    # FOOTER
+    # ══════════════════════════════════════════════
+    story.append(Table([['']], colWidths=[W]))
+    story[-1].setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), CYAN),
+        ('TOPPADDING',    (0,0), (-1,-1), 1),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(Paragraph(
+        f'Ce document est généré automatiquement par le Système S.I.G.V.A — Smart Technology · {generated_at}',
+        foot_s))
+
+    doc.build(story)
+    buf.seek(0)
+    filename = f'recu_SIGVA_{ins.company_name.replace(" ", "_")}_{month}.pdf'
+    return send_file(buf, mimetype='application/pdf',
+                     as_attachment=True, download_name=filename)
+
+
 @main_bp.route('/mobile-money-dashboard')
 @roles_required('mobile_money_agent')
 def mobile_money_dashboard():
