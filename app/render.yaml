@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: police-api
+    runtime: python
+    plan: free
+    buildCommand: |
+      pip install --upgrade pip setuptools wheel
+      pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --worker-class gthread --threads 4 --graceful-timeout 60 --access-logfile - --error-logfile - --log-level info
+    numInstances: 1
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+
+  - type: postgres
+    name: police-db
+    plan: free
+    databaseName: police_db
+    ipAllowList: []

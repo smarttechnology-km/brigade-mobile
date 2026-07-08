@@ -1,0 +1,22 @@
+ * Serving Flask app 'app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.100.35:5001
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 102-054-991
+Traceback (most recent call last):
+  File "/Users/mohamedabdallah/Desktop/Police/run.py", line 25, in <module>
+    app.run(debug=True, host='0.0.0.0', port=5001)
+  File "/Users/mohamedabdallah/opt/anaconda3/lib/python3.9/site-packages/flask/app.py", line 1191, in run
+    run_simple(t.cast(str, host), port, self, **options)
+  File "/Users/mohamedabdallah/opt/anaconda3/lib/python3.9/site-packages/werkzeug/serving.py", line 1097, in run_simple
+    run_with_reloader(
+  File "/Users/mohamedabdallah/opt/anaconda3/lib/python3.9/site-packages/werkzeug/_reloader.py", line 446, in run_with_reloader
+    ensure_echo_on()
+  File "/Users/mohamedabdallah/opt/anaconda3/lib/python3.9/site-packages/werkzeug/_reloader.py", line 426, in ensure_echo_on
+    termios.tcsetattr(sys.stdin, termios.TCSANOW, attributes)
+termios.error: (4, 'Interrupted system call')
