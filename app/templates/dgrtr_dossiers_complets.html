@@ -2,9 +2,8 @@
 {% block content %}
 
 <style>
-.page-header { background: linear-gradient(100deg,#0f2660,#1d4ed8); color:#fff; border-radius:16px; padding:28px 32px; margin-bottom:28px; }
-.stat-card   { background:#fff; border-radius:12px; padding:20px 24px; box-shadow:0 1px 4px rgba(0,0,0,.07); text-align:center; }
-.stat-num    { font-size:2rem; font-weight:800; line-height:1; }
+.stat-card   { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px 20px; text-align:center; }
+.stat-num    { font-size:28px; font-weight:800; line-height:1; color:#0f172a; }
 .stat-lbl    { font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
 .badge-cat   { display:inline-block; background:#1e3a8a; color:#fff; font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px; margin:1px; }
 </style>
@@ -12,12 +11,12 @@
 <div class="container-fluid py-4">
 
   <!-- Header -->
-  <div class="page-header d-flex align-items-center justify-content-between mb-4">
+  <div class="d-flex align-items-center justify-content-between mb-4">
     <div>
-      <h4 class="fw-bold mb-1"><i class="fas fa-id-card me-2"></i>Dossiers Complétés</h4>
-      <small class="opacity-75">Permis de conduire délivrés via le workflow DGRTR</small>
+      <h4 class="fw-bold mb-0"><i class="fas fa-id-card text-primary me-2"></i>Dossiers Complétés</h4>
+      <small class="text-muted">Permis de conduire délivrés via le workflow DGRTR</small>
     </div>
-    <a href="/dgrtr-dashboard" class="btn btn-light btn-sm">
+    <a href="/dgrtr-dashboard" class="btn btn-outline-secondary btn-sm">
       <i class="fas fa-arrow-left me-2"></i>Retour au workflow
     </a>
   </div>
@@ -88,9 +87,9 @@
 <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
-      <div class="modal-header" style="background:linear-gradient(100deg,#0f2660,#1d4ed8);color:#fff;">
+      <div class="modal-header">
         <h5 class="modal-title" id="detail-title"><i class="fas fa-folder-open me-2"></i>Dossier</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" id="detail-body">Chargement…</div>
       <div class="modal-footer">
@@ -129,8 +128,8 @@ function updateStats(data) {
   document.getElementById('stat-temporaire').textContent= data.filter(function(d){ return d.type_permis === 'temporaire'; }).length;
   var now = new Date();
   var thisMonth = data.filter(function(d) {
-    if (!d.step5_validated_at) return false;
-    var parts = d.step5_validated_at.split('/');
+    if (!d.completed_at) return false;
+    var parts = d.completed_at.split('/');
     if (parts.length < 2) return false;
     return parseInt(parts[1]) === now.getMonth() + 1 && parseInt(parts[2]) === now.getFullYear();
   });
@@ -177,8 +176,8 @@ function renderTable(data) {
       <td>${typeBadge}</td>
       <td>${catBadges(d.categories)}</td>
       <td class="text-muted small">${d.country || '—'}</td>
-      <td class="text-muted small" style="white-space:nowrap;">${d.step5_validated_at || '—'}</td>
-      <td class="text-muted small">${d.step5_validated_by || '—'}</td>
+      <td class="text-muted small" style="white-space:nowrap;">${d.completed_at || '—'}</td>
+      <td class="text-muted small">${d.completed_by || '—'}</td>
       <td class="text-end pe-4" style="white-space:nowrap;">
         <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1" onclick="openDetail(${d.id})">
           <i class="fas fa-eye me-1"></i>Détails
@@ -250,7 +249,8 @@ function openDetail(id) {
       <div class="col-md-3"><span class="text-muted">Créé le</span><br>${d.created_at || '—'} <span class="text-muted">par</span> ${d.created_by || '—'}</div>
       <div class="col-md-3"><span class="text-muted">Étape 2</span><br>${d.step2_validated_at || '—'} <span class="text-muted">par</span> ${d.step2_validated_by || '—'}</div>
       <div class="col-md-3"><span class="text-muted">Étape 4 (vérif.)</span><br>${d.step4_validated_at || '—'} <span class="text-muted">par</span> ${d.step4_validated_by || '—'}</div>
-      <div class="col-md-3"><span class="text-muted">Délivré le</span><br><strong>${d.step5_validated_at || '—'}</strong> <span class="text-muted">par</span> <strong>${d.step5_validated_by || '—'}</strong></div>
+      ${d.step5_validated_at ? `<div class="col-md-3"><span class="text-muted">Signature DG</span><br>${d.step5_validated_at} <span class="text-muted">par</span> ${d.step5_validated_by || '—'}</div>` : ''}
+      <div class="col-md-3"><span class="text-muted">Délivré le</span><br><strong>${d.completed_at || '—'}</strong> <span class="text-muted">par</span> <strong>${d.completed_by || '—'}</strong></div>
     </div>`;
 
   // Bouton "Imprimer le dossier provisoire"

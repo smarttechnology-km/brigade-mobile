@@ -2,11 +2,10 @@
 {% block content %}
 
 <style>
-.page-header { background: linear-gradient(100deg,#0f2660,#1d4ed8); color:#fff; border-radius:16px; padding:28px 32px; margin-bottom:28px; }
-.stat-card   { background:#fff; border-radius:12px; padding:20px 24px; box-shadow:0 1px 6px rgba(0,0,0,.08); text-align:center; height:100%; }
-.stat-num    { font-size:2.2rem; font-weight:800; line-height:1.1; }
-.stat-lbl    { font-size:11.5px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
-.chart-card  { background:#fff; border-radius:12px; padding:22px 24px; box-shadow:0 1px 6px rgba(0,0,0,.08); }
+.stat-card   { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px 20px; text-align:center; height:100%; }
+.stat-num    { font-size:28px; font-weight:800; line-height:1.1; color:#0f172a; }
+.stat-lbl    { font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+.chart-card  { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:22px 24px; }
 .chart-title { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#374151; margin-bottom:16px; }
 .tab-btn     { border:none; background:none; padding:6px 16px; border-radius:20px; font-size:13px; font-weight:600; color:#6b7280; cursor:pointer; }
 .tab-btn.active { background:#1d4ed8; color:#fff; }
@@ -15,12 +14,12 @@
 <div class="container-fluid py-4">
 
   <!-- Header -->
-  <div class="page-header d-flex align-items-center justify-content-between mb-4">
+  <div class="d-flex align-items-center justify-content-between mb-4">
     <div>
-      <h4 class="fw-bold mb-1"><i class="fas fa-chart-bar me-2"></i>Statistiques DGRTR</h4>
-      <small class="opacity-75">Suivi de la délivrance des permis de conduire</small>
+      <h4 class="fw-bold mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>Statistiques DGRTR</h4>
+      <small class="text-muted">Suivi de la délivrance des permis de conduire</small>
     </div>
-    <a href="/dgrtr-dashboard" class="btn btn-light btn-sm">
+    <a href="/dgrtr-dashboard" class="btn btn-outline-secondary btn-sm">
       <i class="fas fa-arrow-left me-2"></i>Retour
     </a>
   </div>

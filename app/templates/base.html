@@ -149,10 +149,13 @@
             {% if current_user.dgrtr_type == 'employe' %}
             <a class="nav-link text-white {% if request.path == '/dgrtr/ajouter-permis' %}active{% endif %}" href="/dgrtr/ajouter-permis"><i class="fas fa-plus-circle me-2"></i> Ajouter un permis</a>
             {% endif %}
-            {% if current_user.dgrtr_type == 'directeur_technique' %}
+            {% if current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-dossiers-complets' %}active{% endif %}" href="/dgrtr-dossiers-complets"><i class="fas fa-check-circle me-2"></i> Dossiers Complétés</a>
             {% endif %}
-            {% if current_user.dgrtr_type == 'directeur_technique' %}
+            {% if current_user.dgrtr_type != 'employe' %}
+            <a class="nav-link text-white {% if request.path == '/licenses' %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
+            {% endif %}
+            {% if current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-statistiques' %}active{% endif %}" href="/dgrtr-statistiques"><i class="fas fa-chart-bar me-2"></i> Statistiques</a>
             {% endif %}
             {% endif %}

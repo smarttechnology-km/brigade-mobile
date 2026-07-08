@@ -12,7 +12,7 @@
       <p class="text-muted mb-0">Gestion des permis de conduire</p>
     </div>
     <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
-      {% if current_user.role == 'administrateur' %}
+      {% if current_user.role == 'administrateur' or (current_user.role == 'dgrtr' and current_user.dgrtr_type != 'directeur_technique') %}
       <button class="btn btn-outline-secondary" onclick="openSettingsModal()" title="Paramètres">
         <i class="fas fa-cog me-2"></i>Paramètres
       </button>
@@ -679,6 +679,7 @@
                 <select id="dgrtr-type" class="form-select">
                   <option value="employe">Employée</option>
                   <option value="directeur_technique">Directeur Technique</option>
+                  <option value="directeur_general">Directeur Général</option>
                 </select>
               </div>
               <div class="col-md-2">
@@ -838,7 +839,7 @@ function loadDgrtrUsers() {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Aucun compte DGRTR</td></tr>';
         return;
       }
-      const typeLabel = t => t === 'directeur_technique' ? '<span class="badge bg-primary">Directeur Technique</span>' : '<span class="badge bg-secondary">Employée</span>';
+      const typeLabel = t => t === 'directeur_technique' ? '<span class="badge bg-primary">Directeur Technique</span>' : t === 'directeur_general' ? '<span class="badge bg-success">Directeur Général</span>' : '<span class="badge bg-secondary">Employée</span>';
       tbody.innerHTML = users.map(u => `
         <tr>
           <td class="fw-semibold">${u.username}</td>
@@ -989,6 +990,7 @@ function saveEditDgrtrUser() {
           <select id="edit-dgrtr-type" class="form-select">
             <option value="employe">Employée</option>
             <option value="directeur_technique">Directeur Technique</option>
+            <option value="directeur_general">Directeur Général</option>
           </select>
         </div>
         <div class="mb-3">

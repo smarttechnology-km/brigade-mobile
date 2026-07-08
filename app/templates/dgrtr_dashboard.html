@@ -110,9 +110,14 @@
     <button class="btn btn-sm btn-outline-secondary" id="step-tab-4" onclick="setStepTab(4)">
       <span class="badge bg-primary me-1">4</span>Vérification
     </button>
+    {% if current_user.is_admin or current_user.dgrtr_type == 'directeur_general' %}
+    <button class="btn btn-sm btn-outline-success" id="step-tab-5" onclick="setStepTab(5)">
+      <span class="badge bg-success me-1">5</span>Signature DG
+    </button>
+    {% endif %}
     {% if current_user.is_admin or current_user.dgrtr_type == 'directeur_technique' %}
-    <button class="btn btn-sm btn-outline-warning" id="step-tab-5" onclick="setStepTab(5)">
-      <span class="badge bg-warning text-dark me-1">5</span>Impression A4
+    <button class="btn btn-sm btn-outline-warning" id="step-tab-6" onclick="setStepTab(6)">
+      <span class="badge bg-warning text-dark me-1">6</span>Impression A4
     </button>
     {% endif %}
   </div>
@@ -597,19 +602,44 @@
 
 
 <!-- ══════════════════════════════════════
-     MODAL — Étape 5 : Confirmation finale
+     MODAL — Étape 5 : Signature Directeur Général
 ══════════════════════════════════════ -->
-<div class="modal fade" id="step5Modal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="step5SignatureModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
-      <div class="modal-header" style="background:linear-gradient(100deg,#0f2660,#1d4ed8);color:#fff;">
-        <h5 class="modal-title"><span class="badge bg-warning text-dark me-2">Étape 5</span>Impression du permis A4</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      <div class="modal-header">
+        <h5 class="modal-title"><span class="badge bg-success me-2">Étape 5</span>Signature du Directeur Général</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body" id="step5-summary">Chargement…</div>
+      <div class="modal-body" id="step5sig-summary">Chargement…</div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
-        <button type="button" class="btn btn-primary btn-lg" id="btn-print-step5" onclick="printLicenseA4()">
+        <button type="button" class="btn btn-outline-danger" onclick="openRejectFromStep5()">
+          <i class="fas fa-times me-2"></i>Rejeter
+        </button>
+        <button type="button" class="btn btn-success btn-lg" id="btn-sign-step5" onclick="submitStep5Signature()">
+          <i class="fas fa-signature me-2"></i>Signer &amp; Approuver
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     MODAL — Étape 6 : Impression A4
+══════════════════════════════════════ -->
+<div class="modal fade" id="step6Modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><span class="badge bg-warning text-dark me-2">Étape 6</span>Impression du permis A4</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="step6-summary">Chargement…</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary btn-lg" id="btn-print-step6" onclick="printLicenseA4()">
           <i class="fas fa-print me-2"></i>Imprimer A4
         </button>
       </div>
@@ -651,6 +681,7 @@ var allDossiers    = [];
 var licenseSettings = { temp_validity_months: 12, permanent_validity_years: 10, category_validity: {} };
 var DGRTR_TYPE    = {{ (current_user.dgrtr_type or '') | tojson }};
 var DGRTR_COUNTRY = {{ (current_user.country or '') | tojson }};
+var IS_ADMIN      = {{ (current_user.role == 'administrateur') | tojson }};
 var ALL_CATS = ['A','A1','A2','B','C','D','E','F','P'];
 
 // ── Load on page open ──────────────────
@@ -766,13 +797,17 @@ var currentStepFilter = parseInt(localStorage.getItem('dgrtr_step_filter') || '0
 function setStepTab(step) {
   currentStepFilter = step;
   localStorage.setItem('dgrtr_step_filter', step);
-  for (var i = 0; i <= 5; i++) {
+  for (var i = 0; i <= 6; i++) {
     var btn = document.getElementById('step-tab-' + i);
     if (!btn) continue;
     if (i === step) {
-      btn.className = i === 5 ? 'btn btn-sm btn-warning active' : 'btn btn-sm btn-primary active';
+      btn.className = i === 6 ? 'btn btn-sm btn-warning active'
+                    : i === 5 ? 'btn btn-sm btn-success active'
+                    : 'btn btn-sm btn-primary active';
     } else {
-      btn.className = i === 5 ? 'btn btn-sm btn-outline-warning' : 'btn btn-sm btn-outline-secondary';
+      btn.className = i === 6 ? 'btn btn-sm btn-outline-warning'
+                    : i === 5 ? 'btn btn-sm btn-outline-success'
+                    : 'btn btn-sm btn-outline-secondary';
     }
   }
   filterDossiers();
@@ -841,17 +876,18 @@ function renderDossiersTable(data) {
 function stepProgress(d) {
   var steps = [
     !!d.step1_validated_at,
-    !!d.step2_validated_at,
-    !!d.step3_validated_at,
-    !!d.step4_validated_at,
-    !!d.step5_validated_at,
+    !!d.step3_validated_at,   // photo (UI step 2)
+    !!d.step2_validated_at,   // info  (UI step 3)
+    !!d.step4_validated_at,   // vérif (UI step 4)
+    !!d.step5_validated_at,   // signature DG (UI step 5)
+    !!d.step6_validated_at,   // impression   (UI step 6)
   ];
   var html = '<div class="step-progress">';
   steps.forEach(function(done, i) {
     var next = steps[i + 1];
     var cls = done ? 'done' : (i === steps.filter(Boolean).length ? 'active' : 'todo');
     html += `<span class="step-dot ${cls}">${i + 1}</span>`;
-    if (i < 4) {
+    if (i < 5) {
       html += `<span class="step-connector ${done && next ? 'done' : 'todo'}"></span>`;
     }
   });
@@ -864,7 +900,7 @@ function statusBadge(d) {
   if (d.status === 'rejete')  return '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejeté</span>';
   if (!d.dossier_number)      return '<span class="badge bg-secondary">Étape 1 en cours</span>';
   var step = d.current_step;
-  return `<span class="badge bg-primary">Étape ${step}/5</span>`;
+  return `<span class="badge bg-primary">Étape ${step}/6</span>`;
 }
 
 function renderDossiers(data) {
@@ -975,13 +1011,15 @@ function openDetail(id) {
   if (!d) return;
   currentDossierId = d.id;
 
-  // À partir du step 3 : ouvrir directement le modal du step en cours
-  // Exception : vérification (step4) — seul le DT est redirigé vers le form ;
-  // les autres voient le detailModal (pour pouvoir rejeter)
-  if (d.step4_validated_at && !d.step5_validated_at) { openStep5(id); return; }
+  // Navigation directe selon l'étape en cours
+  if (d.step5_validated_at && !d.step6_validated_at && d.status === 'en_cours') {
+    if (IS_ADMIN || DGRTR_TYPE === 'directeur_technique') { openStep6(id); return; }
+  }
+  if (d.step4_validated_at && !d.step5_validated_at && d.status === 'en_cours') {
+    if (IS_ADMIN || DGRTR_TYPE === 'directeur_general') { openStep5Signature(id); return; }
+  }
   if (d.step2_validated_at && !d.step4_validated_at && d.status === 'en_cours') {
-    if (DGRTR_TYPE === 'directeur_technique') { openStep4(id); return; }
-    // admin, chef → tomber sur le detailModal qui a le bouton Rejeter
+    if (IS_ADMIN || DGRTR_TYPE === 'directeur_technique') { openStep4(id); return; }
   }
   if (d.step3_validated_at && !d.step2_validated_at) { openStep2(id); return; }
 
@@ -1003,6 +1041,7 @@ function openDetail(id) {
     'Prise de photo ID',
     'Informations &amp; Détails du permis',
     'Vérification',
+    'Signature du Directeur Général',
     'Impression du permis A4 PDF',
   ];
 
@@ -1035,6 +1074,7 @@ function openDetail(id) {
     },
     { label: stepLabels[3], done: !!d.step4_validated_at, by: d.step4_validated_by, at: d.step4_validated_at, content: '' },
     { label: stepLabels[4], done: !!d.step5_validated_at, by: d.step5_validated_by, at: d.step5_validated_at, content: '' },
+    { label: stepLabels[5], done: !!d.step6_validated_at, by: d.step6_validated_by, at: d.step6_validated_at, content: '' },
   ];
 
   var doneCount = steps.filter(function(s){ return s.done; }).length;
@@ -1077,17 +1117,19 @@ function openDetail(id) {
   // Bouton "Étape suivante"
   var nextBtn = document.getElementById('detail-next-btn');
   var nextActions = [
-    { label: 'Commencer Étape 2', fn: function() { openStep3(currentDossierId); } },
-    { label: 'Commencer Étape 3', fn: function() { openStep2(currentDossierId); } },
-    { label: 'Commencer Étape 4', fn: function() { openStep4(currentDossierId); } },
-    { label: 'Commencer Étape 5', fn: function() { openStep5(currentDossierId); } },
+    { label: 'Commencer Étape 2', fn: function() { openStep3(currentDossierId); }, roles: null },
+    { label: 'Commencer Étape 3', fn: function() { openStep2(currentDossierId); }, roles: null },
+    { label: 'Commencer Étape 4', fn: function() { openStep4(currentDossierId); }, roles: ['directeur_technique'] },
+    { label: 'Étape 5 — Signature DG', fn: function() { openStep5Signature(currentDossierId); }, roles: ['directeur_general'] },
+    { label: 'Étape 6 — Impression A4', fn: function() { openStep6(currentDossierId); }, roles: ['directeur_technique'] },
   ];
-  if (doneCount >= 1 && doneCount <= 4) {
+  if (doneCount >= 1 && doneCount <= 5) {
     var na = nextActions[doneCount - 1];
-    // Step 5 réservé au Directeur Technique
-    if (doneCount === 4 && DGRTR_TYPE && DGRTR_TYPE !== 'directeur_technique') {
+    var allowed = IS_ADMIN || !na.roles || na.roles.indexOf(DGRTR_TYPE) !== -1;
+    if (!allowed) {
+      var roleLbl = na.roles[0] === 'directeur_technique' ? 'Directeur Technique' : 'Directeur Général';
       nextBtn.className = 'btn btn-secondary disabled';
-      nextBtn.innerHTML = '<i class="fas fa-lock me-2"></i>Réservé au Directeur Technique';
+      nextBtn.innerHTML = '<i class="fas fa-lock me-2"></i>Réservé au ' + roleLbl;
       nextBtn.onclick   = null;
     } else {
       nextBtn.className = 'btn btn-primary';
@@ -1110,8 +1152,9 @@ function openDetail(id) {
     { label: 'Retour Étape 2', fn: function() { editStep(2); } },
     { label: 'Retour Étape 3', fn: function() { editStep(3); } },
     { label: 'Retour Étape 4', fn: function() { editStep(4); } },
+    { label: 'Retour Étape 5', fn: function() { editStep(5); } },
   ];
-  if (doneCount >= 3 && doneCount <= 5) {
+  if (doneCount >= 3 && doneCount <= 6) {
     var pa = prevActions[doneCount - 1];
     prevLabel.textContent = pa.label;
     prevBtn.onclick = function() {
@@ -1123,13 +1166,13 @@ function openDetail(id) {
     prevBtn.classList.add('d-none');
   }
 
-  // Bouton Rejeter : uniquement au step 4, réservé au Directeur Technique et admin
+  // Bouton Rejeter : étape 4 (DT ou admin) ou étape 5 (DG ou admin)
   var rejectBtn = document.getElementById('detail-reject-btn');
-  if (d.status === 'en_cours' && d.current_step === 4 && DGRTR_TYPE !== 'employe') {
-    rejectBtn.classList.remove('d-none');
-  } else {
-    rejectBtn.classList.add('d-none');
-  }
+  var canReject = d.status === 'en_cours' && (
+    (d.current_step === 4 && (IS_ADMIN || DGRTR_TYPE === 'directeur_technique')) ||
+    (d.current_step === 5 && (IS_ADMIN || DGRTR_TYPE === 'directeur_general'))
+  );
+  rejectBtn.classList.toggle('d-none', !canReject);
 
   // Bandeau rejeté
   var rejectedBanner = '';
@@ -1146,7 +1189,7 @@ function openDetail(id) {
 
 
 function editStep(stepNum) {
-  var fns = [openStep1Edit, openStep3, openStep2, openStep4];
+  var fns = [openStep1Edit, openStep3, openStep2, openStep4, openStep5Signature, openStep6];
   if (fns[stepNum - 1]) fns[stepNum - 1](currentDossierId);
 }
 
@@ -1486,12 +1529,90 @@ function submitStep4() {
 }
 
 
-// ── Step 5 — Impression A4 ────────
-function openStep5(dossierId) {
+// ── Step 5 — Signature du Directeur Général ──
+function openStep5Signature(dossierId) {
   currentDossierId = dossierId;
   var d = allDossiers.find(function(x){ return x.id === dossierId; });
 
-  var html = '<p class="text-muted small mb-3"><i class="fas fa-check-circle text-success me-1"></i>Permis validé et délivré. Cliquez sur <strong>Imprimer A4</strong> pour générer le document officiel.</p>';
+  var html = '';
+  if (d) {
+    var photoSrc = d.photo_filename ? '/uploads/license_photos/' + d.photo_filename : '';
+    html += `<div class="alert alert-info py-2 small mb-3"><i class="fas fa-info-circle me-1"></i>
+      Veuillez vérifier les informations du dossier ci-dessous. Votre signature approuve la délivrance du permis et autorise le Directeur Technique à procéder à l'impression.</div>
+    <div class="row g-3 align-items-start mb-3">
+      <div class="col-auto">
+        ${photoSrc ? `<img src="${photoSrc}" style="width:100px;height:124px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb;">` : '<div style="width:100px;height:124px;background:#f3f4f6;border-radius:8px;border:2px solid #e5e7eb;display:flex;align-items:center;justify-content:center;"><i class="fas fa-user-circle fa-3x text-muted"></i></div>'}
+      </div>
+      <div class="col">
+        <table class="table table-sm table-borderless mb-0" style="font-size:14px;">
+          <tbody>
+            <tr><td class="text-muted" style="width:170px;">Dossier n°</td><td class="fw-bold font-monospace text-primary">${d.dossier_number || '—'}</td></tr>
+            <tr><td class="text-muted">Nom complet</td><td class="fw-semibold text-uppercase">${d.nom || ''} ${d.prenom || ''}</td></tr>
+            <tr><td class="text-muted">Date de naissance</td><td>${d.date_naissance || '—'}</td></tr>
+            <tr><td class="text-muted">Île</td><td>${d.country || '—'}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <hr>
+    <div class="row g-2" style="font-size:14px;">
+      <div class="col-md-6"><span class="text-muted">Numéro de permis :</span> <strong class="font-monospace">${d.license_number_proposed || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Type :</span> <strong>${d.type_permis || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Date de délivrance :</span> <strong>${d.issue_date || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Date d'expiration :</span> <strong>${d.expiry_date || '—'}</strong></div>
+      <div class="col-md-6"><span class="text-muted">Catégories :</span> <strong>${d.categories || '—'}</strong></div>
+      <div class="col-12"><span class="text-muted">Centre :</span> <strong>${d.centre_immatriculation || '—'}</strong></div>
+    </div>
+    <hr>
+    <div class="text-muted small">Validé à l'étape 4 par <strong>${d.step4_validated_by || '—'}</strong> le ${d.step4_validated_at || '—'}</div>`;
+  }
+
+  document.getElementById('step5sig-summary').innerHTML = html;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('step5SignatureModal')).show();
+}
+
+function submitStep5Signature() {
+  var btn = document.getElementById('btn-sign-step5');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Signature…';
+
+  fetch('/api/dossiers-permis/' + currentDossierId + '/step5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-signature me-2"></i>Signer &amp; Approuver';
+    if (data.error) {
+      alert(data.error);
+    } else {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('step5SignatureModal')).hide();
+      loadDossiers();
+      showToast('Dossier signé — en attente d\'impression', 'success');
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-signature me-2"></i>Signer &amp; Approuver';
+    alert('Erreur réseau.');
+  });
+}
+
+function openRejectFromStep5() {
+  document.getElementById('reject-reason').value = '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('step5SignatureModal')).hide();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectModal')).show();
+}
+
+
+// ── Step 6 — Impression A4 ────────
+function openStep6(dossierId) {
+  currentDossierId = dossierId;
+  var d = allDossiers.find(function(x){ return x.id === dossierId; });
+
+  var html = '<p class="text-muted small mb-3"><i class="fas fa-check-circle text-success me-1"></i>Permis approuvé par le Directeur Général. Cliquez sur <strong>Imprimer A4</strong> pour générer le document officiel.</p>';
 
   if (d) {
     var photoSrc = d.photo_filename ? '/uploads/license_photos/' + d.photo_filename : '';
@@ -1524,19 +1645,19 @@ function openStep5(dossierId) {
       <div class="col-md-12"><span class="text-muted">Centre :</span> <strong>${d.centre_immatriculation || '—'}</strong></div>
     </div>
     <hr>
-    `;
+    <div class="text-muted small">Signé par <strong>${d.step5_validated_by || '—'}</strong> le ${d.step5_validated_at || '—'}</div>`;
   }
 
-  document.getElementById('step5-summary').innerHTML = html;
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('step5Modal')).show();
+  document.getElementById('step6-summary').innerHTML = html;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('step6Modal')).show();
 }
 
 function printLicenseA4() {
-  var btn = document.getElementById('btn-print-step5');
+  var btn = document.getElementById('btn-print-step6');
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Délivrance…';
 
-  fetch('/api/dossiers-permis/' + currentDossierId + '/step5', {
+  fetch('/api/dossiers-permis/' + currentDossierId + '/step6', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
@@ -1548,7 +1669,7 @@ function printLicenseA4() {
     if (data.error) {
       alert(data.error);
     } else {
-      bootstrap.Modal.getOrCreateInstance(document.getElementById('step5Modal')).hide();
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('step6Modal')).hide();
       loadDossiers();
       window.open('/dgrtr/licenses/' + data.license_id + '/print-a4', '_blank');
     }
