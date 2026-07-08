@@ -10,7 +10,7 @@
         {% set ref = request.referrer or '' %}
         {% if '/fines' in ref %}
           <a href="/fines" class="btn btn-sm btn-outline-primary">
-            <i class="fas fa-arrow-left"></i> Retour Amandes
+            <i class="fas fa-arrow-left"></i> Retour Amendes
           </a>
         {% elif '/dashboard' in ref %}
           <a href="/dashboard" class="btn btn-sm btn-outline-primary">
@@ -30,8 +30,8 @@
           </p>
           {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'policier')) and unpaid_count and unpaid_count > 0 %}
           <div class="alert alert-danger py-2" role="alert">
-            <strong>Attention :</strong> Ce véhicule a <strong>{{ unpaid_count }}</strong> amande{{ 's' if unpaid_count > 1 else '' }} impayée{{ 's' if unpaid_count > 1 else '' }}.
-            <a href="/fines?q={{ vehicle.license_plate|urlencode }}&paid=false" class="btn btn-sm btn-outline-light ms-2">Voir Amandes</a>
+            <strong>Attention :</strong> Ce véhicule a <strong>{{ unpaid_count }}</strong> amende{{ 's' if unpaid_count > 1 else '' }} impayée{{ 's' if unpaid_count > 1 else '' }}.
+            <a href="/fines?q={{ vehicle.license_plate|urlencode }}&paid=false" class="btn btn-sm btn-outline-light ms-2">Voir Amendes</a>
           </div>
           {% endif %}
           <p class="text-muted small mb-3">
@@ -243,7 +243,7 @@
             <div>
               <div class="btn-group btn-group-sm" role="group" id="history-section-group">
                 <button type="button" class="btn btn-outline-secondary active" data-section="all">Tous</button>
-                <button type="button" class="btn btn-outline-secondary" data-section="fines">Amande émise</button>
+                <button type="button" class="btn btn-outline-secondary" data-section="fines">Amende émise</button>
                 <button type="button" class="btn btn-outline-secondary" data-section="payments">Paiement</button>
               </div>
               <div class="btn-group btn-group-sm ms-2" role="group" id="payment-filter-group" style="display:none;">
@@ -259,7 +259,7 @@
                   <div class="d-flex justify-content-between">
                     <div>
                       {% if h.type == 'fine' %}
-                        <span class="badge bg-warning text-dark me-2">Amande</span>
+                        <span class="badge bg-warning text-dark me-2">Amende</span>
                         <strong>{{ h.reason }}</strong>
                         <span class="mx-2 text-muted">—</span>
                         <span class="fw-bold">{{ '%d'|format(h.amount) }} KMF</span>
