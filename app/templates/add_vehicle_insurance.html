@@ -106,9 +106,14 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label for="insurance_expiry" class="form-label">
+                        <label class="form-label">
                             <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
                         </label>
+                        <div class="d-flex gap-2 mb-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDuration(3)">3 mois</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDuration(6)">6 mois</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDuration(12)">12 mois</button>
+                        </div>
                         <input type="date" class="form-control" id="insurance_expiry" name="insurance_expiry" required />
                     </div>
                 </div>
@@ -191,6 +196,15 @@ function renderLicenseTags() {
             <i class="fas fa-id-card me-1"></i>${n}
             <button type="button" class="btn-close btn-close-white ms-1" style="font-size:0.6rem;" onclick="removeLicenseNum('${n}')"></button>
         </span>`).join('');
+}
+
+function setInsuranceDuration(months) {
+    const today = new Date();
+    today.setMonth(today.getMonth() + months);
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    document.getElementById('insurance_expiry').value = `${y}-${m}-${d}`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
