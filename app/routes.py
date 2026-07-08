@@ -1106,7 +1106,7 @@ def vehicles_page():
 
 
 @main_bp.route('/licenses')
-@roles_required('administrateur', 'judiciaire')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
 def licenses_page():
     return render_template('licenses.html')
 
@@ -1120,7 +1120,7 @@ def dgrtr_dashboard():
 @main_bp.route('/dgrtr-statistiques')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_statistiques():
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
         abort(403)
     return render_template('dgrtr_stats.html')
 
@@ -1128,7 +1128,7 @@ def dgrtr_statistiques():
 @main_bp.route('/dgrtr-dossiers-complets')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_dossiers_complets():
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
         from flask import abort
         abort(403)
     return render_template('dgrtr_dossiers_complets.html')
@@ -1212,7 +1212,7 @@ def license_print(license_id):
 
 
 @main_bp.route('/licenses/<int:license_id>/print-folded')
-@roles_required('administrateur', 'judiciaire')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_print_folded(license_id):
     from app.models import DriverLicense, LicenseSetting
     from dateutil.relativedelta import relativedelta
@@ -1256,7 +1256,7 @@ def license_insurance_view(license_number):
 
 
 @main_bp.route('/licenses/<int:license_id>/print-card')
-@roles_required('administrateur', 'judiciaire')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_print_card(license_id):
     from app.models import DriverLicense, LicenseSetting
     lic = DriverLicense.query.get_or_404(license_id)
@@ -1267,13 +1267,13 @@ def license_print_card(license_id):
 
 
 @main_bp.route('/licenses/print-requests')
-@roles_required('administrateur', 'judiciaire')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_print_requests_page():
     return render_template('license_print_requests.html')
 
 
 @main_bp.route('/licenses/<int:license_id>/print-history')
-@roles_required('administrateur', 'judiciaire')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_print_history(license_id):
     from app.models import DriverLicense, LicenseSetting, PointReductionHistory
     lic = DriverLicense.query.get_or_404(license_id)
@@ -3346,7 +3346,7 @@ def api_users_list():
 
 
 @main_bp.route('/api/users/create', methods=['POST'])
-@roles_required('administrateur')
+@roles_required('administrateur', 'dgrtr')
 def api_users_create():
     data = request.get_json() or {}
     username = data.get('username')
@@ -3380,7 +3380,7 @@ def api_users_create():
 
 
 @main_bp.route('/api/users/<int:user_id>/update', methods=['POST'])
-@roles_required('administrateur')
+@roles_required('administrateur', 'dgrtr')
 def api_users_update(user_id):
     data = request.get_json() or {}
     u = User.query.get_or_404(user_id)
@@ -3419,7 +3419,7 @@ def api_users_update(user_id):
 
 
 @main_bp.route('/api/users/<int:user_id>/delete', methods=['POST'])
-@roles_required('administrateur')
+@roles_required('administrateur', 'dgrtr')
 def api_users_delete(user_id):
     if current_user.id == user_id:
         return jsonify({'error':'cannot delete yourself'}), 400

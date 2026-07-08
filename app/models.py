@@ -22,7 +22,7 @@ class User(UserMixin, db.Model):
     phone = db.Column(db.String(30), nullable=True)
     country = db.Column(db.String(50), nullable=True)  # Grand Comores, Anjouan, Moheli
     region = db.Column(db.String(100), nullable=True)  # Region based on country
-    dgrtr_type = db.Column(db.String(30), nullable=True)  # 'employe' | 'directeur_technique'
+    dgrtr_type = db.Column(db.String(30), nullable=True)  # 'employe' | 'directeur_technique' | 'directeur_general'
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     session_version = db.Column(db.Integer, nullable=False, default=0)  # Incremented on each login to invalidate old tokens
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
@@ -1633,6 +1633,10 @@ class LicenseDossier(db.Model):
     step5_validated_at = db.Column(db.DateTime, nullable=True)
     step5_validated_by = db.Column(db.String(100), nullable=True)
 
+    step6_data         = db.Column(db.Text, nullable=True)
+    step6_validated_at = db.Column(db.DateTime, nullable=True)
+    step6_validated_by = db.Column(db.String(100), nullable=True)
+
     # État du workflow
     current_step = db.Column(db.Integer, nullable=False, default=0)
     status       = db.Column(db.String(20), nullable=False, default='en_cours')  # en_cours | complet | rejete
@@ -1658,14 +1662,16 @@ class LicenseDossier(db.Model):
                     self.doc_recu_paiement])
 
     def _ui_current_step(self):
-        # Ordre UI : step1 → step3(photo) → step2(info) → step4 → step5
-        if self.step5_validated_at or self.step4_validated_at:
-            return 5
-        if self.step2_validated_at:   # info (UI step 3) fait → prochain : vérification
+        # Ordre UI : step1 → step3(photo) → step2(info) → step4(vérif) → step5(signature DG) → step6(impression)
+        if self.step5_validated_at:
+            return 6  # signature DG faite → en attente impression (ou déjà complet)
+        if self.step4_validated_at:
+            return 5  # vérification faite → en attente signature DG
+        if self.step2_validated_at:
             return 4
-        if self.step3_validated_at:   # photo (UI step 2) fait → prochain : info
+        if self.step3_validated_at:
             return 3
-        if self.step1_validated_at:   # validation fait → prochain : photo
+        if self.step1_validated_at:
             return 2
         return 1
 
@@ -1708,6 +1714,10 @@ class LicenseDossier(db.Model):
             'step4_validated_by': self.step4_validated_by or '',
             'step5_validated_at': self.step5_validated_at.strftime('%d/%m/%Y %H:%M') if self.step5_validated_at else '',
             'step5_validated_by': self.step5_validated_by or '',
+            'step6_validated_at': self.step6_validated_at.strftime('%d/%m/%Y %H:%M') if self.step6_validated_at else '',
+            'step6_validated_by': self.step6_validated_by or '',
+            'completed_at': (self.step6_validated_at or self.step5_validated_at).strftime('%d/%m/%Y %H:%M') if (self.step6_validated_at or self.step5_validated_at) else '',
+            'completed_by': self.step6_validated_by or self.step5_validated_by or '',
             'current_step': self._ui_current_step(),
             'all_docs_checked': self.all_docs_checked,
             'status': self.status,

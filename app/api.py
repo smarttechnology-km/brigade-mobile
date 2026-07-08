@@ -2863,6 +2863,11 @@ def delete_photo_submission_reason(reason_id):
 
 # ── Driver Licenses ──────────────────────────────────────────────────────────
 
+def _is_license_admin():
+    """True for administrateur and all dgrtr accounts (full license management)."""
+    return current_user.is_admin or getattr(current_user, 'role', '') == 'dgrtr'
+
+
 @api_bp.route('/licenses/settings', methods=['GET'])
 @login_required
 def api_licenses_settings_get():
@@ -2872,8 +2877,8 @@ def api_licenses_settings_get():
 @api_bp.route('/licenses/settings', methods=['PUT'])
 @login_required
 def api_licenses_settings_put():
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     data = request.get_json() or {}
     s = LicenseSetting.get()
     if 'initial_points' in data:
@@ -2913,8 +2918,8 @@ def api_licenses_settings_put():
 @api_bp.route('/licenses/settings/signature', methods=['POST'])
 @login_required
 def api_licenses_settings_signature():
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     file = request.files.get('signature')
     if not file or not file.filename:
         return jsonify({'error': 'Aucun fichier reçu'}), 400
@@ -2938,8 +2943,8 @@ def api_licenses_settings_signature():
 @api_bp.route('/licenses/settings/signature', methods=['DELETE'])
 @login_required
 def api_licenses_settings_signature_delete():
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     s = LicenseSetting.get()
     if s.directeur_signature_filename:
         old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'signatures', s.directeur_signature_filename)
@@ -2961,8 +2966,8 @@ def api_point_articles_list():
 @api_bp.route('/licenses/point-articles', methods=['POST'])
 @login_required
 def api_point_articles_create():
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     from app.models import PointReductionArticle
     data = request.get_json() or {}
     code = (data.get('code') or '').strip()
@@ -2978,8 +2983,8 @@ def api_point_articles_create():
 @api_bp.route('/licenses/point-articles/<int:article_id>', methods=['PUT'])
 @login_required
 def api_point_articles_update(article_id):
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     from app.models import PointReductionArticle
     a = PointReductionArticle.query.get_or_404(article_id)
     data = request.get_json() or {}
@@ -2994,8 +2999,8 @@ def api_point_articles_update(article_id):
 @api_bp.route('/licenses/point-articles/<int:article_id>', methods=['DELETE'])
 @login_required
 def api_point_articles_delete(article_id):
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     from app.models import PointReductionArticle
     a = PointReductionArticle.query.get_or_404(article_id)
     db.session.delete(a)
@@ -3013,8 +3018,8 @@ def api_point_reasons_list():
 @api_bp.route('/licenses/point-reasons', methods=['POST'])
 @login_required
 def api_point_reasons_create():
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     data  = request.get_json() or {}
     label = (data.get('label') or '').strip()
     if not label:
@@ -3034,8 +3039,8 @@ def api_point_reasons_create():
 @api_bp.route('/licenses/point-reasons/<int:reason_id>', methods=['PUT'])
 @login_required
 def api_point_reasons_update(reason_id):
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     r = PointReductionReason.query.get_or_404(reason_id)
     data = request.get_json() or {}
     if 'label' in data:
@@ -3051,8 +3056,8 @@ def api_point_reasons_update(reason_id):
 @api_bp.route('/licenses/point-reasons/<int:reason_id>', methods=['DELETE'])
 @login_required
 def api_point_reasons_delete(reason_id):
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     r = PointReductionReason.query.get_or_404(reason_id)
     db.session.delete(r)
     db.session.commit()
@@ -3068,8 +3073,8 @@ def api_status_rules_list():
 @api_bp.route('/licenses/status-rules', methods=['POST'])
 @login_required
 def api_status_rules_create():
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     data = request.get_json() or {}
     rule = LicenseStatusRule(
         status    = data.get('status', 'revoque'),
@@ -3084,8 +3089,8 @@ def api_status_rules_create():
 @api_bp.route('/licenses/status-rules/apply', methods=['POST'])
 @login_required
 def api_status_rules_apply():
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     rules = LicenseStatusRule.query.order_by(LicenseStatusRule.threshold.asc()).all()
     updated = 0
     for lic in DriverLicense.query.all():
@@ -3106,8 +3111,8 @@ def api_status_rules_apply():
 @api_bp.route('/licenses/status-rules/<int:rule_id>', methods=['DELETE'])
 @login_required
 def api_status_rules_delete(rule_id):
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     r = LicenseStatusRule.query.get_or_404(rule_id)
     db.session.delete(r)
     db.session.commit()
@@ -3350,8 +3355,7 @@ def api_licenses_list():
 @api_bp.route('/licenses', methods=['POST'])
 @login_required
 def api_licenses_create():
-    is_dgrtr_employe = getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', '') == 'employe'
-    if not (current_user.is_admin or getattr(current_user, 'role', '') in ['administrateur', 'judiciaire'] or is_dgrtr_employe):
+    if not (current_user.is_admin or getattr(current_user, 'role', '') in ('administrateur', 'judiciaire', 'dgrtr')):
         return jsonify({'error': 'Accès refusé'}), 403
     data = request.get_json() or {}
     num = (data.get('license_number') or '').strip().upper()
@@ -3554,7 +3558,7 @@ def api_mobile_reduce_points(license_id):
 @api_bp.route('/licenses/<int:license_id>', methods=['PUT'])
 @login_required
 def api_licenses_update(license_id):
-    if not (current_user.is_admin or getattr(current_user, 'role', '') in ['administrateur', 'judiciaire']):
+    if not (current_user.is_admin or getattr(current_user, 'role', '') in ('administrateur', 'judiciaire', 'dgrtr')):
         return jsonify({'error': 'Accès refusé'}), 403
     lic  = DriverLicense.query.get_or_404(license_id)
     err = check_island_access(lic.holder_island)
@@ -3651,8 +3655,8 @@ def api_license_associated_vehicles(license_id):
 @api_bp.route('/licenses/<int:license_id>', methods=['DELETE'])
 @login_required
 def api_licenses_delete(license_id):
-    if not current_user.is_admin:
-        return jsonify({'error': 'Réservé à l\'administrateur'}), 403
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
     lic = DriverLicense.query.get_or_404(license_id)
     if PointReductionHistory.query.filter_by(license_id=lic.id).first():
         return jsonify({'error': 'Ce permis a un historique de points et ne peut pas être supprimé.'}), 400
@@ -3703,7 +3707,7 @@ def api_licenses_photo(license_id):
 @api_bp.route('/licenses/<int:license_id>/print-request', methods=['POST'])
 @login_required
 def api_license_print_request_create(license_id):
-    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
     lic = DriverLicense.query.get_or_404(license_id)
     data  = request.get_json(silent=True) or {}
@@ -3726,7 +3730,7 @@ def api_license_print_request_create(license_id):
 @api_bp.route('/licenses/<int:license_id>/print-requests', methods=['GET'])
 @login_required
 def api_license_print_requests_list(license_id):
-    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
     DriverLicense.query.get_or_404(license_id)
     reqs = (LicensePrintRequest.query
@@ -3739,7 +3743,7 @@ def api_license_print_requests_list(license_id):
 @api_bp.route('/licenses/print-requests/<int:req_id>', methods=['DELETE'])
 @login_required
 def api_license_print_request_cancel(req_id):
-    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
     req = LicensePrintRequest.query.get_or_404(req_id)
     req.status = 'cancelled'
@@ -3750,7 +3754,7 @@ def api_license_print_request_cancel(req_id):
 @api_bp.route('/licenses/print-requests/pending-count', methods=['GET'])
 @login_required
 def api_license_print_requests_pending_count():
-    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
     count = LicensePrintRequest.query.filter_by(status='pending').count()
     return jsonify({'count': count})
@@ -3759,7 +3763,7 @@ def api_license_print_requests_pending_count():
 @api_bp.route('/licenses/print-requests', methods=['GET'])
 @login_required
 def api_license_print_requests_all():
-    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire'):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
     status_filter = request.args.get('status')
     q = LicensePrintRequest.query
@@ -4257,7 +4261,7 @@ def api_search_drivers():
 @api_bp.route('/dgrtr-users', methods=['GET'])
 @login_required
 def list_dgrtr_users():
-    if not (hasattr(current_user, 'is_admin') and current_user.is_admin):
+    if not _is_license_admin():
         return jsonify({'error': 'Accès refusé'}), 403
     users = User.query.filter_by(role='dgrtr').order_by(User.full_name).all()
     return jsonify([{
@@ -4496,13 +4500,33 @@ def validate_dossier_step4(dossier_id):
 @api_bp.route('/dossiers-permis/<int:dossier_id>/step5', methods=['POST'])
 @login_required
 def validate_dossier_step5(dossier_id):
+    """Étape 5 — Signature du Directeur Général. Ne crée pas encore le permis."""
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_general':
+        return jsonify({'error': 'Réservé au Directeur Général'}), 403
+    d = LicenseDossier.query.get_or_404(dossier_id)
+    if not d.step4_validated_at:
+        return jsonify({'error': 'Étape 4 (vérification) non validée'}), 400
+
+    d.step5_validated_at = now_comoros()
+    d.step5_validated_by = current_user.username
+    d.current_step       = 6  # en attente de l'impression A4
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>/step6', methods=['POST'])
+@login_required
+def validate_dossier_step6(dossier_id):
+    """Étape 6 — Impression A4 par le Directeur Technique. Crée le permis et clôt le dossier."""
     if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
     if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
         return jsonify({'error': 'Réservé au Directeur Technique'}), 403
     d = LicenseDossier.query.get_or_404(dossier_id)
-    if not d.step4_validated_at:
-        return jsonify({'error': 'Étape 4 non validée'}), 400
+    if not d.step5_validated_at:
+        return jsonify({'error': 'Étape 5 (signature) non validée'}), 400
     if not d.license_number_proposed:
         return jsonify({'error': 'Numéro de permis manquant'}), 400
 
@@ -4537,9 +4561,9 @@ def validate_dossier_step5(dossier_id):
     db.session.flush()
 
     d.license_id          = lic.id
-    d.step5_validated_at  = now_comoros()
-    d.step5_validated_by  = current_user.username
-    d.current_step        = 5
+    d.step6_validated_at  = now_comoros()
+    d.step6_validated_by  = current_user.username
+    d.current_step        = 6
     d.status              = 'complet'
     db.session.commit()
     return jsonify({'dossier': d.to_dict(), 'license_id': lic.id, 'license_number': lic.license_number})
@@ -4598,12 +4622,15 @@ def dgrtr_stats():
     if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
 
-    from sqlalchemy import func, extract
+    from sqlalchemy import func, extract, case
     from datetime import timedelta
 
     tz_now = now_comoros()
     current_year  = tz_now.year
     current_month = tz_now.month
+
+    # Date de complétion : step6 (nouveau workflow) ou step5 (anciens dossiers)
+    completed_col = func.coalesce(LicenseDossier.step6_validated_at, LicenseDossier.step5_validated_at)
 
     total_dossiers   = LicenseDossier.query.count()
     total_complets   = LicenseDossier.query.filter_by(status='complet').count()
@@ -4613,37 +4640,37 @@ def dgrtr_stats():
         LicenseDossier.status == 'complet', LicenseDossier.type_permis == 'permanent').count()
     total_temporaire = LicenseDossier.query.filter(
         LicenseDossier.status == 'complet', LicenseDossier.type_permis == 'temporaire').count()
-    this_month = LicenseDossier.query.filter(
+    this_month = db.session.query(func.count()).filter(
         LicenseDossier.status == 'complet',
-        extract('year',  LicenseDossier.step5_validated_at) == current_year,
-        extract('month', LicenseDossier.step5_validated_at) == current_month
-    ).count()
+        extract('year',  completed_col) == current_year,
+        extract('month', completed_col) == current_month
+    ).scalar()
 
     days_data = []
     for i in range(29, -1, -1):
         day = (tz_now - timedelta(days=i)).date()
-        count = LicenseDossier.query.filter(
+        count = db.session.query(func.count()).filter(
             LicenseDossier.status == 'complet',
-            func.date(LicenseDossier.step5_validated_at) == day
-        ).count()
+            func.date(completed_col) == day
+        ).scalar()
         days_data.append({'date': day.strftime('%d/%m'), 'count': count})
 
     months_data = []
     month_names = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
     for m in range(1, 13):
-        count = LicenseDossier.query.filter(
+        count = db.session.query(func.count()).filter(
             LicenseDossier.status == 'complet',
-            extract('year',  LicenseDossier.step5_validated_at) == current_year,
-            extract('month', LicenseDossier.step5_validated_at) == m
-        ).count()
+            extract('year',  completed_col) == current_year,
+            extract('month', completed_col) == m
+        ).scalar()
         months_data.append({'month': month_names[m - 1], 'count': count})
 
     year_rows = db.session.query(
-        extract('year', LicenseDossier.step5_validated_at).label('yr'),
+        extract('year', completed_col).label('yr'),
         func.count().label('cnt')
     ).filter(
         LicenseDossier.status == 'complet',
-        LicenseDossier.step5_validated_at != None
+        completed_col != None
     ).group_by('yr').order_by('yr').all()
     years_data = [{'year': int(r.yr), 'count': r.cnt} for r in year_rows]
 
