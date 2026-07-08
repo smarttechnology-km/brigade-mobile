@@ -331,6 +331,7 @@ function openEditDatesModal(vehicleId) {
         if (insuranceInput) insuranceInput.disabled = false;
         if (alertEl) alertEl.style.display = 'none';
     }
+
     // Save button always enabled — license numbers can always be updated
     if (saveBtn) { saveBtn.disabled = false; saveBtn.title = ''; }
 
