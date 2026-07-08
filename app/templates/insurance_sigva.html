@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Service S.I.G.V.A{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Header — matches insurance_dashboard.html pattern -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-satellite-dish me-2"></i>Service S.I.G.V.A</h2>
+            <p class="text-muted mb-0">Commissions Smart Technology — <span id="company-name-sub">Chargement...</span></p>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="alert alert-info mb-0">
+                <small><i class="fas fa-microchip me-1"></i><strong id="company-badge">Chargement...</strong></small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info banner -->
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-info-circle me-2"></i>
+        Cette page affiche les commissions que votre compagnie doit régler à <strong>Smart Technology</strong>
+        pour chaque véhicule activé ou renouvelé sur le Système S.I.G.V.A.
+        Le taux de commission est de <strong id="rate-label">—</strong> par véhicule.
+    </div>
+
+    <!-- Stat cards — identical structure to insurance_dashboard.html -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 class="text-primary mb-0" id="stat-vehicles">—</h3>
+                    <small class="text-muted">Véhicules assignés</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 class="text-danger mb-0" id="stat-due">—</h3>
+                    <small class="text-muted">Commissions dues</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 class="text-success mb-0" id="stat-confirmed">—</h3>
+                    <small class="text-muted">Commissions reçues</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 class="text-warning mb-0" id="stat-months-due">—</h3>
+                    <small class="text-muted">Mois en attente</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly detail table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <h6 class="mb-0"><i class="fas fa-table me-2"></i>Détail mensuel des commissions</h6>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary px-2 py-1" id="btn-year-prev" title="Année précédente">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="fw-bold px-1" id="year-label" style="min-width:52px;text-align:center;">—</span>
+                        <button class="btn btn-sm btn-outline-secondary px-2 py-1" id="btn-year-next" title="Année suivante">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="loading-state" class="text-center py-5 text-muted">
+                        <div class="spinner-border spinner-border-sm me-2"></div>Chargement…
+                    </div>
+                    <div id="table-wrap" style="display:none;">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Mois</th>
+                                        <th class="text-center">Activations</th>
+                                        <th class="text-center">Renouvellements</th>
+                                        <th class="text-end">Commission</th>
+                                        <th class="text-center">Statut</th>
+                                        <th>Validé par</th>
+                                        <th class="text-center">Reçu</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sigva-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="empty-state" class="text-center py-5 text-muted" style="display:none;">
+                        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                        Aucune donnée disponible pour cette année.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    function fmt(n) { return Math.round(n).toLocaleString('fr-FR') + ' KMF'; }
+    function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    var selectedYear = new Date().getFullYear();
+    var currentYear  = selectedYear;
+
+    function load(year) {
+        document.getElementById('loading-state').style.display = '';
+        document.getElementById('table-wrap').style.display    = 'none';
+        document.getElementById('empty-state').style.display   = 'none';
+
+        fetch('/api/insurance/sigva-commissions?year=' + year)
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.error) {
+                    document.getElementById('loading-state').textContent = 'Erreur : ' + d.error;
+                    return;
+                }
+
+                selectedYear = d.selected_year;
+                currentYear  = d.current_year;
+
+                document.getElementById('year-label').textContent         = selectedYear;
+                document.getElementById('btn-year-next').disabled         = (selectedYear >= currentYear + 1);
+                document.getElementById('btn-year-prev').disabled         = (selectedYear <= currentYear - 5);
+                document.getElementById('rate-label').textContent         =
+                    d.commission_rate ? d.commission_rate.toLocaleString('fr-FR') + ' KMF' : '—';
+                document.getElementById('company-badge').textContent      = d.company_name;
+                document.getElementById('company-name-sub').textContent   = d.company_name;
+
+                document.getElementById('stat-vehicles').textContent  = d.vehicle_count;
+                document.getElementById('stat-due').textContent       = fmt(d.total_due);
+                document.getElementById('stat-confirmed').textContent = fmt(d.total_confirmed);
+                var monthsDue = d.months.filter(function (m) { return !m.confirmed && m.commission > 0; }).length;
+                document.getElementById('stat-months-due').textContent = monthsDue;
+
+                document.getElementById('loading-state').style.display = 'none';
+
+                var hasActivity = d.months.some(function (m) { return m.activations || m.renewals; });
+                if (!hasActivity) {
+                    document.getElementById('empty-state').style.display = '';
+                    return;
+                }
+
+                document.getElementById('table-wrap').style.display = '';
+                var rows = d.months.map(function (m) {
+                    var commCell, statusCell, byCell, receiptCell;
+
+                    commCell = m.commission > 0
+                        ? '<td class="text-end fw-semibold">' + fmt(m.commission) + '</td>'
+                        : '<td class="text-end text-muted">0 KMF</td>';
+
+                    if (m.commission === 0) {
+                        statusCell  = '<td class="text-center"><span class="badge bg-secondary">—</span></td>';
+                        byCell      = '<td></td>';
+                        receiptCell = '<td></td>';
+                    } else if (m.confirmed) {
+                        var dt    = m.confirmed_at ? new Date(m.confirmed_at) : null;
+                        var dtStr = dt ? dt.toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'}) : '';
+                        statusCell  = '<td class="text-center"><span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Reçue'
+                            + (dtStr ? ' le ' + dtStr : '') + '</span></td>';
+                        byCell      = '<td><small class="text-muted">' + (m.confirmed_by ? esc(m.confirmed_by) : '—') + '</small></td>';
+                        receiptCell = '<td class="text-center"><a href="/insurance-sigva/receipt/' + encodeURIComponent(m.month)
+                            + '" class="btn btn-sm btn-outline-success" target="_blank">'
+                            + '<i class="fas fa-file-pdf me-1"></i>PDF</a></td>';
+                    } else {
+                        statusCell  = '<td class="text-center"><span class="badge bg-warning text-dark">'
+                            + '<i class="fas fa-clock me-1"></i>En attente</span></td>';
+                        byCell      = '<td></td>';
+                        receiptCell = '<td class="text-center text-muted" style="font-size:.78rem;">—</td>';
+                    }
+
+                    return '<tr>'
+                        + '<td><strong>' + esc(m.month_label) + '</strong></td>'
+                        + '<td class="text-center">' + m.activations + '</td>'
+                        + '<td class="text-center">' + m.renewals + '</td>'
+                        + commCell + statusCell + byCell + receiptCell + '</tr>';
+                });
+
+                var totalAll       = d.total_due + d.total_confirmed;
+                var confirmedCount = d.months.filter(function (m) { return m.confirmed; }).length;
+                rows.push('<tr class="table-light">'
+                    + '<td class="fw-bold">Total ' + selectedYear + '</td>'
+                    + '<td></td><td></td>'
+                    + '<td class="text-end fw-bold">' + fmt(totalAll) + '</td>'
+                    + '<td class="text-center"><small class="text-muted">' + confirmedCount + ' mois reçus</small></td>'
+                    + '<td></td><td></td></tr>');
+
+                document.getElementById('sigva-tbody').innerHTML = rows.join('');
+            })
+            .catch(function () {
+                document.getElementById('loading-state').textContent = 'Erreur de chargement.';
+            });
+    }
+
+    document.getElementById('btn-year-prev').addEventListener('click', function () {
+        if (selectedYear > currentYear - 5) load(selectedYear - 1);
+    });
+    document.getElementById('btn-year-next').addEventListener('click', function () {
+        if (selectedYear < currentYear + 1) load(selectedYear + 1);
+    });
+
+    load(selectedYear);
+})();
+</script>
+{% endblock %}
