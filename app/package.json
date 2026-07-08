@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "@react-native-community/datetimepicker": "^9.1.0",
-    "expo": "^55.0.24",
-    "react-native-svg-transformer": "^1.5.3"
-  }
-}
