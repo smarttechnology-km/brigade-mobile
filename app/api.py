@@ -228,19 +228,28 @@ def api_track(token):
 
     # Attach suspension info when vehicle is suspended
     if vehicle.status == 'suspended':
+        # Look in all history entries that could indicate a suspension
         suspension_entry = (
             VehicleHistory.query
-            .filter_by(vehicle_id=vehicle.id, action='Véhicule suspendu')
+            .filter(
+                VehicleHistory.vehicle_id == vehicle.id,
+                db.or_(
+                    VehicleHistory.action == 'Véhicule suspendu',
+                    db.and_(
+                        VehicleHistory.action.in_(['Statut du véhicule modifié (mobile)', 'Mise à jour: Statut']),
+                        VehicleHistory.notes.ilike('%suspendu%')
+                    )
+                )
+            )
             .order_by(VehicleHistory.created_at.desc())
             .first()
         )
         if suspension_entry:
             notes = suspension_entry.notes or ''
-            # Extract motif after "Motif : "
             motif = ''
             if 'Motif : ' in notes:
                 motif = notes.split('Motif : ', 1)[-1].strip()
-            vehicle_dict['suspension_motif'] = motif or notes
+            vehicle_dict['suspension_motif'] = motif or ''
             vehicle_dict['suspension_by'] = suspension_entry.officer or ''
             vehicle_dict['suspension_date'] = (
                 suspension_entry.created_at.strftime('%d/%m/%Y %H:%M')
