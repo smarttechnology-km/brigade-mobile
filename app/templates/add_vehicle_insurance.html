@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+
 {% block title %}Ajouter un Véhicule{% endblock %}
 
 {% block content %}
@@ -89,31 +90,10 @@
                 <hr class="my-4" />
 
                 <div class="row">
-                    <div class="col-md-12 mb-3">
-                        <label class="form-label">
-                            <i class="fas fa-id-card text-primary me-1"></i>Numéros de permis des conducteurs <span class="text-danger">*</span>
-                        </label>
-                        <div class="input-group mb-2">
-                            <input type="text" id="license-num-input" class="form-control" placeholder="Ex: KM-2024-001" autocomplete="off" />
-                            <button class="btn btn-outline-primary" type="button" onclick="addLicenseNum()">
-                                <i class="fas fa-plus"></i> Ajouter
-                            </button>
-                        </div>
-                        <div id="license-num-tags" class="d-flex flex-wrap gap-2 mb-1"></div>
-                        <small class="text-muted">Appuyez sur Entrée ou cliquez sur Ajouter pour chaque numéro.</small>
-                    </div>
-                </div>
-
-                <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">
+                        <label for="insurance_expiry" class="form-label">
                             <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
                         </label>
-                        <div class="d-flex gap-2 mb-2">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDuration(3)">3 mois</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDuration(6)">6 mois</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDuration(12)">12 mois</button>
-                        </div>
                         <input type="date" class="form-control" id="insurance_expiry" name="insurance_expiry" required />
                     </div>
                 </div>
@@ -156,61 +136,6 @@ let vehicleHasActiveInsurance = false;
 let vehicleHasUnpaidFines = false;
 let vehicleIsInactive = false;
 let vehicleBlockReason = '';
-let licenseNumbers = [];
-
-async function addLicenseNum() {
-    const input = document.getElementById('license-num-input');
-    const val = (input.value || '').trim().toUpperCase();
-    if (!val) return;
-    if (licenseNumbers.includes(val)) { input.value = ''; return; }
-
-    input.disabled = true;
-    try {
-        const r = await fetch(`/api/vehicles/check-driver-license?number=${encodeURIComponent(val)}`, { credentials: 'same-origin' });
-        const data = await r.json();
-        if (!data.exists) {
-            alert(`Numéro de permis "${val}" introuvable dans la base de données.`);
-            return;
-        }
-        licenseNumbers.push(val);
-        input.value = '';
-        renderLicenseTags();
-    } catch(e) {
-        alert('Erreur lors de la vérification du permis.');
-    } finally {
-        input.disabled = false;
-        input.focus();
-    }
-}
-
-function removeLicenseNum(num) {
-    licenseNumbers = licenseNumbers.filter(n => n !== num);
-    renderLicenseTags();
-}
-
-function renderLicenseTags() {
-    const container = document.getElementById('license-num-tags');
-    if (!container) return;
-    container.innerHTML = licenseNumbers.map(n => `
-        <span class="badge bg-primary d-flex align-items-center gap-1" style="font-size:0.85rem;">
-            <i class="fas fa-id-card me-1"></i>${n}
-            <button type="button" class="btn-close btn-close-white ms-1" style="font-size:0.6rem;" onclick="removeLicenseNum('${n}')"></button>
-        </span>`).join('');
-}
-
-function setInsuranceDuration(months) {
-    const today = new Date();
-    today.setMonth(today.getMonth() + months);
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, '0');
-    const d = String(today.getDate()).padStart(2, '0');
-    document.getElementById('insurance_expiry').value = `${y}-${m}-${d}`;
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    const inp = document.getElementById('license-num-input');
-    if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addLicenseNum(); } });
-});
 
 function setAddFormAvailability(canAdd) {
     const submitBtn = document.querySelector('#vehicle-form button[type="submit"]');
@@ -227,12 +152,12 @@ function isInactiveBlockReason(reason) {
 // Search for vehicle when license plate changes
 document.getElementById('license_plate').addEventListener('change', async function() {
     const licensePlate = this.value.trim();
-
+    
     if (!licensePlate) {
         clearVehicleFields();
         return;
     }
-
+    
     const searchStatus = document.getElementById('search-status');
     const blockReasonAlert = document.getElementById('block-reason-alert');
     const blockReasonMessage = document.getElementById('block-reason-message');
@@ -242,23 +167,23 @@ document.getElementById('license_plate').addEventListener('change', async functi
     if (blockReasonAlert) blockReasonAlert.style.display = 'none';
     vehicleIsInactive = false;
     vehicleBlockReason = '';
-
+    
     try {
         const response = await fetch(`/api/vehicles/search-by-license-plate?license_plate=${encodeURIComponent(licensePlate)}`, {
             credentials: 'same-origin'
         });
-
+        
         if (!response.ok) {
             throw new Error('Véhicule non trouvé');
         }
-
+        
         const data = await response.json();
         loadedVehicle = data.vehicle;
         vehicleHasActiveInsurance = !!data.has_active_insurance;
         vehicleHasUnpaidFines = !!data.has_unpaid_fines;
         vehicleBlockReason = data.block_reason || '';
         vehicleIsInactive = isInactiveBlockReason(vehicleBlockReason);
-
+        
         // Populate all fields
         document.getElementById('make').value = loadedVehicle.make || '-';
         document.getElementById('model').value = loadedVehicle.model || '-';
@@ -268,7 +193,7 @@ document.getElementById('license_plate').addEventListener('change', async functi
         document.getElementById('owner_name').value = loadedVehicle.owner_name || '-';
         document.getElementById('owner_island').value = loadedVehicle.owner_island || '-';
         document.getElementById('usage_type').value = loadedVehicle.usage_type || '-';
-
+        
         if (vehicleHasUnpaidFines) {
             searchStatus.textContent = data.block_reason || '✗ Véhicule avec amende non payée';
             searchStatus.className = 'text-danger';
@@ -297,14 +222,14 @@ document.getElementById('license_plate').addEventListener('change', async functi
             setAddFormAvailability(true);
             if (blockReasonAlert) blockReasonAlert.style.display = 'none';
         }
-
+        
         // Focus on insurance expiry field
         if (!vehicleHasActiveInsurance && !vehicleHasUnpaidFines && !vehicleIsInactive) {
             setTimeout(() => {
                 document.getElementById('insurance_expiry').focus();
             }, 500);
         }
-
+        
     } catch (err) {
         console.error('Error:', err);
         clearVehicleFields();
@@ -330,8 +255,6 @@ function clearVehicleFields() {
     document.getElementById('owner_island').value = '';
     document.getElementById('usage_type').value = '';
     document.getElementById('insurance_expiry').value = '';
-    licenseNumbers = [];
-    renderLicenseTags();
     loadedVehicle = null;
     vehicleHasActiveInsurance = false;
     vehicleHasUnpaidFines = false;
@@ -346,7 +269,7 @@ setAddFormAvailability(false);
 
 document.getElementById('vehicle-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-
+    
     if (!loadedVehicle) {
         alert('Veuillez saisir une immatriculation valide');
         return;
@@ -366,52 +289,46 @@ document.getElementById('vehicle-form').addEventListener('submit', async functio
         alert(vehicleBlockReason || 'Ce véhicule est inactif ou son QR code est expiré.');
         return;
     }
-
+    
     const form = this;
     const submitBtn = form.querySelector('button[type="submit"]');
     const successAlert = document.getElementById('success-alert');
     const errorAlert = document.getElementById('error-alert');
     const errorMessage = document.getElementById('error-message');
-
+    
     // Hide alerts
     successAlert.style.display = 'none';
     errorAlert.style.display = 'none';
-
-    if (licenseNumbers.length === 0) {
-        alert('Veuillez ajouter au moins un numéro de permis conducteur.');
-        document.getElementById('license-num-input')?.focus();
-        return;
-    }
-
+    
     const insuranceExpiry = document.getElementById('insurance_expiry').value;
     if (!insuranceExpiry) {
         alert('Veuillez entrer une date d\'expiration pour l\'assurance');
         return;
     }
-
+    
     // Disable submit button
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement...';
-
+    
     try {
         // Get current user's insurance company name to auto-assign
         const meResponse = await fetch('/api/vehicles/insurance-accounts/me', {
             credentials: 'same-origin'
         });
-
+        
         if (!meResponse.ok) {
             throw new Error('Could not retrieve insurance company information');
         }
-
+        
         const meData = await meResponse.json();
         const insuranceCompanyName = meData.insurance_name;
-
+        
         // Prepare data for update
         const data = {
             insurance_company: insuranceCompanyName,
             insurance_expiry: insuranceExpiry
         };
-
+        
         // Update the vehicle with new insurance company and date
         const response = await fetch(`/api/vehicles/${loadedVehicle.id}`, {
             method: 'PUT',
@@ -421,37 +338,38 @@ document.getElementById('vehicle-form').addEventListener('submit', async functio
             },
             body: JSON.stringify(data)
         });
-
+        
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.error || 'Erreur lors de la création du véhicule');
         }
-
+        
         // Create assignment
         const assignResponse = await fetch('/api/vehicles/assignments', {
             method: 'POST',
             credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
                 vehicle_id: loadedVehicle.id,
                 insurance_account_id: meData.id,
-                notes: 'Assigned by insurance account',
-                driver_license_numbers: licenseNumbers
+                notes: 'Assigned by insurance account'
             })
         });
-
+        
         // Show success message
         successAlert.style.display = 'block';
-
+        
         // Reset form
         clearVehicleFields();
         form.reset();
-
+        
         // Redirect after 2 seconds
         setTimeout(() => {
             window.location.href = '/insurance-dashboard';
         }, 2000);
-
+        
     } catch (err) {
         console.error('Error:', err);
         errorMessage.textContent = err.message;

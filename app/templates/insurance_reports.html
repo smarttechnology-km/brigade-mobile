@@ -1,383 +1,410 @@
 {% extends "base.html" %}
+
 {% block title %}Rapports{% endblock %}
 
 {% block content %}
-<style>
-.rpt-page { padding: 1.5rem; }
-.rpt-header { margin-bottom: 1.5rem; }
-.rpt-title { font-size: 1.4rem; font-weight: 700; margin: 0; }
-.rpt-sub   { font-size: .82rem; color: #6c757d; margin-top: .2rem; }
-
-/* Stat cards */
-.rpt-stat { border-radius: 12px; border: none; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
-.rpt-stat .card-body { padding: .9rem 1rem; }
-.rpt-stat-val  { font-size: 1.6rem; font-weight: 700; line-height: 1; }
-.rpt-stat-lbl  { font-size: .72rem; color: #6c757d; margin-top: .25rem; }
-
-/* Type buttons */
-.rpt-type-grid { display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
-.rpt-type-btn  {
-    display: flex; align-items: center; gap: .55rem;
-    padding: .55rem 1rem; border-radius: 10px; border: 1.5px solid #dee2e6;
-    background: #fff; cursor: pointer; font-size: .84rem; font-weight: 600;
-    color: #495057; transition: all .18s;
-}
-.rpt-type-btn:hover  { border-color: #0d6efd; color: #0d6efd; background: #f0f4ff; }
-.rpt-type-btn.active { border-color: #0d6efd; background: #0d6efd; color: #fff; }
-.rpt-type-btn .rpt-ico { font-size: 1rem; }
-
-/* Month picker row */
-.rpt-month-row { display: none; align-items: center; gap: .6rem; margin-bottom: 1rem; }
-.rpt-month-row.show { display: flex; }
-.rpt-month-row label { font-size: .82rem; font-weight: 600; color: #495057; white-space: nowrap; }
-.rpt-month-row input { max-width: 180px; }
-
-/* Results panel */
-.rpt-panel { border-radius: 12px; border: none; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
-.rpt-panel-hdr {
-    border-radius: 12px 12px 0 0; background: #0d6efd; color: #fff;
-    padding: .75rem 1.1rem; display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap;
-}
-.rpt-panel-hdr-title { font-size: .95rem; font-weight: 700; }
-.rpt-panel-meta  { font-size: .75rem; color: rgba(255,255,255,.75); }
-.rpt-search-wrap { padding: .85rem 1.1rem .5rem; }
-.rpt-search { border-radius: 8px; font-size: .84rem; }
-.rpt-table-wrap  { padding: 0 .5rem .75rem; }
-.rpt-table { font-size: .84rem; }
-.rpt-table thead th { background: #f8f9fa; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; border-bottom: 1px solid #dee2e6; white-space: nowrap; }
-.rpt-table tbody tr:hover { background: #f0f4ff; }
-.rpt-empty { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
-.rpt-empty i { font-size: 2.5rem; display: block; margin-bottom: .75rem; }
-
-/* Activity mini-stats */
-.rpt-act-stats { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; padding: .75rem 1.1rem 0; }
-.rpt-act-chip  {
-    display: flex; align-items: center; gap: .4rem;
-    padding: .4rem .8rem; border-radius: 20px; font-size: .82rem; font-weight: 700;
-}
-.rpt-act-chip.green  { background: #d1e7dd; color: #0a3622; }
-.rpt-act-chip.blue   { background: #cfe2ff; color: #084298; }
-.rpt-act-chip.grey   { background: #e9ecef; color: #495057; }
-
-/* Spinner */
-.rpt-spinner { text-align: center; padding: 3rem 1rem; }
-
-@media print {
-    .rpt-type-grid, .rpt-month-row, .rpt-search-wrap, .btn { display: none !important; }
-    .rpt-table { font-size: .82rem; }
-}
-</style>
-
-<div class="rpt-page">
-
-    <!-- ── Header ── -->
-    <div class="rpt-header d-flex align-items-start justify-content-between flex-wrap gap-2">
-        <div>
-            <div class="rpt-title"><i class="fas fa-chart-bar me-2 text-primary"></i>Rapports</div>
-            <div class="rpt-sub" id="rpt-company-name">Chargement…</div>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <button class="btn btn-sm btn-outline-secondary" id="export-csv-btn">
-                <i class="fas fa-download me-1"></i>Télécharger CSV
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">
-                <i class="fas fa-print me-1"></i>Imprimer
-            </button>
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-file-alt me-2"></i>Rapports</h2>
+            <p class="text-muted mb-0">Générez et imprimez des rapports détaillés sur vos véhicules</p>
         </div>
     </div>
 
-    <!-- ── Always-visible stat cards ── -->
-    <div class="row g-3 mb-4" id="stat-cards">
-        <div class="col-6 col-md-3">
-            <div class="card rpt-stat">
-                <div class="card-body">
-                    <div class="rpt-stat-val text-primary" id="sc-total">—</div>
-                    <div class="rpt-stat-lbl">Total véhicules</div>
+    <!-- Report Selection Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <div class="row align-items-end g-3">
+                <!-- Report Type Selection -->
+                <div class="col-md-4">
+                    <label for="report-type" class="form-label">
+                        <i class="fas fa-list me-1"></i>Type de Rapport
+                    </label>
+                    <select class="form-select" id="report-type">
+                        <option value="">-- Sélectionner un rapport --</option>
+                        <option value="all-vehicles">📋 Tous les Véhicules</option>
+                        <option value="expired">⏰ Assurances Expirées</option>
+                        <option value="expiring-soon">⚠️ Expirant Bientôt (30 jours)</option>
+                        <option value="activity">📊 Rapport d'Activité</option>
+                        <option value="statistics">📈 Statistiques</option>
+                    </select>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card rpt-stat">
-                <div class="card-body">
-                    <div class="rpt-stat-val text-success" id="sc-active">—</div>
-                    <div class="rpt-stat-lbl">Assurances actives</div>
+
+                <!-- Date Range (for activity report) -->
+                <div class="col-md-3" id="date-range-container" style="display: none;">
+                    <label for="start-date" class="form-label">
+                        <i class="fas fa-calendar me-1"></i>Date de Début
+                    </label>
+                    <input type="date" class="form-control" id="start-date" />
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card rpt-stat">
-                <div class="card-body">
-                    <div class="rpt-stat-val text-warning" id="sc-soon">—</div>
-                    <div class="rpt-stat-lbl">Expirant dans 30 j</div>
+
+                <div class="col-md-3" id="end-date-container" style="display: none;">
+                    <label for="end-date" class="form-label">
+                        <i class="fas fa-calendar me-1"></i>Date de Fin
+                    </label>
+                    <input type="date" class="form-control" id="end-date" />
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card rpt-stat">
-                <div class="card-body">
-                    <div class="rpt-stat-val text-danger" id="sc-expired">—</div>
-                    <div class="rpt-stat-lbl">Assurances expirées</div>
+
+                <!-- Generate Button -->
+                <div class="col-md-12 col-lg-2 mt-2 mt-lg-0">
+                    <button type="button" class="btn btn-primary w-100" id="generate-btn">
+                        <i class="fas fa-sync-alt me-2"></i>Générer le Rapport
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ── Report type buttons ── -->
-    <div class="rpt-type-grid">
-        <button class="rpt-type-btn" data-type="expired" onclick="selectType('expired')">
-            <i class="fas fa-times-circle rpt-ico text-danger"></i>Assurances Expirées
-        </button>
-        <button class="rpt-type-btn" data-type="expiring-soon" onclick="selectType('expiring-soon')">
-            <i class="fas fa-exclamation-triangle rpt-ico text-warning"></i>Expirant Bientôt
-        </button>
-        <button class="rpt-type-btn" data-type="activity" onclick="selectType('activity')">
-            <i class="fas fa-chart-line rpt-ico text-primary"></i>Rapport d'Activité
-        </button>
+    <!-- Statistics Card (for statistics report) -->
+    <div id="statistics-section" style="display: none;" class="mb-4">
+        <div class="row" id="statistics-container"></div>
     </div>
 
-    <!-- ── Month picker (activity only) ── -->
-    <div class="rpt-month-row" id="month-row">
-        <label><i class="fas fa-calendar-alt me-1"></i>Mois :</label>
-        <input type="month" class="form-control form-control-sm" id="activity-month" />
-    </div>
-
-    <!-- ── Spinner ── -->
-    <div class="rpt-spinner" id="rpt-spinner" style="display:none;">
-        <div class="spinner-border text-primary" role="status"></div>
-        <div class="text-muted mt-2" style="font-size:.82rem;">Génération du rapport…</div>
-    </div>
-
-    <!-- ── Error ── -->
-    <div class="alert alert-danger" id="rpt-error" style="display:none;">
-        <i class="fas fa-exclamation-circle me-1"></i><span id="rpt-error-msg"></span>
-    </div>
-
-    <!-- ── Results panel ── -->
-    <div class="card rpt-panel" id="rpt-panel" style="display:none;">
-        <div class="rpt-panel-hdr">
-            <div>
-                <div class="rpt-panel-hdr-title"><i class="fas fa-table me-2"></i><span id="rpt-panel-title">—</span></div>
-                <div class="rpt-panel-meta" id="rpt-panel-meta">—</div>
+    <!-- Report Results Card -->
+    <div id="results-section" style="display: none;" class="card border-0 shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h5 class="mb-0"><i class="fas fa-table me-2"></i><span id="report-title">Rapport</span></h5>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button type="button" class="btn btn-light btn-sm me-2" id="export-csv-btn">
+                        <i class="fas fa-download me-1"></i>Télécharger CSV
+                    </button>
+                    <button type="button" class="btn btn-light btn-sm" onclick="window.print()">
+                        <i class="fas fa-print me-1"></i>Imprimer
+                    </button>
+                </div>
             </div>
-            <div class="rpt-panel-meta" id="rpt-panel-count"></div>
         </div>
+        <div class="card-body p-4">
+            <!-- Report Info -->
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <small class="text-muted">Compagnie:</small>
+                    <p class="mb-0" id="insurance-name">-</p>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Date de Génération:</small>
+                    <p class="mb-0" id="generated-date">-</p>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Total Enregistrements:</small>
+                    <p class="mb-0"><strong id="record-count">0</strong></p>
+                </div>
+            </div>
 
-        <!-- Activity chips -->
-        <div class="rpt-act-stats" id="act-chips" style="display:none;">
-            <div class="rpt-act-chip green"><i class="fas fa-plus-circle"></i><span id="chip-act">0</span> nouveaux</div>
-            <div class="rpt-act-chip blue"><i class="fas fa-sync-alt"></i><span id="chip-ren">0</span> renouvellements</div>
-            <div class="rpt-act-chip grey"><i class="fas fa-list"></i><span id="chip-tot">0</span> total</div>
-        </div>
+            <hr class="my-3" />
 
-        <!-- Search -->
-        <div class="rpt-search-wrap">
-            <input type="text" class="form-control rpt-search" id="rpt-search"
-                   placeholder="Rechercher immatriculation, propriétaire…" oninput="filterTable()" />
-        </div>
-
-        <!-- Table -->
-        <div class="rpt-table-wrap">
+            <!-- Results Table -->
             <div class="table-responsive">
-                <table class="table table-hover rpt-table mb-0">
-                    <thead id="rpt-thead"></thead>
-                    <tbody id="rpt-tbody"></tbody>
+                <table class="table table-hover" id="results-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th><i class="fas fa-id-card me-1"></i>Immatriculation</th>
+                            <th><i class="fas fa-user me-1"></i>Propriétaire</th>
+                            <th><i class="fas fa-car me-1"></i>Type</th>
+                            <th><i class="fas fa-map-marker-alt me-1"></i>Île</th>
+                            <th><i class="fas fa-shield-alt me-1"></i>Assurance Exp.</th>
+                            <th><i class="fas fa-phone me-1"></i>Téléphone</th>
+                            <th><i class="fas fa-briefcase me-1"></i>Usage</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
                 </table>
             </div>
-            <div class="rpt-empty" id="rpt-empty" style="display:none;">
-                <i class="fas fa-inbox"></i>Aucun résultat trouvé
+
+            <!-- Empty State -->
+            <div id="empty-state" class="text-center py-5" style="display: none;">
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <p class="text-muted">Aucun résultat trouvé</p>
             </div>
         </div>
 
-        <!-- Print footer -->
-        <div class="d-print-block d-none px-3 pb-3 text-muted" style="font-size:.78rem;">
-            Rapport généré le <span id="print-date"></span> — Confidentiel
+        <!-- Print Footer (hidden from screen) -->
+        <div class="d-print-block d-none mt-4 pt-4 border-top text-muted small">
+            <p>Rapport généré le: <span id="print-date"></span></p>
+            <p>Ce rapport est confidentiel et destiné à la compagnie d'assurance uniquement.</p>
         </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="text-center py-5" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Chargement...</span>
+        </div>
+        <p class="text-muted mt-2">Génération du rapport en cours...</p>
+    </div>
+
+    <!-- Error Alert -->
+    <div id="error-alert" class="alert alert-danger" style="display: none;" role="alert">
+        <i class="fas fa-exclamation-circle me-2"></i><span id="error-message"></span>
     </div>
 </div>
 
+<style>
+    @media print {
+        .btn, .card-header, #date-range-container, #end-date-container, .col-md-4.text-end {
+            display: none !important;
+        }
+        .table {
+            font-size: 0.9rem;
+        }
+        body {
+            background: white;
+        }
+    }
+</style>
+
 <script>
-(function () {
-    let currentData = null;
-    let currentType = null;
+let currentReportData = null;
 
-    // ── Load stats on page load ──
-    fetch('/api/vehicles/reports/statistics', { credentials: 'same-origin' })
-        .then(r => r.ok ? r.json() : null)
-        .then(d => {
-            if (!d) return;
-            if (d.insurance_company) document.getElementById('rpt-company-name').textContent = d.insurance_company;
-            if (d.statistics) {
-                const s = d.statistics;
-                document.getElementById('sc-total').textContent   = s.total_vehicles ?? '—';
-                document.getElementById('sc-active').textContent  = s.active ?? '—';
-                document.getElementById('sc-soon').textContent    = s.expiring_soon ?? '—';
-                document.getElementById('sc-expired').textContent = s.expired ?? '—';
+// Show/hide date range fields based on report type
+document.getElementById('report-type').addEventListener('change', function() {
+    const dateRangeContainer = document.getElementById('date-range-container');
+    const endDateContainer = document.getElementById('end-date-container');
+    
+    if (this.value === 'activity') {
+        dateRangeContainer.style.display = 'block';
+        endDateContainer.style.display = 'block';
+    } else {
+        dateRangeContainer.style.display = 'none';
+        endDateContainer.style.display = 'none';
+    }
+});
+
+// Set default dates for activity report
+const today = new Date();
+const thirtyDaysAgo = new Date(today);
+thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+document.getElementById('start-date').valueAsDate = thirtyDaysAgo;
+document.getElementById('end-date').valueAsDate = today;
+
+// Generate report
+document.getElementById('generate-btn').addEventListener('click', async function() {
+    const reportType = document.getElementById('report-type').value;
+    
+    if (!reportType) {
+        alert('Veuillez sélectionner un type de rapport');
+        return;
+    }
+    
+    const resultsSection = document.getElementById('results-section');
+    const statisticsSection = document.getElementById('statistics-section');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const errorAlert = document.getElementById('error-alert');
+    
+    resultsSection.style.display = 'none';
+    statisticsSection.style.display = 'none';
+    errorAlert.style.display = 'none';
+    loadingSpinner.style.display = 'block';
+    
+    try {
+        let url = `/api/vehicles/reports/${reportType}`;
+        
+        if (reportType === 'activity') {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            if (!startDate || !endDate) {
+                throw new Error('Veuillez sélectionner une plage de dates');
             }
-        })
-        .catch(() => {});
-
-    // Default month
-    const _n = new Date();
-    document.getElementById('activity-month').value =
-        _n.getFullYear() + '-' + String(_n.getMonth() + 1).padStart(2, '0');
-    document.getElementById('activity-month').addEventListener('change', () => {
-        if (currentType === 'activity') generate();
-    });
-
-    window.selectType = function (type) {
-        currentType = type;
-        document.querySelectorAll('.rpt-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
-        document.getElementById('month-row').classList.toggle('show', type === 'activity');
-        generate();
-    };
-
-    function generate() {
-        if (!currentType) return;
-        const spinner  = document.getElementById('rpt-spinner');
-        const panel    = document.getElementById('rpt-panel');
-        const errEl    = document.getElementById('rpt-error');
-        panel.style.display = 'none';
-        errEl.style.display = 'none';
-        spinner.style.display = 'block';
-        document.getElementById('rpt-search').value = '';
-
-        let url = `/api/vehicles/reports/${currentType}`;
-        if (currentType === 'activity') {
-            const month = document.getElementById('activity-month').value;
-            if (!month) { showError('Veuillez sélectionner un mois'); return; }
-            url += `?month=${month}`;
+            
+            url += `?start_date=${startDate}&end_date=${endDate}`;
         }
-
-        fetch(url, { credentials: 'same-origin' })
-            .then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.error || 'Erreur'); }))
-            .then(data => {
-                currentData = data;
-                renderPanel(data);
-                panel.style.display = '';
-            })
-            .catch(e => showError(e.message))
-            .finally(() => { spinner.style.display = 'none'; });
-    }
-
-    function showError(msg) {
-        document.getElementById('rpt-spinner').style.display = 'none';
-        document.getElementById('rpt-error-msg').textContent = msg;
-        document.getElementById('rpt-error').style.display = '';
-    }
-
-    function renderPanel(data) {
-        const isActivity = data.report_type === "Rapport d'Activité";
-        const dt = new Date(data.generated_at);
-        const fmtDt = dt.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        document.getElementById('rpt-panel-title').textContent = data.report_type;
-        document.getElementById('rpt-panel-meta').textContent  = fmtDt;
-        document.getElementById('rpt-panel-count').textContent = (data.count || 0) + ' enregistrement(s)';
-        document.getElementById('print-date').textContent      = fmtDt;
-
-        const chips = document.getElementById('act-chips');
-        if (isActivity) {
-            chips.style.display = '';
-            document.getElementById('chip-act').textContent = data.activation_count || 0;
-            document.getElementById('chip-ren').textContent = data.renewal_count    || 0;
-            document.getElementById('chip-tot').textContent = data.count            || 0;
-        } else {
-            chips.style.display = 'none';
-        }
-
-        // Thead
-        const thead = document.getElementById('rpt-thead');
-        if (isActivity) {
-            thead.innerHTML = `<tr>
-                <th>Immatriculation</th><th>Propriétaire</th><th>Type</th>
-                <th>Île</th><th>Opération</th><th>Téléphone</th><th>Date</th>
-            </tr>`;
-        } else {
-            thead.innerHTML = `<tr>
-                <th>Immatriculation</th><th>Propriétaire</th><th>Type</th>
-                <th>Île</th><th>Assurance Exp.</th><th>Téléphone</th><th>Usage</th>
-            </tr>`;
-        }
-
-        // Tbody
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const tbody = document.getElementById('rpt-tbody');
-        if (!data.vehicles || !data.vehicles.length) {
-            tbody.innerHTML = '';
-            document.getElementById('rpt-empty').style.display = '';
-            return;
-        }
-        document.getElementById('rpt-empty').style.display = 'none';
-
-        tbody.innerHTML = data.vehicles.map(v => {
-            if (isActivity) {
-                const isAct = v.payment_type === 'activation';
-                return `<tr>
-                    <td><strong>${esc(v.license_plate)}</strong></td>
-                    <td>${esc(v.owner_name)}</td>
-                    <td>${esc(v.vehicle_type)}</td>
-                    <td>${esc(v.owner_island)}</td>
-                    <td><span class="badge ${isAct ? 'bg-success' : 'bg-primary'}">${isAct ? 'Nouveau' : 'Renouvellement'}</span></td>
-                    <td>${esc(v.owner_phone)}</td>
-                    <td>${esc(v.paid_at)}</td>
-                </tr>`;
-            } else {
-                const exp = new Date(v.insurance_expiry);
-                let cls = 'bg-success';
-                if (exp < today) cls = 'bg-danger';
-                else if ((exp - today) / 86400000 <= 30) cls = 'bg-warning text-dark';
-                return `<tr>
-                    <td><strong>${esc(v.license_plate)}</strong></td>
-                    <td>${esc(v.owner_name)}</td>
-                    <td>${esc(v.vehicle_type || '—')}</td>
-                    <td>${esc(v.owner_island || '—')}</td>
-                    <td><span class="badge ${cls}">${exp.toLocaleDateString('fr-FR')}</span></td>
-                    <td>${esc(v.owner_phone || '—')}</td>
-                    <td>${esc(v.usage_type || '—')}</td>
-                </tr>`;
-            }
-        }).join('');
-    }
-
-    window.filterTable = function () {
-        const term = document.getElementById('rpt-search').value.toLowerCase();
-        const rows = document.querySelectorAll('#rpt-tbody tr');
-        let visible = 0;
-        rows.forEach(r => {
-            const match = !term || r.textContent.toLowerCase().includes(term);
-            r.style.display = match ? '' : 'none';
-            if (match) visible++;
+        
+        const response = await fetch(url, {
+            credentials: 'same-origin'
         });
-        document.getElementById('rpt-empty').style.display = visible === 0 ? '' : 'none';
-    };
-
-    function esc(s) {
-        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
-
-    // ── CSV export ──
-    document.getElementById('export-csv-btn').addEventListener('click', () => {
-        if (!currentData || !currentData.vehicles || !currentData.vehicles.length) {
-            alert('Aucun rapport disponible à exporter'); return;
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erreur lors de la génération du rapport');
         }
-        const d = currentData;
-        const isAct = d.report_type === "Rapport d'Activité";
-        const hdrs = isAct
-            ? ['Immatriculation','Propriétaire','Type','Île','Opération','Téléphone','Date']
-            : ['Immatriculation','Propriétaire','Type','Île','Assurance Exp.','Téléphone','Usage'];
-        const rows = d.vehicles.map(v => isAct
-            ? [v.license_plate, v.owner_name, v.vehicle_type, v.owner_island,
-               v.payment_type === 'activation' ? 'Nouveau' : 'Renouvellement', v.owner_phone, v.paid_at]
-            : [v.license_plate, v.owner_name, v.vehicle_type||'', v.owner_island||'',
-               v.insurance_expiry ? new Date(v.insurance_expiry).toLocaleDateString('fr-FR') : '',
-               v.owner_phone||'', v.usage_type||'']
-        );
-        const csv = [hdrs, ...rows].map(r => r.map(f => `"${String(f).replace(/"/g,'""')}"`).join(',')).join('\n');
-        const blob = new Blob(['﻿' + csv, { type: 'text/csv;charset=utf-8;' }]);
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `rapport-${d.month || new Date().toISOString().split('T')[0]}.csv`;
-        a.click();
+        
+        const data = await response.json();
+        currentReportData = data;
+        
+        renderReport(data);
+        
+        resultsSection.style.display = 'block';
+        
+    } catch (err) {
+        console.error('Error:', err);
+        document.getElementById('error-message').textContent = err.message;
+        errorAlert.style.display = 'block';
+    } finally {
+        loadingSpinner.style.display = 'none';
+    }
+});
+
+function renderReport(data) {
+    const reportTitle = document.getElementById('report-title');
+    const insuranceName = document.getElementById('insurance-name');
+    const generatedDate = document.getElementById('generated-date');
+    const recordCount = document.getElementById('record-count');
+    const printDate = document.getElementById('print-date');
+    const resultsBody = document.getElementById('results-body');
+    const emptyState = document.getElementById('empty-state');
+    const statisticsSection = document.getElementById('statistics-section');
+    const statisticsContainer = document.getElementById('statistics-container');
+    const resultsSection = document.getElementById('results-section');
+    
+    reportTitle.textContent = data.report_type;
+    insuranceName.textContent = data.insurance_company;
+    
+    const date = new Date(data.generated_at);
+    const formattedDate = date.toLocaleDateString('fr-FR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
     });
-})();
+    generatedDate.textContent = formattedDate;
+    printDate.textContent = formattedDate;
+    
+    // Handle statistics report
+    if (data.report_type === 'Statistiques') {
+        statisticsSection.style.display = 'block';
+        resultsSection.style.display = 'block';
+        renderStatistics(data.statistics);
+        resultsBody.innerHTML = '';
+        recordCount.textContent = '0';
+        emptyState.style.display = 'none';
+        return;
+    }
+    
+    statisticsSection.style.display = 'none';
+    
+    recordCount.textContent = data.count;
+    
+    if (!data.vehicles || data.vehicles.length === 0) {
+        resultsBody.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+    
+    emptyState.style.display = 'none';
+    resultsBody.innerHTML = data.vehicles.map(vehicle => {
+        const expiry = new Date(vehicle.insurance_expiry);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        let expiryBadge = 'bg-success';
+        if (expiry < today) {
+            expiryBadge = 'bg-danger';
+        } else if ((expiry - today) / (1000 * 60 * 60 * 24) <= 30) {
+            expiryBadge = 'bg-warning';
+        }
+        
+        const assignedAt = vehicle.assigned_at ? new Date(vehicle.assigned_at).toLocaleDateString('fr-FR') : '-';
+        
+        return `
+            <tr>
+                <td><strong>${vehicle.license_plate}</strong></td>
+                <td>${vehicle.owner_name}</td>
+                <td>${vehicle.vehicle_type || '-'}</td>
+                <td>${vehicle.owner_island || '-'}</td>
+                <td>
+                    <span class="badge ${expiryBadge}">
+                        ${new Date(vehicle.insurance_expiry).toLocaleDateString('fr-FR')}
+                    </span>
+                </td>
+                <td>${vehicle.owner_phone || '-'}</td>
+                <td>${vehicle.usage_type || '-'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderStatistics(stats) {
+    const container = document.getElementById('statistics-container');
+    
+    container.innerHTML = `
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body">
+                    <h4 class="text-primary">${stats.total_vehicles}</h4>
+                    <small class="text-muted">Total Véhicules</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body">
+                    <h4 class="text-danger">${stats.expired}</h4>
+                    <small class="text-muted">Expirées</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body">
+                    <h4 class="text-warning">${stats.expiring_soon}</h4>
+                    <small class="text-muted">Expirant Bientôt</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body">
+                    <h4 class="text-success">${stats.active}</h4>
+                    <small class="text-muted">Actives</small>
+                </div>
+            </div>
+        </div>
+        ${Object.entries(stats.by_type).map(([type, count]) => `
+            <div class="col-md-3 mb-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body text-center">
+                        <h5>${type}</h5>
+                        <h4 class="text-info">${count}</h4>
+                    </div>
+                </div>
+            </div>
+        `).join('')}
+    `;
+}
+
+// Export to CSV
+document.getElementById('export-csv-btn').addEventListener('click', function() {
+    if (!currentReportData || !currentReportData.vehicles) {
+        alert('Aucun rapport disponible à exporter');
+        return;
+    }
+    
+    const vehicles = currentReportData.vehicles;
+    const headers = ['Immatriculation', 'Propriétaire', 'Type', 'Île', 'Assurance Exp.', 'Téléphone', 'Usage'];
+    
+    const csvContent = [
+        headers.join(','),
+        ...vehicles.map(v => [
+            v.license_plate,
+            v.owner_name,
+            v.vehicle_type || '-',
+            v.owner_island || '-',
+            new Date(v.insurance_expiry).toLocaleDateString('fr-FR'),
+            v.owner_phone || '-',
+            v.usage_type || '-'
+        ].map(field => `"${field}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `rapport-${currentReportData.report_type}-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
 </script>
 {% endblock %}

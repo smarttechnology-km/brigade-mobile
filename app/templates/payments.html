@@ -121,6 +121,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>const CURRENT_USER_ROLE = {{ current_user.role | tojson }};</script>
 <script src="{{ url_for('static', filename='js/payments.js') }}"></script>
 {% endblock %}

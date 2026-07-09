@@ -10,7 +10,10 @@
         <p class="text-muted mb-0">Gestion et suivi du parc de véhicules</p>
       </div>
       <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
-<button class="btn btn-primary" id="btn-add-vehicle" data-bs-toggle="modal" data-bs-target="#vehicleModal">
+        <button class="btn btn-outline-secondary" id="btn-settings" data-bs-toggle="modal" data-bs-target="#settingsModal" title="Paramètres">
+          <i class="fas fa-cog me-2"></i>Paramètres
+        </button>
+        <button class="btn btn-primary" id="btn-add-vehicle" data-bs-toggle="modal" data-bs-target="#vehicleModal">
           <i class="fas fa-plus me-2"></i>Ajouter un Véhicule
         </button>
       </div>
@@ -20,7 +23,7 @@
       <div class="col-md-6">
         <div class="input-group">
           <span class="input-group-text"><i class="fas fa-search"></i></span>
-          <input id="vehicle-search" type="text" class="form-control" placeholder="Rechercher par immatriculation, propriétaire, VIN, type...">
+          <input id="vehicle-search" type="text" class="form-control" placeholder="Rechercher un véhicule (immatriculation, propriétaire, type...)">
         </div>
       </div>
       <div class="col-md-6">
@@ -245,12 +248,7 @@
                 <label class="form-label fw-semibold">
                   <i class="fas fa-id-card text-muted me-1"></i>Immatriculation <span class="text-danger">*</span>
                 </label>
-                <div class="input-group">
-                  <input type="text" id="license_plate" name="license_plate" class="form-control" placeholder="Ex: 123AA73" required style="text-transform:uppercase;" />
-                  <button type="button" class="btn btn-outline-secondary" id="btn-gen-plate" onclick="generateLicensePlate()" title="Générer une immatriculation unique">
-                    <i class="fas fa-magic"></i>
-                  </button>
-                </div>
+                <input type="text" id="license_plate" name="license_plate" class="form-control" placeholder="Ex: 123AA73" required />
               </div>
               <div class="col-md-4">
                 <label class="form-label fw-semibold">
@@ -282,11 +280,10 @@
                 </label>
                 <select id="vehicle_type_select" class="form-select" aria-label="Type véhicule">
                   <option value="voiture">🚗 Voiture</option>
-                  <option value="pickup">🛻 Pick up</option>
+                  <option value="taxi">🚕 Taxi</option>
                   <option value="moto">🏍️ Moto</option>
                   <option value="camion">🚚 Camion</option>
                   <option value="minibus">🚐 Minibus</option>
-                  <option value="bus">🚌 Bus</option>
                   <option value="ambulance">🚑 Ambulance</option>
                   <option value="suv">🚙 SUV</option>
                   <option value="other">➕ Autre...</option>
@@ -365,9 +362,6 @@
                   <i class="fas fa-barcode text-muted me-1"></i>VIN (Numéro de série)
                 </label>
                 <input type="text" id="vin" name="vin" class="form-control" placeholder="Ex: 1HGBH41JXMN109186" />
-                <div id="vin-plate-hint" class="d-none mt-1" style="font-size:.78rem;color:#0d6efd;">
-                  <i class="fas fa-car me-1"></i>Immatriculation : <strong id="vin-plate-value"></strong>
-                </div>
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-semibold">
@@ -389,9 +383,6 @@
                   <i class="fas fa-user-circle text-muted me-1"></i>Nom complet <span class="text-danger">*</span>
                 </label>
                 <input type="text" id="owner_name" name="owner_name" class="form-control" placeholder="Ex: Ahmed Ben Ali" required />
-                <div id="owner-name-hint" class="d-none mt-1" style="font-size:.78rem;color:#0d6efd;">
-                  <i class="fas fa-info-circle me-1"></i><span id="owner-name-hint-text"></span>
-                </div>
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-semibold">
@@ -460,17 +451,6 @@
             </div>
           </div>
 
-          <!-- Section amendes (visible uniquement en mode édition si amendes existent) -->
-          <div id="vehicle-fines-section" class="d-none mb-3">
-            <h6 class="text-danger border-bottom pb-2 mb-3">
-              <i class="fas fa-exclamation-triangle me-2"></i>Amendes associées
-            </h6>
-            <div id="vehicle-fines-list"></div>
-            <a id="vehicle-fines-link" href="#" class="btn btn-sm btn-outline-danger mt-2" target="_blank">
-              <i class="fas fa-external-link-alt me-1"></i>Voir toutes les amendes
-            </a>
-          </div>
-
           <div class="alert alert-info mb-0">
             <i class="fas fa-info-circle me-2"></i>
             <small>Les champs marqués d'un <span class="text-danger">*</span> sont obligatoires.</small>
@@ -505,15 +485,16 @@
         <p id="license-plate-display" style="font-size: 18px; font-weight: bold; margin-top: 15px; margin-bottom: 10px;"></p>
         <p class="small text-muted mt-2">Scannez ce QR pour voir l'historique du véhicule</p>
       </div>
-      <div class="modal-footer bg-light justify-content-center">
-        <div class="d-flex gap-2">
-          <a id="download-qr-btn" class="btn btn-success" target="_blank">
-            <i class="fas fa-download me-1"></i>QR Code
-          </a>
-          <a id="download-sheet-btn" class="btn btn-warning" target="_blank">
-            <i class="fas fa-file-pdf me-1"></i>Fiche complète
-          </a>
-        </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Fermer
+        </button>
+        <button type="button" class="btn btn-success" id="download-qr-btn" onclick="downloadQRCodePDF()">
+          <i class="fas fa-download me-1"></i>Télécharger
+        </button>
+        <button type="button" class="btn btn-primary" id="print-qr-btn" onclick="printQRCode()">
+          <i class="fas fa-print me-1"></i>Imprimer
+        </button>
       </div>
     </div>
   </div>

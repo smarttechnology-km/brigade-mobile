@@ -222,139 +222,66 @@
 
 <!-- View User Modal -->
 <div class="modal fade" id="viewUserModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header bg-light">
         <h5 class="modal-title"><i class="fas fa-user-circle me-2"></i>Détails du Policier</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body p-0">
-        <!-- Main tabs -->
-        <ul class="nav nav-tabs px-3 pt-3" id="officer-main-tabs">
-          <li class="nav-item">
-            <button class="nav-link active" id="tab-info-btn" onclick="switchOfficerTab('info')">
-              <i class="fas fa-id-card me-1"></i>Informations personnelles
-            </button>
-          </li>
-          <li class="nav-item">
-            <button class="nav-link" id="tab-fines-btn" onclick="switchOfficerTab('fines')">
-              <i class="fas fa-file-invoice-dollar me-1"></i>Historique amendes
-            </button>
-          </li>
-          <li class="nav-item">
-            <button class="nav-link" id="tab-reductions-btn" onclick="switchOfficerTab('reductions')">
-              <i class="fas fa-minus-circle me-1"></i>Historique Réductions de points
-            </button>
-          </li>
-        </ul>
-
-        <!-- Tab: Informations personnelles -->
-        <div id="officer-tab-info" class="p-4">
-          <h6 class="text-muted mb-4"><i class="fas fa-id-card me-2"></i>Informations personnelles</h6>
-          <div class="row mb-4">
-            <div class="col-md-6 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Nom d'utilisateur</small></label>
-              <p class="h6 mb-0" id="view-u-username">-</p>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Nom complet</small></label>
-              <p class="h6 mb-0" id="view-u-fullname">-</p>
-            </div>
+      <div class="modal-body">
+        <h6 class="text-muted mb-4"><i class="fas fa-id-card me-2"></i>Informations personnelles</h6>
+        <div class="row mb-4">
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Nom d'utilisateur</small></label>
+            <p class="h6 mb-0" id="view-u-username">-</p>
           </div>
-          <div class="row mb-4">
-            <div class="col-md-6 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Email</small></label>
-              <p class="h6 mb-0" id="view-u-email">-</p>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Téléphone</small></label>
-              <p class="h6 mb-0" id="view-u-phone">-</p>
-            </div>
-          </div>
-          <div class="row mb-4">
-            <div class="col-md-6 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Pays</small></label>
-              <p class="h6 mb-0" id="view-u-country">-</p>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Région</small></label>
-              <p class="h6 mb-0" id="view-u-region">-</p>
-            </div>
-          </div>
-          <hr class="my-4"/>
-          <h6 class="text-muted mb-4"><i class="fas fa-user-shield me-2"></i>Permissions et statut</h6>
-          <div class="row mb-4">
-            <div class="col-md-6 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Rôle</small></label>
-              <p class="h6 mb-0" id="view-u-role">-</p>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Statut</small></label>
-              <div id="view-u-status">-</div>
-            </div>
-          </div>
-          <hr class="my-4"/>
-          <h6 class="text-muted mb-3"><i class="fas fa-calendar me-2"></i>Information système</h6>
-          <div class="row">
-            <div class="col-12 mb-3">
-              <label class="form-label text-muted fw-semibold"><small>Créé le</small></label>
-              <p class="h6 mb-0" id="view-u-created">-</p>
-            </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Nom complet</small></label>
+            <p class="h6 mb-0" id="view-u-fullname">-</p>
           </div>
         </div>
-
-        <!-- Tab: Historique amendes -->
-        <div id="officer-tab-fines" class="p-4" style="display:none;">
-          <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-            <label class="text-muted fw-semibold mb-0"><small><i class="fas fa-calendar-alt me-1"></i>De</small></label>
-            <input type="date" id="fines-date-from" class="form-control form-control-sm" style="width:150px;" onchange="applyFinesFilter()">
-            <label class="text-muted fw-semibold mb-0"><small>À</small></label>
-            <input type="date" id="fines-date-to" class="form-control form-control-sm" style="width:150px;" onchange="applyFinesFilter()">
-            <button class="btn btn-sm btn-outline-secondary" onclick="clearFinesFilter()" title="Tout afficher"><i class="fas fa-times me-1"></i>Tout</button>
+        <div class="row mb-4">
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Email</small></label>
+            <p class="h6 mb-0" id="view-u-email">-</p>
           </div>
-          <div class="table-responsive">
-            <table class="table table-sm table-hover">
-              <thead class="table-light">
-                <tr>
-                  <th>Date</th>
-                  <th>Immatriculation</th>
-                  <th>Motif</th>
-                  <th class="text-end">Montant</th>
-                  <th class="text-center">Statut</th>
-                </tr>
-              </thead>
-              <tbody id="officer-fines-body">
-                <tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
-              </tbody>
-            </table>
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Téléphone</small></label>
+            <p class="h6 mb-0" id="view-u-phone">-</p>
           </div>
         </div>
-
-        <!-- Tab: Historique Réductions de points -->
-        <div id="officer-tab-reductions" class="p-4" style="display:none;">
-          <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-            <label class="text-muted fw-semibold mb-0"><small><i class="fas fa-calendar-alt me-1"></i>De</small></label>
-            <input type="date" id="reductions-date-from" class="form-control form-control-sm" style="width:150px;" onchange="applyReductionsFilter()">
-            <label class="text-muted fw-semibold mb-0"><small>À</small></label>
-            <input type="date" id="reductions-date-to" class="form-control form-control-sm" style="width:150px;" onchange="applyReductionsFilter()">
-            <button class="btn btn-sm btn-outline-secondary" onclick="clearReductionsFilter()" title="Tout afficher"><i class="fas fa-times me-1"></i>Tout</button>
+        <div class="row mb-4">
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Pays</small></label>
+            <p class="h6 mb-0" id="view-u-country">-</p>
           </div>
-          <div class="table-responsive">
-            <table class="table table-sm table-hover">
-              <thead class="table-light">
-                <tr>
-                  <th>Date</th>
-                  <th>Titulaire</th>
-                  <th>N° Permis</th>
-                  <th>Motif</th>
-                  <th class="text-center">Points</th>
-                  <th class="text-center">Avant → Après</th>
-                </tr>
-              </thead>
-              <tbody id="officer-reductions-body">
-                <tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
-              </tbody>
-            </table>
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Région</small></label>
+            <p class="h6 mb-0" id="view-u-region">-</p>
+          </div>
+        </div>
+        
+        <hr class="my-4"/>
+        
+        <h6 class="text-muted mb-4"><i class="fas fa-user-shield me-2"></i>Permissions et statut</h6>
+        <div class="row mb-4">
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Rôle</small></label>
+            <p class="h6 mb-0" id="view-u-role">-</p>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Statut</small></label>
+            <div id="view-u-status">-</div>
+          </div>
+        </div>
+        
+        <hr class="my-4"/>
+        
+        <h6 class="text-muted mb-3"><i class="fas fa-calendar me-2"></i>Information système</h6>
+        <div class="row">
+          <div class="col-12 mb-3">
+            <label class="form-label text-muted fw-semibold"><small>Créé le</small></label>
+            <p class="h6 mb-0" id="view-u-created">-</p>
           </div>
         </div>
       </div>

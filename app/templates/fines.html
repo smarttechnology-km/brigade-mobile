@@ -45,7 +45,7 @@
           <div class="col-md-3">
             <label class="form-label small fw-bold">Immatriculation</label>
             <div class="input-group">
-              <input type="text" id="fine-vehicle-plate" class="form-control" placeholder="Ex: 123AA7Y" required />
+              <input type="text" id="fine-vehicle-plate" class="form-control" placeholder="Ex: 123-ABC" required />
               <button class="btn btn-outline-secondary btn-sm" type="button" id="clear-fine-plate" title="Effacer l'immatriculation"><i class="fas fa-times"></i></button>
             </div>
             <input type="hidden" id="fine-vehicle-id" />
@@ -108,21 +108,7 @@
     </div>
   </div>
 </div>
-<!-- Photo de l'amende - modal centered -->
-<div class="modal fade" id="finePhotoModal" tabindex="-1" aria-labelledby="finePhotoModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="finePhotoModalLabel"><i class="fas fa-camera me-1"></i>Photo de l'amende</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body text-center">
-        <img id="fine-photo-modal-img" src="" alt="Photo de l'amende" style="max-width:100%; border-radius:8px;">
-      </div>
-    </div>
-  </div>
-</div>
-<!-- Paramètres des amendes - modal centered -->
+<!-- Paramètres des amendes (types) - modal centered -->
 <div class="modal fade" id="fine-types-modal" tabindex="-1" aria-labelledby="fineTypesLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
@@ -131,143 +117,39 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <!-- Tabs -->
-        <ul class="nav nav-tabs mb-3" id="fineSettingsTabs">
-          <li class="nav-item">
-            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-fine-types" type="button">
-              <i class="fas fa-list me-1"></i>Types d'amendes
-            </button>
-          </li>
-          <li class="nav-item">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-fine-articles" type="button">
-              <i class="fas fa-book me-1"></i>Articles
-            </button>
-          </li>
-          <li class="nav-item">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-late-rates" type="button" id="tab-late-rates-btn">
-              <i class="fas fa-clock me-1"></i>Durée des amendes
-            </button>
-          </li>
-        </ul>
-
-        <div class="tab-content">
-          <!-- Tab 1 : Types d'amendes -->
-          <div class="tab-pane show active" id="tab-fine-types">
-            <form id="fine-type-form" class="row g-2 align-items-end mb-3">
-              <input type="hidden" id="fine-type-id" />
-              <div class="col-md-5">
-                <label class="form-label small">Motif (libellé)</label>
-                <input type="text" id="fine-type-label" class="form-control" placeholder="Ex: Non-port du casque" required />
-              </div>
-              <div class="col-md-2">
-                <label class="form-label small">Montant (KMF)</label>
-                <input type="number" step="0.01" id="fine-type-amount" class="form-control" required />
-              </div>
-              <div class="col-md-3">
-                <label class="form-label small">Article</label>
-                <select id="fine-type-article" class="form-select">
-                  <option value="">— aucun —</option>
-                </select>
-              </div>
-              <div class="col-md-2 text-end">
-                <button type="button" id="fine-type-cancel" class="btn btn-outline-secondary me-2 d-none">Annuler</button>
-                <button type="submit" class="btn btn-outline-primary">Ajouter</button>
-              </div>
-            </form>
-            <div class="table-responsive">
-              <table class="table table-sm table-hover">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Motif</th>
-                    <th>Montant (KMF)</th>
-                    <th>Article</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="fine-types-tbody">
-                  <tr><td colspan="5" class="text-center text-muted">Chargement...</td></tr>
-                </tbody>
-              </table>
+        <div class="container py-1">
+          <div class="row">
+            <div class="col-12">
+          <form id="fine-type-form" class="row g-2 align-items-end mb-3">
+            <input type="hidden" id="fine-type-id" />
+            <div class="col-md-6">
+              <label class="form-label small">Motif (libellé)</label>
+              <input type="text" id="fine-type-label" class="form-control" placeholder="Ex: Non-port du casque" required />
             </div>
+            <div class="col-md-3">
+              <label class="form-label small">Montant (KMF)</label>
+              <input type="number" step="0.01" id="fine-type-amount" class="form-control" required />
+            </div>
+            <div class="col-md-3 text-end">
+              <button type="button" id="fine-type-cancel" class="btn btn-outline-secondary me-2 d-none">Annuler</button>
+              <button type="submit" class="btn btn-outline-primary">Ajouter Type</button>
+            </div>
+          </form>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Motif</th>
+                  <th>Montant (KMF)</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="fine-types-tbody">
+                <tr><td colspan="4" class="text-center text-muted">Chargement...</td></tr>
+              </tbody>
+            </table>
           </div>
-
-          <!-- Tab 2 : Articles d'amendes -->
-          <div class="tab-pane" id="tab-fine-articles">
-            <form id="fine-article-form" class="row g-2 align-items-end mb-3">
-              <input type="hidden" id="fine-article-id" />
-              <div class="col-md-3">
-                <label class="form-label small">N° Article</label>
-                <input type="text" id="fine-article-code" class="form-control" placeholder="Ex: Art. 234-2" required />
-              </div>
-              <div class="col-md-6">
-                <label class="form-label small">Description</label>
-                <input type="text" id="fine-article-description" class="form-control" placeholder="Texte de l'article (optionnel)" />
-              </div>
-              <div class="col-md-3 text-end">
-                <button type="button" id="fine-article-cancel" class="btn btn-outline-secondary me-2 d-none">Annuler</button>
-                <button type="submit" class="btn btn-outline-primary">Ajouter</button>
-              </div>
-            </form>
-            <div class="table-responsive">
-              <table class="table table-sm table-hover">
-                <thead>
-                  <tr>
-                    <th>N° Article</th>
-                    <th>Description</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="fine-articles-tbody">
-                  <tr><td colspan="3" class="text-center text-muted">Chargement...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Tab 3 : Durée des amendes -->
-          <div class="tab-pane" id="tab-late-rates">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <p class="text-muted small mb-0">
-                Définissez à partir de combien de mois une amende impayée sera majorée, et de quel pourcentage <strong>par mois</strong>. Ex : « À partir de 1 mois → +50%/mois » donne +50% à 1 mois, +100% à 2 mois, +150% à 3 mois…
-              </p>
-              <button class="btn btn-sm btn-outline-secondary ms-3" id="btn-apply-late-rates" onclick="applyLateRatesNow()" title="Recalculer toutes les amendes impayées maintenant">
-                <i class="fas fa-sync-alt me-1"></i>Appliquer maintenant
-              </button>
-            </div>
-            <form id="late-rate-form" class="row g-2 align-items-end mb-3">
-              <div class="col-md-4">
-                <label class="form-label small">À partir de (mois)</label>
-                <input type="number" min="1" id="late-rate-months" class="form-control" placeholder="Ex: 1" required />
-              </div>
-              <div class="col-md-4">
-                <label class="form-label small">Augmentation par mois (%)</label>
-                <div class="input-group">
-                  <input type="number" min="0.01" step="0.01" id="late-rate-percentage" class="form-control" placeholder="Ex: 50" required />
-                  <span class="input-group-text">% / mois</span>
-                </div>
-              </div>
-              <div class="col-md-4 text-end">
-                <button type="button" id="late-rate-cancel-btn" class="btn btn-outline-secondary me-2 d-none" onclick="cancelEditLateRate()">Annuler</button>
-                <button type="submit" id="late-rate-submit-btn" class="btn btn-outline-primary">
-                  <i class="fas fa-plus me-1"></i>Ajouter
-                </button>
-              </div>
-            </form>
-            <div class="table-responsive">
-              <table class="table table-sm table-hover">
-                <thead class="table-light">
-                  <tr>
-                    <th>À partir de</th>
-                    <th>Par mois</th>
-                    <th>Exemple (base 10 000 KMF)</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="late-rates-tbody">
-                  <tr><td colspan="4" class="text-center text-muted">Chargement...</td></tr>
-                </tbody>
-              </table>
             </div>
           </div>
         </div>
@@ -282,137 +164,4 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/fines_list.js') }}"></script>
-<script>
-// ── Durée des amendes ─────────────────────────────────────────────────────────
-
-async function loadLateRates() {
-  try {
-    const res = await fetch('/api/fine-late-rates', { credentials: 'include' });
-    const rates = await res.json();
-    renderLateRates(rates);
-  } catch (e) {
-    document.getElementById('late-rates-tbody').innerHTML =
-      '<tr><td colspan="4" class="text-danger text-center">Erreur de chargement</td></tr>';
-  }
-}
-
-let _editingRateId = null;
-
-function renderLateRates(rates) {
-  const tbody = document.getElementById('late-rates-tbody');
-  if (!rates.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Aucune règle configurée</td></tr>';
-    return;
-  }
-  tbody.innerHTML = rates.map(r => {
-    const fmt = n => Math.round(n).toLocaleString('fr-FR');
-    const ex1 = fmt(10000 * (1 + r.percentage / 100 * r.months));
-    const ex2 = fmt(10000 * (1 + r.percentage / 100 * (r.months + 1)));
-    const ex3 = fmt(10000 * (1 + r.percentage / 100 * (r.months + 2)));
-    return `
-      <tr>
-        <td><strong>${r.months} mois</strong></td>
-        <td><span class="badge bg-warning text-dark">+${r.percentage}% / mois</span></td>
-        <td class="text-muted small">${r.months} mois: ${ex1} KMF · ${r.months+1} mois: ${ex2} KMF · ${r.months+2} mois: ${ex3} KMF</td>
-        <td class="text-end">
-          <button class="btn btn-sm btn-outline-secondary me-1" onclick="startEditLateRate(${r.id}, ${r.months}, ${r.percentage})" title="Modifier">
-            <i class="fas fa-pencil-alt"></i>
-          </button>
-          <button class="btn btn-sm btn-outline-danger" onclick="deleteLateRate(${r.id})" title="Supprimer">
-            <i class="fas fa-trash"></i>
-          </button>
-        </td>
-      </tr>`;
-  }).join('');
-}
-
-function startEditLateRate(id, months, percentage) {
-  _editingRateId = id;
-  document.getElementById('late-rate-months').value = months;
-  document.getElementById('late-rate-percentage').value = percentage;
-  document.getElementById('late-rate-submit-btn').textContent = 'Enregistrer';
-  document.getElementById('late-rate-cancel-btn').classList.remove('d-none');
-  document.getElementById('late-rate-months').focus();
-}
-
-function cancelEditLateRate() {
-  _editingRateId = null;
-  document.getElementById('late-rate-months').value = '';
-  document.getElementById('late-rate-percentage').value = '';
-  document.getElementById('late-rate-submit-btn').textContent = 'Ajouter';
-  document.getElementById('late-rate-cancel-btn').classList.add('d-none');
-}
-
-document.getElementById('late-rate-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const months = parseInt(document.getElementById('late-rate-months').value);
-  const percentage = parseFloat(document.getElementById('late-rate-percentage').value);
-  const isEdit = _editingRateId !== null;
-  const url = isEdit ? `/api/fine-late-rates/${_editingRateId}` : '/api/fine-late-rates';
-  const method = isEdit ? 'PUT' : 'POST';
-  try {
-    const res = await fetch(url, {
-      method,
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ months, percentage }),
-    });
-    const data = await res.json();
-    if (!res.ok) { alert(data.error || 'Erreur'); return; }
-    cancelEditLateRate();
-    loadLateRates();
-  } catch (e) {
-    alert('Erreur réseau');
-  }
-});
-
-async function deleteLateRate(id) {
-  if (!confirm('Supprimer cette règle ?')) return;
-  try {
-    const res = await fetch(`/api/fine-late-rates/${id}`, {
-      method: 'DELETE', credentials: 'include',
-    });
-    if (res.ok) loadLateRates();
-    else alert('Erreur lors de la suppression');
-  } catch (e) {
-    alert('Erreur réseau');
-  }
-}
-
-async function applyLateRatesNow() {
-  const btn = document.getElementById('btn-apply-late-rates');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours...';
-  try {
-    const res = await fetch('/api/fine-late-rates/apply-now', {
-      method: 'POST', credentials: 'include',
-    });
-    const data = await res.json();
-    if (res.ok) {
-      btn.innerHTML = '<i class="fas fa-check me-1"></i>Appliqué !';
-      if (typeof loadFines === 'function') loadFines();
-      setTimeout(() => {
-        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Appliquer maintenant';
-        btn.disabled = false;
-      }, 2000);
-    } else {
-      alert(data.error || 'Erreur');
-      btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Appliquer maintenant';
-      btn.disabled = false;
-    }
-  } catch (e) {
-    alert('Erreur réseau');
-    btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Appliquer maintenant';
-    btn.disabled = false;
-  }
-}
-
-// Load when tab is shown
-document.getElementById('tab-late-rates-btn').addEventListener('shown.bs.tab', loadLateRates);
-
-// Also load when modal opens (in case late-rates tab was active)
-document.getElementById('fine-types-modal').addEventListener('show.bs.modal', () => {
-  loadLateRates();
-});
-</script>
 {% endblock %}
