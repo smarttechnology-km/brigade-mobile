@@ -362,6 +362,7 @@ setInterval(() => {
 }, 30000);
 
 function viewUserFromUsage(userId) {
+    // Fetch user details directly instead of relying on cache
     fetch(`/api/users/${userId}/details`)
         .then(r => {
             if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -369,7 +370,8 @@ function viewUserFromUsage(userId) {
         })
         .then(user => {
             if (!user) throw new Error('User not found');
-
+            
+            // Display user details in a read-only format
             document.getElementById('view-u-username').textContent = escapeHtml(user.username || '');
             document.getElementById('view-u-fullname').textContent = escapeHtml(user.full_name || '');
             document.getElementById('view-u-email').textContent = escapeHtml(user.email || '');
@@ -379,138 +381,14 @@ function viewUserFromUsage(userId) {
             document.getElementById('view-u-role').textContent = user.role ? (user.role === 'administrateur' ? '👤 Administrateur' : user.role === 'policier' ? '🚔 Policier' : '⚖️ Judiciaire') : '';
             document.getElementById('view-u-status').innerHTML = user.is_active ? '<span class="badge bg-success">Actif</span>' : '<span class="badge bg-secondary">Inactif</span>';
             document.getElementById('view-u-created').textContent = escapeHtml(user.created_at || '');
-
-            // Reset tabs and filters
-            switchOfficerTab('info');
-            _initOfficerFilters();
-            document.getElementById('officer-fines-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
-            document.getElementById('officer-reductions-body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
-
+            
             const modal = new bootstrap.Modal(document.getElementById('viewUserModal'));
             modal.show();
-
-            // Load officer history in background
-            fetch(`/api/users/${userId}/officer-history`)
-                .then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error || 'Erreur'); }))
-                .then(data => renderOfficerHistory(data))
-                .catch(() => {
-                    document.getElementById('officer-fines-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Erreur de chargement.</td></tr>';
-                    document.getElementById('officer-reductions-body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Erreur de chargement.</td></tr>';
-                });
         })
         .catch(err => {
             console.error('Error loading user:', err);
             alert('Erreur: ' + (err.message || 'Utilisateur introuvable'));
         });
-}
-
-function switchOfficerTab(tab) {
-    ['info', 'fines', 'reductions'].forEach(function(t) {
-        document.getElementById('officer-tab-' + t).style.display = tab === t ? '' : 'none';
-        document.getElementById('tab-' + t + '-btn').classList.toggle('active', tab === t);
-    });
-}
-
-// Full data cache for client-side filtering
-var _officerFines = [];
-var _officerReductions = [];
-
-function _todayStr() {
-    const d = new Date();
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-}
-
-function _initOfficerFilters() {
-    const today = _todayStr();
-    document.getElementById('fines-date-from').value      = today;
-    document.getElementById('fines-date-to').value        = today;
-    document.getElementById('reductions-date-from').value = today;
-    document.getElementById('reductions-date-to').value   = today;
-}
-
-// Parse "DD/MM/YYYY HH:MM" → "YYYY-MM-DD" for comparison
-function _parseDateStr(str) {
-    if (!str) return null;
-    const parts = str.split(' ')[0].split('/');
-    if (parts.length !== 3) return null;
-    return parts[2] + '-' + parts[1] + '-' + parts[0];
-}
-
-function _filterByDate(items, dateField, fromVal, toVal) {
-    return items.filter(function(item) {
-        const d = _parseDateStr(item[dateField]);
-        if (!d) return true;
-        if (fromVal && d < fromVal) return false;
-        if (toVal   && d > toVal)   return false;
-        return true;
-    });
-}
-
-window.applyFinesFilter = function() {
-    const from = document.getElementById('fines-date-from').value;
-    const to   = document.getElementById('fines-date-to').value;
-    renderFinesTable(_filterByDate(_officerFines, 'issued_at', from, to));
-};
-
-window.clearFinesFilter = function() {
-    document.getElementById('fines-date-from').value = '';
-    document.getElementById('fines-date-to').value   = '';
-    renderFinesTable(_officerFines);
-};
-
-window.applyReductionsFilter = function() {
-    const from = document.getElementById('reductions-date-from').value;
-    const to   = document.getElementById('reductions-date-to').value;
-    renderReductionsTable(_filterByDate(_officerReductions, 'created_at', from, to));
-};
-
-window.clearReductionsFilter = function() {
-    document.getElementById('reductions-date-from').value = '';
-    document.getElementById('reductions-date-to').value   = '';
-    renderReductionsTable(_officerReductions);
-};
-
-function renderFinesTable(fines) {
-    if (fines.length === 0) {
-        document.getElementById('officer-fines-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Aucune amende pour cette période.</td></tr>';
-    } else {
-        document.getElementById('officer-fines-body').innerHTML = fines.map(f =>
-            `<tr>
-                <td style="white-space:nowrap;">${escapeHtml(f.issued_at)}</td>
-                <td><strong>${escapeHtml(f.plate)}</strong></td>
-                <td>${escapeHtml(f.reason)}</td>
-                <td class="text-end">${Number(f.amount).toLocaleString('fr-FR')} KMF</td>
-                <td class="text-center">${f.paid ? '<span class="badge bg-success">Payée</span>' : '<span class="badge bg-warning text-dark">En attente</span>'}</td>
-            </tr>`
-        ).join('');
-    }
-}
-
-function renderReductionsTable(reductions) {
-    if (reductions.length === 0) {
-        document.getElementById('officer-reductions-body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Aucune réduction de points pour cette période.</td></tr>';
-    } else {
-        document.getElementById('officer-reductions-body').innerHTML = reductions.map(r =>
-            `<tr>
-                <td style="white-space:nowrap;">${escapeHtml(r.created_at)}</td>
-                <td>${escapeHtml(r.holder)}</td>
-                <td><code>${escapeHtml(r.license_number)}</code></td>
-                <td>${escapeHtml(r.reason)}</td>
-                <td class="text-center"><span class="badge bg-danger">-${r.points_deducted} pt${r.points_deducted > 1 ? 's' : ''}</span></td>
-                <td class="text-center">${r.points_before} → ${r.points_after}</td>
-            </tr>`
-        ).join('');
-    }
-}
-
-function renderOfficerHistory(data) {
-    _officerFines      = data.fines      || [];
-    _officerReductions = data.reductions || [];
-
-    // Apply today filter by default
-    const today = _todayStr();
-    renderFinesTable(_filterByDate(_officerFines,      'issued_at',  today, today));
-    renderReductionsTable(_filterByDate(_officerReductions, 'created_at', today, today));
 }
 
 // === GESTION EMPRUNT MANUEL ===

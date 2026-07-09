@@ -10,11 +10,9 @@ document.addEventListener('DOMContentLoaded', function(){
         const group = document.getElementById('payments-view-group');
         if(group){
             group.querySelectorAll('button[data-view]').forEach(b=>{
-                b.classList.remove('active', 'btn-primary');
-                b.classList.add('btn-outline-secondary');
+                b.classList.remove('active');
                 if(b.dataset.view === savedView){
-                    b.classList.add('active', 'btn-primary');
-                    b.classList.remove('btn-outline-secondary');
+                    b.classList.add('active');
                 }
             });
         }
@@ -39,13 +37,8 @@ function bindViewControls(){
     group.addEventListener('click', function(e){
         const btn = e.target.closest('button[data-view]');
         if(!btn) return;
-        group.querySelectorAll('button[data-view]').forEach(b=>{
-            b.classList.remove('active', 'btn-primary');
-            b.classList.add('btn-outline-secondary');
-        });
+        group.querySelectorAll('button[data-view]').forEach(b=>b.classList.remove('active'));
         btn.classList.add('active');
-        btn.classList.remove('btn-outline-secondary');
-        btn.classList.add('btn-primary');
         const view = btn.dataset.view;
         // Save current view to sessionStorage
         sessionStorage.setItem('payments-current-view', view);
@@ -236,7 +229,7 @@ function renderPaymentsTable(items, isArchive){
         ${isArchive ? `<td>${paidDate}</td>` : ''}
         <td>${f.paid ? (f.receipt_number ? 'Payée' : 'Payée') : 'Impayée'}</td>
         <td>
-            ${isArchive ? `<a class="btn btn-sm btn-outline-secondary" href="/fines/receipt/${f.id}" onclick="sessionStorage.setItem('payments-current-view', 'archive');"><i class="fas fa-print me-1"></i>Reçu</a>` : (typeof CURRENT_USER_ROLE !== 'undefined' && (CURRENT_USER_ROLE === 'judiciaire' || CURRENT_USER_ROLE === 'policier') ? `<button class="btn btn-sm btn-secondary" disabled title="Non autorisé"><i class="fas fa-ban me-1"></i>Payer</button>` : `<button class="btn btn-sm btn-success" data-pay-id="${f.id}"><i class="fas fa-check me-1"></i>Payer</button>`)}
+            ${isArchive ? `<a class="btn btn-sm btn-outline-secondary" href="/fines/receipt/${f.id}" onclick="sessionStorage.setItem('payments-current-view', 'archive');"><i class="fas fa-print me-1"></i>Reçu</a>` : `<button class="btn btn-sm btn-success" data-pay-id="${f.id}"><i class="fas fa-check me-1"></i>Payer</button>`}
         </td>
     </tr>`;
     }).join('');

@@ -14,7 +14,6 @@ document.addEventListener('DOMContentLoaded', function() {
     loadVehicleOptions();
     loadVignetteRates();
     loadPenaltyRates();
-    loadVignetteSettings();
 });
 
 // ============= VEHICLE OPTIONS =============
@@ -331,79 +330,4 @@ function deletePenaltyRate(rateId) {
         console.error('Error:', err);
         alert('Erreur: ' + err.message);
     });
-}
-
-// ============= VIGNETTE SETTINGS (GENERAL) =============
-
-async function loadVignetteSettings() {
-    try {
-        const res = await fetch('/api/vehicles/vignette-settings', { credentials: 'include' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const input = document.getElementById('renewal-opening-date');
-        if (input) input.value = data.renewal_opening_date || '';
-        updateRenewalStatusBanner(data.renewal_opening_date);
-    } catch (e) {
-        console.error('Error loading vignette settings:', e);
-    }
-}
-
-function updateRenewalStatusBanner(dateStr) {
-    const banner = document.getElementById('renewal-status-banner');
-    if (!banner) return;
-    if (!dateStr) {
-        banner.className = 'alert alert-secondary mb-4';
-        banner.innerHTML = '<i class="fas fa-minus-circle me-2"></i>Aucune date d\'ouverture configurée. Le renouvellement n\'est autorisé qu\'après le 31 mars.';
-        banner.classList.remove('d-none');
-        return;
-    }
-    const opening = new Date(dateStr);
-    const now = new Date();
-    const march31 = new Date(now.getFullYear(), 2, 31); // month is 0-indexed
-    if (now >= opening && now <= march31) {
-        banner.className = 'alert alert-success mb-4';
-        banner.innerHTML = `<i class="fas fa-check-circle me-2"></i><strong>Période de renouvellement ouverte</strong> depuis le ${opening.toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'})}. Les pénalités commenceront le 31 mars.`;
-    } else if (now < opening) {
-        banner.className = 'alert alert-warning mb-4';
-        banner.innerHTML = `<i class="fas fa-clock me-2"></i>La période de renouvellement s'ouvrira le <strong>${opening.toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'})}</strong>.`;
-    } else {
-        banner.className = 'alert alert-danger mb-4';
-        banner.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>Le 31 mars est dépassé. Les <strong>pénalités de retard</strong> sont en cours d'application.`;
-    }
-    banner.classList.remove('d-none');
-}
-
-async function saveVignetteSettings() {
-    const input = document.getElementById('renewal-opening-date');
-    const msgEl = document.getElementById('settings-save-msg');
-    const dateVal = input ? input.value : '';
-    try {
-        const res = await fetch('/api/vehicles/vignette-settings', {
-            method: 'PUT',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ renewal_opening_date: dateVal || null })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erreur serveur');
-        updateRenewalStatusBanner(data.renewal_opening_date);
-        if (msgEl) {
-            msgEl.className = 'alert alert-success';
-            msgEl.textContent = 'Paramètres enregistrés avec succès.';
-            msgEl.classList.remove('d-none');
-            setTimeout(() => msgEl.classList.add('d-none'), 3000);
-        }
-    } catch (e) {
-        if (msgEl) {
-            msgEl.className = 'alert alert-danger';
-            msgEl.textContent = 'Erreur : ' + e.message;
-            msgEl.classList.remove('d-none');
-        }
-    }
-}
-
-function clearRenewalDate() {
-    const input = document.getElementById('renewal-opening-date');
-    if (input) input.value = '';
-    saveVignetteSettings();
 }

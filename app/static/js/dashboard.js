@@ -10,51 +10,19 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeof Chart === 'undefined'){
         console.error('Chart.js non chargé: la variable `Chart` est introuvable.');
         showDashboardError('Librairie Chart.js non chargée — vérifiez la console Network pour `chart.min.js`.');
+        // still attempt to load stats (numbers) but skip charts creation
     }
     loadDashboardData();
-
+    // Actualiser les données toutes les 30 secondes
+    setInterval(loadDashboardData, 30000);
+    
     // country filter binding for admin
     const countryFilterEl = document.getElementById('dashboard-country-filter');
     if(countryFilterEl){
         countryFilterEl.addEventListener('change', function(){
-            _lastUpdateKey = null; // force reload on filter change
             loadDashboardData(0, this.value);
         });
     }
-
-    // ── Near-real-time polling via lightweight /last-update endpoint ──────────
-    // Every 3 s we check only the latest updated_at + count.
-    // If something changed we trigger a full reload immediately.
-    // Full reload also runs every 30 s as a safety net.
-    let _lastUpdateKey = null;
-
-    function checkForUpdates() {
-        if (document.hidden) return;
-        const country = (countryFilterEl && countryFilterEl.value) || null;
-        let url = '/api/vehicles/last-update';
-        if (country) url += '?country=' + encodeURIComponent(country);
-
-        fetch(url, { credentials: 'same-origin' })
-            .then(r => r.ok ? r.json() : null)
-            .then(d => {
-                if (!d) return;
-                const key = d.last_update + '|' + d.total;
-                if (_lastUpdateKey === null) {
-                    _lastUpdateKey = key; // initialise on first tick
-                    return;
-                }
-                if (key !== _lastUpdateKey) {
-                    _lastUpdateKey = key;
-                    loadDashboardData();
-                }
-            })
-            .catch(() => {});
-    }
-
-    setInterval(checkForUpdates, 3000);
-    setInterval(loadDashboardData, 30000); // safety-net full refresh
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) loadDashboardData(); });
-    window.addEventListener('focus', loadDashboardData);
 });
 
 /**
@@ -362,16 +330,17 @@ function loadVehiclesList(retryCount = 0, country = null) {
         .then(data => {
             if (data === undefined) return; // Retry en cours
             try{
-                // Use the most recent updated_at across ALL vehicles as the change key.
-                // This catches any modification (name, status, any field) on any vehicle.
-                const vehicles = data || [];
-                const latestUpdated = vehicles.reduce((max, v) => {
-                    const t = v.updated_at || v.created_at || '';
-                    return t > max ? t : max;
-                }, '');
-                const key = vehicles.length + '|' + latestUpdated;
+                // Build a compact key for the first 10 vehicles to detect changes
+                const keyItems = (data || []).slice(0, 10).map(v => ({
+                    id: v.id,
+                    lp: v.license_plate,
+                    status: v.status,
+                    owner: v.owner_name
+                }));
+                const key = JSON.stringify(keyItems);
                 if(window._lastVehiclesKey && window._lastVehiclesKey === key){
                     console.debug('Vehicles list unchanged; skipping update');
+                    // ensure table visible after first load
                     if (table && shouldHide) table.classList.remove('invisible');
                     window._vehiclesLoaded = true;
                     return;

@@ -119,7 +119,7 @@ function updateRegions(){
 }
 
 let usersCache = [];
-let selectedRole = 'administrateur'; // Onglet par défaut
+let selectedRole = null; // Track selected role filter
 
 function loadUsers(roleFilter = null){
     let url = '/api/users/list';
@@ -170,8 +170,7 @@ function renderUsersByRole(list, roles){
     
     let html = '';
     let rowIndex = 0;
-    const adminCount = usersCache.filter(u => u.role === 'administrateur').length;
-
+    
     // Sort roles for consistent display
     const roleOrder = ['administrateur', 'judiciaire', 'policier', 'agent_impot'];
     const sortedRoles = roles.sort((a, b) => {
@@ -207,11 +206,7 @@ function renderUsersByRole(list, roles){
         }
         
         // User rows for this role
-        const isLastAdmin = role === 'administrateur' && adminCount <= 1;
         usersInRole.forEach((u, idx) => {
-            const deleteBtn = isLastAdmin
-                ? `<button class="btn btn-sm btn-outline-danger" disabled title="Dernier administrateur — suppression impossible"><i class="fas fa-trash"></i></button>`
-                : `<button class="btn btn-sm btn-outline-danger" data-uid="${u.id}" title="Supprimer"><i class="fas fa-trash"></i></button>`;
             html += `<tr>
                 <td>${++rowIndex}</td>
                 <td>${escapeHtml(u.username||'')}</td>
@@ -227,7 +222,9 @@ function renderUsersByRole(list, roles){
                   <button class="btn btn-sm btn-outline-primary me-1" data-edit="${u.id}" title="Éditer">
                     <i class="fas fa-edit"></i>
                   </button>
-                  ${deleteBtn}
+                  <button class="btn btn-sm btn-outline-danger" data-uid="${u.id}" title="Supprimer">
+                    <i class="fas fa-trash"></i>
+                  </button>
                 </td>
             </tr>`;
         });

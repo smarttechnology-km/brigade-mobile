@@ -52,49 +52,22 @@ function refreshVignetteDashboard() {
     loadDashboardData();
 }
 
-let _vigLastRefresh = Date.now();
-
-function _vigInjectLiveBadge() {
-    const header = document.querySelector('#vehicles-table')?.closest('.card')?.querySelector('.card-header h6');
-    if (!header || document.getElementById('vig-live-badge')) return;
-    const badge = document.createElement('span');
-    badge.id = 'vig-live-badge';
-    badge.className = 'badge ms-2 fw-normal';
-    badge.style.fontSize = '0.72rem';
-    header.appendChild(badge);
-}
-
-function _vigUpdateLiveBadge() {
-    const badge = document.getElementById('vig-live-badge');
-    if (!badge) return;
-    const secs = Math.round((Date.now() - _vigLastRefresh) / 1000);
-    if (secs < 5) {
-        badge.className = 'badge bg-success ms-2 fw-normal';
-        badge.textContent = '● En direct';
-    } else if (secs < 35) {
-        badge.className = 'badge bg-secondary ms-2 fw-normal';
-        badge.textContent = `↻ il y a ${secs}s`;
-    } else {
-        badge.className = 'badge bg-warning text-dark ms-2 fw-normal';
-        badge.textContent = `↻ il y a ${secs}s`;
-    }
-}
-
 function setupAutoRefresh() {
-    _vigInjectLiveBadge();
-    setInterval(_vigUpdateLiveBadge, 1000);
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            loadDashboardData();
+        }
+    });
 
-    function doRefresh() {
-        if (document.hidden) return;
-        _vigLastRefresh = Date.now();
-        _vigUpdateLiveBadge();
+    window.addEventListener('focus', function() {
         loadDashboardData();
-    }
+    });
 
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) doRefresh(); });
-    window.addEventListener('focus', doRefresh);
-    setInterval(doRefresh, 30000);
-    _vigUpdateLiveBadge();
+    setInterval(() => {
+        if (!document.hidden) {
+            loadDashboardData();
+        }
+    }, 60000);
 }
 
 function loadVignetteVehicles() {
@@ -253,9 +226,6 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
             statusBadge = 'badge bg-danger';
             statusText = 'Expirée';
             isExpired = true;
-        } else if (vehicle.renewal_needed) {
-            statusBadge = 'badge bg-info';
-            statusText = 'À renouveler';
         } else if (vignetteExpiry < new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)) {
             statusBadge = 'badge bg-warning';
             statusText = 'Expiration proche';

@@ -2,47 +2,21 @@ let mmAllFines = [];
 let mmAllVehicles = [];
 let mmFilteredVehicles = [];
 let selectedVehicleId = null;
-let _mmdLastRefresh = Date.now();
-
-function _mmdUpdateLiveBadge() {
-    const badge = document.getElementById('mmd-live-badge');
-    if (!badge) return;
-    const secs = Math.round((Date.now() - _mmdLastRefresh) / 1000);
-    if (secs < 5) {
-        badge.className = 'badge bg-success ms-2 fw-normal align-middle';
-        badge.textContent = '● En direct';
-    } else if (secs < 35) {
-        badge.className = 'badge bg-secondary ms-2 fw-normal align-middle';
-        badge.textContent = `↻ il y a ${secs}s`;
-    } else {
-        badge.className = 'badge bg-warning text-dark ms-2 fw-normal align-middle';
-        badge.textContent = `↻ il y a ${secs}s`;
-    }
-}
-
-function setupDashboardAutoRefresh() {
-    _mmdUpdateLiveBadge();
-    setInterval(_mmdUpdateLiveBadge, 1000);
-
-    function doRefresh() {
-        if (document.hidden) return;
-        _mmdLastRefresh = Date.now();
-        _mmdUpdateLiveBadge();
-        loadUnpaidFines();
-    }
-
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) doRefresh(); });
-    window.addEventListener('focus', doRefresh);
-    setInterval(doRefresh, 30000);
-}
 
 document.addEventListener('DOMContentLoaded', function () {
     const searchEl = document.getElementById('mm-search');
+    const refreshBtn = document.getElementById('mm-refresh-btn');
     const confirmBtn = document.getElementById('mm-confirm-pay-btn');
 
     if (searchEl) {
         searchEl.addEventListener('input', function () {
             filterRows(this.value || '');
+        });
+    }
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function () {
+            loadUnpaidFines();
         });
     }
 
@@ -63,7 +37,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     loadUnpaidFines();
-    setupDashboardAutoRefresh();
 });
 
 function loadUnpaidFines() {
