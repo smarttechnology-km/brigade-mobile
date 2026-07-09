@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app, url_for, render_template, send_file
 from app import db
-from app.models import Payment, Fine, Vehicle, VehicleHistory
+from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting, QRCodePayment, SmartTechSetting, HuriDestinationSetting, FineType
 from datetime import datetime, timedelta
 import io
 import json
@@ -25,6 +25,17 @@ def _parse_vignette_datetime(value):
         except Exception:
             return None
     return ensure_comoros(value)
+
+
+def _get_renewal_opening_datetime():
+    """Return the configured renewal opening date as a timezone-aware Comoros datetime, or None."""
+    try:
+        setting = VignetteSetting.query.first()
+        if setting and setting.renewal_opening_date:
+            return ensure_comoros(datetime.combine(setting.renewal_opening_date, datetime.min.time()))
+    except Exception:
+        pass
+    return None
 
 
 def _calculate_unpaid_fines_amount(vehicle):
@@ -199,22 +210,50 @@ def lookup():
 
     q_normalized = q.upper().strip()
 
-    # Try track_token first
+    # Try track_token first (exact), then exact plate match only — no partial search
     vehicle = Vehicle.query.filter_by(track_token=q).first()
     if not vehicle:
         vehicle = Vehicle.query.filter_by(license_plate=q_normalized).first()
-    if not vehicle:
-        vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{q_normalized}%')).first()
 
     if not vehicle:
         return jsonify({'fines': [], 'vehicle': None})
 
     # Return unpaid fines only
-    unpaid_fines = [f.to_dict() for f in vehicle.fines.filter_by(paid=False).order_by(Fine.issued_at.desc()).all()]
+    raw_fines = vehicle.fines.filter_by(paid=False).order_by(Fine.issued_at.desc()).all()
+
+    # Batch-lookup article info keyed by reason label (avoids N+1)
+    reasons = {f.reason for f in raw_fines if f.reason}
+    fine_types = FineType.query.filter(FineType.label.in_(reasons)).all() if reasons else []
+    article_map = {
+        ft.label: {
+            'article_code': ft.article.code if ft.article else None,
+            'article_description': ft.article.description if ft.article else None,
+        }
+        for ft in fine_types
+    }
+
+    unpaid_fines = []
+    for f in raw_fines:
+        d = f.to_dict()
+        info = article_map.get(f.reason, {})
+        d['article_code'] = info.get('article_code')
+        d['article_description'] = info.get('article_description')
+        unpaid_fines.append(d)
+
     unpaid_fines_amount = _calculate_unpaid_fines_amount(vehicle)
 
     now = now_comoros()
     vignette_expiry = _parse_vignette_datetime(vehicle.vignette_expiry)
+
+    renewal_opening = _get_renewal_opening_datetime()
+    in_renewal_period = renewal_opening is not None and now >= renewal_opening
+    payment_approved = bool(getattr(vehicle, 'vignette_payment_approved', False))
+    renewal_needed = bool(
+        in_renewal_period
+        and vignette_expiry
+        and vignette_expiry >= now
+        and not payment_approved
+    )
 
     vignette_status = 'no_vignette'
     penalty_amount = 0.0
@@ -233,11 +272,33 @@ def lookup():
     vignette_price = float(vignette_breakdown['base_amount']) if vignette_breakdown else 0.0
     annual_ds_amount = float(vignette_breakdown['annual_ds_amount']) if vignette_breakdown else 0.0
     vignette_total = float(vignette_breakdown['total_amount']) if vignette_breakdown else 0.0
-    requested_expiry = get_vignette_expiry_date(now)
-    renewal_allowed = not (vignette_expiry and vignette_expiry > now)
+    if renewal_needed and vignette_expiry:
+        # Early renewal during the open window: quote the vignette extended by
+        # one year from its current expiry (matches the agent approval flow).
+        requested_expiry = ensure_comoros(datetime(
+            vignette_expiry.year + 1, vignette_expiry.month, vignette_expiry.day, 23, 59, 59
+        ))
+    else:
+        requested_expiry = get_vignette_expiry_date(now)
+    renewal_allowed = not (vignette_expiry and vignette_expiry > now) or renewal_needed
+
+    vehicle_payload = vehicle.to_dict()
+    vehicle_payload['renewal_needed'] = renewal_needed
+    vehicle_payload['renewal_period_open'] = bool(in_renewal_period)
+
+    qr_expiry = ensure_comoros(vehicle.qr_code_expiry) if vehicle.qr_code_expiry else None
+    qr_status = 'none'
+    if qr_expiry:
+        if qr_expiry < now:
+            qr_status = 'expired'
+        elif qr_expiry < now + timedelta(days=30):
+            qr_status = 'expiring'
+        else:
+            qr_status = 'active'
+    qr_renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
 
     return jsonify({
-        'vehicle': vehicle.to_dict(),
+        'vehicle': vehicle_payload,
         'fines': unpaid_fines,
         'vignette_quote': {
             'status': vignette_status,
@@ -247,8 +308,17 @@ def lookup():
             'fines_amount': round(unpaid_fines_amount, 2),
             'total_amount': round(vignette_total + penalty_amount + unpaid_fines_amount, 2) if renewal_allowed else 0.0,
             'requested_expiry': requested_expiry.isoformat() if requested_expiry else None,
-            'is_renewal': bool(vignette_expiry and vignette_expiry < now),
+            'is_renewal': bool(vignette_expiry and (vignette_expiry < now or renewal_needed)),
             'renewal_allowed': renewal_allowed,
+            'renewal_needed': renewal_needed,
+            'renewal_period_open': bool(in_renewal_period),
+        },
+        'qr_quote': {
+            'status': qr_status,
+            'price': round(qr_renewal_price, 2),
+            'expiry': qr_expiry.isoformat() if qr_expiry else None,
+            # QR code renewal is only payable once it has actually expired.
+            'renewal_allowed': qr_status == 'expired',
         }
     })
 
@@ -347,6 +417,7 @@ def create_payment():
             owner_name=vehicle.owner_name,
             payer_name=payer_name,
             payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('vignette'),
             fines=json.dumps(payload)
         )
         db.session.add(payment)
@@ -357,7 +428,7 @@ def create_payment():
         return jsonify({
             'payment_id': payment.id,
             'checkout_url': checkout_url,
-            'amount': int(total * 100),
+            'amount': round(total, 2),
             'currency': 'KMF',
             'status': 'pending',
             'payment_type': 'vignette',
@@ -370,6 +441,55 @@ def create_payment():
                 'total_amount': round(total, 2),
                 'requested_expiry': requested_expiry.isoformat() if requested_expiry else None,
             }
+        })
+
+    if payment_type == 'qr_renewal':
+        vehicle_id = data.get('vehicle_id')
+        if not vehicle_id:
+            return jsonify({'error': 'vehicle_id is required for QR code renewal'}), 400
+
+        vehicle = Vehicle.query.get(vehicle_id)
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+
+        qr_expiry = ensure_comoros(vehicle.qr_code_expiry) if vehicle.qr_code_expiry else None
+        if qr_expiry and qr_expiry > now_comoros():
+            return jsonify({'error': 'Le code QR de ce véhicule est encore valide.'}), 400
+
+        amount = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
+        payload = {
+            'type': 'qr_renewal_request',
+            'payment_type': 'qr_renewal',
+            'vehicle_id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name,
+            'amount': amount,
+        }
+
+        payment = Payment(
+            amount=amount,
+            currency='KMF',
+            status='pending',
+            license_plate=vehicle.license_plate,
+            owner_name=vehicle.owner_name,
+            payer_name=payer_name,
+            payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('qr_renewal'),
+            fines=json.dumps(payload)
+        )
+        db.session.add(payment)
+        db.session.commit()
+
+        checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
+
+        return jsonify({
+            'payment_id': payment.id,
+            'checkout_url': checkout_url,
+            'amount': round(amount, 2),
+            'currency': 'KMF',
+            'status': 'pending',
+            'payment_type': 'qr_renewal',
+            'vehicle': vehicle.to_dict(),
         })
 
     if not fines_ids:
@@ -393,7 +513,17 @@ def create_payment():
 
     total = sum([f.amount for f in fines])
 
-    payment = Payment(amount=total, currency='USD', status='pending', license_plate=license_plate, owner_name=owner_name, payer_name=payer_name, payer_email=payer_email, fines=str(fines_ids))
+    payment = Payment(
+        amount=total,
+        currency='KMF',
+        status='pending',
+        license_plate=license_plate,
+        owner_name=owner_name,
+        payer_name=payer_name,
+        payer_email=payer_email,
+        destination_phone=HuriDestinationSetting.get().phone_for('fine'),
+        fines=str(fines_ids)
+    )
     db.session.add(payment)
     db.session.commit()
 
@@ -403,8 +533,8 @@ def create_payment():
     return jsonify({
         'payment_id': payment.id, 
         'checkout_url': checkout_url,
-        'amount': int(total * 100),  # Convert to cents for API consistency
-        'currency': 'USD',
+        'amount': round(float(total), 2),
+        'currency': 'KMF',
         'status': 'pending'
     })
 
@@ -412,11 +542,11 @@ def create_payment():
 @mobile_pay_bp.route('/check-balance', methods=['POST'])
 def check_balance():
     """Check if Huri Money account has sufficient balance for payment.
-    
+
     Expected JSON:
     {
         "phone_number": "3123456",
-        "required_amount": 50000  // in cents (KMF)
+        "required_amount": 13000  // in KMF
     }
     """
     data = request.get_json() or {}
@@ -426,49 +556,34 @@ def check_balance():
     if not phone_number or required_amount is None:
         return jsonify({'error': 'Missing phone_number or required_amount'}), 400
 
-    # In production, this would call Huri Money API to check balance
-    # For now, simulate different scenarios based on phone number
-    
-    # Simulate balance check: for demo purposes, some numbers have insufficient balance
+    # Simulated balances in KMF
     simulated_balances = {
-        '3111111': 10000,       # Insufficient (100.00 KMF)
-        '3122222': 2000000,     # Sufficient (20,000.00 KMF) - test number
-        '3133333': 5000,        # Insufficient (50.00 KMF)
+        '3111111': 100,    # Insufficient (100 KMF)
+        '3122222': 20000,  # Sufficient (20,000 KMF) - test number
+        '3133333': 50,     # Insufficient (50 KMF)
     }
 
-    # Get balance or default to sufficient amount (2,000,000 cents = 20,000 KMF)
-    account_balance = simulated_balances.get(phone_number, 2000000)
-    
-    # Convert cents to KMF for display
-    required_amount_kmf = required_amount / 100 if required_amount > 100 else required_amount
-    account_balance_kmf = account_balance / 100 if account_balance > 100 else account_balance
-    
+    # Default: 20,000 KMF
+    account_balance = simulated_balances.get(phone_number, 20000)
     has_sufficient_balance = account_balance >= required_amount
-    
-    console_output = {
-        'phone_number': phone_number,
-        'required_amount': int(required_amount_kmf),
-        'account_balance': int(account_balance_kmf),
-        'has_sufficient_balance': has_sufficient_balance,
-    }
-    
-    print(f'💰 Balance Check: {console_output}')
-    
+
+    print(f'💰 Balance Check: phone={phone_number}, required={required_amount} KMF, balance={account_balance} KMF, ok={has_sufficient_balance}')
+
     if has_sufficient_balance:
         return jsonify({
             'status': 'connected',
             'has_sufficient_balance': True,
-            'balance': int(account_balance),
+            'balance': account_balance,
             'message': 'Balance is sufficient'
         }), 200
     else:
         return jsonify({
             'status': 'insufficient_balance',
             'has_sufficient_balance': False,
-            'balance': int(account_balance),
-            'required': int(required_amount),
-            'message': f'Insufficient balance. Required: {required_amount}, Available: {account_balance}'
-        }), 200  # Return 200 even for insufficient balance to allow client-side handling
+            'balance': account_balance,
+            'required': required_amount,
+            'message': f'Insufficient balance. Required: {required_amount} KMF, Available: {account_balance} KMF'
+        }), 200
 
 
 @mobile_pay_bp.route('/webhook', methods=['POST'])
@@ -526,15 +641,17 @@ def webhook():
                 if not requested_expiry:
                     requested_expiry = get_vignette_expiry_date(payment_time)
 
+                citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
                 vehicle.vignette_payment_requested_at = payment_time
-                vehicle.vignette_payment_requested_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                vehicle.vignette_payment_requested_by = citizen_label
                 vehicle.vignette_payment_requested_expiry = requested_expiry
                 vehicle.vignette_payment_approved = True
                 vehicle.vignette_payment_approved_at = payment_time
-                vehicle.vignette_payment_approved_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                vehicle.vignette_payment_approved_by = citizen_label
                 vehicle.vignette_payment_method = 'huri_money' if payment.huri_payment_id else 'app_mobile'
                 vehicle.vignette_expiry = requested_expiry
                 vehicle.vignette_last_paid_at = payment_time
+                vehicle.vignette_last_paid_by = citizen_label
                 vehicle.vignette_last_paid_vignette_amount = float(fine_payload.get('vignette_price') or 0.0) + float(fine_payload.get('annual_ds_amount') or 0.0)
                 vehicle.vignette_last_paid_penalty_amount = float(fine_payload.get('penalty_amount') or 0.0)
                 vehicle.vignette_last_paid_fines_amount = float(fine_payload.get('fines_amount') or 0.0)
@@ -556,17 +673,42 @@ def webhook():
                     if f:
                         f.paid = True
                         f.paid_at = payment_time
-                        f.paid_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                        f.paid_by = citizen_label
                         f.receipt_number = f'VEN-{f.id}-{int(payment_time.timestamp())}'
 
                 db.session.commit()
+        elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'qr_renewal_request':
+            vehicle_id = fine_payload.get('vehicle_id')
+            vehicle = Vehicle.query.get(int(vehicle_id)) if vehicle_id else None
+            if vehicle:
+                payment_time = payment.paid_at or now_comoros()
+                vehicle.generate_qr_code_with_expiry()
+                vehicle.status = 'active'
+
+                citizen_name = payment.payer_name or payment.phone_number or 'Inconnu'
+                db.session.add(QRCodePayment(
+                    vehicle_id=vehicle.id,
+                    payment_type='renewal',
+                    amount=float(payment.amount or 0.0),
+                    status='paid',
+                    paid_at=payment_time,
+                    recorded_by=f'App Citoyen / {citizen_name}',
+                ))
+                db.session.add(VehicleHistory(
+                    vehicle_id=vehicle.id,
+                    action='Renouvellement QR Code via mobile citoyen',
+                    officer='App Mobile',
+                    notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF | Nouvelle expiration: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
+                ))
+                db.session.commit()
         else:
+            citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
             for fid in fine_payload:
                 f = Fine.query.get(int(fid))
                 if f:
                     f.paid = True
                     f.paid_at = now_comoros()
-                    f.paid_by = payment.payer_name or payment.phone_number or 'HuriMoney'
+                    f.paid_by = citizen_label
                     f.receipt_number = f'REC-{f.id}-{int(f.paid_at.timestamp())}'
             db.session.commit()
 
@@ -616,6 +758,10 @@ def get_receipt(payment_id):
                 'requested_expiry': payload.get('requested_expiry'),
             }
             fine_ids = payload.get('fine_ids') or []
+        elif isinstance(payload, dict) and payload.get('type') == 'qr_renewal_request':
+            payment_type = 'qr_renewal'
+            vehicle = Vehicle.query.get(payload.get('vehicle_id')) if payload.get('vehicle_id') else None
+            fine_ids = []
         else:
             fine_ids = payload if isinstance(payload, list) else []
 
@@ -641,13 +787,13 @@ def get_receipt(payment_id):
         payload = []
 
     # Generate receipt number
-    receipt_prefix = 'VGN' if payment_type == 'vignette' else 'RCP'
+    receipt_prefix = 'VGN' if payment_type == 'vignette' else 'QRR' if payment_type == 'qr_renewal' else 'RCP'
     receipt_number = f'{receipt_prefix}-{p.id}-{int(p.created_at.timestamp())}'
     
     return jsonify({
         'payment_id': str(p.id),
         'receipt_number': receipt_number,
-        'amount': int(p.amount * 100),  # Convert to cents for API consistency
+        'amount': round(float(p.amount), 2),
         'currency': p.currency,
         'status': p.status,
         'payment_type': payment_type,
@@ -697,13 +843,13 @@ def last_receipt_by_plate():
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
-    # Find vehicle by license plate
-    vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{plate}%')).first()
+    # Find vehicle by exact plate only — no partial search
+    vehicle = Vehicle.query.filter_by(license_plate=plate.upper().strip()).first()
     if not vehicle:
-        return jsonify({'error': 'Véhicule non trouvé'}), 404
-    
+        return jsonify({'error': 'Immatriculation introuvable. Veuillez entrer l\'immatriculation complète.'}), 404
+
     from sqlalchemy import or_, and_
-    
+
     payment_query = Payment.query.filter(
         Payment.license_plate.ilike(f'%{vehicle.license_plate}%')
     )
@@ -795,13 +941,13 @@ def receipts_by_date():
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
-    # Find vehicle by license plate
-    vehicle = Vehicle.query.filter(Vehicle.license_plate.ilike(f'%{plate}%')).first()
+    # Find vehicle by exact plate only — no partial search
+    vehicle = Vehicle.query.filter_by(license_plate=plate.upper().strip()).first()
     if not vehicle:
-        return jsonify({'error': 'Véhicule non trouvé'}), 404
-    
+        return jsonify({'error': 'Immatriculation introuvable. Veuillez entrer l\'immatriculation complète.'}), 404
+
     from sqlalchemy import or_, and_
-    
+
     # Get all payments for this vehicle on the selected date
     payments = Payment.query.filter(
         Payment.license_plate.ilike(f'%{vehicle.license_plate}%')
@@ -992,6 +1138,14 @@ def download_receipt_pdf(payment_id):
                 col2_items.append(Paragraph(f"<b>Type:</b> Paiement amendes ({len(fines)} selectionnee(s))", normal_style))
             col2_items.append(Paragraph(f"<b>Montant total paye:</b> <b>{round(float(payment.amount or 0.0), 2)} KMF</b>", normal_style))
             col2_items.append(Paragraph(f"<b>Reference recu:</b> {receipt_number or '—'}", normal_style))
+            if payment_kind == 'vignette' and isinstance(raw_payload, dict):
+                expiry = raw_payload.get('requested_expiry', '')
+                if expiry:
+                    try:
+                        expiry = datetime.fromisoformat(expiry).strftime('%d/%m/%Y')
+                    except Exception:
+                        pass
+                    col2_items.append(Paragraph(f"<b>Expiration vignette:</b> {expiry}", normal_style))
             
             # Create nested tables for each column
             col1_table = Table([[item] for item in col1_items], colWidths=[2.7*inch])
@@ -1025,8 +1179,48 @@ def download_receipt_pdf(payment_id):
             ]))
             elements.append(main_table)
 
+        # VIGNETTE BREAKDOWN SECTION
+        if payment_kind == 'vignette' and isinstance(raw_payload, dict):
+            elements.append(Spacer(1, 0.15 * inch))
+            elements.append(Paragraph("<b>Decomposition du paiement</b>", heading_style))
+
+            vig_price   = float(raw_payload.get('vignette_price') or 0.0)
+            annual_ds   = float(raw_payload.get('annual_ds_amount') or 0.0)
+            penalty     = float(raw_payload.get('penalty_amount') or 0.0)
+            fines_amt   = float(raw_payload.get('fines_amount') or 0.0)
+            total_amt   = float(payment.amount or 0.0)
+
+            breakdown_data = [
+                [Paragraph('<b>Composante</b>', normal_style), Paragraph('<b>Montant (KMF)</b>', normal_style)],
+            ]
+            if vig_price > 0:
+                breakdown_data.append(['Vignette annuelle', f"{round(vig_price, 2)}"])
+            if annual_ds > 0:
+                breakdown_data.append(['DS annuelle', f"{round(annual_ds, 2)}"])
+            if penalty > 0:
+                breakdown_data.append(['Penalite de retard', f"{round(penalty, 2)}"])
+            if fines_amt > 0:
+                breakdown_data.append([f'Amendes incluses ({len(fines)})', f"{round(fines_amt, 2)}"])
+            breakdown_data.append([
+                Paragraph('<b>TOTAL</b>', normal_style),
+                Paragraph(f'<b>{round(total_amt, 2)}</b>', normal_style),
+            ])
+
+            breakdown_table = Table(breakdown_data, colWidths=[3.5 * inch, 1.8 * inch])
+            breakdown_table.setStyle(TableStyle([
+                ('GRID',        (0, 0), (-1, -1), 0.5, colors.lightgrey),
+                ('BACKGROUND',  (0, 0), (-1,  0), colors.whitesmoke),
+                ('BACKGROUND',  (0, -1), (-1, -1), colors.HexColor('#f0f0f0')),
+                ('FONTNAME',    (0, 0), (-1,  0), 'Helvetica-Bold'),
+                ('ALIGN',       (1, 0), (1, -1), 'RIGHT'),
+                ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING',  (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.append(breakdown_table)
+
         if fines:
-            elements.append(Spacer(1, 0.12 * inch))
+            elements.append(Spacer(1, 0.15 * inch))
             elements.append(Paragraph(f"<b>Amendes reglees ({len(fines)})</b>", heading_style))
 
             fines_table_data = [[

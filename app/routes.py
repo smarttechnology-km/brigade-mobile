@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort, send_file, current_app
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, abort, send_file, send_from_directory, current_app
 from flask_login import login_required, current_user
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from functools import wraps
@@ -62,6 +62,19 @@ def get_vignette_expiry_date(reference_date=None):
         # Sinon, expiration le 31 mars de l'année prochaine
         return ensure_comoros(datetime(current_year + 1, 3, 31, 23, 59, 59))
 
+def get_renewal_opening_datetime():
+    """Return the configured renewal opening date as a timezone-aware datetime, or None."""
+    try:
+        from app.models import VignetteSetting
+        from datetime import datetime as _dt
+        setting = VignetteSetting.query.first()
+        if setting and setting.renewal_opening_date:
+            return ensure_comoros(_dt.combine(setting.renewal_opening_date, _dt.min.time()))
+    except Exception:
+        pass
+    return None
+
+
 # Helper function to apply island filter for judiciaire and policier users
 def apply_island_filter(query, island_field, force_country=None):
     """Apply island/country filter for judiciaire and policier users with assigned country.
@@ -95,6 +108,29 @@ def check_island_access(island):
 
 def vehicle_has_unpaid_fines(vehicle_id):
     return Fine.query.filter_by(vehicle_id=vehicle_id, paid=False).first() is not None
+
+
+def _record_qr_payment(vehicle, payment_type, officer):
+    """Auto-record a SmartTech QRCodePayment. Activation recorded once; renewal always."""
+    try:
+        from app.models import QRCodePayment, SmartTechSetting
+        if payment_type == 'activation':
+            if QRCodePayment.query.filter_by(vehicle_id=vehicle.id, payment_type='activation', status='paid').first():
+                return
+            amount = SmartTechSetting.get('qr_activation_price', 5000)
+        else:
+            amount = SmartTechSetting.get('qr_renewal_price', 3000)
+        db.session.add(QRCodePayment(
+            vehicle_id=vehicle.id,
+            payment_type=payment_type,
+            amount=amount,
+            status='paid',
+            paid_at=now_comoros(),
+            recorded_by=officer,
+        ))
+        db.session.commit()
+    except Exception as e:
+        print(f"Warning: could not record QR payment: {e}")
 
 
 def _sync_vehicle_owner_link(vehicle):
@@ -577,6 +613,12 @@ def roles_required(*allowed_roles):
     return deco
 
 
+@main_bp.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    """Serve files from UPLOAD_FOLDER (persistent disk on Render, static/ in dev)."""
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
+
+
 @main_bp.route('/')
 def index():
     """Page d'accueil du dashboard"""
@@ -628,6 +670,352 @@ def insurance_dashboard():
     return render_template('insurance_dashboard.html')
 
 
+@main_bp.route('/insurance-sigva')
+@login_required
+def insurance_sigva():
+    """S.I.G.V.A commission page for insurance accounts."""
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    return render_template('insurance_sigva.html')
+
+
+@main_bp.route('/insurance-sigva/receipt/<month>')
+@login_required
+def insurance_sigva_receipt(month):
+    """Generate a PDF receipt for a confirmed commission month."""
+    import re as _re, io
+    from flask import send_file
+    from app.models import InsuranceAccount, QRCodePayment, SmartTechSetting, VehicleInsuranceAssignment
+    from app.timezone_utils import ensure_comoros, now_comoros
+    from datetime import timezone, timedelta, datetime
+    import calendar
+
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    if not _re.match(r'^\d{4}-\d{2}$', month):
+        abort(400)
+
+    ins = current_user.insurance
+    commission_rate = int(SmartTechSetting.get('insurance_commission', 0))
+    COMOROS_TZ = timezone(timedelta(hours=3))
+
+    # Check the month is confirmed
+    rval = SmartTechSetting.get('commission_received_%s_%s' % (ins.id, month), '')
+    if not rval or rval == '0':
+        abort(404)
+    parts = str(rval).split('|', 1)
+    confirmed_at_str = parts[0]
+    confirmed_by     = parts[1] if len(parts) > 1 else None
+
+    # Commission data for the month
+    year_n, month_n = map(int, month.split('-'))
+    last_day = calendar.monthrange(year_n, month_n)[1]
+    m_start  = datetime(year_n, month_n, 1, 0, 0, 0, tzinfo=COMOROS_TZ)
+    m_end    = datetime(year_n, month_n, last_day, 23, 59, 59, tzinfo=COMOROS_TZ)
+
+    assignments = VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    vehicle_ids = list({a.vehicle_id for a in assignments})
+    if vehicle_ids:
+        from app.models import QRCodePayment
+        qr_all = QRCodePayment.query.filter(
+            QRCodePayment.vehicle_id.in_(vehicle_ids),
+            QRCodePayment.status == 'paid'
+        ).all()
+    else:
+        qr_all = []
+    m_qr = [q for q in qr_all if q.paid_at and m_start <= ensure_comoros(q.paid_at) <= m_end]
+    acts = sum(1 for q in m_qr if q.payment_type == 'activation')
+    rens = sum(1 for q in m_qr if q.payment_type == 'renewal')
+    commission = (acts + rens) * commission_rate
+
+    MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                 'Juillet','Août','Septembre','Octobre','Novembre','Décembre']
+    month_label = MONTHS_FR[month_n - 1] + ' ' + str(year_n)
+
+    # ── Build PDF ──
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm, mm
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                    Table, TableStyle, HRFlowable, KeepTogether)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+    # ── Palette ──
+    NAVY     = colors.HexColor('#0B1D35')
+    NAVY2    = colors.HexColor('#122540')
+    CYAN     = colors.HexColor('#00B4CC')
+    CYAN_LT  = colors.HexColor('#E5F7FA')
+    GREEN    = colors.HexColor('#0D7A45')
+    GREEN_LT = colors.HexColor('#EAF7F0')
+    GREEN_BD = colors.HexColor('#A8D5BE')
+    SLATE    = colors.HexColor('#556070')
+    STEEL    = colors.HexColor('#E4EAF1')
+    WHITE    = colors.white
+
+    confirmed_at_display = '—'
+    try:
+        from datetime import datetime as _dt2
+        confirmed_at_display = _dt2.fromisoformat(confirmed_at_str).strftime('%d/%m/%Y à %H:%M')
+    except Exception:
+        confirmed_at_display = confirmed_at_str
+
+    receipt_ref = f'SIGVA/{ins.id:04d}/{year_n}/{month_n:02d}'
+    generated_at = now_comoros().strftime('%d/%m/%Y à %H:%M')
+
+    buf = io.BytesIO()
+    MX, MY = 1.8*cm, 1.5*cm
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=MX, rightMargin=MX,
+                            topMargin=MY, bottomMargin=MY)
+    W = A4[0] - 2*MX
+    styles = getSampleStyleSheet()
+
+    # ── Typography ──
+    def ps(name, **kw):
+        return ParagraphStyle(name, parent=styles['Normal'], **kw)
+
+    hdr_brand  = ps('HB', fontSize=15, fontName='Helvetica-Bold', textColor=WHITE, leading=18)
+    hdr_sub    = ps('HS', fontSize=8,  fontName='Helvetica',      textColor=colors.HexColor('#90B8D4'), leading=11, spaceBefore=2)
+    hdr_ref_l  = ps('RL', fontSize=8,  fontName='Helvetica',      textColor=colors.HexColor('#90B8D4'), alignment=TA_RIGHT, leading=11)
+    hdr_ref_v  = ps('RV', fontSize=13, fontName='Helvetica-Bold', textColor=WHITE, alignment=TA_RIGHT, leading=16)
+    hdr_recu   = ps('RC', fontSize=9,  fontName='Helvetica-Bold', textColor=CYAN,  alignment=TA_RIGHT, leading=11, spaceBefore=3)
+
+    meta_s     = ps('ME', fontSize=7.5, textColor=SLATE, alignment=TA_RIGHT)
+    sec_s      = ps('SE', fontSize=8.5, fontName='Helvetica-Bold', textColor=SLATE,
+                    spaceBefore=14, spaceAfter=5, letterSpacing=0.8)
+    lbl_s      = ps('LB', fontSize=8,  textColor=SLATE, leading=11)
+    val_s      = ps('VL', fontSize=10, fontName='Helvetica-Bold', textColor=NAVY, leading=13)
+    val_sm     = ps('VS', fontSize=8.5,fontName='Helvetica-Bold', textColor=NAVY, leading=11)
+    amt_lbl_s  = ps('AL', fontSize=8,  fontName='Helvetica-Bold', textColor=CYAN,
+                    alignment=TA_CENTER, letterSpacing=1.2, spaceAfter=2)
+    amt_val_s  = ps('AV', fontSize=28, fontName='Helvetica-Bold', textColor=NAVY, alignment=TA_CENTER)
+    amt_sub_s  = ps('AS', fontSize=8,  textColor=SLATE, alignment=TA_CENTER, spaceBefore=2)
+    det_hdr_s  = ps('DH', fontSize=8,  fontName='Helvetica-Bold', textColor=WHITE,
+                    alignment=TA_CENTER, leading=11)
+    det_val_s  = ps('DV', fontSize=9,  alignment=TA_CENTER, leading=12, textColor=NAVY)
+    det_amt_s  = ps('DA', fontSize=9,  fontName='Helvetica-Bold', alignment=TA_CENTER,
+                    leading=12, textColor=NAVY)
+    cert_ttl_s = ps('CT', fontSize=13, fontName='Helvetica-Bold', textColor=GREEN,
+                    alignment=TA_CENTER, spaceAfter=2)
+    cert_lbl_s = ps('CL', fontSize=8,  textColor=SLATE, leading=11)
+    cert_val_s = ps('CV', fontSize=9.5,fontName='Helvetica-Bold', textColor=NAVY, leading=13)
+    foot_s     = ps('FT', fontSize=7,  textColor=SLATE, alignment=TA_CENTER)
+
+    def p(text, style=None): return Paragraph(str(text) if text else '—', style or det_val_s)
+    def fmt(n):              return f'{round(n):,}'.replace(',', ' ') + ' KMF'
+
+    story = []
+
+    # ══════════════════════════════════════════════
+    # HEADER BAND
+    # ══════════════════════════════════════════════
+    hdr_left = [
+        Paragraph('Smart Technology', hdr_brand),
+        Paragraph('Système S.I.G.V.A · Commission Assurance', hdr_sub),
+    ]
+    hdr_right = [
+        Paragraph('REÇU DE COMMISSION', hdr_recu),
+        Paragraph(receipt_ref, hdr_ref_v),
+        Paragraph('Référence document', hdr_ref_l),
+    ]
+    hdr_tbl = Table(
+        [[hdr_left, hdr_right]],
+        colWidths=[W*0.55, W*0.45],
+    )
+    hdr_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), NAVY),
+        ('TOPPADDING',    (0,0), (-1,-1), 16),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 16),
+        ('LEFTPADDING',   (0,0), (0,0),  16),
+        ('RIGHTPADDING',  (-1,0),(-1,-1),16),
+        ('LEFTPADDING',   (1,0), (1,-1), 8),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(hdr_tbl)
+
+    # Cyan accent stripe
+    story.append(Table([['']], colWidths=[W]))
+    story[-1].setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), CYAN),
+        ('TOPPADDING',    (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+    ]))
+
+    # Meta line (ref + date) right-aligned
+    story.append(Spacer(1, 0.25*cm))
+    story.append(Paragraph(
+        f'Réf. {receipt_ref}  ·  Généré le {generated_at}',
+        meta_s))
+    story.append(Spacer(1, 0.5*cm))
+
+    # ══════════════════════════════════════════════
+    # PARTIES : Émetteur | Destinataire
+    # ══════════════════════════════════════════════
+    emetteur = [
+        Paragraph('ÉMETTEUR', sec_s),
+        Paragraph('Smart Technology', val_s),
+        Paragraph('Système S.I.G.V.A', ps('e2', fontSize=8.5, textColor=SLATE, leading=11)),
+        Paragraph('République des Comores', ps('e3', fontSize=8.5, textColor=SLATE, leading=11)),
+    ]
+    destinataire = [
+        Paragraph('DESTINATAIRE', ps('DS', fontSize=8.5, fontName='Helvetica-Bold',
+                  textColor=SLATE, spaceBefore=0, spaceAfter=5, letterSpacing=0.8)),
+        Paragraph(ins.company_name, val_s),
+        Paragraph(ins.island or 'Comores', ps('d2', fontSize=8.5, textColor=SLATE, leading=11)),
+        Paragraph('Compagnie d\'assurance', ps('d3', fontSize=8.5, textColor=SLATE, leading=11)),
+    ]
+    parties_tbl = Table([[emetteur, destinataire]], colWidths=[W*0.5, W*0.5])
+    parties_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (1,0), (1,-1), STEEL),
+        ('TOPPADDING',    (0,0), (-1,-1), 12),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+        ('LEFTPADDING',   (0,0), (0,-1), 0),
+        ('RIGHTPADDING',  (0,0), (0,-1), 16),
+        ('LEFTPADDING',   (1,0), (1,-1), 16),
+        ('VALIGN',        (0,0), (-1,-1), 'TOP'),
+        ('LINEAFTER',     (0,0), (0,-1), 0.5, STEEL),
+    ]))
+    story.append(parties_tbl)
+    story.append(Spacer(1, 0.6*cm))
+
+    # ══════════════════════════════════════════════
+    # PÉRIODE
+    # ══════════════════════════════════════════════
+    period_data = [
+        [p('PÉRIODE', ps('PL', fontSize=8, fontName='Helvetica-Bold', textColor=SLATE,
+                          letterSpacing=0.8, alignment=TA_CENTER)),
+         p('TAUX UNITAIRE', ps('TL', fontSize=8, fontName='Helvetica-Bold', textColor=SLATE,
+                                letterSpacing=0.8, alignment=TA_CENTER))],
+        [p(month_label, ps('PV', fontSize=12, fontName='Helvetica-Bold', textColor=NAVY,
+                            alignment=TA_CENTER)),
+         p(f'{commission_rate:,} KMF / véhicule'.replace(',', ' '),
+           ps('TV', fontSize=11, fontName='Helvetica-Bold', textColor=NAVY,
+               alignment=TA_CENTER))],
+    ]
+    period_tbl = Table(period_data, colWidths=[W*0.5, W*0.5])
+    period_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,0), CYAN_LT),
+        ('BACKGROUND',    (0,1), (-1,1), colors.white),
+        ('BOX',           (0,0), (-1,-1), 0.8, CYAN),
+        ('LINEAFTER',     (0,0), (0,-1), 0.5, CYAN),
+        ('TOPPADDING',    (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(period_tbl)
+    story.append(Spacer(1, 0.55*cm))
+
+    # ══════════════════════════════════════════════
+    # AMOUNT BOX
+    # ══════════════════════════════════════════════
+    amt_box = Table([
+        [Paragraph('MONTANT DE LA COMMISSION', amt_lbl_s)],
+        [Paragraph(fmt(commission), amt_val_s)],
+        [Paragraph(f'{acts + rens} véhicule(s) × {commission_rate:,} KMF'.replace(',', ' '), amt_sub_s)],
+    ], colWidths=[W])
+    amt_box.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), colors.white),
+        ('BOX',           (0,0), (-1,-1), 1.5, CYAN),
+        ('TOPPADDING',    (0,0), (-1,-1), 12),
+        ('BOTTOMPADDING', (0,0), (-1,0),  4),
+        ('BOTTOMPADDING', (0,1), (-1,1),  4),
+        ('BOTTOMPADDING', (0,2), (-1,2), 12),
+        ('LEFTPADDING',   (0,0), (-1,-1), 10),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 10),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(amt_box)
+    story.append(Spacer(1, 0.6*cm))
+
+    # ══════════════════════════════════════════════
+    # BREAKDOWN TABLE
+    # ══════════════════════════════════════════════
+    story.append(Paragraph('DÉTAIL DU CALCUL', sec_s))
+    det_data = [
+        [p('Activations', det_hdr_s), p('Renouvellements', det_hdr_s),
+         p('Total véhicules', det_hdr_s), p('Taux unitaire', det_hdr_s), p('Commission', det_hdr_s)],
+        [p(str(acts), det_val_s), p(str(rens), det_val_s), p(str(acts + rens), det_val_s),
+         p(fmt(commission_rate), det_val_s), p(fmt(commission), det_amt_s)],
+    ]
+    det_tbl = Table(det_data, colWidths=[W*0.17, W*0.22, W*0.21, W*0.2, W*0.2])
+    det_tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,0), NAVY),
+        ('BACKGROUND',    (0,1), (-1,1), colors.HexColor('#F7F9FC')),
+        ('BOX',           (0,0), (-1,-1), 0.5, STEEL),
+        ('LINEBELOW',     (0,0), (-1,0), 0.5, NAVY2),
+        ('GRID',          (0,0), (-1,-1), 0.4, STEEL),
+        ('TOPPADDING',    (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+        # Highlight commission column
+        ('BACKGROUND',    (4,1), (4,1), CYAN_LT),
+        ('TEXTCOLOR',     (4,1), (4,1), NAVY),
+    ]))
+    story.append(det_tbl)
+    story.append(Spacer(1, 0.7*cm))
+
+    # ══════════════════════════════════════════════
+    # CERTIFICATION BLOCK
+    # ══════════════════════════════════════════════
+    cert_inner = [
+        [Paragraph('✓  RÉCEPTION CONFIRMÉE', cert_ttl_s)],
+        [Spacer(1, 0.15*cm)],
+        [Table([
+            [p('Date de confirmation', cert_lbl_s), p(confirmed_at_display, cert_val_s)],
+            [p('Validé par',           cert_lbl_s), p(confirmed_by or '—',   cert_val_s)],
+        ], colWidths=[W*0.32, W*0.50],
+        style=TableStyle([
+            ('TOPPADDING',    (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ('LEFTPADDING',   (0,0), (-1,-1), 0),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 0),
+            ('LINEBELOW',     (0,0), (-1,-2), 0.3, GREEN_BD),
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+        ]))],
+    ]
+    cert_content_tbl = Table(cert_inner, colWidths=[W*0.86])
+    cert_content_tbl.setStyle(TableStyle([
+        ('TOPPADDING',    (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('LEFTPADDING',   (0,0), (-1,-1), 0),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 0),
+        ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+    ]))
+    cert_outer = Table([[cert_content_tbl]], colWidths=[W])
+    cert_outer.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), GREEN_LT),
+        ('BOX',           (0,0), (-1,-1), 1.2, GREEN),
+        ('TOPPADDING',    (0,0), (-1,-1), 14),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 14),
+        ('LEFTPADDING',   (0,0), (-1,-1), 20),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 20),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(KeepTogether(cert_outer))
+    story.append(Spacer(1, 0.8*cm))
+
+    # ══════════════════════════════════════════════
+    # FOOTER
+    # ══════════════════════════════════════════════
+    story.append(Table([['']], colWidths=[W]))
+    story[-1].setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), CYAN),
+        ('TOPPADDING',    (0,0), (-1,-1), 1),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(Paragraph(
+        f'Ce document est généré automatiquement par le Système S.I.G.V.A — Smart Technology · {generated_at}',
+        foot_s))
+
+    doc.build(story)
+    buf.seek(0)
+    filename = f'recu_SIGVA_{ins.company_name.replace(" ", "_")}_{month}.pdf'
+    return send_file(buf, mimetype='application/pdf',
+                     as_attachment=True, download_name=filename)
+
+
 @main_bp.route('/mobile-money-dashboard')
 @roles_required('mobile_money_agent')
 def mobile_money_dashboard():
@@ -640,6 +1028,15 @@ def mobile_money_dashboard():
 def mobile_money_vignettes_page():
     """Dashboard for mobile money agents to accept vignette renewal payments."""
     return render_template('mobile_money_vignettes.html')
+
+
+@main_bp.route('/mobile-money-qr-renewal')
+@roles_required('mobile_money_agent')
+def mobile_money_qr_renewal_page():
+    """Page for mobile money agents to process QR code renewals."""
+    from app.models import SmartTechSetting
+    renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
+    return render_template('mobile_money_qr_renewal.html', renewal_price=renewal_price)
 
 
 @main_bp.route('/mobile-money-archive')
@@ -708,6 +1105,184 @@ def vehicles_page():
     return render_template('vehicles.html')
 
 
+@main_bp.route('/licenses')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def licenses_page():
+    return render_template('licenses.html')
+
+
+@main_bp.route('/dgrtr-dashboard')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_dashboard():
+    return render_template('dgrtr_dashboard.html')
+
+
+@main_bp.route('/dgrtr-statistiques')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_statistiques():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
+        abort(403)
+    return render_template('dgrtr_stats.html')
+
+
+@main_bp.route('/dgrtr-dossiers-complets')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_dossiers_complets():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
+        from flask import abort
+        abort(403)
+    return render_template('dgrtr_dossiers_complets.html')
+
+
+@main_bp.route('/dgrtr/ajouter-permis')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_add_license():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'employe':
+        abort(403)
+    return render_template('dgrtr_add_license.html')
+
+
+@main_bp.route('/dgrtr/licenses/<int:license_id>/print-a4')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_license_print_a4(license_id):
+    from app.models import DriverLicense, LicenseSetting
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    category_details = parse_category_details(lic)
+    from dateutil.relativedelta import relativedelta
+    months = settings.temp_validity_months or 12
+    computed_expiry = lic.issue_date + relativedelta(months=months) if lic.issue_date else None
+    # Le PDF A4 DGRTR est toujours un permis temporaire
+    return render_template('dgrtr_license_a4.html', lic=lic, settings=settings,
+                           category_details=category_details, force_temporaire=True,
+                           computed_expiry=computed_expiry)
+
+
+@main_bp.route('/licenses/<int:license_id>/qrcode')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def license_qrcode(license_id):
+    from app.models import DriverLicense
+    lic = DriverLicense.query.get_or_404(license_id)
+    qr = qrcode.QRCode(box_size=6, border=2)
+    qr.add_data(lic.license_number)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color='black', back_color='white')
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png')
+
+
+def parse_category_details(lic):
+    """Parse a DriverLicense.category_details JSON blob and reformat its
+    date/expiration fields from ISO (YYYY-MM-DD) to display (DD/MM/YYYY)."""
+    try:
+        raw_details = json.loads(lic.category_details) if lic.category_details else {}
+    except (ValueError, TypeError):
+        raw_details = {}
+    category_details = {}
+    for cat, d in raw_details.items():
+        formatted = dict(d)
+        for field in ('date', 'expiration'):
+            if d.get(field):
+                try:
+                    formatted[field] = datetime.strptime(d[field], '%Y-%m-%d').strftime('%d/%m/%Y')
+                except ValueError:
+                    pass
+        category_details[cat] = formatted
+    return category_details
+
+
+@main_bp.route('/licenses/<int:license_id>/print')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def license_print(license_id):
+    from app.models import DriverLicense, LicenseSetting
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    force_temporaire = request.args.get('temporaire') == '1'
+    computed_expiry = None
+    if force_temporaire and not lic.expiry_date and lic.issue_date:
+        months = settings.temp_validity_months or 12
+        from dateutil.relativedelta import relativedelta
+        computed_expiry = lic.issue_date + relativedelta(months=months)
+    category_details = parse_category_details(lic)
+    return render_template('license_print.html', lic=lic, settings=settings,
+                           force_temporaire=force_temporaire, computed_expiry=computed_expiry,
+                           category_details=category_details)
+
+
+@main_bp.route('/licenses/<int:license_id>/print-folded')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def license_print_folded(license_id):
+    from app.models import DriverLicense, LicenseSetting
+    from dateutil.relativedelta import relativedelta
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    computed_expiry = None
+    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
+        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    category_details = parse_category_details(lic)
+    return render_template('license_folded_card.html', lic=lic, settings=settings,
+                           computed_expiry=computed_expiry, category_details=category_details)
+
+
+@main_bp.route('/licenses/insurance-view/<license_number>')
+@login_required
+def license_insurance_view(license_number):
+    """View a folded license card for an insurance account (only for their registered drivers)."""
+    from app.models import DriverLicense, LicenseSetting, VehicleInsuranceAssignment, InsuranceAccount
+    from dateutil.relativedelta import relativedelta
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    num = license_number.strip().upper()
+    assignments = VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    allowed = set()
+    for a in assignments:
+        if a.driver_license_numbers:
+            try:
+                allowed.update(json.loads(a.driver_license_numbers))
+            except Exception:
+                pass
+    if num not in allowed:
+        return "Permis non autorisé", 403
+    lic = DriverLicense.query.filter_by(license_number=num).first_or_404()
+    settings = LicenseSetting.get()
+    computed_expiry = None
+    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
+        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    category_details = parse_category_details(lic)
+    return render_template('license_folded_card.html', lic=lic, settings=settings,
+                           computed_expiry=computed_expiry, category_details=category_details)
+
+
+@main_bp.route('/licenses/<int:license_id>/print-card')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def license_print_card(license_id):
+    from app.models import DriverLicense, LicenseSetting
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    category_details = parse_category_details(lic)
+    return render_template('license_card.html', lic=lic, settings=settings, now_comoros=now_comoros,
+                            category_details=category_details)
+
+
+@main_bp.route('/licenses/print-requests')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def license_print_requests_page():
+    return render_template('license_print_requests.html')
+
+
+@main_bp.route('/licenses/<int:license_id>/print-history')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def license_print_history(license_id):
+    from app.models import DriverLicense, LicenseSetting, PointReductionHistory
+    lic = DriverLicense.query.get_or_404(license_id)
+    settings = LicenseSetting.get()
+    history = PointReductionHistory.query.filter_by(license_id=license_id)\
+        .order_by(PointReductionHistory.created_at.desc()).all()
+    return render_template('license_print_history.html', lic=lic, settings=settings, history=history)
+
+
 @main_bp.route('/reports')
 @roles_required('administrateur','judiciaire')
 def reports_page():
@@ -716,14 +1291,14 @@ def reports_page():
 
 
 @main_bp.route('/fines')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','policier')
 def fines_page():
     """Page d'administration des amandes/fines"""
     return render_template('fines.html')
 
 
 @main_bp.route('/fines/stats')
-@roles_required('judiciaire')
+@roles_required()
 def fines_stats_page():
     """Page de statistiques des amandes"""
     return render_template('fines_stats.html')
@@ -734,6 +1309,20 @@ def fines_stats_page():
 def exoneration_page():
     """Page de gestion des véhicules exonérés"""
     return render_template('exoneration.html')
+
+
+@main_bp.route('/alerts')
+@roles_required('policier', 'judiciaire')
+def alerts_page():
+    """Page de gestion des alertes (accidents, travaux, recherches de véhicule...)"""
+    return render_template('alerts.html')
+
+
+@main_bp.route('/recherche')
+@roles_required('administrateur', 'policier')
+def recherche_page():
+    """Page de recherche de permis par véhicule (policier)"""
+    return render_template('recherche.html')
 
 
 @vehicle_bp.route('/stats', methods=['GET'])
@@ -769,11 +1358,28 @@ def get_vehicle_stats():
 def get_vehicles_list():
     """Retourner la liste des véhicules"""
     country = request.args.get('country', type=str)  # New country filter for admin
-    
+
     query = Vehicle.query
     query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
     vehicles = query.order_by(Vehicle.created_at.desc()).all()
     return jsonify([v.to_dict() for v in vehicles])
+
+
+@vehicle_bp.route('/last-update', methods=['GET'])
+@login_required
+def vehicles_last_update():
+    """Lightweight endpoint: returns the most recent updated_at and vehicle count.
+    Used by the dashboard to detect changes without fetching all vehicle data."""
+    from sqlalchemy import func
+    country = request.args.get('country', type=str)
+    query = Vehicle.query
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
+    result = query.with_entities(
+        func.max(Vehicle.updated_at).label('last_update'),
+        func.count(Vehicle.id).label('total')
+    ).one()
+    last_update = result.last_update.strftime('%Y-%m-%d %H:%M:%S') if result.last_update else ''
+    return jsonify({'last_update': last_update, 'total': result.total})
 
 
 @vehicle_bp.route('/query', methods=['GET'])
@@ -813,12 +1419,11 @@ def query_vehicles():
             query = query.filter(Vehicle.created_at <= ed)
         except Exception:
             pass
-    # filter by expired registration (vignette) if requested
+    # filter by expired vignette if requested
     if expired is not None:
         try:
             if expired.lower() in ('1','true','yes'):
-                # include vehicles with registration_expiry set and before now
-                query = query.filter(Vehicle.registration_expiry != None).filter(Vehicle.registration_expiry <= now_comoros())
+                query = query.filter(Vehicle.vignette_expiry != None).filter(Vehicle.vignette_expiry <= now_comoros())
         except Exception:
             pass
     
@@ -1033,6 +1638,8 @@ def create_vehicle():
             vehicle.insurance_expiry = datetime.fromisoformat(insurance_expiry)
         except Exception:
             pass
+    if current_user and getattr(current_user, 'is_authenticated', False):
+        vehicle.created_by = getattr(current_user, 'username', None)
     db.session.add(vehicle)
     db.session.flush()  # Flush to get the vehicle ID before committing
     
@@ -1074,12 +1681,33 @@ def create_vehicle():
         print(f'Error logging vehicle creation: {e}')
     
     return jsonify(vehicle.to_dict()), 201
+@vehicle_bp.route('/lookup-vin', methods=['GET'])
+@login_required
+def lookup_vehicle_by_vin():
+    from app.models import Fine
+    vin = request.args.get('vin', '').strip()
+    if not vin:
+        return jsonify({'vehicle': None})
+    vehicle = Vehicle.query.filter(Vehicle.vin.ilike(vin)).first()
+    if not vehicle:
+        return jsonify({'vehicle': None})
+    unpaid = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).order_by(Fine.issued_at.desc()).all()
+    return jsonify({'vehicle': {
+        'id': vehicle.id,
+        'license_plate': vehicle.license_plate,
+        'owner_name': vehicle.owner_name,
+        'fines': [f.to_dict() for f in unpaid],
+    }})
+
+
 @vehicle_bp.route('/<int:vehicle_id>', methods=['GET'])
 @login_required
 def get_vehicle(vehicle_id):
+    from app.models import Fine
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
-    return jsonify(vehicle.to_dict())
+    fines = Fine.query.filter_by(vehicle_id=vehicle.id).order_by(Fine.issued_at.desc()).all()
+    return jsonify({**vehicle.to_dict(), 'fines': [f.to_dict() for f in fines]})
 
 
 @vehicle_bp.route('/<int:vehicle_id>/history', methods=['GET'])
@@ -1132,7 +1760,7 @@ def create_fine(vehicle_id):
     exonerated = ExoneratedVehicle.query.filter_by(vehicle_id=vehicle.id).first()
     is_exonerated = exonerated is not None
     
-    fine = Fine(vehicle_id=vehicle.id, amount=amount, reason=reason, officer=officer, notes=notes)
+    fine = Fine(vehicle_id=vehicle.id, amount=amount, base_amount=amount, reason=reason, officer=officer, notes=notes)
     
     # If vehicle is exonerated, mark it for automatic deletion after 60 minutes
     # (will be deleted automatically by background task - no trace left)
@@ -1361,6 +1989,43 @@ def list_all_fines():
     return jsonify(result)
 
 
+@vehicle_bp.route('/fines/articles', methods=['GET', 'POST'])
+@login_required
+def manage_fine_articles():
+    """GET: list fine articles. POST: create a new fine article."""
+    from app.models import FineArticle
+    if request.method == 'GET':
+        articles = FineArticle.query.order_by(FineArticle.code).all()
+        return jsonify([a.to_dict() for a in articles])
+    data = request.get_json() or request.form
+    code = (data.get('code') or '').strip()
+    description = (data.get('description') or '').strip()
+    if not code:
+        return jsonify({'error': 'code requis'}), 400
+    article = FineArticle(code=code, description=description or None)
+    db.session.add(article)
+    db.session.commit()
+    return jsonify(article.to_dict()), 201
+
+
+@vehicle_bp.route('/fines/articles/<int:article_id>', methods=['PUT', 'DELETE'])
+@login_required
+def fine_article_detail(article_id):
+    from app.models import FineArticle
+    article = FineArticle.query.get_or_404(article_id)
+    if request.method == 'DELETE':
+        db.session.delete(article)
+        db.session.commit()
+        return jsonify({'message': 'Supprimé'})
+    data = request.get_json() or request.form
+    if 'code' in data:
+        article.code = (data['code'] or '').strip()
+    if 'description' in data:
+        article.description = (data['description'] or '').strip() or None
+    db.session.commit()
+    return jsonify(article.to_dict())
+
+
 @vehicle_bp.route('/fines/types', methods=['GET', 'POST'])
 @login_required
 def manage_fine_types():
@@ -1374,13 +2039,15 @@ def manage_fine_types():
     label = data.get('label')
     amount = data.get('amount')
     code = data.get('code')
+    article_id = data.get('article_id') or None
     if not label or not amount:
         return jsonify({'error': 'label et amount requis'}), 400
     try:
         amt = Decimal(str(amount))
     except Exception:
         return jsonify({'error': 'Montant invalide'}), 400
-    ft = FineType(label=label, amount=amt, code=code)
+    ft = FineType(label=label, amount=amt, code=code,
+                  article_id=int(article_id) if article_id else None)
     db.session.add(ft)
     db.session.commit()
     return jsonify(ft.to_dict()), 201
@@ -1406,6 +2073,8 @@ def fine_type_detail(type_id):
             return jsonify({'error': 'Montant invalide'}), 400
     if 'code' in data:
         ft.code = data.get('code')
+    if 'article_id' in data:
+        ft.article_id = int(data['article_id']) if data['article_id'] else None
     db.session.commit()
     return jsonify(ft.to_dict())
 
@@ -1426,6 +2095,41 @@ def _apply_fine_payment(fine, paid_by, payment_method=''):
     )
     db.session.add(hist)
     return hist
+
+
+@vehicle_bp.route('/fines/<int:fine_id>/reason', methods=['PATCH'])
+@login_required
+def update_fine_reason(fine_id):
+    from app.models import Fine, VehicleHistory
+    from decimal import Decimal
+    fine = Fine.query.get_or_404(fine_id)
+    age = (now_comoros() - ensure_comoros(fine.issued_at)).total_seconds()
+    if age > 3 * 24 * 3600:
+        return jsonify({'error': 'Le motif ne peut être modifié que dans les 3 jours suivant l\'émission.'}), 403
+    data = request.get_json() or {}
+    new_reason = (data.get('reason') or '').strip()
+    if not new_reason:
+        return jsonify({'error': 'Le motif ne peut pas être vide.'}), 400
+    old_reason = fine.reason
+    old_amount = float(fine.amount)
+    fine.reason = new_reason
+    new_amount = old_amount
+    if data.get('amount') is not None:
+        try:
+            new_amount = float(data['amount'])
+            fine.amount = Decimal(str(new_amount))
+        except (ValueError, TypeError):
+            pass
+    officer = getattr(current_user, 'username', 'inconnu')
+    notes = f'Ancien motif : « {old_reason} » ({int(old_amount)} KMF) → Nouveau : « {new_reason} » ({int(new_amount)} KMF)'
+    db.session.add(VehicleHistory(
+        vehicle_id=fine.vehicle_id,
+        action=f'Amende #{fine.id} modifiée',
+        officer=officer,
+        notes=notes
+    ))
+    db.session.commit()
+    return jsonify({'ok': True, 'reason': fine.reason, 'amount': float(fine.amount)})
 
 
 @vehicle_bp.route('/fines/<int:fine_id>/pay', methods=['POST'])
@@ -1641,9 +2345,10 @@ def get_vehicle_qrcode(vehicle_id):
     if not vehicle.qr_code_expiry:
         vehicle.generate_qr_code_with_expiry()
         db.session.commit()
-    
+        _record_qr_payment(vehicle, 'activation', current_user.username)
+
     # URL publique de suivi
-    track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+    track_url = vehicle.license_plate
     # Générer QR code PNG
     qr = qrcode.QRCode(box_size=6, border=2)
     qr.add_data(track_url)
@@ -1677,70 +2382,240 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         if not vehicle.qr_code_expiry:
             vehicle.generate_qr_code_with_expiry()
             db.session.commit()
-        
+            _record_qr_payment(vehicle, 'activation', current_user.username)
+
         # Générer QR code
-        track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+        track_url = vehicle.license_plate
         qr = qrcode.QRCode(box_size=6, border=2)
         qr.add_data(track_url)
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="black", back_color="white")
-        
+
         # Sauvegarder QR code dans un buffer
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
-        
-        # Générer le PDF avec format petit (carte autocollante 10x10cm)
+
         pdf_buf = io.BytesIO()
-        card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise
-        doc = SimpleDocTemplate(pdf_buf, pagesize=card_size, topMargin=0.2*cm, bottomMargin=0.2*cm, leftMargin=0.2*cm, rightMargin=0.2*cm)
+        card_size = (10*cm, 10*cm)
+        doc = SimpleDocTemplate(
+            pdf_buf, pagesize=card_size,
+            topMargin=0.4*cm, bottomMargin=0.35*cm,
+            leftMargin=0.4*cm, rightMargin=0.4*cm
+        )
         styles = getSampleStyleSheet()
-        elems = []
-        
-        # QR Code image (plus grand)
-        qr_image = RLImage(qr_buf, width=6.5*cm, height=6.5*cm)
-        
-        # Créer une table pour centrer l'image
-        qr_table = Table([[qr_image]])
-        qr_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
-            ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+
+        footer_style = ParagraphStyle(
+            'QRFooter', parent=styles['Normal'],
+            fontSize=7, textColor=colors.HexColor('#555555'),
+            alignment=TA_CENTER, fontName='Helvetica-Oblique', leading=9,
+        )
+
+        qr_big = RLImage(qr_buf, width=8.0*cm, height=8.0*cm)
+        qr_band = Table([[qr_big]], colWidths=[9.2*cm], rowHeights=[8.28*cm])
+        qr_band.setStyle(TableStyle([
+            ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+            ('BACKGROUND',    (0,0), (-1,-1), colors.white),
+            ('TOPPADDING',    (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
         ]))
-        elems.append(qr_table)
-        elems.append(Spacer(1, 0.05*cm))
-        
-        # Numéro d'immatriculation
-        license_plate_style = ParagraphStyle(
-            'LicensePlate',
-            parent=styles['Normal'],
-            fontSize=14,
-            textColor=colors.HexColor('#003366'),
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=0.15*cm
+
+        footer_band = Table(
+            [[Paragraph('Brigade Mobile — Comores', footer_style)]],
+            colWidths=[9.2*cm], rowHeights=[0.46*cm]
         )
-        elems.append(Paragraph(f'<b>{vehicle.license_plate}</b>', license_plate_style))
-        
-        # Espace supplémentaire avant le texte descriptif
-        elems.append(Spacer(1, 0.05*cm))
-        
-        # Texte descriptif "votre identifiant numérique"
-        subtitle_style = ParagraphStyle(
-            'Subtitle',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.HexColor('#0066CC'),
-            alignment=TA_CENTER,
-            fontName='Helvetica-Oblique',
-            spaceAfter=0
+        footer_band.setStyle(TableStyle([
+            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#eef2ff')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ]))
+
+        card = Table(
+            [[qr_band], [footer_band]],
+            colWidths=[9.2*cm],
+            rowHeights=[8.28*cm, 0.46*cm],
         )
-        elems.append(Paragraph('Votre identifiant numérique', subtitle_style))
-        
-        # Créer le PDF
-        doc.build(elems)
+        card.setStyle(TableStyle([
+            ('BOX',           (0,0), (-1,-1), 1.5, colors.HexColor('#003399')),
+            ('NOSPLIT',       (0,0), (-1,-1)),
+            ('TOPPADDING',    (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('LEFTPADDING',   (0,0), (-1,-1), 0),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 0),
+        ]))
+
+        doc.build([card])
         pdf_buf.seek(0)
-        
-        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'{vehicle.license_plate}_qrcode.pdf')
+
+        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'qrcode_{vehicle.track_token[:8]}.pdf')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/sheet.pdf', methods=['GET'])
+@login_required
+def vehicle_sheet_pdf(vehicle_id):
+    """Fiche complète véhicule : infos + QR code"""
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({'error': 'PDF generation not available'}), 500
+
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage, HRFlowable
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+        # ── QR code ──────────────────────────────────────────────────────────
+        if not vehicle.qr_code_expiry:
+            vehicle.generate_qr_code_with_expiry()
+            db.session.commit()
+            _record_qr_payment(vehicle, 'activation', current_user.username)
+
+        track_url = vehicle.license_plate
+        qr = qrcode.QRCode(box_size=6, border=2)
+        qr.add_data(track_url)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color='black', back_color='white')
+        qr_buf = io.BytesIO()
+        qr_img.save(qr_buf, format='PNG')
+        qr_buf.seek(0)
+
+        # ── PDF A4 ────────────────────────────────────────────────────────────
+        pdf_buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            pdf_buf, pagesize=A4,
+            topMargin=1.5*cm, bottomMargin=1.5*cm,
+            leftMargin=2*cm, rightMargin=2*cm
+        )
+        W = A4[0] - 4*cm
+        styles = getSampleStyleSheet()
+
+        def ps(name, **kw):
+            return ParagraphStyle(name, parent=styles['Normal'], **kw)
+
+        title_s   = ps('T',  fontSize=16, fontName='Helvetica-Bold', textColor=colors.HexColor('#003399'), alignment=TA_CENTER, spaceAfter=10)
+        sub_s     = ps('S',  fontSize=9,  textColor=colors.HexColor('#555'), alignment=TA_CENTER, spaceAfter=10)
+        section_s = ps('SE', fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor('#003399'), spaceBefore=10, spaceAfter=4)
+        label_s   = ps('L',  fontSize=8,  textColor=colors.HexColor('#888'))
+        value_s   = ps('V',  fontSize=9,  fontName='Helvetica-Bold')
+        footer_s  = ps('F',  fontSize=7,  textColor=colors.HexColor('#aaa'), alignment=TA_CENTER)
+
+        def field(lbl, val):
+            return [Paragraph(lbl, label_s), Paragraph(str(val) if val else '—', value_s)]
+
+        def date_fmt(d):
+            if not d: return '—'
+            try: return d.strftime('%d/%m/%Y')
+            except: return str(d)
+
+        story = []
+
+        # Header
+        story.append(Paragraph('FICHE D\'IMMATRICULATION', title_s))
+        story.append(Paragraph('Brigade Mobile — Comores', sub_s))
+        story.append(HRFlowable(width=W, thickness=1.5, color=colors.HexColor('#003399'), spaceAfter=10))
+
+        # QR + plaque côte à côte
+        qr_rl = RLImage(qr_buf, width=4.5*cm, height=4.5*cm)
+        plate_s = ps('PL', fontSize=22, fontName='Helvetica-Bold',
+                     textColor=colors.HexColor('#003399'), alignment=TA_CENTER)
+        plate_sub = ps('PS', fontSize=8, textColor=colors.HexColor('#666'), alignment=TA_CENTER)
+        top_tbl = Table([
+            [qr_rl, [
+                Paragraph(vehicle.license_plate, plate_s),
+                Spacer(1, 12),
+                Paragraph(f'{vehicle.make or ""} {vehicle.model or ""}'.strip() or '—', ps('MK', fontSize=11, alignment=TA_CENTER)),
+                Spacer(1, 4),
+                Paragraph(f'Statut : {vehicle.status or "—"}', plate_sub),
+                Paragraph(f'Enregistré le : {date_fmt(vehicle.registration_date)}', plate_sub),
+            ]]
+        ], colWidths=[4.8*cm, W - 4.8*cm])
+        top_tbl.setStyle(TableStyle([
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN',         (1,0), (1,0),  'CENTER'),
+            ('LEFTPADDING',   (0,0), (-1,-1), 4),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 4),
+            ('TOPPADDING',    (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+            ('BOX',           (0,0), (-1,-1), 0.8, colors.HexColor('#dde')),
+            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#f5f7ff')),
+        ]))
+        story.append(top_tbl)
+        story.append(Spacer(1, 6))
+
+        # ── Section véhicule ──
+        story.append(Paragraph('Informations du Véhicule', section_s))
+        veh_data = [
+            field('Type', vehicle.vehicle_type) + field("Type d'usage", vehicle.usage_type),
+            field('Marque', vehicle.make) + field('Modèle', vehicle.model),
+            field('Année', vehicle.year) + field('Couleur', vehicle.color),
+            field('Carburant', vehicle.fuel_type) + field('Classe fiscale', vehicle.fiscal_class),
+            field('Classe CV', vehicle.cv_class) + field('VIN', vehicle.vin),
+        ]
+        veh_tbl = Table(veh_data, colWidths=[W*0.16, W*0.34, W*0.16, W*0.34])
+        veh_tbl.setStyle(TableStyle([
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#dde')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('LEFTPADDING',   (0,0), (-1,-1), 5),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 5),
+        ]))
+        story.append(veh_tbl)
+
+        # ── Section propriétaire ──
+        story.append(Paragraph('Propriétaire', section_s))
+        own_data = [
+            field('Nom complet', vehicle.owner_name) + field('Téléphone', vehicle.owner_phone),
+            field('Île', vehicle.owner_island) + field('Adresse', vehicle.owner_address),
+        ]
+        own_tbl = Table(own_data, colWidths=[W*0.16, W*0.34, W*0.16, W*0.34])
+        own_tbl.setStyle(TableStyle([
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#dde')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('LEFTPADDING',   (0,0), (-1,-1), 5),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 5),
+        ]))
+        story.append(own_tbl)
+
+        # ── Section assurance / vignette ──
+        story.append(Paragraph('Assurance & Vignette', section_s))
+        ins_data = [
+            field('Compagnie', vehicle.insurance_company) + field("Expiration assurance", date_fmt(vehicle.insurance_expiry)),
+            field('Expiration vignette', date_fmt(vehicle.vignette_expiry)) + field('Expiration QR Code', date_fmt(vehicle.qr_code_expiry)),
+        ]
+        ins_tbl = Table(ins_data, colWidths=[W*0.16, W*0.34, W*0.16, W*0.34])
+        ins_tbl.setStyle(TableStyle([
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#dde')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('LEFTPADDING',   (0,0), (-1,-1), 5),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 5),
+        ]))
+        story.append(ins_tbl)
+
+        if vehicle.notes:
+            story.append(Paragraph('Notes', section_s))
+            story.append(Paragraph(vehicle.notes, ps('N', fontSize=8, textColor=colors.HexColor('#444'))))
+
+        story.append(Spacer(1, 10))
+        story.append(HRFlowable(width=W, thickness=0.5, color=colors.HexColor('#ccc'), spaceAfter=4))
+        from app.timezone_utils import now_comoros as _now
+        story.append(Paragraph(f'Généré le {_now().strftime("%d/%m/%Y à %H:%M")} — Brigade Mobile Comores', footer_s))
+
+        doc.build(story)
+        pdf_buf.seek(0)
+        return send_file(pdf_buf, mimetype='application/pdf',
+                         download_name=f'fiche_{vehicle.license_plate}.pdf')
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1758,11 +2633,12 @@ def renew_vehicle_qrcode(vehicle_id):
         
         # Renouveler uniquement l'expiration du QR code
         vehicle.generate_qr_code_with_expiry()
-        
+        vehicle.qr_renewed_by = current_user.username
+
         # Réactiver le véhicule s'il était inactif
         if vehicle.status == 'inactive':
             vehicle.status = 'active'
-        
+
         # Enregistrer dans l'historique
         from app.models import VehicleHistory
         history = VehicleHistory(
@@ -1773,21 +2649,93 @@ def renew_vehicle_qrcode(vehicle_id):
         )
         db.session.add(history)
         db.session.commit()
-        
+        _record_qr_payment(vehicle, 'renewal', current_user.username)
+
+        from app.models import SmartTechSetting
+        renewal_amount = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
         return jsonify({
             'success': True,
             'message': f'Code QR renouvelé pour {vehicle.license_plate}',
             'track_token': vehicle.track_token,
             'token_unchanged': True,
             'old_expiry': old_expiry,
-            'new_expiry': vehicle.qr_code_expiry.strftime('%Y-%m-%d'),
+            'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y'),
             'old_status': old_status,
             'new_status': vehicle.status,
-            'generated_at': vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S')
+            'generated_at': vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'owner_name': vehicle.owner_name or '',
+            'amount': renewal_amount,
+            'payment_type': 'renewal',
+            'recorded_by': current_user.username,
+            'paid_at': now_comoros().strftime('%d/%m/%Y %H:%M'),
         }), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/qrcode/activate', methods=['POST'])
+@login_required
+def activate_vehicle_qrcode(vehicle_id):
+    """Activate QR code for a vehicle (first time) and return receipt data."""
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+    try:
+        already_active = bool(vehicle.qr_code_expiry and not vehicle.is_qr_expired)
+        if not vehicle.qr_code_expiry:
+            vehicle.generate_qr_code_with_expiry()
+            db.session.commit()
+        _record_qr_payment(vehicle, 'activation', current_user.username)
+        from app.models import SmartTechSetting
+        activation_amount = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000)
+        return jsonify({
+            'success': True,
+            'already_active': already_active,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name or '',
+            'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y'),
+            'amount': activation_amount,
+            'payment_type': 'activation',
+            'recorded_by': current_user.username,
+            'paid_at': now_comoros().strftime('%d/%m/%Y %H:%M'),
+            'pdf_url': f'/api/vehicles/{vehicle.id}/qrcode/pdf',
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/qrcode/last-receipt', methods=['GET'])
+@login_required
+def vehicle_qrcode_last_receipt(vehicle_id):
+    """Return the latest QR payment receipt data for a vehicle."""
+    from app.models import QRCodePayment
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+    payment = QRCodePayment.query.filter_by(
+        vehicle_id=vehicle.id, status='paid'
+    ).order_by(QRCodePayment.paid_at.desc()).first()
+    if not payment:
+        return jsonify({'error': 'Aucun paiement enregistré pour ce véhicule.'}), 404
+    return jsonify({
+        'license_plate': vehicle.license_plate,
+        'owner_name': vehicle.owner_name or '',
+        'payment_type': payment.payment_type,
+        'amount': float(payment.amount),
+        'paid_at': payment.paid_at.strftime('%d/%m/%Y %H:%M') if payment.paid_at else '—',
+        'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y') if vehicle.qr_code_expiry else '—',
+        'recorded_by': payment.recorded_by or '—',
+    })
+
+
+@main_bp.route('/vehicles/<int:vehicle_id>/track')
+@login_required
+def vehicle_track_redirect(vehicle_id):
+    """Redirect from vehicle ID to its public track page (used when track_token is unknown client-side)."""
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    if not vehicle.track_token:
+        abort(404)
+    return redirect(url_for('main_bp.public_track', token=vehicle.track_token))
 
 
 @main_bp.route('/track/<token>')
@@ -1860,8 +2808,7 @@ def public_track(token):
 
 
 @main_bp.route('/payments')
-@main_bp.route('/payments')
-@roles_required('judiciaire', 'policier')
+@roles_required('policier')
 def payments_page():
     """Page de gestion des paiements des amandes"""
     return render_template('payments.html')
@@ -2156,6 +3103,203 @@ def users_page():
     return render_template('users.html')
 
 
+@main_bp.route('/api/users/backup')
+@roles_required('administrateur')
+def api_users_backup():
+    import zipfile
+    from sqlalchemy import inspect, text
+    timestamp = now_comoros().strftime('%Y%m%d_%H%M%S')
+    db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    zip_buf = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # --- SQLite: include raw .db file ---
+        if db_uri.startswith('sqlite'):
+            db_path = db_uri.replace('sqlite:///', '')
+            if os.path.isfile(db_path):
+                zf.write(db_path, f'police_backup_{timestamp}.db')
+
+        # --- JSON dump of all tables (works on SQLite + PostgreSQL) ---
+        inspector = inspect(db.engine)
+        all_tables = inspector.get_table_names()
+        backup_data = {}
+        with db.engine.connect() as conn:
+            for table in all_tables:
+                try:
+                    rows = conn.execute(text(f'SELECT * FROM "{table}"')).mappings().all()
+                    backup_data[table] = [dict(r) for r in rows]
+                except Exception:
+                    backup_data[table] = []
+
+        import decimal
+        def default_serial(obj):
+            if isinstance(obj, (datetime, )):
+                return obj.isoformat()
+            if isinstance(obj, decimal.Decimal):
+                return float(obj)
+            return str(obj)
+
+        json_bytes = json.dumps(backup_data, ensure_ascii=False, indent=2, default=default_serial).encode('utf-8')
+        zf.writestr(f'police_backup_{timestamp}.json', json_bytes)
+
+        # --- Manifest ---
+        manifest = {
+            'timestamp': timestamp,
+            'database': 'sqlite' if db_uri.startswith('sqlite') else 'postgresql',
+            'tables': {t: len(backup_data.get(t, [])) for t in all_tables},
+        }
+        zf.writestr('manifest.json', json.dumps(manifest, indent=2))
+
+    zip_buf.seek(0)
+    return send_file(
+        zip_buf,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'backup_{timestamp}.zip'
+    )
+
+
+_restore_tasks = {}  # task_id -> {'status': 'running'|'done'|'error', 'message': ..., 'tables': ...}
+
+
+@main_bp.route('/api/users/restore', methods=['POST'])
+@roles_required('administrateur')
+def api_users_restore():
+    import zipfile
+    import threading
+    import uuid as _uuid
+
+    f = request.files.get('backup_file')
+    if not f or not f.filename.endswith('.zip'):
+        return jsonify({'error': 'Fichier ZIP requis.'}), 400
+
+    try:
+        zip_buf = io.BytesIO(f.read())
+        with zipfile.ZipFile(zip_buf, 'r') as zf:
+            json_names = [n for n in zf.namelist() if n.endswith('.json') and 'backup' in n]
+            if not json_names:
+                return jsonify({'error': 'Aucun fichier JSON de backup trouvé dans le ZIP.'}), 400
+            raw = zf.read(json_names[0])
+            backup_data = json.loads(raw.decode('utf-8'))
+    except Exception as e:
+        return jsonify({'error': f'Lecture du ZIP échouée : {e}'}), 400
+
+    task_id = str(_uuid.uuid4())
+    _restore_tasks[task_id] = {'status': 'running', 'message': 'Restauration en cours…'}
+
+    app_ref = current_app._get_current_object()
+
+    def do_restore():
+        from sqlalchemy import text
+        db_uri = app_ref.config.get('SQLALCHEMY_DATABASE_URI', '')
+        is_pg = not db_uri.startswith('sqlite')
+        sorted_names = [t.name for t in db.metadata.sorted_tables]
+        tables_to_restore = [n for n in sorted_names if n in backup_data and backup_data[n]]
+        stats = {}
+        try:
+            with app_ref.app_context():
+                with db.engine.begin() as conn:
+                    if is_pg:
+                        tables_quoted = ', '.join(f'"{n}"' for n in tables_to_restore)
+                        conn.execute(text(f'TRUNCATE {tables_quoted} CASCADE'))
+                    else:
+                        conn.execute(text('PRAGMA foreign_keys = OFF'))
+                        for name in reversed(tables_to_restore):
+                            conn.execute(text(f'DELETE FROM "{name}"'))
+
+                    from sqlalchemy import Boolean as _SABool
+
+                    def _prepare_rows(name, rows):
+                        table_obj = db.metadata.tables.get(name)
+                        if table_obj is not None:
+                            db_col_map = {c.name: c for c in table_obj.columns}
+                        else:
+                            db_col_map = {k: None for k in rows[0].keys()}
+                        col_names = [c for c in rows[0].keys() if c in db_col_map]
+                        if not col_names:
+                            return None, None, None
+                        bool_cols = {
+                            c for c in col_names
+                            if db_col_map[c] is not None and isinstance(db_col_map[c].type, _SABool)
+                        }
+                        def _fix(row):
+                            r = {c: row[c] for c in col_names}
+                            for bc in bool_cols:
+                                if r[bc] is not None:
+                                    r[bc] = bool(r[bc])
+                            return r
+                        return col_names, ', '.join(f'"{c}"' for c in col_names), [_fix(r) for r in rows]
+
+                    deferred = []  # tables qui ont échoué au premier passage (FK)
+                    for name in tables_to_restore:
+                        rows = backup_data[name]
+                        if not rows:
+                            continue
+                        col_names, cols_sql, filtered_rows = _prepare_rows(name, rows)
+                        if not col_names:
+                            continue
+                        vals_sql = ', '.join(f':{c}' for c in col_names)
+                        stmt = text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})')
+                        if is_pg:
+                            sp = f'sp_{name.replace("-", "_")}'
+                            conn.execute(text(f'SAVEPOINT {sp}'))
+                            try:
+                                conn.execute(stmt, filtered_rows)
+                                conn.execute(text(f'RELEASE SAVEPOINT {sp}'))
+                                stats[name] = len(filtered_rows)
+                            except Exception:
+                                conn.execute(text(f'ROLLBACK TO SAVEPOINT {sp}'))
+                                deferred.append((name, col_names, cols_sql, filtered_rows))
+                        else:
+                            conn.execute(stmt, filtered_rows)
+                            stats[name] = len(filtered_rows)
+
+                    # Deuxième passage pour les tables avec FK non résolues au premier tour
+                    for name, col_names, cols_sql, filtered_rows in deferred:
+                        vals_sql = ', '.join(f':{c}' for c in col_names)
+                        stmt = text(f'INSERT INTO "{name}" ({cols_sql}) VALUES ({vals_sql})')
+                        sp = f'sp2_{name.replace("-", "_")}'
+                        conn.execute(text(f'SAVEPOINT {sp}'))
+                        try:
+                            conn.execute(stmt, filtered_rows)
+                            conn.execute(text(f'RELEASE SAVEPOINT {sp}'))
+                            stats[name] = len(filtered_rows)
+                        except Exception as e2:
+                            conn.execute(text(f'ROLLBACK TO SAVEPOINT {sp}'))
+                            stats[name] = f'SKIPPED: {e2}'
+
+                    if not is_pg:
+                        conn.execute(text('PRAGMA foreign_keys = ON'))
+
+                if is_pg:
+                    for name in tables_to_restore:
+                        try:
+                            with db.engine.begin() as conn:
+                                conn.execute(text(
+                                    f"SELECT setval(pg_get_serial_sequence('{name}', 'id'), "
+                                    f"COALESCE((SELECT MAX(id) FROM \"{name}\"), 1))"
+                                ))
+                        except Exception:
+                            pass
+
+            _restore_tasks[task_id] = {'status': 'done', 'message': 'Restauration réussie.', 'tables': stats}
+        except Exception as e:
+            _restore_tasks[task_id] = {'status': 'error', 'message': f'Restauration échouée : {e}'}
+
+    threading.Thread(target=do_restore, daemon=True).start()
+    return jsonify({'task_id': task_id, 'status': 'running'})
+
+
+@main_bp.route('/api/users/restore/status/<task_id>', methods=['GET'])
+def api_users_restore_status(task_id):
+    # Pas d'auth requise : le task_id UUID 128 bits est non-devinable et ne retourne pas de données sensibles.
+    # L'auth session serait de toute façon invalide pendant la restauration (users table vidée).
+    task = _restore_tasks.get(task_id)
+    if not task:
+        return jsonify({'error': 'Tâche introuvable.'}), 404
+    return jsonify(task)
+
+
 @main_bp.route('/api/users/list')
 @roles_required('administrateur')
 def api_users_list():
@@ -2202,7 +3346,7 @@ def api_users_list():
 
 
 @main_bp.route('/api/users/create', methods=['POST'])
-@roles_required('administrateur')
+@roles_required('administrateur', 'dgrtr')
 def api_users_create():
     data = request.get_json() or {}
     username = data.get('username')
@@ -2224,6 +3368,7 @@ def api_users_create():
     u.phone = phone
     u.country = country
     u.region = region
+    u.dgrtr_type = data.get('dgrtr_type') or None
     u.is_active = bool(is_active)
     u.set_password(password)
     # if role is administrateur mark is_admin True for backwards compatibility
@@ -2235,7 +3380,7 @@ def api_users_create():
 
 
 @main_bp.route('/api/users/<int:user_id>/update', methods=['POST'])
-@roles_required('administrateur')
+@roles_required('administrateur', 'dgrtr')
 def api_users_update(user_id):
     data = request.get_json() or {}
     u = User.query.get_or_404(user_id)
@@ -2264,6 +3409,8 @@ def api_users_update(user_id):
             u.is_admin = False
     if 'is_active' in data:
         u.is_active = bool(data.get('is_active'))
+    if 'dgrtr_type' in data:
+        u.dgrtr_type = data.get('dgrtr_type') or None
     if 'password' in data and data.get('password'):
         u.set_password(data.get('password'))
 
@@ -2272,16 +3419,18 @@ def api_users_update(user_id):
 
 
 @main_bp.route('/api/users/<int:user_id>/delete', methods=['POST'])
-@roles_required('administrateur')
+@roles_required('administrateur', 'dgrtr')
 def api_users_delete(user_id):
     if current_user.id == user_id:
         return jsonify({'error':'cannot delete yourself'}), 400
     u = User.query.get_or_404(user_id)
+    if u.role == 'administrateur' and User.query.filter_by(role='administrateur').count() <= 1:
+        return jsonify({'error': 'Impossible de supprimer le dernier administrateur.'}), 400
     
-    # Delete related phone_usages records first (to avoid foreign key constraint)
-    from app.models import PhoneUsage
+    from app.models import PhoneUsage, UserHistory
     PhoneUsage.query.filter_by(user_id=user_id).delete()
-    
+    UserHistory.query.filter_by(user_id=user_id).delete()
+
     db.session.delete(u)
     db.session.commit()
     return jsonify({'ok': True})
@@ -2431,7 +3580,7 @@ def public_track_qrcode(token):
         abort(403)
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
     # point the QR to the public tracking page itself
-    track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+    track_url = vehicle.license_plate
     qr = qrcode.QRCode(box_size=6, border=2)
     qr.add_data(track_url)
     qr.make(fit=True)
@@ -2465,19 +3614,20 @@ def public_track_qrcode_pdf(token):
         if not vehicle.qr_code_expiry:
             vehicle.generate_qr_code_with_expiry()
             db.session.commit()
-        
+            _record_qr_payment(vehicle, 'activation', current_user.username)
+
         # Générer QR code
-        track_url = f"{request.host_url.rstrip('/')}/track/{vehicle.track_token}"
+        track_url = vehicle.license_plate
         qr = qrcode.QRCode(box_size=6, border=2)
         qr.add_data(track_url)
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="black", back_color="white")
-        
+
         # Sauvegarder QR code dans un buffer
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
-        
+
         # Générer le PDF avec format petit (carte autocollante 10x10cm)
         pdf_buf = io.BytesIO()
         card_size = (10*cm, 10*cm)  # Petit format pour autocollant parebrise
@@ -2522,13 +3672,53 @@ def public_track_qrcode_pdf(token):
             fontName='Helvetica-Oblique',
             spaceAfter=0
         )
-        elems.append(Paragraph('Votre identifiant numérique', subtitle_style))
-        
-        # Créer le PDF
-        doc.build(elems)
+        # ── Nouveau design : bandeau bleu + QR grand + footer ──────────────────
+        footer_style = ParagraphStyle(
+            'QRFooter', parent=styles['Normal'],
+            fontSize=7, textColor=colors.HexColor('#555555'),
+            alignment=TA_CENTER, fontName='Helvetica-Oblique', leading=9,
+        )
+
+        # Zone utile = 10cm - 0.4cm (top) - 0.35cm (bottom) = 9.25cm
+        # QR 8.0cm + padding 4+2pt (~0.21cm) + footer ~0.46cm = ~8.67cm → OK
+        qr_big = RLImage(qr_buf, width=8.0*cm, height=8.0*cm)
+        qr_band = Table([[qr_big]], colWidths=[9.2*cm], rowHeights=[8.28*cm])
+        qr_band.setStyle(TableStyle([
+            ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+            ('BACKGROUND',    (0,0), (-1,-1), colors.white),
+            ('TOPPADDING',    (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ]))
+
+        footer_band = Table(
+            [[Paragraph('Brigade Mobile — Comores', footer_style)]],
+            colWidths=[9.2*cm], rowHeights=[0.46*cm]
+        )
+        footer_band.setStyle(TableStyle([
+            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#eef2ff')),
+            ('TOPPADDING',    (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ]))
+
+        card = Table(
+            [[qr_band], [footer_band]],
+            colWidths=[9.2*cm],
+            rowHeights=[8.28*cm, 0.46*cm],
+        )
+        card.setStyle(TableStyle([
+            ('BOX',           (0,0), (-1,-1), 1.5, colors.HexColor('#003399')),
+            ('NOSPLIT',       (0,0), (-1,-1)),
+            ('TOPPADDING',    (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('LEFTPADDING',   (0,0), (-1,-1), 0),
+            ('RIGHTPADDING',  (0,0), (-1,-1), 0),
+        ]))
+
+        doc.build([card])
         pdf_buf.seek(0)
-        
-        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'{vehicle.license_plate}_qrcode.pdf')
+
+        return send_file(pdf_buf, mimetype='application/pdf', download_name=f'qrcode_{vehicle.track_token[:8]}.pdf')
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2561,6 +3751,12 @@ def update_vehicle(vehicle_id):
             qr_expired = False
         if vehicle.status == 'inactive' or qr_expired:
             return jsonify({'error': "Impossible de modifier l'assurance: le véhicule est inactif ou le QR code est expiré."}), 400
+        # Block modification when the current insurance is still active
+        if vehicle.insurance_expiry:
+            ins_exp = ensure_comoros(vehicle.insurance_expiry)
+            if ins_exp > now_comoros():
+                return jsonify({'error': "Impossible de modifier l'assurance: l'assurance actuelle est encore active jusqu'au "
+                                         + ins_exp.strftime('%d/%m/%Y') + "."}), 400
 
     # Tax agents can renew vignette only when vehicle QR code is active.
     vignette_update_requested = 'vignette_expiry' in data
@@ -2622,6 +3818,7 @@ def update_vehicle(vehicle_id):
         if was_vignette_expired:
             payer_name = current_user.username if (current_user and getattr(current_user, 'is_authenticated', False)) else 'agent_impot'
             unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).order_by(Fine.issued_at.asc()).all()
+            auto_paid_fines_amount = sum(float(f.amount or 0) for f in unpaid_fines)
             for fine in unpaid_fines:
                 _apply_fine_payment(
                     fine,
@@ -2629,6 +3826,8 @@ def update_vehicle(vehicle_id):
                     'Paiement automatique lors du renouvellement de vignette par agent d\'impôt'
                 )
                 auto_paid_fines.append(fine)
+            if auto_paid_fines_amount > 0:
+                vehicle.vignette_last_paid_fines_amount = auto_paid_fines_amount
         vehicle.vignette_payment_approved = False
         vehicle.vignette_payment_approved_at = None
         vehicle.vignette_payment_approved_by = None
@@ -2886,20 +4085,20 @@ def remove_exonerated_vehicle(exoneration_id):
 # ===== PHONES MANAGEMENT =====
 
 @main_bp.route('/phones')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','policier')
 def phones_page():
     """Display phones management page"""
     return render_template('phones.html')
 
 @main_bp.route('/phone-usage')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','policier')
 def phone_usage_page():
     """Display phone usage history page"""
     return render_template('phone_usage.html')
 
 
 @main_bp.route('/phone/<int:phone_id>/history')
-@roles_required('administrateur','policier','judiciaire')
+@roles_required('administrateur','policier')
 def phone_history_page(phone_id):
     """Display usage history for a specific phone"""
     phone = Phone.query.get(phone_id)
@@ -3254,19 +4453,91 @@ def get_insurance_vehicles():
             if v.id not in existing_ids:
                 vehicles.append(v)
 
+    from app.models import QRCodePayment
+    # Most recent QR payment per vehicle (for sort order)
+    vehicle_ids_all = [v.id for v in vehicles]
+    last_payments = {}
+    if vehicle_ids_all:
+        rows = QRCodePayment.query.filter(
+            QRCodePayment.vehicle_id.in_(vehicle_ids_all),
+            QRCodePayment.status == 'paid',
+        ).order_by(QRCodePayment.paid_at.desc()).all()
+        for p in rows:
+            if p.vehicle_id not in last_payments:
+                last_payments[p.vehicle_id] = p.paid_at
+
+    assignment_map = {a.vehicle_id: a for a in assignments}
+
     vehicles_payload = []
     for vehicle in vehicles:
         vehicle_data = vehicle.to_dict()
         vehicle_data['has_unpaid_fines'] = vehicle_has_unpaid_fines(vehicle.id)
         vehicle_data['block_reason'] = get_vehicle_block_reason_for_insurance(vehicle)
         vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
+        lp = last_payments.get(vehicle.id)
+        vehicle_data['last_payment_at'] = lp.isoformat() if lp else None
+        a = assignment_map.get(vehicle.id)
+        vehicle_data['driver_license_numbers'] = json.loads(a.driver_license_numbers) if (a and a.driver_license_numbers) else []
+        # Sort key: most recent among assigned_at and vehicle updated_at
+        assigned_at = a.assigned_at.isoformat() if (a and a.assigned_at) else '0000'
+        updated_at  = vehicle.updated_at.isoformat() if vehicle.updated_at else '0000'
+        vehicle_data['_sort_key'] = max(assigned_at, updated_at)
         vehicles_payload.append(vehicle_data)
+
+    # Sort: most recently added or renewed first
+    vehicles_payload.sort(key=lambda v: v['_sort_key'], reverse=True)
 
     return jsonify({
         "vehicles": vehicles_payload
     })
 
 
+@vehicle_bp.route('/insurance-alerts', methods=['GET'])
+@login_required
+def get_insurance_alerts():
+    """Return alerts linked to vehicles assigned to current insurance account."""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+
+    from app.models import Alert, alert_vehicles as alert_vehicles_table
+
+    insurance_company_name = current_user.insurance.company_name if current_user.insurance else None
+
+    # Collect vehicle IDs for this account
+    assigned_ids = {
+        a.vehicle_id
+        for a in VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    }
+    if insurance_company_name:
+        legacy_ids = {
+            v.id for v in Vehicle.query.filter_by(insurance_company=insurance_company_name).all()
+        }
+        assigned_ids |= legacy_ids
+
+    if not assigned_ids:
+        return jsonify({"alerts": []})
+
+    # Find alert IDs that link to any of those vehicles
+    from sqlalchemy import select as sa_select
+    rows = db.session.execute(
+        sa_select(alert_vehicles_table.c.alert_id)
+        .where(alert_vehicles_table.c.vehicle_id.in_(assigned_ids))
+    ).fetchall()
+    alert_ids = list({r[0] for r in rows})
+
+    if not alert_ids:
+        return jsonify({"alerts": []})
+
+    alerts = Alert.query.filter(Alert.id.in_(alert_ids)).order_by(Alert.starts_at.desc()).all()
+
+    result = []
+    for alert in alerts:
+        d = alert.to_dict()
+        # Only keep vehicles that belong to this account
+        d['vehicles'] = [v for v in d['vehicles'] if v['id'] in assigned_ids]
+        result.append(d)
+
+    return jsonify({"alerts": result})
 
 
 @vehicle_bp.route('/vignette-vehicles', methods=['GET'])
@@ -3360,37 +4631,47 @@ def get_vignette_vehicles():
         
         payment_approved = bool(getattr(vehicle, 'vignette_payment_approved', False))
 
+        # Determine renewal period status
+        renewal_opening = get_renewal_opening_datetime()
+        in_renewal_period = (
+            renewal_opening is not None
+            and now >= renewal_opening
+            and (not vignette_expiry or vignette_expiry >= now)
+            and not payment_approved
+        )
+        vehicle_data['renewal_period_open'] = bool(renewal_opening)
+        vehicle_data['renewal_needed'] = in_renewal_period
+
         # Calculate penalty amount based on days late unless payment has already been approved,
         # in which case we keep the approved amount frozen for display.
-        # 
+        #
         # Penalties apply ONLY when the vignette has expired (March 31st has passed).
         # Aux Comores: Les pénalités s'appliquent uniquement après le 31 mars (date d'expiration).
-        # Avant le 31 mars, aucune pénalité n'est appliquée, même si un renouvellement est demandé.
         if payment_approved:
             vehicle_data['penalty_amount'] = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         elif vignette_expiry and vignette_expiry < now:
-            # Vignette is expired: calculate penalty based on days since March 31st
+            # Vignette is expired: calculate current penalty based on days overdue
             days_late = (now - vignette_expiry).days
             penalty_amount = calculate_penalty_amount(days_late)
             vehicle_data['penalty_amount'] = penalty_amount
         else:
-            # Vignette is still valid (before March 31st) or no vignette: no penalty
-            vehicle_data['penalty_amount'] = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
-        
-        # Add unpaid fines amount
+            # Vignette still valid (renewal window or active): no current penalty
+            vehicle_data['penalty_amount'] = 0.0
+
+        # Add fines amount
         unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
         total_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
         if payment_approved:
+            # Payment approved: freeze what was included in the approved payment
             vehicle_data['unpaid_fines_amount'] = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
             vehicle_data['unpaid_fines_count'] = 0
-        elif pending_request_expiry:
-            vehicle_data['unpaid_fines_amount'] = total_fines_amount
-            vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
-        elif vignette_expiry and vignette_expiry < now:
+        elif total_fines_amount > 0:
+            # Current unpaid fines exist: show them
             vehicle_data['unpaid_fines_amount'] = total_fines_amount
             vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
         else:
-            vehicle_data['unpaid_fines_amount'] = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
+            # No current unpaid fines: show 0 (old paid amounts are historical, not due)
+            vehicle_data['unpaid_fines_amount'] = 0.0
             vehicle_data['unpaid_fines_count'] = 0
         
         vehicles_payload.append(vehicle_data)
@@ -3415,12 +4696,18 @@ def approve_vignette_payment(vehicle_id):
     requested_expiry = ensure_comoros(get_pending_vignette_request_expiry(vehicle))
     current_expiry = ensure_comoros(vehicle.vignette_expiry) if vehicle.vignette_expiry else None
     if not current_expiry and not requested_expiry:
-        return jsonify({'error': 'Ce véhicule n’a pas de vignette à confirmer.'}), 400
+        return jsonify({'error': "Ce vehicule n'a pas de vignette a confirmer."}), 400
 
     now_time = now_comoros()
     expiry = current_expiry or requested_expiry
-    if current_expiry and expiry >= now_time:
-        return jsonify({'error': 'Cette vignette n’est pas expirée. Paiement de renouvellement non requis.'}), 400
+    renewal_opening = get_renewal_opening_datetime()
+    in_renewal_period = renewal_opening is not None and now_time >= renewal_opening
+    if current_expiry and expiry >= now_time and not in_renewal_period:
+        return jsonify({'error': "La periode de renouvellement n'est pas encore ouverte."}), 400
+
+    # Early renewal: vignette is still active but the renewal window is open.
+    # Approving the payment also extends the vignette to next year's cycle right away.
+    early_renewal = bool(current_expiry and current_expiry >= now_time and in_renewal_period)
 
     if getattr(vehicle, 'vignette_payment_approved', False):
         return jsonify({'error': 'Le paiement de cette vignette est déjà approuvé.'}), 400
@@ -3430,13 +4717,20 @@ def approve_vignette_payment(vehicle_id):
 
     vehicle.vignette_payment_approved = True
     vehicle.vignette_payment_approved_at = now_time
-    vehicle.vignette_payment_approved_by = current_user.username if getattr(current_user, 'is_authenticated', False) else 'Système'
+    agent_display_name = (getattr(current_user, 'full_name', None) or getattr(current_user, 'username', None)) if getattr(current_user, 'is_authenticated', False) else 'Système'
+    vehicle.vignette_payment_approved_by = agent_display_name or 'Système'
     vehicle.vignette_payment_method = payment_method
 
     # Finalize the requested expiry date when this was a payment request for a vehicle
     # without vignette. For expired renewals, keep the renewal date equal to the approved date.
     if requested_expiry and not current_expiry:
         vehicle.vignette_expiry = requested_expiry
+    elif early_renewal:
+        # Citizen paid ahead of expiry during the open renewal window: extend the
+        # vignette to next year's cycle (same day/month, one year later) right away.
+        vehicle.vignette_expiry = ensure_comoros(datetime(
+            current_expiry.year + 1, current_expiry.month, current_expiry.day, 23, 59, 59
+        ))
 
     vignette_price = calculate_vignette_price(vehicle)
     penalty_amount = 0.0
@@ -3449,6 +4743,7 @@ def approve_vignette_payment(vehicle_id):
 
     # Persist last paid breakdown so tax dashboard can still display paid components after renewal.
     vehicle.vignette_last_paid_at = now_time
+    vehicle.vignette_last_paid_by = vehicle.vignette_payment_approved_by
     vehicle.vignette_last_paid_vignette_amount = float(vignette_price or 0.0)
     vehicle.vignette_last_paid_penalty_amount = float(penalty_amount or 0.0)
     vehicle.vignette_last_paid_fines_amount = float(unpaid_fines_amount or 0.0)
@@ -3459,7 +4754,7 @@ def approve_vignette_payment(vehicle_id):
 
     unpaid_fines_count = len(unpaid_fines)
 
-    # If there are unpaid fines included in the vignette payment, mark them as paid
+    # Mark bundled fines as paid
     paid_fine_ids = []
     if unpaid_fines_count > 0:
         receipt_ref = f"VIGN-{vehicle.id}-{now_time.strftime('%Y%m%d%H%M%S')}"
@@ -3471,20 +4766,32 @@ def approve_vignette_payment(vehicle_id):
             db.session.add(f)
             paid_fine_ids.append(f.id)
 
-        # Create a payment record representing the combined transaction
-        from app.models import Payment
-        payment_record = Payment(
-            amount=total_amount,
-            currency='KMF',
-            status='paid',
-            license_plate=vehicle.license_plate,
-            owner_name=vehicle.owner_name,
-            payer_name=vehicle.vignette_payment_approved_by,
-            payer_email=None,
-            paid_at=now_time,
-            fines=json.dumps(paid_fine_ids)
-        )
-        db.session.add(payment_record)
+    # Always create a payment record in vignette payload format so the citizen app
+    # can display the receipt in "Retelecharger un recu".
+    from app.models import Payment
+    vignette_payload = {
+        'type': 'vignette_request',
+        'vehicle_id': vehicle.id,
+        'vignette_price': float(vignette_price or 0.0),
+        'annual_ds_amount': 0.0,
+        'penalty_amount': float(penalty_amount or 0.0),
+        'fines_amount': float(unpaid_fines_amount or 0.0),
+        'total_amount': float(total_amount or 0.0),
+        'requested_expiry': vehicle.vignette_expiry.isoformat() if vehicle.vignette_expiry else None,
+        'fine_ids': paid_fine_ids,
+    }
+    payment_record = Payment(
+        amount=total_amount,
+        currency='KMF',
+        status='paid',
+        license_plate=vehicle.license_plate,
+        owner_name=vehicle.owner_name,
+        payer_name=vehicle.vignette_payment_approved_by,
+        payer_email=None,
+        paid_at=now_time,
+        fines=json.dumps(vignette_payload)
+    )
+    db.session.add(payment_record)
 
     db.session.add(VehicleHistory(
         vehicle_id=vehicle.id,
@@ -3494,10 +4801,14 @@ def approve_vignette_payment(vehicle_id):
     ))
     db.session.commit()
 
+    success_message = 'Paiement vignette approuvé avec succès.'
+    if early_renewal and vehicle.vignette_expiry:
+        success_message += f" Vignette renouvelée jusqu'au {vehicle.vignette_expiry.strftime('%d/%m/%Y')}."
+
     return jsonify({
         'ok': True,
         'vehicle': vehicle.to_dict(),
-        'message': 'Paiement vignette approuvé avec succès.',
+        'message': success_message,
         'vignette_price': round(vignette_price, 2),
         'penalty_amount': round(penalty_amount, 2),
         'unpaid_fines_amount': round(unpaid_fines_amount, 2),
@@ -3525,7 +4836,7 @@ def request_vignette_payment(vehicle_id):
     requested_expiry_value = data.get('vignette_expiry')
 
     if not requested_expiry_value:
-        return jsonify({'error': 'La date d’expiration est requise.'}), 400
+        return jsonify({'error': "La date d'expiration est requise."}), 400
 
     try:
         requested_expiry = datetime.fromisoformat(requested_expiry_value)
@@ -3538,7 +4849,7 @@ def request_vignette_payment(vehicle_id):
     vignette_price = float(calculate_vignette_price(vehicle) or 0.0)
     if vignette_price <= 0:
         return jsonify({
-            'error': 'Impossible d’ajouter une vignette: aucun tarif n’est disponible pour cette combinaison de classe fiscale et classe CV.'
+            'error': "Impossible d'ajouter une vignette: aucun tarif n'est disponible pour cette combinaison."
         }), 400
 
     now_time = now_comoros()
@@ -4021,12 +5332,27 @@ def get_mobile_money_archive():
     if getattr(current_user, 'role', None) == 'mobile_money_agent':
         user_country = None
 
-    # Direct paid fines only: exclude fines already bundled into a vignette payment.
+    # Show transactions made by mobile_money_agent accounts OR from the citizen app (Huri Money).
+    # Exclude only payments made by other system roles (admin, policier, judiciaire, etc.).
+    mobile_agent_usernames = [
+        u.username for u in User.query.filter_by(role='mobile_money_agent').all()
+    ]
+    other_system_usernames = [
+        u.username for u in User.query.filter(
+            User.role.notin_(['mobile_money_agent'])
+        ).all()
+    ]
+
+    # Direct paid fines: mobile agent OR citizen app (paid_by not a system user).
     fines_query = Fine.query.filter(
         Fine.paid == True,
         Fine.paid_at.isnot(None),
         Fine.paid_at >= start_date,
-        Fine.paid_at <= end_date
+        Fine.paid_at <= end_date,
+        db.or_(
+            Fine.paid_by.in_(mobile_agent_usernames),
+            Fine.paid_by.notin_(other_system_usernames),
+        ) if other_system_usernames else Fine.paid_by.isnot(None),
     )
     if user_country:
         fines_query = fines_query.join(Vehicle).filter(Vehicle.owner_island == user_country)
@@ -4036,6 +5362,11 @@ def get_mobile_money_archive():
     for fine in fines_query.order_by(Fine.paid_at.desc()).all():
         if fine.receipt_number and str(fine.receipt_number).startswith('VIGN-'):
             continue
+        raw_paid_by = fine.paid_by or '-'
+        if raw_paid_by not in mobile_agent_usernames and not raw_paid_by.startswith('App Citoyen /'):
+            paid_by_display = f'App Citoyen / {raw_paid_by}'
+        else:
+            paid_by_display = raw_paid_by
         direct_paid_fines.append({
             'id': fine.id,
             'license_plate': fine.vehicle.license_plate if fine.vehicle else '-',
@@ -4044,15 +5375,19 @@ def get_mobile_money_archive():
             'reason': fine.reason,
             'receipt_number': fine.receipt_number,
             'paid_at': fine.paid_at.isoformat() if fine.paid_at else None,
-            'paid_by': fine.paid_by,
+            'paid_by': paid_by_display,
         })
         direct_fines_total += float(fine.amount or 0.0)
 
-    # Vignette archive: use persisted vignette payment breakdown.
+    # Vignettes: mobile agent OR citizen app (vignette_last_paid_by not a system user).
     vignette_query = Vehicle.query.filter(
         Vehicle.vignette_last_paid_at.isnot(None),
         Vehicle.vignette_last_paid_at >= start_date,
-        Vehicle.vignette_last_paid_at <= end_date
+        Vehicle.vignette_last_paid_at <= end_date,
+        db.or_(
+            Vehicle.vignette_last_paid_by.in_(mobile_agent_usernames),
+            Vehicle.vignette_last_paid_by.notin_(other_system_usernames),
+        ) if other_system_usernames else Vehicle.vignette_last_paid_by.isnot(None),
     )
     if user_country:
         vignette_query = vignette_query.filter(Vehicle.owner_island == user_country)
@@ -4077,7 +5412,7 @@ def get_mobile_money_archive():
             'penalty_amount': penalty_amount,
             'fines_amount': fines_amount,
             'total_amount': total_amount,
-            'approved_by': vehicle.vignette_payment_approved_by,
+            'approved_by': (lambda raw: f'App Citoyen / {raw}' if raw and raw not in mobile_agent_usernames and not raw.startswith('App Citoyen /') else (raw or '-'))(vehicle.vignette_last_paid_by or vehicle.vignette_payment_approved_by),
             'payment_method': vehicle.vignette_payment_method,
             'receipt_number': f"VIGN-{vehicle.id}-{int(vehicle.vignette_last_paid_at.timestamp())}" if vehicle.vignette_last_paid_at else None,
             'included_fines': float(fines_amount),
@@ -4085,6 +5420,48 @@ def get_mobile_money_archive():
         vignette_total += vignette_price
         vignette_penalties += penalty_amount
         vignette_included_fines += fines_amount
+
+    # QR code renewals archive — mobile agents OR citizen app (recorded_by not a system user)
+    from app.models import QRCodePayment
+    qr_query = QRCodePayment.query.filter(
+        QRCodePayment.payment_type == 'renewal',
+        QRCodePayment.status == 'paid',
+        QRCodePayment.paid_at.isnot(None),
+        QRCodePayment.paid_at >= start_date,
+        QRCodePayment.paid_at <= end_date,
+        db.or_(
+            QRCodePayment.recorded_by.in_(mobile_agent_usernames),
+            QRCodePayment.recorded_by.notin_(other_system_usernames),
+        ) if other_system_usernames else QRCodePayment.recorded_by.isnot(None),
+    )
+    if user_country:
+        qr_query = qr_query.join(Vehicle, QRCodePayment.vehicle_id == Vehicle.id)\
+                           .filter(Vehicle.owner_island == user_country)
+
+    qr_archive = []
+    qr_total = 0.0
+    for p in qr_query.order_by(QRCodePayment.paid_at.desc()).all():
+        v = p.vehicle
+        raw = p.recorded_by or '-'
+        # Format display: citizen payments may have old raw format (phone/name/HuriMoney)
+        if raw.startswith('App Citoyen /'):
+            recorded_by_display = raw
+        elif raw in mobile_agent_usernames:
+            recorded_by_display = raw
+        else:
+            # Old citizen record without prefix — add it
+            recorded_by_display = f'App Citoyen / {raw}'
+        qr_archive.append({
+            'id': p.id,
+            'license_plate': v.license_plate if v else '-',
+            'owner_name': v.owner_name if v else '-',
+            'owner_island': v.owner_island if v else '-',
+            'amount': float(p.amount or 0.0),
+            'paid_at': p.paid_at.isoformat() if p.paid_at else None,
+            'recorded_by': recorded_by_display,
+            'new_expiry': v.qr_code_expiry.strftime('%d/%m/%Y') if v and v.qr_code_expiry else '-',
+        })
+        qr_total += float(p.amount or 0.0)
 
     return jsonify({
         'start_date': start_date.isoformat(),
@@ -4096,10 +5473,13 @@ def get_mobile_money_archive():
             'vignette_total': round(vignette_total, 2),
             'vignette_penalties_total': round(vignette_penalties, 2),
             'vignette_included_fines_total': round(vignette_included_fines, 2),
-            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines, 2),
+            'qr_renewals_count': len(qr_archive),
+            'qr_renewals_total': round(qr_total, 2),
+            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines + qr_total, 2),
         },
         'direct_paid_fines': direct_paid_fines,
         'vignette_archive': vignette_archive,
+        'qr_archive': qr_archive,
     })
 
 
@@ -4286,51 +5666,78 @@ def get_all_vehicles_report():
 @vehicle_bp.route('/reports/activity', methods=['GET'])
 @login_required
 def get_activity_report():
-    """Get activity report for a date range (insurance accounts only)"""
+    """Activity report by month: QR activations and renewals for insurance account vehicles."""
     if not isinstance(current_user, InsuranceAccount):
         return jsonify({"error": "Not an insurance account"}), 403
-    
+
+    import calendar as _cal
     from datetime import datetime
-    
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
-    if not start_date or not end_date:
-        return jsonify({"error": "start_date and end_date are required"}), 400
-    
+    from app.timezone_utils import COMOROS_TZ
+    from app.models import QRCodePayment
+
+    month_param = request.args.get('month')
+    if not month_param:
+        from app.timezone_utils import now_comoros
+        month_param = now_comoros().strftime('%Y-%m')
+
     try:
-        start = datetime.strptime(start_date, '%Y-%m-%d').date()
-        end = datetime.strptime(end_date, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
-    
-    # Get vehicles added/modified in this date range
-    assignments = VehicleInsuranceAssignment.query.filter(
-        VehicleInsuranceAssignment.insurance_account_id == current_user.id,
-        VehicleInsuranceAssignment.assigned_at >= start,
-        VehicleInsuranceAssignment.assigned_at <= end
-    ).order_by(VehicleInsuranceAssignment.assigned_at.desc()).all()
-    
+        year, month = map(int, month_param.split('-'))
+    except (ValueError, AttributeError):
+        return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
+
+    last_day = _cal.monthrange(year, month)[1]
+    start_dt = datetime(year, month, 1, 0, 0, 0, tzinfo=COMOROS_TZ)
+    end_dt   = datetime(year, month, last_day, 23, 59, 59, tzinfo=COMOROS_TZ)
+
+    # Vehicles belonging to this insurance account
+    assignments = VehicleInsuranceAssignment.query.filter_by(
+        insurance_account_id=current_user.id
+    ).all()
+    vehicle_ids = [a.vehicle_id for a in assignments]
+
+    if not vehicle_ids:
+        payments = []
+    else:
+        payments = QRCodePayment.query.filter(
+            QRCodePayment.vehicle_id.in_(vehicle_ids),
+            QRCodePayment.status == 'paid',
+            QRCodePayment.paid_at >= start_dt,
+            QRCodePayment.paid_at <= end_dt,
+        ).order_by(QRCodePayment.paid_at.desc()).all()
+
+    # Deduplicate: keep only the most recent payment per vehicle (payments already sorted desc)
+    seen = set()
     vehicles_data = []
-    for assignment in assignments:
-        vehicle = Vehicle.query.get(assignment.vehicle_id)
-        if vehicle:
-            v_dict = vehicle.to_dict()
-            v_dict['assigned_at'] = assignment.assigned_at.isoformat()
-            v_dict['assigned_by'] = assignment.assigned_by
-            vehicles_data.append(v_dict)
-    
-    result = {
-        "report_type": "Rapport d'Activité",
-        "generated_at": datetime.now().isoformat(),
+    for p in payments:
+        if p.vehicle_id in seen or not p.vehicle:
+            continue
+        seen.add(p.vehicle_id)
+        v = p.vehicle
+        vehicles_data.append({
+            'license_plate': v.license_plate,
+            'owner_name':    v.owner_name or '—',
+            'vehicle_type':  v.vehicle_type or '—',
+            'owner_island':  v.owner_island or '—',
+            'owner_phone':   v.owner_phone or '—',
+            'usage_type':    v.usage_type or '—',
+            'payment_type':  p.payment_type,
+            'paid_at':       p.paid_at.strftime('%d/%m/%Y %H:%M') if p.paid_at else '—',
+        })
+
+    activation_count = sum(1 for v in vehicles_data if v['payment_type'] == 'activation')
+    renewal_count    = sum(1 for v in vehicles_data if v['payment_type'] == 'renewal')
+
+    from app.timezone_utils import now_comoros
+    return jsonify({
+        "report_type":       "Rapport d'Activité",
+        "generated_at":      now_comoros().isoformat(),
         "insurance_company": current_user.insurance.company_name,
-        "start_date": start_date,
-        "end_date": end_date,
-        "count": len(vehicles_data),
-        "vehicles": vehicles_data
-    }
-    
-    return jsonify(result), 200
+        "month":             month_param,
+        "activation_count":  activation_count,
+        "renewal_count":     renewal_count,
+        "count":             len(vehicles_data),
+        "vehicles":          vehicles_data,
+    }), 200
 
 
 @vehicle_bp.route('/reports/statistics', methods=['GET'])
@@ -4444,9 +5851,13 @@ def assign_vehicle_to_insurance():
     data = request.get_json()
     vehicle_id = data.get('vehicle_id')
     insurance_expiry = data.get('insurance_expiry')
-    
+    usage_type = (data.get('usage_type') or '').strip() or None
+    driver_license_numbers = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
+
     if not vehicle_id:
         return jsonify({"error": "vehicle_id required"}), 400
+    if not driver_license_numbers:
+        return jsonify({"error": "Au moins un numéro de permis conducteur est requis"}), 400
     
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     
@@ -4474,7 +5885,12 @@ def assign_vehicle_to_insurance():
     try:
         # Update vehicle with insurance company name
         vehicle.insurance_company = current_user.insurance.company_name
-        
+
+        # Update usage type if provided
+        old_usage = vehicle.usage_type
+        if usage_type:
+            vehicle.usage_type = usage_type
+
         # Update insurance expiry if provided
         if insurance_expiry:
             try:
@@ -4489,10 +5905,21 @@ def assign_vehicle_to_insurance():
             vehicle_id=vehicle.id,
             insurance_account_id=current_user.id,
             assigned_by=current_user.username,
-            notes='Assigned by insurance account'
+            notes='Assigned by insurance account',
+            driver_license_numbers=json.dumps(driver_license_numbers)
         )
         db.session.add(assignment)
-        
+
+        # Historique usage si modifié
+        if usage_type and usage_type != old_usage:
+            from app.models import VehicleHistory
+            db.session.add(VehicleHistory(
+                vehicle_id=vehicle.id,
+                action='Usage modifié',
+                officer=current_user.username,
+                notes=f"Usage: {old_usage or '—'} → {usage_type}"
+            ))
+
         db.session.commit()
         return jsonify({
             "success": True,
@@ -4503,6 +5930,96 @@ def assign_vehicle_to_insurance():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+@vehicle_bp.route('/<int:vehicle_id>/assignment-licenses', methods=['PATCH'])
+@login_required
+def update_assignment_licenses(vehicle_id):
+    """Update driver license numbers on an insurance assignment (insurance accounts only)."""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Not an insurance account"}), 403
+    assignment = VehicleInsuranceAssignment.query.filter_by(
+        vehicle_id=vehicle_id, insurance_account_id=current_user.id
+    ).first_or_404()
+    data = request.get_json() or {}
+    nums = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
+    if not nums:
+        return jsonify({"error": "Au moins un numéro de permis conducteur est requis"}), 400
+    assignment.driver_license_numbers = json.dumps(nums)
+    db.session.commit()
+    return jsonify({"success": True, "driver_license_numbers": nums})
+
+
+@vehicle_bp.route('/check-driver-license', methods=['GET'])
+@login_required
+def check_driver_license():
+    """Check whether a driver license number exists. Used by insurance account forms."""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    num = (request.args.get('number') or '').strip().upper()
+    if not num:
+        return jsonify({"exists": False}), 200
+    from app.models import DriverLicense
+    lic = DriverLicense.query.filter_by(license_number=num).first()
+    if lic:
+        return jsonify({
+            "exists": True,
+            "holder": f"{lic.holder_firstname or ''} {lic.holder_name}".strip(),
+            "status": lic.status,
+            "is_expired": lic.is_expired
+        })
+    return jsonify({"exists": False})
+
+
+@vehicle_bp.route('/driver-license-preview', methods=['GET'])
+@login_required
+def driver_license_preview():
+    """Return license data for the Côté A preview modal (insurance accounts only)."""
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    num = (request.args.get('number') or '').strip().upper()
+    if not num:
+        return jsonify({"error": "number required"}), 400
+    # Security: number must be registered on one of this account's vehicles
+    assignments = VehicleInsuranceAssignment.query.filter_by(insurance_account_id=current_user.id).all()
+    allowed = set()
+    for a in assignments:
+        if a.driver_license_numbers:
+            try:
+                allowed.update(json.loads(a.driver_license_numbers))
+            except Exception:
+                pass
+    if num not in allowed:
+        return jsonify({"error": "Permis non autorisé"}), 403
+    from app.models import DriverLicense, LicenseSetting
+    from dateutil.relativedelta import relativedelta
+    lic = DriverLicense.query.filter_by(license_number=num).first()
+    if not lic:
+        return jsonify({"error": "Permis introuvable"}), 404
+    settings = LicenseSetting.get()
+    computed_expiry = None
+    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
+        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    category_details = parse_category_details(lic)
+    holder_cats = [c.strip() for c in lic.categories.split(',') if c.strip()] if lic.categories else []
+    display_cats = [c for c in holder_cats if c != 'P']
+    expiry = lic.expiry_date or computed_expiry
+    return jsonify({
+        "license_number":        lic.license_number,
+        "holder_name":           lic.holder_name or '',
+        "holder_firstname":      lic.holder_firstname or '',
+        "holder_island":         lic.holder_island or '',
+        "centre_immatriculation":lic.centre_immatriculation or '',
+        "type_permis":           lic.type_permis or '',
+        "issue_date":            lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else None,
+        "expiry_date":           expiry.strftime('%d/%m/%Y') if expiry else None,
+        "status":                lic.status,
+        "is_expired":            lic.is_expired,
+        "is_pro":                'P' in holder_cats,
+        "categories":            display_cats,
+        "category_details":      category_details,
+        "photo_url":             f"/uploads/license_photos/{lic.photo_filename}" if lic.photo_filename else None,
+    })
 
 
 # ==================== VEHICLE INSURANCE ASSIGNMENT ====================
@@ -4554,11 +6071,15 @@ def create_vehicle_assignment():
     if existing:
         return jsonify({"error": "This assignment already exists"}), 400
     
+    driver_nums = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
+    if not driver_nums:
+        return jsonify({"error": "Au moins un numéro de permis conducteur est requis"}), 400
     assignment = VehicleInsuranceAssignment(
         vehicle_id=vehicle_id,
         insurance_account_id=insurance_account_id,
         assigned_by=current_user.username,
-        notes=data.get('notes', '')
+        notes=data.get('notes', ''),
+        driver_license_numbers=json.dumps(driver_nums)
     )
     
     db.session.add(assignment)
@@ -4796,6 +6317,187 @@ def delete_penalty_rate(rate_id):
     return jsonify({"message": "Penalty rate deleted successfully"})
 
 
+@vehicle_bp.route('/vignette-settings', methods=['GET'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def get_vignette_settings():
+    """Get global vignette settings."""
+    from app.models import VignetteSetting
+    setting = VignetteSetting.get()
+    return jsonify(setting.to_dict())
+
+
+@vehicle_bp.route('/vignette-settings', methods=['PUT'])
+@login_required
+@roles_required('agent_impot', 'administrateur')
+def update_vignette_settings():
+    """Update global vignette settings."""
+    from app.models import VignetteSetting
+    from datetime import date
+    data = request.get_json() or {}
+    setting = VignetteSetting.get()
+
+    raw_date = data.get('renewal_opening_date')
+    if raw_date:
+        try:
+            setting.renewal_opening_date = date.fromisoformat(raw_date)
+        except ValueError:
+            return jsonify({'error': 'Format de date invalide. Utilisez YYYY-MM-DD.'}), 400
+    else:
+        setting.renewal_opening_date = None
+
+    setting.updated_by = current_user.username if current_user.is_authenticated else None
+    db.session.commit()
+    return jsonify({'message': 'Paramètres mis à jour.', **setting.to_dict()})
+
+
+# ============= HURI MONEY DESTINATION SETTINGS =============
+
+@main_bp.route('/payment-settings')
+@login_required
+@roles_required('administrateur')
+def payment_settings():
+    """Page for configuring which Huri Money account receives each payment type's revenue."""
+    return render_template('payment_settings.html')
+
+
+@vehicle_bp.route('/payment-settings', methods=['GET'])
+@login_required
+@roles_required('administrateur')
+def get_payment_settings():
+    from app.models import HuriDestinationSetting
+    setting = HuriDestinationSetting.get()
+    return jsonify(setting.to_dict())
+
+
+_PAYMENT_PHONE_FIELD_LABELS = {'fine_phone': 'Amendes', 'vignette_phone': 'Vignette'}
+
+
+@vehicle_bp.route('/payment-settings', methods=['PUT'])
+@login_required
+@roles_required('administrateur')
+def update_payment_settings():
+    """Request a change to a destination phone number. The change is NOT applied here —
+    a confirmation code is emailed to a fixed, server-side-only address
+    (PAYMENT_CHANGE_APPROVAL_EMAIL env var, not editable via the web app), and must be
+    confirmed via /payment-settings/confirm before it takes effect. This keeps the
+    approval channel outside the in-app account system, so a single compromised or
+    malicious admin account cannot redirect payment revenue on its own."""
+    from app.models import HuriDestinationSetting, PendingPhoneChange
+    from app.email_service import send_approval_email
+    import random
+
+    data = request.get_json() or {}
+    setting = HuriDestinationSetting.get()
+    username = current_user.username if current_user.is_authenticated else None
+
+    if 'fine_phone' in data:
+        field = 'fine_phone'
+        new_value = (data.get('fine_phone') or '').strip() or None
+        current_value = setting.fine_phone
+    elif 'vignette_phone' in data:
+        field = 'vignette_phone'
+        new_value = (data.get('vignette_phone') or '').strip() or None
+        current_value = setting.vignette_phone
+    else:
+        return jsonify({'error': 'Aucun champ à modifier.'}), 400
+
+    if new_value == current_value:
+        return jsonify({'message': 'Aucun changement.', **setting.to_dict()})
+
+    code = f"{random.randint(0, 999999):06d}"
+    pending = PendingPhoneChange(
+        field=field,
+        old_value=current_value,
+        new_value=new_value,
+        requested_by=username,
+        expires_at=now_comoros() + timedelta(minutes=15),
+    )
+    pending.set_code(code)
+
+    label = _PAYMENT_PHONE_FIELD_LABELS[field]
+    subject = f"Confirmation requise : changement numéro {label}"
+    body = (
+        f"{username or 'Un administrateur'} demande de changer le numéro Huri Money « {label} » :\n\n"
+        f"  Ancien numéro : {current_value or '—'}\n"
+        f"  Nouveau numéro : {new_value or '—'}\n\n"
+        f"Code de confirmation : {code}\n\n"
+        f"Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, "
+        f"ne communiquez pas ce code et vérifiez le compte administrateur concerné."
+    )
+    email_result = send_approval_email(subject, body)
+    if not email_result.get('success'):
+        return jsonify({'error': f"Impossible d'envoyer le code de confirmation : {email_result.get('message')}"}), 503
+
+    db.session.add(pending)
+    db.session.commit()
+
+    return jsonify({
+        'pending': True,
+        'change_id': pending.id,
+        'message': 'Un code de confirmation a été envoyé. Saisissez-le pour valider le changement.',
+    })
+
+
+@vehicle_bp.route('/payment-settings/confirm', methods=['POST'])
+@login_required
+@roles_required('administrateur')
+def confirm_payment_settings_change():
+    """Apply a pending phone number change once the emailed confirmation code is verified."""
+    from app.models import HuriDestinationSetting, HuriDestinationPhoneHistory, PendingPhoneChange
+
+    data = request.get_json() or {}
+    try:
+        change_id = int(data.get('change_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Demande de changement invalide.'}), 400
+    code = str(data.get('code') or '').strip()
+
+    pending = PendingPhoneChange.query.get(change_id)
+    if not pending or pending.consumed:
+        return jsonify({'error': 'Demande de changement introuvable ou déjà traitée.'}), 404
+
+    if pending.is_expired:
+        return jsonify({'error': 'Ce code a expiré. Veuillez recommencer.'}), 400
+
+    if pending.attempts >= PendingPhoneChange.MAX_ATTEMPTS:
+        return jsonify({'error': 'Trop de tentatives. Veuillez recommencer.'}), 400
+
+    if not code or not pending.check_code(code):
+        pending.attempts += 1
+        db.session.commit()
+        remaining = max(PendingPhoneChange.MAX_ATTEMPTS - pending.attempts, 0)
+        return jsonify({'error': f'Code incorrect. {remaining} tentative(s) restante(s).'}), 400
+
+    setting = HuriDestinationSetting.get()
+    db.session.add(HuriDestinationPhoneHistory(
+        field=pending.field, old_value=pending.old_value, new_value=pending.new_value, changed_by=pending.requested_by
+    ))
+    setattr(setting, pending.field, pending.new_value)
+    setattr(setting, f'{pending.field}_updated_at', now_comoros())
+    setattr(setting, f'{pending.field}_updated_by', pending.requested_by)
+
+    pending.consumed = True
+    db.session.commit()
+
+    return jsonify({'message': 'Changement confirmé et appliqué.', **setting.to_dict()})
+
+
+@vehicle_bp.route('/payment-settings/history', methods=['GET'])
+@login_required
+@roles_required('administrateur')
+def get_payment_settings_history():
+    from app.models import HuriDestinationPhoneHistory
+    field = request.args.get('field', '').strip()
+    if field not in ('fine_phone', 'vignette_phone', 'qr_renewal_phone'):
+        return jsonify({'error': 'Champ invalide'}), 400
+    entries = (HuriDestinationPhoneHistory.query
+               .filter_by(field=field)
+               .order_by(HuriDestinationPhoneHistory.changed_at.desc())
+               .all())
+    return jsonify([e.to_dict() for e in entries])
+
+
 # Vehicle Transfers - Citizen API
 
 @main_bp.route('/api/vehicle-transfers', methods=['POST'])
@@ -4857,7 +6559,7 @@ def submit_vehicle_transfer():
                 if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
                     return jsonify({'error': 'Invalid file type. Allowed: PDF, JPG, PNG, GIF'}), 400
 
-                upload_dir = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'app/static'), 'vehicle_transfers')
+                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'vehicle_transfers')
                 os.makedirs(upload_dir, exist_ok=True)
                 filename = secure_filename(f"{vehicle_id}_{datetime.now().timestamp()}_{file.filename}")
                 file.save(os.path.join(upload_dir, filename))
