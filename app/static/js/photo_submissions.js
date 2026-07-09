@@ -107,7 +107,7 @@ function openPhotoModal(index) {
     // Déterminer l'URL de la photo
     let photoUrl = '';
     if (submission.photo_filename) {
-        photoUrl = `/static/photo_submissions/${submission.photo_filename}`;
+        photoUrl = `/uploads/photo_submissions/${submission.photo_filename}`;
     }
 
     // Remplir les champs du modal
@@ -224,6 +224,6 @@ async function deleteSubmission() {
 
 function expandPhoto() {
     if (!currentModal.photo_filename) return;
-    const photoUrl = `/static/photo_submissions/${currentModal.photo_filename}`;
+    const photoUrl = `/uploads/photo_submissions/${currentModal.photo_filename}`;
     window.open(photoUrl, '_blank');
 }

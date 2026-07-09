@@ -1,10 +1,42 @@
 let vignetteVehiclesCache = [];
 let filteredVignetteVehiclesCache = [];
 let selectedVignetteVehicleId = null;
+let _mmvLastRefresh = Date.now();
+
+function _mmvUpdateLiveBadge() {
+    const badge = document.getElementById('mmv-live-badge');
+    if (!badge) return;
+    const secs = Math.round((Date.now() - _mmvLastRefresh) / 1000);
+    if (secs < 5) {
+        badge.className = 'badge bg-success ms-2 fw-normal align-middle';
+        badge.textContent = '● En direct';
+    } else if (secs < 35) {
+        badge.className = 'badge bg-secondary ms-2 fw-normal align-middle';
+        badge.textContent = `↻ il y a ${secs}s`;
+    } else {
+        badge.className = 'badge bg-warning text-dark ms-2 fw-normal align-middle';
+        badge.textContent = `↻ il y a ${secs}s`;
+    }
+}
+
+function setupVignetteAutoRefresh() {
+    _mmvUpdateLiveBadge();
+    setInterval(_mmvUpdateLiveBadge, 1000);
+
+    function doRefresh() {
+        if (document.hidden) return;
+        _mmvLastRefresh = Date.now();
+        _mmvUpdateLiveBadge();
+        loadVignettePayments();
+    }
+
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) doRefresh(); });
+    window.addEventListener('focus', doRefresh);
+    setInterval(doRefresh, 30000);
+}
 
 document.addEventListener('DOMContentLoaded', function () {
     const searchEl = document.getElementById('mm-vignette-search');
-    const refreshBtn = document.getElementById('mm-vignette-refresh-btn');
     const confirmBtn = document.getElementById('mm-vignette-confirm-btn');
 
     if (searchEl) {
@@ -13,17 +45,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', function () {
-            loadVignettePayments();
-        });
-    }
-
     if (confirmBtn) {
         confirmBtn.addEventListener('click', approveVignettePayment);
     }
 
     loadVignettePayments();
+    setupVignetteAutoRefresh();
 });
 
 function loadVignettePayments() {
@@ -40,7 +67,7 @@ function loadVignettePayments() {
         .then(function (data) {
             const vehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
             vignetteVehiclesCache = vehicles.filter(function (vehicle) {
-                return vehicle.vignette_status === 'expired' || vehicle.vignette_status === 'pending' || vehicle.vignette_payment_request_pending;
+                return vehicle.vignette_status === 'expired' || vehicle.vignette_status === 'pending' || vehicle.vignette_payment_request_pending || vehicle.renewal_needed;
             });
 
             vignetteVehiclesCache.sort(function (a, b) {
@@ -117,6 +144,8 @@ function renderVignetteVehicles(items) {
             ? '<span class="badge bg-success">Approuvé</span>'
             : pendingStatus || pendingRequest
             ? '<span class="badge bg-primary">Demande en attente</span>'
+            : vehicle.renewal_needed
+            ? '<span class="badge bg-info">À renouveler</span>'
             : '<span class="badge bg-warning text-dark">En attente</span>';
 
         const actionButton = approved
