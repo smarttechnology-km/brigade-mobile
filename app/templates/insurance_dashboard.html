@@ -71,6 +71,38 @@
         </div>
     </div>
 
+    <!-- Accidents & Alerts Section -->
+    <div class="row mb-4" id="alerts-section" style="display:none;">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm border-start border-danger border-4">
+                <div class="card-header bg-light border-bottom d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0 text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Accidents &amp; Alertes concernant vos véhicules</h6>
+                    <span class="badge bg-danger" id="alerts-count-badge">0</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="alerts-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:13%">Date</th>
+                                    <th style="width:12%">Type</th>
+                                    <th style="width:22%">Titre</th>
+                                    <th style="width:20%">Véhicule(s) concerné(s)</th>
+                                    <th style="width:10%">Île</th>
+                                    <th style="width:10%">Statut</th>
+                                    <th style="width:13%">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alerts-tbody">
+                                <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Vehicles Table -->
     <div class="row">
         <div class="col-12">
@@ -161,11 +193,32 @@
                 <div class="row">
                     <div class="col-12 mb-3">
                         <label class="form-label fw-semibold">
+                            <i class="fas fa-id-card text-primary me-1"></i>Numéros de permis des conducteurs <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group mb-2">
+                            <input type="text" id="edit-license-num-input" class="form-control" placeholder="Ex: KM-2024-001" autocomplete="off" />
+                            <button class="btn btn-outline-primary" type="button" onclick="editAddLicense()">
+                                <i class="fas fa-plus"></i> Ajouter
+                            </button>
+                        </div>
+                        <div id="edit-license-tags" class="d-flex flex-wrap gap-2 mb-1"></div>
+                        <small class="text-muted">Appuyez sur Entrée ou cliquez sur Ajouter pour chaque numéro.</small>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <label class="form-label fw-semibold">
                             <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
                         </label>
                         <div id="edit-dates-alert" class="alert alert-warning" style="display:none;">
                             <strong>Attention:</strong>
                             <span id="edit-dates-alert-text"></span>
+                        </div>
+                        <div class="d-flex gap-2 mb-2" id="edit-duration-btns" style="display:none;">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDurationDashboard(3)">3 mois</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDurationDashboard(6)">6 mois</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDurationDashboard(12)">12 mois</button>
                         </div>
                         <input type="date" id="edit-insurance-expiry" class="form-control" />
                     </div>
@@ -182,6 +235,80 @@
         </div>
     </div>
 </div>
+
+<!-- License Preview Modal (Côté A) -->
+<div class="modal fade" id="licensePreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:440px;">
+        <div class="modal-content border-0 shadow-lg" style="background:transparent;">
+            <div class="modal-header border-0 pb-0">
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" id="license-preview-body">
+                <div class="text-center py-5 text-white">
+                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.lp-card {
+    width: 410px;
+    border-radius: 0;
+    overflow: hidden;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    box-shadow: 0 12px 40px rgba(0,0,0,.35);
+}
+.lp-card.lp-pro { background: linear-gradient(170deg, #1a0509 0%, #4a0d1c 50%, #7a1530 100%); }
+.lp-card:not(.lp-pro) { background: linear-gradient(170deg, #0a1638 0%, #163074 50%, #1e40af 100%); }
+.lp-header {
+    padding: 10px 16px 8px;
+    position: relative;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.lp-header::after {
+    content:''; position:absolute; left:0; right:0; bottom:0; height:3px;
+    background: linear-gradient(90deg,#92400e,#fbbf24 35%,#fde68a 50%,#fbbf24 65%,#92400e);
+}
+.lp-flag { font-size:20px; }
+.lp-title { font-size:11px; font-weight:800; color:#fff; letter-spacing:.08em; text-transform:uppercase; }
+.lp-sub   { font-size:9px;  font-weight:700; color:#fbbf24; letter-spacing:.08em; text-transform:uppercase; }
+.lp-arabic { font-size:10px; font-weight:700; color:rgba(255,255,255,.88); text-align:right; line-height:1.4; direction:rtl; }
+.lp-body {
+    padding: 16px 18px 12px;
+    display: flex; flex-direction: column; align-items: center;
+    position: relative;
+}
+.lp-photo-row { display:flex; align-items:flex-start; gap:14px; width:100%; }
+.lp-photo { width:90px; height:110px; border-radius:4px; overflow:hidden; border:2px solid rgba(255,255,255,.2); flex-shrink:0; background:#1e3a8a; display:flex; align-items:center; justify-content:center; }
+.lp-photo img { width:100%; height:100%; object-fit:cover; }
+.lp-photo .lp-no-photo { font-size:2.5rem; color:rgba(255,255,255,.4); }
+.lp-photo-num { font-size:8px; font-weight:800; color:rgba(255,255,255,.6); text-align:center; margin-top:3px; letter-spacing:.05em; }
+.lp-identity { flex:1; }
+.lp-lbl { font-size:8px; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.5); font-weight:700; }
+.lp-name { font-size:15px; font-weight:600; color:rgba(255,255,255,.85); text-transform:uppercase; line-height:1.2; }
+.lp-divider { height:1px; background:rgba(255,255,255,.15); margin:6px 0; }
+.lp-field-lbl { font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:rgba(255,255,255,.5); font-weight:700; }
+.lp-field-val { font-size:12px; font-weight:700; color:#fff; }
+.lp-pro-badge { font-size:9px; color:#fbbf24; font-weight:800; letter-spacing:.06em; margin-top:4px; }
+.lp-validity {
+    width:100%; margin-top:8px;
+    background:rgba(255,255,255,.08); border:1px solid rgba(251,191,36,.25);
+    border-radius:6px; padding:5px 10px;
+    display:flex; justify-content:space-between; align-items:center;
+}
+.lp-fv-item { display:flex; flex-direction:column; align-items:center; gap:1px; }
+.lp-fv-lbl { font-size:7.5px; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.55); font-weight:700; }
+.lp-fv-val { font-size:11px; font-weight:800; color:#fde68a; }
+.lp-fv-sep { font-size:13px; color:rgba(255,255,255,.3); }
+.lp-cats { width:100%; margin-top:6px; display:flex; flex-wrap:wrap; gap:3px; }
+.lp-cat-chip { display:flex; align-items:center; gap:3px; background:rgba(255,255,255,.1); border:1px solid rgba(251,191,36,.22); border-radius:4px; padding:2px 7px; flex:1; min-width:80px; }
+.lp-cat-icon { font-size:10px; color:#fde68a; }
+.lp-cat-exp  { font-size:7px; color:rgba(255,255,255,.55); margin-left:auto; }
+.lp-footer { background:rgba(0,0,0,.25); border-top:1px solid rgba(255,255,255,.1); padding:6px 14px; text-align:center; }
+.lp-footer-text { font-size:7px; font-weight:700; color:rgba(255,255,255,.55); text-transform:uppercase; letter-spacing:.07em; }
+</style>
 
 <!-- Fine Details Modal -->
 <div class="modal fade" id="fineDetailsModal" tabindex="-1" aria-hidden="true">
@@ -233,5 +360,58 @@
     </div>
 </div>
 
+<!-- Alert Detail Modal -->
+<div class="modal fade" id="alertDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i><span id="alert-modal-title">Alerte</span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold text-muted small text-uppercase">Type</label>
+                        <div id="alert-modal-type" class="fw-bold"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold text-muted small text-uppercase">Île</label>
+                        <div id="alert-modal-island" class="fw-bold"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold text-muted small text-uppercase">Date</label>
+                        <div id="alert-modal-date" class="fw-bold"></div>
+                    </div>
+                </div>
+                <div class="mb-3" id="alert-modal-desc-row" style="display:none;">
+                    <label class="form-label fw-semibold text-muted small text-uppercase">Description</label>
+                    <div id="alert-modal-desc" class="border rounded p-2 bg-light"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold text-muted small text-uppercase">Véhicule(s) concerné(s)</label>
+                    <div id="alert-modal-vehicles" class="d-flex flex-wrap gap-2"></div>
+                </div>
+                <div id="alert-modal-photos-row" style="display:none;">
+                    <label class="form-label fw-semibold text-muted small text-uppercase">Photos</label>
+                    <div id="alert-modal-photos" class="d-flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i>Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function setInsuranceDurationDashboard(months) {
+    var today = new Date();
+    today.setMonth(today.getMonth() + months);
+    var y = today.getFullYear();
+    var m = String(today.getMonth() + 1).padStart(2, '0');
+    var d = String(today.getDate()).padStart(2, '0');
+    document.getElementById('edit-insurance-expiry').value = y + '-' + m + '-' + d;
+}
+</script>
 <script src="{{ url_for('static', filename='js/insurance-dashboard.js') }}"></script>
 {% endblock %}

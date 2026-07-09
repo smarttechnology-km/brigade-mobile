@@ -66,8 +66,11 @@
 
         <!-- TABLEAU DES SOUMISSIONS PHOTOS -->
         <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="fas fa-list me-2"></i>Photos Soumises</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="openReasonsModal()">
+                    <i class="fas fa-cog me-1"></i>Paramètres
+                </button>
             </div>
             <div class="card-body p-0">
             <div class="table-responsive">
@@ -461,6 +464,31 @@
   </div>
 </div>
 
+<!-- MODAL PARAMÈTRES : RAISONS DE SOUMISSION -->
+<div class="modal fade" id="reasonsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-cog me-2"></i>Raisons de la soumission</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Ces raisons sont affichées dans l'application mobile lors de la soumission d'une photo.</p>
+        <div class="input-group mb-3">
+          <input type="text" id="new-reason-input" class="form-control" placeholder="Nouvelle raison..." maxlength="200">
+          <button class="btn btn-primary" onclick="addReason()"><i class="fas fa-plus me-1"></i>Ajouter</button>
+        </div>
+        <ul class="list-group" id="reasons-list">
+          <li class="list-group-item text-center text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Chargement...</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // Function to expand photo in a separate modal
 function expandPhoto() {
@@ -563,7 +591,7 @@ function renderSubmissionsTable(submissions) {
                 <td class="small text-muted">${submittedDate}</td>
                 <td>${statusBadge}</td>
                 <td>
-                    <button class="btn btn-sm btn-primary" onclick="openPhotoModal(${sub.id})">
+                    <button class="btn btn-sm btn-primary" onclick="editVehicleFromSubmission(${sub.id}, '${escapeHtml(sub.license_plate || '')}')">
                         <i class="fas fa-edit"></i>
                     </button>
                     ${deleteButton}
@@ -613,7 +641,7 @@ async function openPhotoModal(submissionId) {
         photoPreviewContainer.innerHTML = '<div class="alert alert-info"><i class="fas fa-trash me-2"></i>Photo supprimée du serveur (résolution effectuée)</div>';
     } else {
         // Use static photo URL directly instead of API endpoint
-        const photoUrl = `/static/photo_submissions/${submission.photo_filename}`;
+        const photoUrl = `/uploads/photo_submissions/${submission.photo_filename}`;
         const img = document.createElement('img');
         img.id = 'photo-preview';
         img.src = photoUrl;
@@ -767,7 +795,7 @@ async function editVehicleFromSubmission(submissionId, licensePlate) {
     }
 
     // Afficher photo et infos de la soumission
-    const photoUrl = `/static/photo_submissions/${submission.photo_filename}`;
+    const photoUrl = `/uploads/photo_submissions/${submission.photo_filename}`;
     document.getElementById('vehicle-edit-photo').src = photoUrl;
     document.getElementById('expand-photo-btn').style.display = 'inline-block'; // Afficher le bouton Agrandir
     document.getElementById('vehicle-edit-plate').textContent = submission.license_plate || '-';
@@ -1016,9 +1044,14 @@ function renderTransfersTable(transfers) {
     }
 
     tbody.innerHTML = transfers.map(transfer => `
-        <tr style="cursor: pointer;" onclick="showTransferModal(${transfer.id})">
+        <tr>
             <td class="ps-4">${transfer.id}</td>
-            <td><strong>${transfer.vehicle?.license_plate || 'N/A'}</strong></td>
+            <td>
+                ${transfer.status === 'approved' && transfer.vehicle?.id
+                  ? `<a href="${transfer.vehicle.track_token ? `/track/${transfer.vehicle.track_token}` : `/vehicles/${transfer.vehicle.id}/track`}" class="fw-bold text-decoration-none" title="Voir le suivi du véhicule">${transfer.vehicle.license_plate}</a>`
+                  : `<strong>${transfer.vehicle?.license_plate || 'N/A'}</strong>`
+                }
+            </td>
             <td>
                 <span class="badge" style="background-color: ${getTypeColor(transfer.transfer_type)};">
                     ${getTypeLabel(transfer.transfer_type)}
@@ -1033,12 +1066,33 @@ function renderTransfersTable(transfers) {
                 </span>
             </td>
             <td class="text-end pe-4">
-                <button class="btn btn-sm btn-primary" title="Voir détails" onclick="event.stopPropagation(); showTransferModal(${transfer.id})">
+                <button class="btn btn-sm btn-primary me-1" title="Voir détails" onclick="showTransferModal(${transfer.id})">
                     <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-danger" title="Supprimer" onclick="deleteTransfer(${transfer.id})">
+                    <i class="fas fa-trash"></i>
                 </button>
             </td>
         </tr>
     `).join('');
+}
+
+async function deleteTransfer(transferId) {
+    if (!confirm('Supprimer ce transfert définitivement ?')) return;
+    try {
+        const res = await fetch(`/api/vehicle-transfers/${transferId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.error || 'Erreur lors de la suppression');
+            return;
+        }
+        loadTransfers();
+    } catch (e) {
+        alert('Erreur réseau');
+    }
 }
 
 async function showTransferModal(transferId) {
@@ -1083,7 +1137,7 @@ async function showTransferModal(transferId) {
                     <div class="card-body">
                         <h6 class="card-title mb-3">Informations</h6>
                         <div class="small text-muted">
-                            <p><strong>Plaque :</strong> ${plate}</p>
+                            <p><strong>Plaque :</strong> ${transfer.status === 'approved' && transfer.vehicle?.id ? `<a href="${transfer.vehicle.track_token ? `/track/${transfer.vehicle.track_token}` : `/vehicles/${transfer.vehicle.id}/track`}" target="_blank" class="fw-bold text-decoration-none">${plate} </a>` : plate}</p>
                             <p><strong>Type :</strong> ${getTypeLabel(transfer.transfer_type)}</p>
                             <p><strong>Statut :</strong>
                                 <span class="badge" style="background-color:${getStatusColor(transfer.status)};">
@@ -1108,7 +1162,10 @@ async function showTransferModal(transferId) {
             <div class="row mb-3">
                 <div class="col-md-6">
                     <label class="form-label">Plaque d'immatriculation</label>
-                    <input type="text" class="form-control" value="${plate}" readonly style="background-color:#e9ecef;">
+                    ${transfer.status === 'approved' && transfer.vehicle?.id
+                      ? `<div class="form-control d-flex align-items-center" style="background-color:#e9ecef;"><a href="${transfer.vehicle.track_token ? `/track/${transfer.vehicle.track_token}` : `/vehicles/${transfer.vehicle.id}/track`}" target="_blank" class="fw-bold text-decoration-none">${plate} </a></div>`
+                      : `<input type="text" class="form-control" value="${plate}" readonly style="background-color:#e9ecef;">`
+                    }
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Type de transfert</label>
@@ -1413,6 +1470,76 @@ function formatDatetime(dateString) {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleString('fr-FR');
+}
+
+// ── Raisons de soumission ────────────────────────────────────────────────────
+
+async function openReasonsModal() {
+    await loadReasons();
+    new bootstrap.Modal(document.getElementById('reasonsModal')).show();
+}
+
+async function loadReasons() {
+    const list = document.getElementById('reasons-list');
+    list.innerHTML = '<li class="list-group-item text-center text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Chargement...</li>';
+    try {
+        const res = await fetch('/api/photo-submission-reasons/manage');
+        const data = await res.json();
+        if (!data.length) {
+            list.innerHTML = '<li class="list-group-item text-muted text-center">Aucune raison configurée</li>';
+            return;
+        }
+        list.innerHTML = data.map(r => {
+            const isAutre = r.label.trim().toLowerCase() === 'autre';
+            const controls = isAutre
+                ? `<span class="badge bg-secondary ms-2" title="Ne peut pas être modifié">Fixe</span>`
+                : `<div class="d-flex align-items-center gap-2 flex-shrink-0">
+                       <div class="form-check form-switch mb-0" title="${r.is_active ? 'Actif — cliquer pour désactiver' : 'Inactif — cliquer pour activer'}">
+                           <input class="form-check-input" type="checkbox" role="switch" ${r.is_active ? 'checked' : ''}
+                               onchange="toggleReason(${r.id}, this.checked)">
+                       </div>
+                       <button class="btn btn-sm btn-outline-danger" onclick="deleteReason(${r.id})" title="Supprimer">
+                           <i class="fas fa-trash"></i>
+                       </button>
+                   </div>`;
+            return `<li class="list-group-item d-flex justify-content-between align-items-center gap-2" id="reason-item-${r.id}">
+                <span id="reason-label-${r.id}" style="${r.is_active ? '' : 'text-decoration:line-through;color:#aaa;'}">${escapeHtml(r.label)}</span>
+                ${controls}
+            </li>`;
+        }).join('');
+    } catch(e) {
+        list.innerHTML = '<li class="list-group-item text-danger text-center">Erreur de chargement</li>';
+    }
+}
+
+async function addReason() {
+    const input = document.getElementById('new-reason-input');
+    const label = input.value.trim();
+    if (!label) return;
+    const res = await fetch('/api/photo-submission-reasons', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({label})
+    });
+    if (!res.ok) { alert('Erreur lors de l\'ajout'); return; }
+    input.value = '';
+    await loadReasons();
+}
+
+async function toggleReason(id, active) {
+    await fetch(`/api/photo-submission-reasons/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({is_active: active})
+    });
+    await loadReasons();
+}
+
+async function deleteReason(id) {
+    if (!confirm('Supprimer cette raison définitivement ?')) return;
+    const res = await fetch(`/api/photo-submission-reasons/${id}`, {method: 'DELETE'});
+    if (!res.ok) { alert('Erreur lors de la suppression'); return; }
+    await loadReasons();
 }
 </script>
 {% endblock %}

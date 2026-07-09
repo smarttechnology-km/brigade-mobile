@@ -55,9 +55,11 @@
             </button>
             <div class="flex-grow-1 text-center">
                 {% if current_user.is_authenticated and (current_user.is_insurance_account or (current_user.role == 'agent_impot')) %}
-                <span class="text-white fw-bold" style="font-size: 1.1rem;">Police Comores</span>
+                <span class="text-white fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</span>
+                {% elif current_user.is_authenticated and current_user.role == 'dgrtr' %}
+                <a href="/dgrtr-dashboard" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</a>
                 {% else %}
-                <a href="/" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">Police Comores</a>
+                <a href="/" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</a>
                 {% endif %}
             </div>
             <div style="width: 40px;"></div>
@@ -73,12 +75,17 @@
             {% if current_user.is_authenticated and (current_user.is_insurance_account or (current_user.role == 'agent_impot')) %}
             <span class="navbar-brand text-white d-inline-block">
                 <i class="fas fa-car"></i>
-                <span class="ms-2">Police Comores</span>
+                <span class="ms-2">S.I.G.V.A</span>
             </span>
+            {% elif current_user.is_authenticated and current_user.role == 'dgrtr' %}
+            <a class="navbar-brand text-white" href="/dgrtr-dashboard">
+                <i class="fas fa-car"></i>
+                <span class="ms-2">S.I.G.V.A</span>
+            </a>
             {% else %}
             <a class="navbar-brand text-white" href="/">
                 <i class="fas fa-car"></i>
-                <span class="ms-2">Police Comores</span>
+                <span class="ms-2">S.I.G.V.A</span>
             </a>
             {% endif %}
         </div>
@@ -107,28 +114,50 @@
             <a class="nav-link text-white {% if request.path.startswith('/uninsured-vehicles') %}active{% endif %}" href="/uninsured-vehicles"><i class="fas fa-car me-2"></i> Véhicules à Assurer</a>
             <a class="nav-link text-white {% if request.path.startswith('/add-vehicle-insurance') %}active{% endif %}" href="/add-vehicle-insurance"><i class="fas fa-plus-circle me-2"></i> Ajouter un Véhicule</a>
             <a class="nav-link text-white {% if request.path.startswith('/insurance-reports') %}active{% endif %}" href="/insurance-reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
+            <a class="nav-link text-white {% if request.path.startswith('/insurance-sigva') %}active{% endif %}" href="/insurance-sigva"><i class="fas fa-satellite-dish me-2"></i> Service S.I.G.V.A</a>
             <a class="nav-link text-white {% if request.path.startswith('/insurance-profile') %}active{% endif %}" href="/insurance-profile"><i class="fas fa-user-circle me-2"></i> Mon Profil</a>
             {% endif %}
             
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
             <a class="nav-link text-white {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard"><i class="fas fa-chart-line me-2"></i> Dashboard</a>
             <a class="nav-link text-white {% if request.path.startswith('/vehicles') %}active{% endif %}" href="/vehicles"><i class="fas fa-car-side me-2"></i> Véhicules</a>
+            <a class="nav-link text-white {% if request.path.startswith('/licenses') %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
+            {% endif %}
+
+            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'policier')) %}
+            <a class="nav-link text-white {% if request.path.startswith('/fines') and not request.path.startswith('/fines/receipt') and not request.path.startswith('/fines/stats') %}active{% endif %}" href="/fines"><i class="fas fa-file-invoice-dollar me-2"></i> Amendes</a>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.is_admin %}
+            <a class="nav-link text-white {% if request.path.startswith('/fines/stats') %}active{% endif %}" href="/fines/stats"><i class="fas fa-chart-bar me-2"></i> Stats Amendes</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}
-            <a class="nav-link text-white {% if request.path.startswith('/fines') and not request.path.startswith('/fines/receipt') and not request.path.startswith('/fines/stats') %}active{% endif %}" href="/fines"><i class="fas fa-file-invoice-dollar me-2"></i> Amendes</a>
-            {% if current_user.is_admin or (current_user.role == 'judiciaire') %}
-            <a class="nav-link text-white {% if request.path.startswith('/fines/stats') %}active{% endif %}" href="/fines/stats"><i class="fas fa-chart-bar me-2"></i> Stats Amendes</a>
-            {% endif %}
+            <a class="nav-link text-white {% if request.path.startswith('/alerts') %}active{% endif %}" href="/alerts"><i class="fas fa-exclamation-triangle me-2"></i> Alertes</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
-            <a class="nav-link text-white {% if request.path.startswith('/payments') or request.path.startswith('/fines/receipt') %}active{% endif %}" href="/payments"><i class="fas fa-credit-card me-2"></i> Paiements</a>
             <a class="nav-link text-white {% if request.path.startswith('/reports') %}active{% endif %}" href="/reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'policier') %}
             <a class="nav-link text-white {% if request.path.startswith('/payments') or request.path.startswith('/fines/receipt') %}active{% endif %}" href="/payments"><i class="fas fa-credit-card me-2"></i> Paiements</a>
+            <a class="nav-link text-white {% if request.path.startswith('/recherche') %}active{% endif %}" href="/recherche"><i class="fas fa-search me-2"></i> Recherche</a>
+            {% endif %}
+
+            {% if current_user.is_authenticated and (current_user.role == 'dgrtr') %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis</a>
+            {% if current_user.dgrtr_type == 'employe' %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr/ajouter-permis' %}active{% endif %}" href="/dgrtr/ajouter-permis"><i class="fas fa-plus-circle me-2"></i> Ajouter un permis</a>
+            {% endif %}
+            {% if current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr-dossiers-complets' %}active{% endif %}" href="/dgrtr-dossiers-complets"><i class="fas fa-check-circle me-2"></i> Dossiers Complétés</a>
+            {% endif %}
+            {% if current_user.dgrtr_type != 'employe' %}
+            <a class="nav-link text-white {% if request.path == '/licenses' %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
+            {% endif %}
+            {% if current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr-statistiques' %}active{% endif %}" href="/dgrtr-statistiques"><i class="fas fa-chart-bar me-2"></i> Statistiques</a>
+            {% endif %}
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'agent_impot') %}
@@ -140,17 +169,18 @@
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'mobile_money_agent') %}
-            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-dashboard') %}active{% endif %}" href="/mobile-money-dashboard"><i class="fas fa-wallet me-2"></i> Dashboard Mobile Money</a>
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-dashboard') %}active{% endif %}" href="/mobile-money-dashboard"><i class="fas fa-wallet me-2"></i> Dashboard Money</a>
             <a class="nav-link text-white {% if request.path.startswith('/mobile-money-vignettes') %}active{% endif %}" href="/mobile-money-vignettes"><i class="fas fa-ticket-alt me-2"></i> Paiement Vignettes</a>
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-qr-renewal') %}active{% endif %}" href="/mobile-money-qr-renewal"><i class="fas fa-qrcode me-2"></i> Renouvellement QR</a>
             <a class="nav-link text-white {% if request.path.startswith('/mobile-money-archive') %}active{% endif %}" href="/mobile-money-archive"><i class="fas fa-archive me-2"></i> Archive Paiements</a>
             {% endif %}
 
-            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}
+            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'policier')) %}
             <a class="nav-link text-white {% if request.path.startswith('/phones') and not request.path.startswith('/phone-') %}active{% endif %}" href="/phones"><i class="fas fa-mobile-alt me-2"></i> Téléphones</a>
             <a class="nav-link text-white {% if request.path.startswith('/phone-usage') %}active{% endif %}" href="/phone-usage"><i class="fas fa-history me-2"></i> Historique Téléphones</a>
-            {% if current_user.is_admin or (current_user.role == 'judiciaire') %}
-            <a class="nav-link text-white {% if request.path.startswith('/photo-submissions') %}active{% endif %}" href="/photo-submissions"><i class="fas fa-images me-2"></i> Soumission <span id="photo-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% endif %}
+            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+            <a class="nav-link text-white {% if request.path.startswith('/photo-submissions') %}active{% endif %}" href="/photo-submissions"><i class="fas fa-images me-2"></i> Soumission <span id="photo-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% endif %}
 
             {% if current_user.is_authenticated and current_user.is_admin %}
@@ -158,56 +188,50 @@
             {% endif %}
 
             {% if current_user.is_authenticated %}
-            <div class="px-3 mt-3">
-                        <div class="d-grid gap-2">
-                            {% if not current_user.is_insurance_account %}
-                            <a href="/profile" class="btn btn-light btn-sm">Mon profil</a>
-                            {% endif %}
-                            <button onclick="toggleTheme()" class="btn btn-outline-light btn-sm" id="themeToggle" title="Basculer thème sombre/clair">
-                                <i class="fas fa-moon"></i>
-                            </button>
-                            <script>
-                                (function() {
-                                    const html = document.documentElement;
-                                    const currentTheme = html.getAttribute('data-bs-theme') || 'light';
-                                    const themeBtn = document.getElementById('themeToggle');
-                                    if (themeBtn) {
-                                        themeBtn.innerHTML = currentTheme === 'dark' ?
-                                            '<i class="fas fa-sun"></i>' :
-                                            '<i class="fas fa-moon"></i>';
-                                    }
-                                })();
-                            </script>
-                            <script>
-                                // Load pending photo submissions count
-                                function updatePhotoCount() {
-                                    fetch('/api/photo-submissions/count-pending')
-                                        .then(r => r.json())
-                                        .then(data => {
-                                            const badge = document.getElementById('photo-count-badge');
-                                            if (badge) {
-                                                const count = data.pending_count || 0;
-                                                if (count > 0) {
-                                                    badge.textContent = count;
-                                                    badge.style.display = 'inline-block';
-                                                } else {
-                                                    badge.style.display = 'none';
-                                                }
-                                            }
-                                        })
-                                        .catch(err => console.error('Error loading photo count:', err));
-                                }
-                                
-                                // Load count on page load
-                                document.addEventListener('DOMContentLoaded', updatePhotoCount);
-                                
-                                // Refresh count every 30 seconds
-                                setInterval(updatePhotoCount, 30000);
-                            </script>
-                            <a href="/auth/logout" class="btn btn-outline-light btn-sm w-100">Se déconnecter</a>
-                        </div>
+            <div class="px-2 mt-2 pb-2 border-top border-secondary pt-2">
+                <div class="d-flex gap-1">
+                    {% if not current_user.is_insurance_account %}
+                    <a href="/profile" class="btn btn-light btn-sm flex-fill" title="Mon profil">
+                        <i class="fas fa-user"></i>
+                    </a>
+                    {% endif %}
+                    <button onclick="toggleTheme()" class="btn btn-outline-light btn-sm flex-fill" id="themeToggle" title="Thème sombre / clair" style="padding:6px 0;">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <a href="/auth/logout" class="btn btn-outline-danger btn-sm flex-fill" title="Se déconnecter" style="padding:6px 0;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </a>
                 </div>
             </div>
+            <script>
+                (function() {
+                    const html = document.documentElement;
+                    const currentTheme = html.getAttribute('data-bs-theme') || 'light';
+                    const themeBtn = document.getElementById('themeToggle');
+                    if (themeBtn) {
+                        themeBtn.innerHTML = currentTheme === 'dark' ?
+                            '<i class="fas fa-sun"></i>' :
+                            '<i class="fas fa-moon"></i>';
+                    }
+                })();
+            </script>
+            <script>
+                function updatePhotoCount() {
+                    fetch('/api/photo-submissions/count-pending')
+                        .then(r => r.json())
+                        .then(data => {
+                            const badge = document.getElementById('photo-count-badge');
+                            if (badge) {
+                                const count = data.pending_count || 0;
+                                badge.textContent = count;
+                                badge.style.display = count > 0 ? 'inline-block' : 'none';
+                            }
+                        })
+                        .catch(() => {});
+                }
+                document.addEventListener('DOMContentLoaded', updatePhotoCount);
+                setInterval(updatePhotoCount, 30000);
+            </script>
             {% else %}
             <a class="nav-link text-white mt-3" href="/auth/login"><i class="fas fa-sign-in-alt me-2"></i> Se connecter</a>
             {% endif %}

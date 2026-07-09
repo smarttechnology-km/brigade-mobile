@@ -520,7 +520,7 @@
 
             <div id="dm-suspend-section" style="display:none;">
               <hr class="dm-hr">
-              <h6 class="fw-bold text-uppercase mb-2" style="font-size:.72rem;letter-spacing:.08em;"><i class="fas fa-ban me-1"></i>Suspendre ce permis</h6>
+              <h6 class="fw-bold text-uppercase mb-2" style="font-size:.72rem;letter-spacing:.08em;"><i class="fas fa-ban me-1"></i>Suspendre ce véhicule</h6>
               <div class="mb-2">
                 <input type="text" class="form-control" id="dm-motif" placeholder="Motif de suspension (obligatoire)">
               </div>
@@ -590,6 +590,7 @@ const STATUS_LABELS = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqu�
 
 let searchResults = [];
 let currentLicenseId = null;
+let currentVehicleId = null;
 let currentPhotoUrl = null;
 let currentModalVehicles = [];
 let galleryItems = [];
@@ -751,6 +752,7 @@ async function openDetails(licId, vehicleId) {
   if (!lic) return;
 
   currentLicenseId = licId;
+  currentVehicleId = vehicleId;
   currentPhotoUrl = lic.photo_url || null;
 
   document.getElementById('dm-title').textContent = `Permis N° ${lic.license_number}`;
@@ -861,7 +863,7 @@ async function openDetails(licId, vehicleId) {
   const suspendSection = document.getElementById('dm-suspend-section');
   document.getElementById('dm-motif').value = '';
   document.getElementById('dm-suspend-error').style.display = 'none';
-  suspendSection.style.display = (lic.status === 'actif' && !isExp) ? '' : 'none';
+  suspendSection.style.display = (vehicle && vehicle.status === 'active') ? '' : 'none';
 }
 
 async function confirmSuspend() {
@@ -877,7 +879,7 @@ async function confirmSuspend() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Suspension…';
   try {
-    const resp = await fetch(`/api/licenses/${currentLicenseId}/suspend`, {
+    const resp = await fetch(`/api/vehicles/${currentVehicleId}/suspend`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ motif })
@@ -888,17 +890,13 @@ async function confirmSuspend() {
       errEl.style.display = '';
       return;
     }
+    // Update vehicle status in cache and hide suspend section
     for (const item of searchResults) {
-      for (let i = 0; i < item.licenses.length; i++) {
-        if (item.licenses[i].id === currentLicenseId) item.licenses[i] = { ...item.licenses[i], ...data };
+      if (item.vehicle.id === currentVehicleId) {
+        item.vehicle.status = 'suspended';
       }
     }
-    const tile = document.getElementById(`tile-${currentLicenseId}`);
-    if (tile) {
-      const vehicle = searchResults.find(r => r.licenses.some(l => l.id === currentLicenseId))?.vehicle;
-      const lic = searchResults.flatMap(r => r.licenses).find(l => l.id === currentLicenseId);
-      if (lic && vehicle) tile.outerHTML = renderLicenseTile(lic, vehicle);
-    }
+    document.getElementById('dm-suspend-section').style.display = 'none';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal')).hide();
   } catch (e) {
     errEl.textContent = 'Erreur réseau.';
