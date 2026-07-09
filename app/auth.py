@@ -20,9 +20,6 @@ def load_user(user_id):
             return InsuranceAccount.query.get(account_id)
         if account_type == 'user':
             return User.query.get(account_id)
-        if account_type == 'smarttech':
-            from app.models import SmartTechAccount
-            return SmartTechAccount.query.get(account_id)
         return None
 
     # Backward compatibility for old sessions that stored only numeric IDs.
@@ -45,8 +42,6 @@ def login():
             return redirect(url_for('main.insurance_dashboard'))
         if getattr(current_user, 'role', None) == 'mobile_money_agent':
             return redirect(url_for('main.mobile_money_dashboard'))
-        if getattr(current_user, 'role', None) == 'dgrtr':
-            return redirect(url_for('main.dgrtr_dashboard'))
         return redirect(url_for('main.index'))
 
     if request.method == 'POST':
@@ -86,8 +81,6 @@ def login():
             next_page = request.args.get('next')
             if getattr(user, 'role', None) == 'mobile_money_agent':
                 return redirect(next_page or url_for('main.mobile_money_dashboard'))
-            if getattr(user, 'role', None) == 'dgrtr':
-                return redirect(next_page or url_for('main.dgrtr_dashboard'))
             return redirect(next_page or url_for('main.index'))
         
         flash('Nom d\'utilisateur ou mot de passe incorrect', 'danger')

@@ -11,12 +11,6 @@ from sqlalchemy import text
 import os
 import logging
 
-# Load variables from a local .env file (development convenience). In production
-# (Render), env vars are set directly in the dashboard and this is a no-op if no
-# .env file is present.
-from dotenv import load_dotenv
-load_dotenv()
-
 logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
@@ -29,22 +23,11 @@ def create_app():
     # Configuration
     basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     db_path = os.path.join(basedir, 'police.db')
-    database_url = os.environ.get('DATABASE_URL', f'sqlite:///{db_path}')
-    # Render fournit parfois "postgres://" (ancien format) — SQLAlchemy veut "postgresql://"
-    if database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_pre_ping': True,
-        'pool_recycle': 280,
-    }
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+    app.config['SECRET_KEY'] = 'dev-secret-key-change-in-production'
     # JWT configuration (used by mobile app)
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-change')
-    # Upload folder: persistent disk on Render (/data), local static folder in dev
-    _default_upload = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
-    app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', _default_upload)
 
     # Initialiser la base de données
     db.init_app(app)
@@ -62,14 +45,12 @@ def create_app():
     from app.auth import auth_bp
     from app.citizen_auth import citizen_auth_bp
     from app.mobile_pay import mobile_pay_bp
-    from app.smart_tech import smart_tech_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(vehicle_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(citizen_auth_bp)
     app.register_blueprint(mobile_pay_bp)
-    app.register_blueprint(smart_tech_bp)
 
     # Enable CORS for API endpoints during development (restrict in production)
     CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -190,7 +171,7 @@ def create_app():
         tasks_set_app(app)
 
         # Add the exoneration task to run every hour
-        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_late_rates
+        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry
         scheduler.add_job(
             func=process_exonerated_fines,
             trigger=IntervalTrigger(hours=1),
@@ -217,42 +198,8 @@ def create_app():
             replace_existing=True
         )
 
-        # Send push notifications for vignette/insurance expiry daily at 08:00 AM
-        scheduler.add_job(
-            func=send_expiry_notifications,
-            trigger=CronTrigger(hour=8, minute=0),
-            id='send_expiry_notifications',
-            name='Send vignette and insurance expiry push notifications daily at 08:00 AM',
-            replace_existing=True
-        )
-
-        # Apply fine late-rate increases to unpaid fines daily at 09:00 AM
-        scheduler.add_job(
-            func=apply_fine_late_rates,
-            trigger=CronTrigger(hour=9, minute=0),
-            id='apply_fine_late_rates',
-            name='Apply late-rate percentage increases to unpaid fines daily at 09:00 AM',
-            replace_existing=True
-        )
-
     # Créer les tables et s'assurer que l'admin existe
     with app.app_context():
-        # Si license_dossiers.nom est NOT NULL (ancienne version), on recrée la table proprement
-        try:
-            if str(app.config.get('SQLALCHEMY_DATABASE_URI', '')).startswith('sqlite'):
-                from sqlalchemy import text as _text
-                with db.engine.connect() as _conn:
-                    _tbl = _conn.execute(_text(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name='license_dossiers'"
-                    )).first()
-                    if _tbl:
-                        _cols = {row[1]: row[3] for row in _conn.execute(_text("PRAGMA table_info(license_dossiers)")).fetchall()}
-                        if _cols.get('nom', 0) == 1:
-                            _conn.execute(_text("DROP TABLE license_dossiers"))
-                            logger.info("Dropped license_dossiers (nom was NOT NULL) — will recreate")
-        except Exception as _e:
-            logger.warning(f"Could not check/drop license_dossiers: {_e}")
-
         db.create_all()
 
         # SQLite compatibility guard:
@@ -274,11 +221,6 @@ def create_app():
                                 text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
                             )
                             logger.info("Added missing users.session_version column for SQLite compatibility")
-                        if 'dgrtr_type' not in existing_columns:
-                            conn.execute(
-                                text("ALTER TABLE users ADD COLUMN dgrtr_type VARCHAR(30)")
-                            )
-                            logger.info("Added missing users.dgrtr_type column for SQLite compatibility")
 
                     vehicle_owners_table_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicle_owners'")
@@ -312,51 +254,7 @@ def create_app():
                         vehicle_columns = {
                             row[1] for row in conn.execute(text("PRAGMA table_info(vehicles)" )).fetchall()
                         }
-                        # Patch fines table
-                        fines_table_exists = conn.execute(
-                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='fines'")
-                        ).first() is not None
-                        if fines_table_exists:
-                            fine_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(fines)")).fetchall()}
-                            if 'base_amount' not in fine_columns:
-                                conn.execute(text("ALTER TABLE fines ADD COLUMN base_amount NUMERIC(10,2)"))
-                                conn.execute(text("UPDATE fines SET base_amount = amount WHERE base_amount IS NULL"))
-                                logger.info("Added fines.base_amount column and backfilled from amount")
-                            if 'photo_filename' not in fine_columns:
-                                conn.execute(text("ALTER TABLE fines ADD COLUMN photo_filename VARCHAR(255)"))
-                                logger.info("Added fines.photo_filename column")
-
-                        # Patch payments table
-                        payments_table_exists = conn.execute(
-                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='payments'")
-                        ).first() is not None
-                        if payments_table_exists:
-                            payment_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(payments)")).fetchall()}
-                            if 'destination_phone' not in payment_columns:
-                                conn.execute(text("ALTER TABLE payments ADD COLUMN destination_phone VARCHAR(20)"))
-                                logger.info("Added missing payments.destination_phone column")
-
-                        # Patch huri_destination_settings table (per-field update tracking)
-                        huri_dest_table_exists = conn.execute(
-                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='huri_destination_settings'")
-                        ).first() is not None
-                        if huri_dest_table_exists:
-                            huri_dest_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(huri_destination_settings)")).fetchall()}
-                            huri_dest_column_definitions = {
-                                'fine_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN fine_phone_updated_at DATETIME",
-                                'fine_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN fine_phone_updated_by VARCHAR(80)",
-                                'vignette_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN vignette_phone_updated_at DATETIME",
-                                'vignette_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN vignette_phone_updated_by VARCHAR(80)",
-                                'qr_renewal_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN qr_renewal_phone_updated_at DATETIME",
-                                'qr_renewal_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN qr_renewal_phone_updated_by VARCHAR(80)",
-                            }
-                            for column_name, alter_sql in huri_dest_column_definitions.items():
-                                if column_name not in huri_dest_columns:
-                                    conn.execute(text(alter_sql))
-                                    logger.info(f"Added missing huri_destination_settings.{column_name} column")
-
                         vehicle_column_definitions = {
-                            'track_token': "ALTER TABLE vehicles ADD COLUMN track_token VARCHAR(36)",
                             'vignette_payment_approved': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved BOOLEAN NOT NULL DEFAULT 0",
                             'vignette_payment_approved_at': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved_at DATETIME",
                             'vignette_payment_approved_by': "ALTER TABLE vehicles ADD COLUMN vignette_payment_approved_by VARCHAR(80)",
@@ -365,238 +263,18 @@ def create_app():
                             'vignette_payment_requested_by': "ALTER TABLE vehicles ADD COLUMN vignette_payment_requested_by VARCHAR(80)",
                             'vignette_payment_requested_expiry': "ALTER TABLE vehicles ADD COLUMN vignette_payment_requested_expiry DATETIME",
                             'vignette_last_paid_at': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_at DATETIME",
-                            'vignette_last_paid_by': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_by VARCHAR(150)",
                             'vignette_last_paid_vignette_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_vignette_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_penalty_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_penalty_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_fines_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_fines_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_total_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_total_amount FLOAT NOT NULL DEFAULT 0.0",
-                            'created_by': "ALTER TABLE vehicles ADD COLUMN created_by VARCHAR(80)",
-                            'qr_renewed_by': "ALTER TABLE vehicles ADD COLUMN qr_renewed_by VARCHAR(80)",
                         }
                         for column_name, alter_sql in vehicle_column_definitions.items():
                             if column_name not in vehicle_columns:
                                 conn.execute(text(alter_sql))
                                 logger.info(f"Added missing vehicles.{column_name} column for SQLite compatibility")
-
-                        # Backfill track_token for vehicles that have NULL (created before the column existed)
-                        if 'track_token' in vehicle_columns or 'track_token' not in vehicle_columns:
-                            import uuid as _uuid
-                            null_tokens = conn.execute(
-                                text("SELECT id FROM vehicles WHERE track_token IS NULL OR track_token = ''")
-                            ).fetchall()
-                            for (vid,) in null_tokens:
-                                conn.execute(
-                                    text("UPDATE vehicles SET track_token = :token WHERE id = :id"),
-                                    {'token': str(_uuid.uuid4()), 'id': vid}
-                                )
-                            if null_tokens:
-                                logger.info(f"Backfilled track_token for {len(null_tokens)} vehicle(s)")
-                    via_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(vehicle_insurance_assignments)")).fetchall()}
-                    if 'driver_license_numbers' not in via_cols:
-                        conn.execute(text("ALTER TABLE vehicle_insurance_assignments ADD COLUMN driver_license_numbers TEXT"))
-                        logger.info("Added missing vehicle_insurance_assignments.driver_license_numbers column")
-
-                    st_subs_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_subscriptions'")
-                    ).first() is not None
-                    if st_subs_exists:
-                        sub_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(st_subscriptions)")).fetchall()}
-                        st_sub_col_defs = {
-                            'payment_mode': "ALTER TABLE st_subscriptions ADD COLUMN payment_mode VARCHAR(20) NOT NULL DEFAULT 'manuel'",
-                            'last_paid_at': "ALTER TABLE st_subscriptions ADD COLUMN last_paid_at DATETIME",
-                            'last_paid_by': "ALTER TABLE st_subscriptions ADD COLUMN last_paid_by VARCHAR(80)",
-                            'phone_id':     "ALTER TABLE st_subscriptions ADD COLUMN phone_id INTEGER",
-                            'start_date':   "ALTER TABLE st_subscriptions ADD COLUMN start_date DATE",
-                            'employee_id':  "ALTER TABLE st_subscriptions ADD COLUMN employee_id INTEGER REFERENCES st_employees(id)",
-                        }
-                        for col, sql in st_sub_col_defs.items():
-                            if col not in sub_cols:
-                                conn.execute(text(sql))
-                                logger.info(f"Added missing st_subscriptions.{col} column")
-
-                    st_exp_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_expenses'")
-                    ).first() is not None
-                    if not st_exp_exists:
-                        conn.execute(text(
-                            "CREATE TABLE IF NOT EXISTS st_expenses ("
-                            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                            "description VARCHAR(200) NOT NULL,"
-                            "category VARCHAR(80) NOT NULL,"
-                            "amount FLOAT NOT NULL DEFAULT 0.0,"
-                            "expense_date DATE NOT NULL,"
-                            "vendor VARCHAR(120),"
-                            "notes TEXT,"
-                            "created_at DATETIME NOT NULL,"
-                            "created_by VARCHAR(80)"
-                            ")"
-                        ))
-                        logger.info("Created st_expenses table")
-
-                    st_accts_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='smart_tech_accounts'")
-                    ).first() is not None
-                    if st_accts_exists:
-                        acct_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(smart_tech_accounts)")).fetchall()}
-                        if 'employee_id' not in acct_cols:
-                            conn.execute(text("ALTER TABLE smart_tech_accounts ADD COLUMN employee_id INTEGER REFERENCES st_employees(id)"))
-                            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_smart_tech_accounts_employee_id ON smart_tech_accounts(employee_id) WHERE employee_id IS NOT NULL"))
-                            logger.info("Added missing smart_tech_accounts.employee_id column")
-                        if 'role' not in acct_cols:
-                            conn.execute(text("ALTER TABLE smart_tech_accounts ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'admin'"))
-                            logger.info("Added missing smart_tech_accounts.role column")
-
-                    st_emp_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_employees'")
-                    ).first() is not None
-                    if not st_emp_exists:
-                        conn.execute(text(
-                            "CREATE TABLE IF NOT EXISTS st_employees ("
-                            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                            "first_name VARCHAR(80) NOT NULL,"
-                            "last_name VARCHAR(80) NOT NULL,"
-                            "phone VARCHAR(30),"
-                            "email VARCHAR(120),"
-                            "island VARCHAR(50),"
-                            "position VARCHAR(100) NOT NULL,"
-                            "salary FLOAT NOT NULL DEFAULT 0.0,"
-                            "hire_date DATE,"
-                            "status VARCHAR(20) NOT NULL DEFAULT 'actif',"
-                            "notes TEXT,"
-                            "created_at DATETIME NOT NULL,"
-                            "created_by VARCHAR(80)"
-                            ")"
-                        ))
-                        logger.info("Created st_employees table")
-
-                    dl_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(driver_licenses)")).fetchall()}
-                    dl_col_defs = {
-                        'nationalite':           "ALTER TABLE driver_licenses ADD COLUMN nationalite VARCHAR(100)",
-                        'sexe':                  "ALTER TABLE driver_licenses ADD COLUMN sexe VARCHAR(10)",
-                        'points':                "ALTER TABLE driver_licenses ADD COLUMN points INTEGER NOT NULL DEFAULT 12",
-                        'holder_firstname':      "ALTER TABLE driver_licenses ADD COLUMN holder_firstname VARCHAR(100)",
-                        'lieu_naissance':        "ALTER TABLE driver_licenses ADD COLUMN lieu_naissance VARCHAR(150)",
-                        'centre_immatriculation':"ALTER TABLE driver_licenses ADD COLUMN centre_immatriculation VARCHAR(150)",
-                        'type_permis':           "ALTER TABLE driver_licenses ADD COLUMN type_permis VARCHAR(20) NOT NULL DEFAULT 'permanent'",
-                        'registered_phone':      "ALTER TABLE driver_licenses ADD COLUMN registered_phone VARCHAR(20)",
-                        'registered_at':         "ALTER TABLE driver_licenses ADD COLUMN registered_at DATETIME",
-                        'category_details':      "ALTER TABLE driver_licenses ADD COLUMN category_details TEXT",
-                    }
-                    for col, sql in dl_col_defs.items():
-                        if col not in dl_cols:
-                            conn.execute(text(sql))
-                            logger.info(f"Added missing driver_licenses.{col} column")
-
-                    ls_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(license_settings)")).fetchall()}
-                    if 'directeur_general_name' not in ls_cols:
-                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN directeur_general_name VARCHAR(150)"))
-                        logger.info("Added missing license_settings.directeur_general_name column")
-                    if 'directeur_signature_filename' not in ls_cols:
-                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN directeur_signature_filename VARCHAR(255)"))
-                        logger.info("Added missing license_settings.directeur_signature_filename column")
-                    if 'permanent_validity_years' not in ls_cols:
-                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN permanent_validity_years INTEGER NOT NULL DEFAULT 10"))
-                        logger.info("Added missing license_settings.permanent_validity_years column")
-                    if 'category_validity' not in ls_cols:
-                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN category_validity TEXT"))
-                        logger.info("Added missing license_settings.category_validity column")
-
-                    lpr_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='license_print_requests'")
-                    ).first() is not None
-                    if lpr_exists:
-                        lpr_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(license_print_requests)")).fetchall()}
-                        if 'unit_price' not in lpr_cols:
-                            conn.execute(text("ALTER TABLE license_print_requests ADD COLUMN unit_price FLOAT NOT NULL DEFAULT 0"))
-                            logger.info("Added missing license_print_requests.unit_price column")
-
-                    alerts_table_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='alerts'")
-                    ).first() is not None
-                    if alerts_table_exists:
-                        alert_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(alerts)")).fetchall()}
-                        if 'contact_phones' not in alert_cols:
-                            conn.execute(text("ALTER TABLE alerts ADD COLUMN contact_phones TEXT"))
-                            logger.info("Added missing alerts.contact_phones column")
-                        if 'is_pinned' not in alert_cols:
-                            conn.execute(text("ALTER TABLE alerts ADD COLUMN is_pinned BOOLEAN NOT NULL DEFAULT 0"))
-                            logger.info("Added missing alerts.is_pinned column")
-
-                    # Patch fine_types: add article_id column
-                    ft_table_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='fine_types'")
-                    ).first() is not None
-                    if ft_table_exists:
-                        ft_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(fine_types)")).fetchall()}
-                        if 'article_id' not in ft_cols:
-                            conn.execute(text("ALTER TABLE fine_types ADD COLUMN article_id INTEGER REFERENCES fine_articles(id)"))
-                            logger.info("Added fine_types.article_id column")
-
-                    # Patch point_reduction_reasons: add article_id column
-                    prr_table_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='point_reduction_reasons'")
-                    ).first() is not None
-                    if prr_table_exists:
-                        prr_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(point_reduction_reasons)")).fetchall()}
-                        if 'article_id' not in prr_cols:
-                            conn.execute(text("ALTER TABLE point_reduction_reasons ADD COLUMN article_id INTEGER REFERENCES point_reduction_articles(id)"))
-                            logger.info("Added point_reduction_reasons.article_id column")
-
-                    # license_dossiers — colonnes ajoutées progressivement
-                    ld_table_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='license_dossiers'")
-                    ).first() is not None
-                    if ld_table_exists:
-                        ld_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(license_dossiers)")).fetchall()}
-                        ld_col_defs = {
-                            'nom':                  "ALTER TABLE license_dossiers ADD COLUMN nom VARCHAR(150)",
-                            'prenom':               "ALTER TABLE license_dossiers ADD COLUMN prenom VARCHAR(100)",
-                            'date_naissance':       "ALTER TABLE license_dossiers ADD COLUMN date_naissance DATE",
-                            'telephone':            "ALTER TABLE license_dossiers ADD COLUMN telephone VARCHAR(30)",
-                            'country':              "ALTER TABLE license_dossiers ADD COLUMN country VARCHAR(50)",
-                            'doc_recu_paiement':      "ALTER TABLE license_dossiers ADD COLUMN doc_recu_paiement BOOLEAN NOT NULL DEFAULT 0",
-                            'photo_filename':         "ALTER TABLE license_dossiers ADD COLUMN photo_filename VARCHAR(255)",
-                            'final_status':           "ALTER TABLE license_dossiers ADD COLUMN final_status VARCHAR(20) DEFAULT 'actif'",
-                            'lieu_naissance':         "ALTER TABLE license_dossiers ADD COLUMN lieu_naissance VARCHAR(150)",
-                            'sexe':                   "ALTER TABLE license_dossiers ADD COLUMN sexe VARCHAR(10)",
-                            'nationalite':            "ALTER TABLE license_dossiers ADD COLUMN nationalite VARCHAR(100)",
-                            'holder_address':         "ALTER TABLE license_dossiers ADD COLUMN holder_address VARCHAR(255)",
-                            'license_number_proposed':"ALTER TABLE license_dossiers ADD COLUMN license_number_proposed VARCHAR(50)",
-                            'type_permis':            "ALTER TABLE license_dossiers ADD COLUMN type_permis VARCHAR(20)",
-                            'issue_date':             "ALTER TABLE license_dossiers ADD COLUMN issue_date DATE",
-                            'expiry_date':            "ALTER TABLE license_dossiers ADD COLUMN expiry_date DATE",
-                            'centre_immatriculation': "ALTER TABLE license_dossiers ADD COLUMN centre_immatriculation VARCHAR(150)",
-                            'categories':             "ALTER TABLE license_dossiers ADD COLUMN categories VARCHAR(100)",
-                            'category_details':       "ALTER TABLE license_dossiers ADD COLUMN category_details TEXT",
-                            'step2_data':             "ALTER TABLE license_dossiers ADD COLUMN step2_data TEXT",
-                            'step2_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step2_validated_at DATETIME",
-                            'step2_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step2_validated_by VARCHAR(100)",
-                            'step3_data':           "ALTER TABLE license_dossiers ADD COLUMN step3_data TEXT",
-                            'step3_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step3_validated_at DATETIME",
-                            'step3_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step3_validated_by VARCHAR(100)",
-                            'step4_data':           "ALTER TABLE license_dossiers ADD COLUMN step4_data TEXT",
-                            'step4_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step4_validated_at DATETIME",
-                            'step4_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step4_validated_by VARCHAR(100)",
-                            'step5_data':           "ALTER TABLE license_dossiers ADD COLUMN step5_data TEXT",
-                            'step5_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step5_validated_at DATETIME",
-                            'step5_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step5_validated_by VARCHAR(100)",
-                            'step6_data':           "ALTER TABLE license_dossiers ADD COLUMN step6_data TEXT",
-                            'step6_validated_at':   "ALTER TABLE license_dossiers ADD COLUMN step6_validated_at DATETIME",
-                            'step6_validated_by':   "ALTER TABLE license_dossiers ADD COLUMN step6_validated_by VARCHAR(100)",
-                            'license_id':           "ALTER TABLE license_dossiers ADD COLUMN license_id INTEGER REFERENCES driver_licenses(id)",
-                            'updated_at':           "ALTER TABLE license_dossiers ADD COLUMN updated_at DATETIME",
-                            'rejected_at':          "ALTER TABLE license_dossiers ADD COLUMN rejected_at DATETIME",
-                            'rejected_by':          "ALTER TABLE license_dossiers ADD COLUMN rejected_by VARCHAR(100)",
-                            'rejection_reason':     "ALTER TABLE license_dossiers ADD COLUMN rejection_reason TEXT",
-                        }
-                        for col, sql in ld_col_defs.items():
-                            if col not in ld_cols:
-                                conn.execute(text(sql))
-                                logger.info(f"Added license_dossiers.{col} column")
-
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
-
+        
         # Initialize QR codes for all phones that don't have one
         from app.models import Phone, User
         try:
@@ -618,7 +296,7 @@ def create_app():
         # S'assurer que l'utilisateur admin existe toujours
         admin_username = 'admin'
         admin_password = 'admin123'
-
+        
         admin = User.query.filter_by(username=admin_username).first()
         if not admin:
             admin = User(username=admin_username, is_admin=True, role='administrateur')
@@ -631,85 +309,5 @@ def create_app():
             admin.role = 'administrateur'
             db.session.commit()
             print(f"✓ Droits admin restaurés: {admin_username}")
-
-        # S'assurer qu'un compte SmartTech par défaut existe toujours
-        from app.models import SmartTechAccount
-        if not SmartTechAccount.query.first():
-            default_st = SmartTechAccount(username='smarttech', full_name='Smart Technology', role='admin', is_active=True)
-            default_st.set_password('smarttech123')
-            db.session.add(default_st)
-            db.session.commit()
-            print("✓ Compte SmartTech par défaut créé : smarttech / smarttech123")
-
-        # Pré-peupler les raisons de soumission par défaut
-        from app.models import PhotoSubmissionReason
-        if PhotoSubmissionReason.query.count() == 0:
-            defaults = [
-                "Mise à jour de l'assurance",
-                "Vérification du certificat d'immatriculation",
-                "Contrôle technique manquant",
-                "Inspection du véhicule",
-                "Discordance documents/système",
-                "Autre",
-            ]
-            for i, label in enumerate(defaults):
-                db.session.add(PhotoSubmissionReason(label=label, sort_order=i + 1))
-            db.session.commit()
-
-        # Initialiser les paramètres par défaut Smart Technology
-        from app.models import SmartTechSetting
-        for key, default_val in [('qr_activation_price', '5000'), ('qr_renewal_price', '3000')]:
-            if not SmartTechSetting.query.filter_by(key=key).first():
-                db.session.add(SmartTechSetting(key=key, value=default_val))
-        db.session.commit()
-
-        # Backfill QRCodePayment pour véhicules existants sans enregistrement
-        try:
-            from app.models import QRCodePayment, VehicleHistory, Vehicle
-            from app.timezone_utils import now_comoros as _now
-            act_price = SmartTechSetting.get('qr_activation_price', 5000)
-            ren_price = SmartTechSetting.get('qr_renewal_price', 3000)
-
-            vehicles_with_qr = Vehicle.query.filter(Vehicle.qr_code_expiry.isnot(None)).all()
-            for v in vehicles_with_qr:
-                # Activation : une seule fois par véhicule
-                if not QRCodePayment.query.filter_by(vehicle_id=v.id, payment_type='activation', status='paid').first():
-                    db.session.add(QRCodePayment(
-                        vehicle_id=v.id,
-                        payment_type='activation',
-                        amount=act_price,
-                        status='paid',
-                        paid_at=v.qr_code_generated_at or v.created_at or _now(),
-                        recorded_by=v.created_by or 'system',
-                    ))
-
-                # Renouvellements : un enregistrement par entrée d'historique
-                renewals = VehicleHistory.query.filter(
-                    VehicleHistory.vehicle_id == v.id,
-                    VehicleHistory.action.like('%QR Code renouvelé%')
-                ).order_by(VehicleHistory.created_at).all()
-                for r in renewals:
-                    from datetime import timedelta
-                    already = QRCodePayment.query.filter(
-                        QRCodePayment.vehicle_id == v.id,
-                        QRCodePayment.payment_type == 'renewal',
-                        QRCodePayment.status == 'paid',
-                        QRCodePayment.paid_at >= r.created_at - timedelta(minutes=5),
-                        QRCodePayment.paid_at <= r.created_at + timedelta(minutes=5),
-                    ).first()
-                    if not already:
-                        db.session.add(QRCodePayment(
-                            vehicle_id=v.id,
-                            payment_type='renewal',
-                            amount=ren_price,
-                            status='paid',
-                            paid_at=r.created_at or _now(),
-                            recorded_by=r.officer or 'system',
-                        ))
-
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            print(f"Warning: QRCodePayment backfill failed: {e}")
 
     return app

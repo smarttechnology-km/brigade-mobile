@@ -11,10 +11,9 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
-from app.models import db, Vehicle, User, VehicleOwner, Fine, VehicleTransfer, DriverLicense, PointReductionHistory
+from app.models import db, Vehicle, User, VehicleOwner, Fine, VehicleTransfer
 from app.sms_service import SMSService
 from app.push_notifications import send_expo_push_notification
-from app.timezone_utils import now_comoros
 
 citizen_auth_bp = Blueprint('citizen_auth', __name__, url_prefix='/api/auth')
 
@@ -589,138 +588,11 @@ def get_current_user():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-
-def _current_owner_phone():
-    """Resolve the calling citizen's stable phone identity from the JWT (vehicle_id ->
-    VehicleOwner.phone), the same way /me does. Returns None if it can't be resolved."""
-    identity = get_jwt_identity()
-    vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
-    if not vehicle_id:
-        return None
-    vehicle = Vehicle.query.get(vehicle_id)
-    if not vehicle:
-        return None
-    owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
-    return owner.phone if owner else None
-
-
-@citizen_auth_bp.route('/license/register', methods=['POST'])
-@jwt_required()
-def register_license():
-    """Link an existing DriverLicense (found by license_number, scanned from its QR)
-    to the current citizen's phone, so it shows up on their dashboard."""
-    try:
-        phone = _current_owner_phone()
-        if not phone:
-            return jsonify({'error': 'Compte non identifié'}), 401
-
-        data = request.get_json() or {}
-        number = (data.get('license_number') or '').strip().upper()
-        if not number:
-            return jsonify({'error': 'Numéro de permis manquant'}), 400
-
-        lic = DriverLicense.query.filter_by(license_number=number).first()
-        if not lic:
-            return jsonify({'error': 'Permis introuvable'}), 404
-
-        if lic.registered_phone and lic.registered_phone != phone:
-            return jsonify({'error': 'Ce permis est déjà enregistré sur un autre compte.'}), 409
-
-        existing = DriverLicense.query.filter_by(registered_phone=phone).first()
-        if existing and existing.id != lic.id:
-            return jsonify({'error': f"Un autre permis ({existing.license_number}) est déjà enregistré sur ce compte."}), 409
-
-        lic.registered_phone = phone
-        lic.registered_at = now_comoros()
-        db.session.commit()
-        return jsonify({'message': 'Permis enregistré avec succès.', 'license': lic.to_dict()})
-    except Exception as e:
-        print(f"❌ register_license error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@citizen_auth_bp.route('/license/my', methods=['GET'])
-@jwt_required()
-def get_my_license():
-    """Return the license registered to the current citizen, with full details
-    (including photo filename) and point reduction history, or {license: None}."""
-    try:
-        phone = _current_owner_phone()
-        if not phone:
-            return jsonify({'license': None})
-
-        lic = DriverLicense.query.filter_by(registered_phone=phone).first()
-        if not lic:
-            return jsonify({'license': None})
-
-        history = (PointReductionHistory.query
-                   .filter_by(license_id=lic.id)
-                   .order_by(PointReductionHistory.created_at.desc())
-                   .all())
-        data = lic.to_dict()
-        data['point_history'] = [
-            {k: v for k, v in h.to_dict().items() if k != 'created_by'}
-            for h in history
-        ]
-        return jsonify({'license': data})
-    except Exception as e:
-        print(f"❌ get_my_license error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@citizen_auth_bp.route('/license/my', methods=['DELETE'])
-@jwt_required()
-def unregister_license():
-    """Remove the link between the current citizen's account and their registered
-    license (e.g. if the wrong QR was scanned). Does not delete the license itself."""
-    try:
-        phone = _current_owner_phone()
-        if not phone:
-            return jsonify({'error': 'Compte non identifié'}), 401
-
-        lic = DriverLicense.query.filter_by(registered_phone=phone).first()
-        if lic:
-            lic.registered_phone = None
-            lic.registered_at = None
-            db.session.commit()
-        return jsonify({'message': 'Permis retiré du compte.'})
-    except Exception as e:
-        print(f"❌ unregister_license error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
 @citizen_auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
-    """Logout: clear push token so the device stops receiving notifications."""
-    try:
-        identity = get_jwt_identity()
-        vehicle_id = int(identity) if not isinstance(identity, dict) else int(identity.get('vehicle_id'))
-        owner = VehicleOwner.query.filter_by(vehicle_id=vehicle_id).first()
-        if owner and owner.expo_push_token:
-            owner.expo_push_token = None
-            db.session.commit()
-    except Exception as e:
-        print(f"⚠️ Could not clear push token on logout: {e}")
+    """Logout user (token cleanup happens on client side)"""
     return jsonify({'message': 'Logged out successfully'}), 200
-
-
-@citizen_auth_bp.route('/unregister-push-token', methods=['POST'])
-def unregister_push_token():
-    """Remove a push token without requiring JWT — used on forced logout (expired session)."""
-    data = request.get_json() or {}
-    push_token = (data.get('push_token') or '').strip()
-    if not push_token:
-        return jsonify({'message': 'No token provided'}), 200
-    try:
-        owners = VehicleOwner.query.filter_by(expo_push_token=push_token).all()
-        for owner in owners:
-            owner.expo_push_token = None
-        if owners:
-            db.session.commit()
-    except Exception as e:
-        print(f"⚠️ Could not unregister push token: {e}")
-    return jsonify({'message': 'Token unregistered'}), 200
 
 
 @citizen_auth_bp.route('/delete-account/request-otp', methods=['POST'])
