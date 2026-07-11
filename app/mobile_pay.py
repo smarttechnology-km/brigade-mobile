@@ -1094,13 +1094,19 @@ def download_receipt_pdf(payment_id):
                     fine = fines[0]
                     if not vehicle:
                         vehicle = Vehicle.query.get(fine.vehicle_id)
-                    receipt_number = fine.receipt_number or f"REC-{fine.id}"
+                    if payment_kind != 'vignette':
+                        receipt_number = fine.receipt_number or f"REC-{fine.id}"
         except Exception as e:
             print(f"Error loading fines data: {e}")
-        
+
+        # For vignette payments use a VGN- receipt number
+        if payment_kind == 'vignette' and not receipt_number:
+            ts = int(payment.created_at.timestamp()) if payment.created_at else payment.id
+            receipt_number = f"VGN-{payment.id}-{ts}"
+
         # HEADER SECTION - matching web receipt
         header_left = Paragraph("<b>Police Nationale - Controle Routier</b><br/>Service des amendes et paiements", title_style)
-        
+
         receipt_num = receipt_number or f"REC-{payment.id}"
         paid_date = payment.paid_at.strftime('%d/%m/%Y %H:%M') if payment.paid_at else ''
         header_right = Paragraph(f"<b>Recu n {receipt_num}</b><br/>{paid_date}", title_style)
