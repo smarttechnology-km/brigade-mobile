@@ -18,8 +18,6 @@ document.addEventListener('DOMContentLoaded', () => {
         countryFilter.addEventListener('change', loadSubmissions);
     }
     
-    // Auto-load every 10s
-    setInterval(loadSubmissions, 10000);
 });
 
 async function loadSubmissions() {

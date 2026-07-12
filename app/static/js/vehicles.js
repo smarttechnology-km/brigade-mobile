@@ -188,15 +188,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Only load the full vehicles table on the dedicated vehicles page
-    // (the vehicles page includes a #btn-add-vehicle button). On the
+    // (the vehicles page includes a #vehicles-tbody element). On the
     // dashboard we include this script only to reuse modal helpers, so
     // avoid replacing the dashboard table rows.
     const addBtn = document.getElementById('btn-add-vehicle');
-    console.log('btn-add-vehicle found:', addBtn ? 'YES' : 'NO');
-    
-    if (addBtn) {
-        // we're on the vehicles management page — load and bind add button
-        console.log('Loading vehicles...');
+    const vehiclesTbody = document.getElementById('vehicles-tbody');
+
+    if (vehiclesTbody) {
+        // we're on the vehicles management page — load table
         loadVehicles();
 
         // ── Real-time sync via lightweight last-update polling ──
@@ -250,9 +249,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         
-        addBtn.addEventListener('click', function() {
-            openVehicleModal();
-        });
+        if (addBtn) {
+            addBtn.addEventListener('click', function() {
+                openVehicleModal();
+            });
+        }
     }
 
     // Auto-fill / notify owner name from phone lookup
@@ -522,6 +523,17 @@ function filterAndRenderVehicles(query){
     renderVehiclesTable(filtered);
 }
 
+function _setSaveBlocked(blocked) {
+    const saveBtn = document.getElementById('save-vehicle-btn');
+    const msg = document.getElementById('save-vehicle-blocked-msg');
+    if (saveBtn) {
+        saveBtn.disabled = blocked;
+        saveBtn.classList.toggle('btn-primary', !blocked);
+        saveBtn.classList.toggle('btn-secondary', blocked);
+    }
+    if (msg) msg.classList.toggle('d-none', !blocked);
+}
+
 function openVehicleModal(vehicle) {
     // Reset form FIRST
     document.getElementById('vehicle-form').reset();
@@ -532,6 +544,7 @@ function openVehicleModal(vehicle) {
     if (_vinHint) _vinHint.classList.add('d-none');
     const _finesSection = document.getElementById('vehicle-fines-section');
     if (_finesSection) _finesSection.classList.add('d-none');
+    _setSaveBlocked(false);
     
     // Update modal title with icon
     const modalTitle = document.getElementById('vehicleModalLabel');
@@ -719,8 +732,10 @@ function openVehicleModal(vehicle) {
                     </div>`;
                 }).join('');
                 if(finesLink) finesLink.href = `/fines?q=${encodeURIComponent(vehicle.license_plate)}&paid=false`;
+                _setSaveBlocked(true);
             } else {
                 finesSection.classList.add('d-none');
+                _setSaveBlocked(false);
             }
         }
     }
@@ -996,6 +1011,7 @@ function statusLabel(s){ if(s==='active') return 'Actif'; if(s==='inactive') ret
                 vinHint.classList.add('d-none');
                 const s = document.getElementById('vehicle-fines-section');
                 if(s) s.classList.add('d-none');
+                _setSaveBlocked(false);
                 return;
             }
             _vinTimer = setTimeout(function(){
@@ -1028,20 +1044,24 @@ function statusLabel(s){ if(s==='active') return 'Actif'; if(s==='inactive') ret
                                         </div>`;
                                     }).join('');
                                     if(finesLink) finesLink.href = `/fines?q=${encodeURIComponent(v.license_plate)}&paid=false`;
+                                    _setSaveBlocked(true);
                                 } else {
                                     finesSection.classList.add('d-none');
+                                    _setSaveBlocked(false);
                                 }
                             }
                         } else {
                             vinHint.classList.add('d-none');
                             const s = document.getElementById('vehicle-fines-section');
                             if(s) s.classList.add('d-none');
+                            _setSaveBlocked(false);
                         }
                     })
                     .catch(() => {
                         vinHint.classList.add('d-none');
                         const s = document.getElementById('vehicle-fines-section');
                         if(s) s.classList.add('d-none');
+                        _setSaveBlocked(false);
                     });
             }, 400);
         });
