@@ -69,131 +69,6 @@
     </div>
 </div>
 
-<!-- Add Vehicle to Insurance Modal -->
-<div class="modal fade" id="addVehicleModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-plus-circle me-2"></i>
-                    <span>Ajouter le Véhicule</span>
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4">
-                <input type="hidden" id="modal-vehicle-id" />
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-id-card text-muted me-1"></i>Immatriculation</label>
-                        <input type="text" id="modal-license-plate" class="form-control" readonly />
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-industry text-muted me-1"></i>Marque</label>
-                        <input type="text" id="modal-make" class="form-control" readonly />
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-cubes text-muted me-1"></i>Modèle</label>
-                        <input type="text" id="modal-model" class="form-control" readonly />
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-calendar text-muted me-1"></i>Année</label>
-                        <input type="text" id="modal-year" class="form-control" readonly />
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-palette text-muted me-1"></i>Couleur</label>
-                        <input type="text" id="modal-color" class="form-control" readonly />
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-car text-muted me-1"></i>Type</label>
-                        <input type="text" id="modal-vehicle-type" class="form-control" readonly />
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-user text-muted me-1"></i>Propriétaire</label>
-                        <input type="text" id="modal-owner-name" class="form-control" readonly />
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-map-marker-alt text-muted me-1"></i>Île</label>
-                        <input type="text" id="modal-owner-island" class="form-control" readonly />
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold"><i class="fas fa-briefcase text-muted me-1"></i>Usage</label>
-                        <select id="modal-usage-type" class="form-select" onchange="toggleUsageOtherUninsured(this)">
-                            <option value="Personnelle">👤 Personnelle</option>
-                            <option value="Taxi">🚕 Taxi</option>
-                            <option value="Transport public">🚌 Transport public</option>
-                            <option value="Location">🚗 Location</option>
-                            <option value="Véhicule de service">🔧 Véhicule de service</option>
-                            <option value="Véhicule utilitaire">📦 Véhicule utilitaire</option>
-                            <option value="Transport scolaire">🏫 Transport scolaire</option>
-                            <option value="Transport touristique">🗺️ Transport touristique</option>
-                            <option value="Auto-école">🎓 Auto-école</option>
-                            <option value="autre">➕ Autre...</option>
-                        </select>
-                        <input type="text" id="modal-usage-type-other" class="form-control mt-2 d-none" placeholder="Précisez le type d'usage" />
-                    </div>
-                </div>
-
-                <hr class="my-3" />
-
-                <div class="row">
-                    <div class="col-12 mb-3">
-                        <label class="form-label fw-semibold">
-                            <i class="fas fa-id-card text-primary me-1"></i>Numéros de permis des conducteurs <span class="text-danger">*</span>
-                        </label>
-                        <div class="input-group mb-2">
-                            <input type="text" id="modal-license-input" class="form-control" placeholder="Ex: KM-2024-001" autocomplete="off" />
-                            <button class="btn btn-outline-primary" type="button" onclick="modalAddLicense()">
-                                <i class="fas fa-plus"></i> Ajouter
-                            </button>
-                        </div>
-                        <div id="modal-license-tags" class="d-flex flex-wrap gap-2 mb-1"></div>
-                        <small class="text-muted">Appuyez sur Entrée ou cliquez sur Ajouter pour chaque numéro.</small>
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-12 mb-3">
-                        <label class="form-label fw-semibold">
-                            <i class="fas fa-shield-alt text-success me-1"></i>Assurance Exp. <span class="text-danger">*</span>
-                        </label>
-                        <div id="modal-warning-alert" class="alert alert-warning" style="display:none;">
-                            <strong>Attention:</strong>
-                            <span id="modal-warning-text"></span>
-                        </div>
-                        <div class="d-flex gap-2 mb-2">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDurationUninsured(3)">3 mois</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDurationUninsured(6)">6 mois</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setInsuranceDurationUninsured(12)">12 mois</button>
-                        </div>
-                        <input type="date" id="modal-insurance-expiry" class="form-control" />
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Annuler
-                </button>
-                <button type="button" id="confirm-add-vehicle-btn" class="btn btn-success" onclick="confirmAddVehicle()">
-                    <i class="fas fa-check me-1"></i>Ajouter
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Fine Details Modal -->
 <div class="modal fade" id="fineDetailsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -244,79 +119,42 @@
     </div>
 </div>
 
+<!-- Inactive Warning Modal -->
+<div class="modal fade" id="inactiveWarningModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Véhicule non éligible
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold"><i class="fas fa-id-card text-muted me-1"></i>Immatriculation</label>
+                        <input type="text" class="form-control" id="inactive-modal-plate" readonly />
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-warning mb-0">
+                            <strong><i class="fas fa-qrcode me-1"></i>Raison :</strong>
+                            <div id="inactive-modal-reason" class="mt-1"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-function toggleUsageOtherUninsured(sel) {
-    var other = document.getElementById('modal-usage-type-other');
-    if (!other) return;
-    if (sel.value === 'autre') {
-        other.classList.remove('d-none');
-        other.focus();
-    } else {
-        other.classList.add('d-none');
-        other.value = '';
-    }
-}
-
-function getUsageTypeUninsured() {
-    var sel = document.getElementById('modal-usage-type');
-    if (sel && sel.value === 'autre') {
-        var other = document.getElementById('modal-usage-type-other');
-        return (other && other.value.trim()) ? other.value.trim() : null;
-    }
-    return sel ? sel.value : null;
-}
-
-function setInsuranceDurationUninsured(months) {
-    var today = new Date();
-    today.setMonth(today.getMonth() + months);
-    var y = today.getFullYear();
-    var m = String(today.getMonth() + 1).padStart(2, '0');
-    var d = String(today.getDate()).padStart(2, '0');
-    document.getElementById('modal-insurance-expiry').value = y + '-' + m + '-' + d;
-}
-
 let vehiclesCache = [];
-let modalLicenseNumbers = [];
 
-async function modalAddLicense() {
-    const input = document.getElementById('modal-license-input');
-    const val = (input.value || '').trim().toUpperCase();
-    if (!val) return;
-    if (modalLicenseNumbers.includes(val)) { input.value = ''; return; }
-
-    input.disabled = true;
-    try {
-        const r = await fetch(`/api/vehicles/check-driver-license?number=${encodeURIComponent(val)}`, { credentials: 'same-origin' });
-        const data = await r.json();
-        if (!data.exists) {
-            alert(`Numéro de permis "${val}" introuvable dans la base de données.`);
-            return;
-        }
-        modalLicenseNumbers.push(val);
-        input.value = '';
-        renderModalLicenseTags();
-    } catch(e) {
-        alert('Erreur lors de la vérification du permis.');
-    } finally {
-        input.disabled = false;
-        input.focus();
-    }
-}
-
-function modalRemoveLicense(num) {
-    modalLicenseNumbers = modalLicenseNumbers.filter(n => n !== num);
-    renderModalLicenseTags();
-}
-
-function renderModalLicenseTags() {
-    const container = document.getElementById('modal-license-tags');
-    if (!container) return;
-    container.innerHTML = modalLicenseNumbers.map(n => `
-        <span class="badge bg-primary fs-6 d-flex align-items-center gap-1" style="font-size:0.85rem!important;">
-            <i class="fas fa-id-card me-1"></i>${n}
-            <button type="button" class="btn-close btn-close-white ms-1" style="font-size:0.6rem;" onclick="modalRemoveLicense('${n}')"></button>
-        </span>`).join('');
-}
 
 document.addEventListener('DOMContentLoaded', function() {
     loadUninsuredVehicles();
@@ -421,7 +259,7 @@ function renderVehiclesTable(vehicles) {
                         <i class="fas fa-lock"></i> Bloqué
                     </button>
                 ` : isVehicleInactive(v) ? `
-                    <button class="btn btn-sm btn-outline-warning" type="button" onclick="addVehicleToInsurance(${v.id}, '${v.license_plate.replace(/'/g, "\\'")}')" title="Véhicule inactif - attention">
+                    <button class="btn btn-sm btn-outline-warning" type="button" onclick="showInactiveWarning(${v.id})" title="Véhicule inactif - QR code non actif">
                         <i class="fas fa-exclamation-triangle"></i> Attention
                     </button>
                 ` : `
@@ -457,64 +295,28 @@ Adresse: ${vehicle.owner_address || '-'}
 }
 
 function addVehicleToInsurance(vehicleId, licensePlate) {
+    window.location.href = '/add-vehicle-insurance?plate=' + encodeURIComponent(licensePlate);
+}
+
+function showInactiveWarning(vehicleId) {
     const vehicle = vehiclesCache.find(v => v.id === vehicleId);
     if (!vehicle) return;
-    
-    // Populate modal fields
-    document.getElementById('modal-vehicle-id').value = vehicle.id;
-    document.getElementById('modal-license-plate').value = vehicle.license_plate;
-    document.getElementById('modal-make').value = vehicle.make || '-';
-    document.getElementById('modal-model').value = vehicle.model || '-';
-    document.getElementById('modal-year').value = vehicle.year || '-';
-    document.getElementById('modal-color').value = vehicle.color || '-';
-    document.getElementById('modal-vehicle-type').value = vehicle.vehicle_type || '-';
-    document.getElementById('modal-owner-name').value = vehicle.owner_name || '-';
-    document.getElementById('modal-owner-island').value = vehicle.owner_island || '-';
-    const usageSel = document.getElementById('modal-usage-type');
-    const usageOther = document.getElementById('modal-usage-type-other');
-    if (usageSel) {
-        usageSel.value = vehicle.usage_type || 'Personnelle';
-        if (!usageSel.value) {
-            usageSel.value = 'autre';
-            if (usageOther) { usageOther.value = vehicle.usage_type || ''; usageOther.classList.remove('d-none'); }
-        } else {
-            if (usageOther) { usageOther.classList.add('d-none'); usageOther.value = ''; }
-        }
-    }
-    document.getElementById('modal-insurance-expiry').value = vehicle.insurance_expiry ? vehicle.insurance_expiry.split('T')[0] : '';
 
-    const warningAlert = document.getElementById('modal-warning-alert');
-    const warningText = document.getElementById('modal-warning-text');
-    const confirmBtn = document.getElementById('confirm-add-vehicle-btn');
-    const inactive = isVehicleInactive(vehicle);
+    const now = new Date();
+    const qrExpiry = vehicle.qr_code_expiry ? new Date(vehicle.qr_code_expiry) : null;
+    let reason = '';
 
-    if (warningAlert && warningText && confirmBtn) {
-        if (inactive) {
-            const reason = getInactiveReason(vehicle) || 'Véhicule inactif.';
-            warningText.textContent = reason;
-            warningAlert.style.display = '';
-            confirmBtn.disabled = true;
-            confirmBtn.title = 'Impossible d\'ajouter un véhicule inactif';
-        } else {
-            warningText.textContent = '';
-            warningAlert.style.display = 'none';
-            confirmBtn.disabled = false;
-            confirmBtn.title = '';
-        }
-    }
-    
-    // Reset license tags
-    modalLicenseNumbers = [];
-    renderModalLicenseTags();
-    const licInput = document.getElementById('modal-license-input');
-    if (licInput) {
-        licInput.value = '';
-        licInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); modalAddLicense(); } };
+    if (vehicle.status === 'inactive') {
+        reason = 'Ce véhicule est marqué comme inactif. Le QR code n\'est pas actif.';
+    } else if (qrExpiry && qrExpiry < now) {
+        reason = 'Le QR code de ce véhicule a expiré le ' + qrExpiry.toLocaleDateString('fr-FR') + '. Il doit être renouvelé avant de pouvoir ajouter une assurance.';
+    } else {
+        reason = 'Ce véhicule n\'est pas éligible (QR code non actif).';
     }
 
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('addVehicleModal'));
-    modal.show();
+    document.getElementById('inactive-modal-plate').value = vehicle.license_plate || '-';
+    document.getElementById('inactive-modal-reason').textContent = reason;
+    new bootstrap.Modal(document.getElementById('inactiveWarningModal')).show();
 }
 
 function showFineDetails(vehicleId) {
@@ -565,47 +367,6 @@ function showFineDetails(vehicleId) {
     alert(details);
 }
 
-function confirmAddVehicle() {
-    const vehicleId = document.getElementById('modal-vehicle-id').value;
-    const insuranceExpiry = document.getElementById('modal-insurance-expiry').value;
-    const vehicle = vehiclesCache.find(v => String(v.id) === String(vehicleId));
-
-    if (vehicle && isVehicleInactive(vehicle)) {
-        alert(getInactiveReason(vehicle) || 'Véhicule inactif.');
-        return;
-    }
-
-    if (modalLicenseNumbers.length === 0) {
-        alert('Veuillez ajouter au moins un numéro de permis conducteur.');
-        document.getElementById('modal-license-input')?.focus();
-        return;
-    }
-
-    fetch('/api/vehicles/assign-to-insurance', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            vehicle_id: vehicleId,
-            insurance_expiry: insuranceExpiry || null,
-            driver_license_numbers: modalLicenseNumbers,
-            usage_type: getUsageTypeUninsured() || null
-        })
-    })
-    .then(r => {
-        if (!r.ok) throw new Error('Failed to assign vehicle');
-        return r.json();
-    })
-    .then(data => {
-        bootstrap.Modal.getInstance(document.getElementById('addVehicleModal')).hide();
-        alert('Véhicule ajouté avec succès à votre assurance!');
-        loadUninsuredVehicles(); // Reload the list
-    })
-    .catch(err => {
-        console.error('Error:', err);
-        alert('Erreur: ' + err.message);
-    });
-}
 
 function refreshVehicles() {
     loadUninsuredVehicles();

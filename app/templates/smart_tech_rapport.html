@@ -23,13 +23,14 @@
         .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
         .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
         .st-brand-sub{font-size:.7rem;color:var(--st-cyan);}
-        .st-nav{flex:1;}
+        .st-nav{flex:1;overflow-y:auto;min-height:0;}
         .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
         .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
         .st-nav-item.active{border-left:3px solid var(--st-cyan);}
         .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
         .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
-        .st-sidebar-footer{padding-top:1rem;border-top:1px solid rgba(255,255,255,0.07);}
+        .st-bottom-row { display: flex; border-top: 1px solid rgba(255,255,255,0.07); }
+        .st-bottom-row .st-nav-item { flex: 1; justify-content: center; padding: 0.7rem 0.4rem; font-size: 0.8rem; border-left: none !important; }
 
         /* ── Main ── */
         .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
@@ -233,12 +234,12 @@
         </a>
         {% endif %}
     </nav>
+    <div class="st-bottom-row">
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
         </a>
         {% endif %}
-    <div class="st-sidebar-footer">
         <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
             <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
         </a>

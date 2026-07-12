@@ -243,6 +243,16 @@ function setInsuranceDuration(months) {
 document.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('license-num-input');
     if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addLicenseNum(); } });
+
+    // Pre-fill license plate from URL ?plate= parameter
+    const urlPlate = new URLSearchParams(window.location.search).get('plate');
+    if (urlPlate) {
+        const plateField = document.getElementById('license_plate');
+        if (plateField) {
+            plateField.value = urlPlate;
+            plateField.dispatchEvent(new Event('change'));
+        }
+    }
 });
 
 function setAddFormAvailability(canAdd) {
