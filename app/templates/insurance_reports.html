@@ -231,6 +231,9 @@
         generate();
     };
 
+    // Sélectionner "Assurances Expirées" par défaut
+    selectType('expired');
+
     function generate() {
         if (!currentType) return;
         const spinner  = document.getElementById('rpt-spinner');

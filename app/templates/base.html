@@ -185,6 +185,7 @@
 
             {% if current_user.is_authenticated and current_user.is_admin %}
             <a class="nav-link text-white {% if request.path.startswith('/users') %}active{% endif %}" href="/users"><i class="fas fa-users me-2"></i> Utilisateurs</a>
+            <a class="nav-link text-white {% if request.path.startswith('/payment-settings') %}active{% endif %}" href="/payment-settings"><i class="fas fa-mobile-screen-button me-2"></i> Numéros Paiements</a>
             {% endif %}
 
             {% if current_user.is_authenticated %}

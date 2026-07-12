@@ -48,12 +48,6 @@
               <img src="{{ url_for('main.public_track_qrcode', token=vehicle.track_token) }}" alt="QR Code" class="img-fluid" style="max-width:140px;" />
             </div>
             <div>
-              <a href="{{ url_for('main.public_track_qrcode_pdf', token=vehicle.track_token) }}" class="btn btn-sm btn-success mb-2" target="_blank" rel="noopener">
-                <i class="fas fa-download me-1"></i>Télécharger QR
-              </a>
-              <a href="/api/vehicles/{{ vehicle.id }}/sheet.pdf" class="btn btn-sm btn-warning mb-2" target="_blank" rel="noopener">
-                <i class="fas fa-file-pdf me-1"></i>Fiche complète
-              </a>
               <div class="small text-muted">Token: <code>{{ vehicle.track_token }}</code></div>
             </div>
           </div>
