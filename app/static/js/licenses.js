@@ -212,6 +212,7 @@
         document.getElementById('f-date_of_birth').value = l.date_of_birth || '';
         document.getElementById('f-issue_date').value   = l.issue_date || '';
         document.getElementById('f-expiry_date').value  = l.expiry_date || '';
+        if (!l.expiry_date && l.issue_date) autoFillExpiry();
         document.getElementById('f-status').value       = l.status || 'actif';
         document.getElementById('f-notes').value        = l.notes || '';
         const cats = (l.categories || '').split(',').map(c => c.trim()).filter(Boolean);
@@ -227,7 +228,20 @@
             const expInput  = document.getElementById(`cat-expiration-${cat}`);
             if (idInput)   idInput.value = d.identifiant || (cb.checked ? (l.license_number || '') : '');
             if (dateInput) dateInput.value = d.date || '';
-            if (expInput)  expInput.value = d.expiration || '';
+            if (expInput) {
+                if (d.expiration) {
+                    expInput.value = d.expiration;
+                } else {
+                    const cfg = (_settings.category_validity || {})[cat] || { mode: 'card' };
+                    if (cfg.mode === 'custom' && cfg.years && d.date) {
+                        const dt = new Date(d.date);
+                        dt.setFullYear(dt.getFullYear() + Number(cfg.years));
+                        expInput.value = dt.toISOString().slice(0, 10);
+                    } else {
+                        expInput.value = l.expiry_date || '';
+                    }
+                }
+            }
         });
         if (l.photo_filename) {
             const img = document.getElementById('photo-preview-img');
@@ -966,7 +980,7 @@
         if (onHistory) {
             window.open(`/licenses/${_currentLicense.id}/print-history?temporaire=1`, '_blank');
         } else {
-            window.open(`/licenses/${_currentLicense.id}/print-folded`, '_blank');
+            window.open(`/licenses/${_currentLicense.id}/print`, '_blank');
         }
     };
 
@@ -1081,7 +1095,7 @@
             .then(l => {
                 _currentLicense = l;
                 const btnCarte = document.getElementById('btn-carte-digitale');
-                if (btnCarte) btnCarte.style.display = 'none';
+                if (btnCarte) btnCarte.style.display = '';
                 syncPrintButton(l.id, l.type_permis === 'permanent' && !l.is_expired);
                 const btnImprimer = document.getElementById('btn-imprimer');
                 if (btnImprimer) btnImprimer.style.display = l.is_expired ? 'none' : '';
@@ -1092,14 +1106,23 @@
                 const cats = catList.length
                     ? catList.map(c => `<span class="badge bg-info text-dark me-1">${esc(c)}</span>`).join('')
                     : '—';
+                const computeCatExpiry = (code, obtDate) => {
+                    const entry = (_settings.category_validity || {})[code] || {};
+                    if (entry.mode === 'custom' && entry.years && obtDate) {
+                        const d = new Date(obtDate);
+                        d.setFullYear(d.getFullYear() + parseInt(entry.years));
+                        return d.toISOString().split('T')[0];
+                    }
+                    return l.expiry_date || '';
+                };
                 const catDetailRows = catList
-                    .filter(c => catDetailsMap[c] && (catDetailsMap[c].identifiant || catDetailsMap[c].date || catDetailsMap[c].expiration))
+                    .filter(c => catDetailsMap[c] && (catDetailsMap[c].identifiant || catDetailsMap[c].date))
                     .map(c => `
                         <tr>
                             <td><span class="badge bg-info text-dark">${esc(c)}</span></td>
                             <td>${esc(catDetailsMap[c].identifiant || '—')}</td>
                             <td>${fmtDate(catDetailsMap[c].date)}</td>
-                            <td>${fmtDate(catDetailsMap[c].expiration)}</td>
+                            <td>${fmtDate(computeCatExpiry(c, catDetailsMap[c].date))}</td>
                         </tr>`).join('');
                 const statusCls   = { actif: 'success', suspendu: 'warning', revoque: 'danger', expire: 'secondary' }[l.status] || 'secondary';
                 const statusLabel = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqué', expire: 'Expiré' }[l.is_expired ? 'expire' : l.status] || l.status;
@@ -1142,7 +1165,7 @@
                                 : '<span class="badge bg-success"><i class="fas fa-infinity me-1"></i>Permanent</span>'}
                         </div>
                         <div class="col-md-4"><div class="text-muted mb-1">${l.type_permis === 'temporaire' ? 'Depuis le' : 'Date de début'}</div><strong>${fmtDate(l.issue_date)}</strong></div>
-                        ${l.type_permis === 'temporaire' ? `<div class="col-md-4"><div class="text-muted mb-1">Jusqu'au</div><strong>${fmtDate(l.expiry_date)}</strong></div>` : ''}
+                        <div class="col-md-4"><div class="text-muted mb-1">Date d'expiration</div><strong>${fmtDate(l.expiry_date)}</strong></div>
                         <div class="col-md-4"><div class="text-muted mb-1">Centre d'immatriculation</div><strong>${esc(l.centre_immatriculation || '—')}</strong></div>
                         <div class="col-md-4"><div class="text-muted mb-1">Adresse</div><span>${esc(l.holder_address || '—')}</span></div>
                         <div class="col-md-6"><div class="text-muted mb-1">Catégories</div><div class="mt-1">${cats || '—'}</div></div>
