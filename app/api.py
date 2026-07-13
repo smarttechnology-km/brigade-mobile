@@ -4963,3 +4963,84 @@ def get_vehicle_attestation_logo(vehicle_id):
         return jsonify({'logo_b64': tpl.get('logo_b64')})
     except Exception:
         return jsonify({'logo_b64': None})
+
+
+@api_bp.route('/vehicles/<int:vehicle_id>/attestation-html', methods=['GET'])
+@jwt_required()
+def get_vehicle_attestation_html(vehicle_id):
+    """Return a self-contained HTML page for the mobile WebView — same visual as the web maquette."""
+    import os
+    from flask import Response, current_app
+    from app.models import InsuranceAccount
+
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    assignment = VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle_id).first()
+    account = None
+    tpl = {}
+    if assignment:
+        account = InsuranceAccount.query.get(assignment.insurance_account_id)
+        if account and account.attestation_template:
+            try:
+                tpl = json.loads(account.attestation_template)
+            except Exception:
+                tpl = {}
+
+    company_name = tpl.get('company_name', '')
+    if not company_name and account and account.insurance:
+        company_name = account.insurance.company_name or ''
+    words = re.findall(r'\w+', company_name)
+    initials = ''.join(w[0].upper() for w in words if w)
+    police_number = initials + str(vehicle.id).zfill(6) if initials else str(vehicle.id).zfill(6)
+    insurance_id = account.id if account else 0
+    insurance_year = account.created_at.strftime('%Y') if (account and account.created_at) else now_comoros().strftime('%Y')
+
+    vehicle_data = {
+        'id': vehicle.id,
+        'license_plate': vehicle.license_plate,
+        'owner_name': vehicle.owner_name,
+        'owner_address': vehicle.owner_address or vehicle.owner_island or '',
+        'vehicle_type': vehicle.vehicle_type or '',
+        'model': vehicle.model or '',
+        'insurance_expiry': vehicle.insurance_expiry.strftime('%d/%m/%Y') if vehicle.insurance_expiry else '—',
+        'today': now_comoros().strftime('%d/%m/%Y'),
+        'insurance_id': insurance_id,
+        'insurance_year': insurance_year,
+    }
+
+    builder_path = os.path.join(current_app.root_path, 'static', 'js', 'attestation-builder.js')
+    with open(builder_path, 'r', encoding='utf-8') as f:
+        builder_js = f.read()
+
+    vehicle_json = json.dumps(vehicle_data, ensure_ascii=False)
+    tpl_json = json.dumps(tpl, ensure_ascii=False)
+
+    html = f"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=700, initial-scale=1, shrink-to-fit=no">
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+html, body {{ background: #f0f0f0; display: flex; justify-content: center; align-items: flex-start; padding: 0; min-height: 100%; }}
+#card-container {{ padding: 12px; display: flex; justify-content: center; width: 100%; }}
+</style>
+</head>
+<body>
+<div id="card-container"></div>
+<script>
+const VEHICLE = {vehicle_json};
+const TPL = {tpl_json};
+</script>
+<script>
+{builder_js}
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {{
+    document.getElementById('card-container').innerHTML = window.buildAttestationHTML(TPL, VEHICLE);
+}});
+</script>
+</body>
+</html>"""
+
+    return Response(html, mimetype='text/html; charset=utf-8')
