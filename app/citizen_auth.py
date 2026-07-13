@@ -9,7 +9,7 @@ import random
 import string
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, Response
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from app.models import db, Vehicle, User, VehicleOwner, Fine, VehicleTransfer, DriverLicense, PointReductionHistory
 from app.sms_service import SMSService
@@ -1142,3 +1142,117 @@ def request_vehicle_transfer():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+@citizen_auth_bp.route('/my-attestation-html', methods=['GET'])
+@jwt_required()
+def citizen_attestation_html():
+    """Return self-contained attestation HTML for the citizen's own vehicle."""
+    from app.models import VehicleInsuranceAssignment, InsuranceAccount
+
+    identity = get_jwt_identity()
+    vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
+    if not vehicle_id:
+        return jsonify({'error': 'Compte non identifié'}), 401
+
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    assignment = VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle_id).first()
+    account = None
+    tpl = {}
+    if assignment:
+        account = InsuranceAccount.query.get(assignment.insurance_account_id)
+        if account and account.attestation_template:
+            try:
+                tpl = json.loads(account.attestation_template)
+            except Exception:
+                tpl = {}
+
+    company_name = tpl.get('company_name', '')
+    if not company_name and account and account.insurance:
+        company_name = account.insurance.company_name or ''
+    insurance_id = account.id if account else 0
+    insurance_year = account.created_at.strftime('%Y') if (account and account.created_at) else now_comoros().strftime('%Y')
+
+    vehicle_data = {
+        'id': vehicle.id,
+        'license_plate': vehicle.license_plate,
+        'owner_name': vehicle.owner_name,
+        'owner_address': vehicle.owner_address or vehicle.owner_island or '',
+        'vehicle_type': vehicle.vehicle_type or '',
+        'model': vehicle.model or '',
+        'insurance_expiry': vehicle.insurance_expiry.strftime('%d/%m/%Y') if vehicle.insurance_expiry else '—',
+        'today': now_comoros().strftime('%d/%m/%Y'),
+        'insurance_id': insurance_id,
+        'insurance_year': insurance_year,
+    }
+
+    # Strip logo — sent via second request to avoid slow initial load
+    logo_b64 = tpl.pop('logo_b64', None)
+
+    builder_path = os.path.join(current_app.root_path, 'static', 'js', 'attestation-builder.js')
+    with open(builder_path, 'r', encoding='utf-8') as f:
+        builder_js = f.read()
+
+    vehicle_json = json.dumps(vehicle_data, ensure_ascii=False)
+    tpl_json = json.dumps(tpl, ensure_ascii=False)
+    logo_json = json.dumps(logo_b64)
+
+    html = f"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+html, body {{ background: #f0f0f0; overflow: hidden; width: 100vw; height: 100vh; }}
+#card-container {{
+    display: flex; justify-content: center; align-items: center;
+    width: 100vw; height: 100vh;
+}}
+#card-container > * {{ transform-origin: center center; flex-shrink: 0; }}
+</style>
+</head>
+<body>
+<div id="card-container"></div>
+<script>
+window.VEHICLE = {vehicle_json};
+window.TPL = {tpl_json};
+var _LOGO = {logo_json};
+</script>
+<script>{builder_js}</script>
+<script>
+var _c = document.getElementById('card-container');
+
+function _rotate() {{
+    var el = _c.firstElementChild;
+    if (!el) return;
+    var cw = el.offsetWidth, ch = el.offsetHeight;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var scale = Math.min(vw / ch, vh / cw) * 0.97;
+    el.style.transform = 'rotate(90deg) scale(' + scale + ')';
+}}
+
+document.addEventListener('DOMContentLoaded', function() {{
+    _c.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
+    _rotate();
+    if (_LOGO) {{
+        window.TPL.logo_b64 = _LOGO;
+        _c.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
+        _rotate();
+    }}
+}});
+
+function _applyLogo(b64) {{
+    if (!b64 || b64 === 'null') return;
+    window.TPL.logo_b64 = b64;
+    _c.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
+    _rotate();
+}}
+document.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
+window.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
+</script>
+</body>
+</html>"""
+
+    return Response(html, mimetype='text/html; charset=utf-8')
