@@ -5022,11 +5022,26 @@ def get_vehicle_attestation_html(vehicle_id):
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=700, initial-scale=1, shrink-to-fit=no">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-html, body {{ background: #f0f0f0; display: flex; justify-content: center; align-items: flex-start; padding: 0; min-height: 100%; }}
-#card-container {{ padding: 12px; display: flex; justify-content: center; width: 100%; }}
+html, body {{
+    background: #f0f0f0;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+}}
+#card-container {{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+}}
+#card-container > * {{
+    transform-origin: center center;
+    flex-shrink: 0;
+}}
 </style>
 </head>
 <body>
@@ -5039,15 +5054,32 @@ window.TPL = {tpl_json};
 {builder_js}
 </script>
 <script>
+var _container = document.getElementById('card-container');
+
+function _rotateCard() {{
+    var cardEl = _container.firstElementChild;
+    if (!cardEl) return;
+    /* Natural card: ~680px wide, ~400px tall.
+       After rotate(90deg): visual width = card height, visual height = card width.
+       Scale so the rotated card fills the viewport width. */
+    var cw = cardEl.offsetWidth;
+    var ch = cardEl.offsetHeight;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var scale = Math.min(vw / ch, vh / cw) * 0.97;
+    cardEl.style.transform = 'rotate(90deg) scale(' + scale + ')';
+}}
+
 document.addEventListener('DOMContentLoaded', function() {{
-    document.getElementById('card-container').innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
+    _container.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
+    _rotateCard();
 }});
 
-// Receive logo from React Native after initial render
 function _applyLogo(logoB64) {{
     if (!logoB64 || logoB64 === 'null') return;
     window.TPL.logo_b64 = logoB64;
-    document.getElementById('card-container').innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
+    _container.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
+    _rotateCard();
 }}
 document.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
 window.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
