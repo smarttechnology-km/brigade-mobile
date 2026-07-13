@@ -4499,6 +4499,9 @@ def insurance_attestation_print(vehicle_id):
             tpl = json.loads(current_user.attestation_template)
         except Exception:
             tpl = {}
+    # Strip logo_b64 from the embedded JSON — it can be hundreds of KB and slows the
+    # initial page load. The print page fetches it separately via a lightweight JS call.
+    tpl_without_logo = {k: v for k, v in tpl.items() if k != 'logo_b64'}
     created_year = current_user.created_at.strftime('%Y') if current_user.created_at else now_comoros().strftime('%Y')
     vehicle_data = {
         'id': vehicle.id,
@@ -4514,7 +4517,7 @@ def insurance_attestation_print(vehicle_id):
     }
     return render_template('insurance_attestation_print.html',
                            vehicle_json=json.dumps(vehicle_data),
-                           tpl_json=json.dumps(tpl))
+                           tpl_json=json.dumps(tpl_without_logo))
 
 
 @vehicle_bp.route('/insurance-accounts/me/password', methods=['PUT'])

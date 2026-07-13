@@ -4932,6 +4932,9 @@ def get_vehicle_attestation_data(vehicle_id):
         'insurance_year': insurance_year,
     }
 
+    # Strip logo_b64 — can be hundreds of KB; mobile shows initials fallback instead
+    tpl.pop('logo_b64', None)
+
     return jsonify({
         'vehicle': vehicle_data,
         'template': tpl,
