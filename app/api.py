@@ -4881,3 +4881,61 @@ def api_insurance_sigva_commissions():
         'selected_year': selected_year,
         'current_year': current_year,
     })
+
+
+@api_bp.route('/vehicles/<int:vehicle_id>/attestation-data', methods=['GET'])
+@jwt_required()
+def get_vehicle_attestation_data(vehicle_id):
+    """Return attestation template + vehicle data for the mobile officer view."""
+    from app.models import InsuranceAccount
+
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    # Find the insurance account assigned to this vehicle
+    assignment = VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle_id).first()
+    account = None
+    tpl = {}
+    if assignment:
+        account = InsuranceAccount.query.get(assignment.insurance_account_id)
+        if account and account.attestation_template:
+            try:
+                tpl = json.loads(account.attestation_template)
+            except Exception:
+                tpl = {}
+
+    # Compute auto-generated numbers (mirrors attestation-builder.js logic)
+    company_name = tpl.get('company_name', '')
+    if not company_name and account and account.insurance:
+        company_name = account.insurance.company_name or ''
+
+    words = re.findall(r'\w+', company_name)
+    initials = ''.join(w[0].upper() for w in words if w)
+    police_number = initials + str(vehicle.id).zfill(6) if initials else str(vehicle.id).zfill(6)
+
+    insurance_id = account.id if account else 0
+    insurance_year = account.created_at.strftime('%Y') if (account and account.created_at) else now_comoros().strftime('%Y')
+    arrete_number = f"N°{str(insurance_id).zfill(3)}/{insurance_year}"
+
+    today_str = now_comoros().strftime('%d/%m/%Y')
+    insurance_expiry_str = vehicle.insurance_expiry.strftime('%d/%m/%Y') if vehicle.insurance_expiry else None
+
+    vehicle_data = {
+        'id': vehicle.id,
+        'license_plate': vehicle.license_plate,
+        'owner_name': vehicle.owner_name,
+        'owner_address': vehicle.owner_address or vehicle.owner_island or '',
+        'vehicle_type': vehicle.vehicle_type or '',
+        'model': vehicle.model or '',
+        'insurance_expiry': insurance_expiry_str,
+        'today': today_str,
+        'insurance_id': insurance_id,
+        'insurance_year': insurance_year,
+    }
+
+    return jsonify({
+        'vehicle': vehicle_data,
+        'template': tpl,
+        'police_number': police_number,
+        'arrete_number': arrete_number,
+        'has_template': bool(tpl),
+    })

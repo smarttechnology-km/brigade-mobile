@@ -396,6 +396,11 @@ def create_app():
                         conn.execute(text("ALTER TABLE vehicle_insurance_assignments ADD COLUMN driver_license_numbers TEXT"))
                         logger.info("Added missing vehicle_insurance_assignments.driver_license_numbers column")
 
+                    ia_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(insurance_accounts)")).fetchall()}
+                    if 'attestation_template' not in ia_cols:
+                        conn.execute(text("ALTER TABLE insurance_accounts ADD COLUMN attestation_template TEXT"))
+                        logger.info("Added missing insurance_accounts.attestation_template column")
+
                     st_subs_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='st_subscriptions'")
                     ).first() is not None

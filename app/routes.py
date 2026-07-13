@@ -1078,6 +1078,14 @@ def insurance_reports():
     return render_template('insurance_reports.html')
 
 
+@main_bp.route('/insurance-attestation')
+@login_required
+def insurance_attestation():
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    return render_template('insurance_attestation.html')
+
+
 @main_bp.route('/uninsured-vehicles')
 @login_required
 def uninsured_vehicles_page():
@@ -4420,7 +4428,10 @@ def get_current_insurance_account():
     if not isinstance(current_user, InsuranceAccount):
         return jsonify({"error": "Not an insurance account"}), 403
     
-    return jsonify(current_user.to_dict())
+    data = current_user.to_dict()
+    data['insurance_id']   = current_user.id
+    data['insurance_year'] = current_user.created_at.strftime('%Y') if current_user.created_at else now_comoros().strftime('%Y')
+    return jsonify(data)
 
 
 @vehicle_bp.route('/insurance-accounts/me', methods=['PUT'])
@@ -4449,6 +4460,61 @@ def update_insurance_account_profile():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 400
+
+
+@vehicle_bp.route('/insurance-accounts/me/attestation-template', methods=['GET'])
+@login_required
+def get_attestation_template():
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    tpl = {}
+    if current_user.attestation_template:
+        try:
+            tpl = json.loads(current_user.attestation_template)
+        except Exception:
+            tpl = {}
+    return jsonify(tpl)
+
+
+@vehicle_bp.route('/insurance-accounts/me/attestation-template', methods=['PUT'])
+@login_required
+def save_attestation_template():
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    data = request.get_json() or {}
+    current_user.attestation_template = json.dumps(data)
+    db.session.commit()
+    return jsonify({"message": "Maquette enregistrée"}), 200
+
+
+@main_bp.route('/insurance-attestation/<int:vehicle_id>/print')
+@login_required
+def insurance_attestation_print(vehicle_id):
+    if not isinstance(current_user, InsuranceAccount) or not current_user.is_active:
+        abort(403)
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    tpl = {}
+    if current_user.attestation_template:
+        try:
+            tpl = json.loads(current_user.attestation_template)
+        except Exception:
+            tpl = {}
+    created_year = current_user.created_at.strftime('%Y') if current_user.created_at else now_comoros().strftime('%Y')
+    vehicle_data = {
+        'id': vehicle.id,
+        'license_plate': vehicle.license_plate,
+        'owner_name': vehicle.owner_name,
+        'owner_address': vehicle.owner_address or vehicle.owner_island or '',
+        'vehicle_type': vehicle.vehicle_type,
+        'model': vehicle.model or '',
+        'insurance_expiry': vehicle.insurance_expiry.strftime('%d/%m/%Y') if vehicle.insurance_expiry else '—',
+        'today': now_comoros().strftime('%d/%m/%Y'),
+        'insurance_id': current_user.id,
+        'insurance_year': created_year,
+    }
+    return render_template('insurance_attestation_print.html',
+                           vehicle_json=json.dumps(vehicle_data),
+                           tpl_json=json.dumps(tpl))
 
 
 @vehicle_bp.route('/insurance-accounts/me/password', methods=['PUT'])

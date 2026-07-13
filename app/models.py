@@ -459,9 +459,10 @@ class InsuranceAccount(db.Model, UserMixin):
     contact_email = db.Column(db.String(150), nullable=True)
     contact_phone = db.Column(db.String(30), nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    attestation_template = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
-    
+
     insurance = db.relationship('Insurance', backref=db.backref('accounts', lazy=True))
     
     def set_password(self, password):
