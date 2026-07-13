@@ -9,9 +9,11 @@ body { background:#f0f0f0; display:flex; flex-direction:column; align-items:cent
 .no-print { text-align:center; margin-bottom:16px; display:flex; gap:8px; }
 .no-print button { padding:8px 24px; background:#198754; color:#fff; border:none; border-radius:6px; font-size:14px; cursor:pointer; }
 .no-print button.sec { background:#6c757d; }
+#loading-msg { color:#555; font-size:14px; font-family:sans-serif; margin-top:40px; }
 @media print {
     body { background:#fff; padding:0; }
     .no-print { display:none !important; }
+    #loading-msg { display:none !important; }
     @page { size: A5 landscape; margin:8mm; }
 }
 </style>
@@ -21,6 +23,7 @@ body { background:#f0f0f0; display:flex; flex-direction:column; align-items:cent
     <button onclick="window.print()">🖨️ Imprimer</button>
     <button class="sec" onclick="window.close()">Fermer</button>
 </div>
+<div id="loading-msg">Chargement de l'attestation…</div>
 <div id="card-container"></div>
 
 <script>
@@ -29,9 +32,31 @@ const TPL     = {{ tpl_json|safe }};
 </script>
 <script src="{{ url_for('static', filename='js/attestation-builder.js') }}"></script>
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('card-container').innerHTML = window.buildAttestationHTML(TPL, VEHICLE);
-    setTimeout(() => window.print(), 400);
+document.addEventListener('DOMContentLoaded', async () => {
+    const container  = document.getElementById('card-container');
+    const loadingMsg = document.getElementById('loading-msg');
+
+    // 1 — Render immediately without logo (page is responsive right away)
+    container.innerHTML = window.buildAttestationHTML(TPL, VEHICLE);
+    loadingMsg.style.display = 'none';
+
+    // 2 — Fetch logo separately, re-render with it, then print
+    try {
+        const res = await fetch('/api/vehicles/insurance-accounts/me/attestation-template');
+        if (res.ok) {
+            const fullTpl = await res.json();
+            if (fullTpl && fullTpl.logo_b64) {
+                container.innerHTML = window.buildAttestationHTML(fullTpl, VEHICLE);
+                // Wait for the logo image to actually paint before printing
+                const img = container.querySelector('img');
+                if (img && !img.complete) {
+                    await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+                }
+            }
+        }
+    } catch (_) { /* logo unavailable — print without it */ }
+
+    window.print();
 });
 </script>
 </body>
