@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}Maquette Attestation{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-3 align-items-center">
+        <div class="col">
+            <h2><i class="fas fa-file-contract me-2"></i>Maquette d'Attestation d'Assurance</h2>
+            <p class="text-muted mb-0">Choisissez un modèle, personnalisez-le, enregistrez — toutes vos attestations s'y conformeront.</p>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-success" onclick="saveMaquette()">
+                <i class="fas fa-save me-2"></i>Enregistrer
+            </button>
+        </div>
+    </div>
+
+    <div id="save-alert" class="alert alert-success d-none mb-3"><i class="fas fa-check-circle me-2"></i>Maquette enregistrée avec succès.</div>
+
+    <!-- Model picker -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light border-bottom">
+            <h6 class="mb-0"><i class="fas fa-palette me-2"></i>Choisissez un modèle</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3" id="model-picker"></div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Formulaire -->
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0"><i class="fas fa-building me-2"></i>Informations de votre société</h6>
+                </div>
+                <div class="card-body">
+                    <!-- Logo -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Logo de la société</label>
+                        <div class="d-flex align-items-center gap-3">
+                            <div id="logo-preview-wrap" style="width:80px;height:60px;border:1px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f8f9fa;">
+                                <img id="logo-preview-img" src="" alt="" style="max-width:100%;max-height:100%;display:none;">
+                                <span id="logo-placeholder" class="text-muted small text-center px-1">Pas de logo</span>
+                            </div>
+                            <div class="flex-grow-1">
+                                <input type="file" id="f-logo-file" class="form-control form-control-sm" accept="image/*" onchange="handleLogo(event)">
+                                <button class="btn btn-sm btn-link text-danger p-0 mt-1" onclick="clearLogo()">Supprimer le logo</button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Couleur -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Couleur d'accent</label>
+                        <div class="d-flex align-items-center gap-3">
+                            <input type="color" id="f-card-color" class="form-control form-control-color" value="#fffff0" style="width:56px;height:38px;">
+                            <span class="text-muted small">Couleur principale de la carte</span>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="resetColor()">Défaut</button>
+                        </div>
+                    </div>
+                    <hr class="my-3"/>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Nom complet de la société</label>
+                        <input type="text" id="f-company-name" class="form-control" placeholder="Ex: ASSURANCES GENERALES ET DE PRÉVOYANCE">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Code d'assurance <span class="text-muted fw-normal">(optionnel)</span></label>
+                        <input type="text" id="f-company-code" class="form-control" placeholder="Ex: Société d'Assurance régie par le Code des Assurances, RCCM n°3049-B-05">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Siège social / Adresse</label>
+                        <input type="text" id="f-company-address" class="form-control" placeholder="Ex: Moroni EGT, Gare du Nord">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Téléphone(s)</label>
+                            <input type="text" id="f-company-phone" class="form-control" placeholder="Ex: 487 09 14 / 332 23 86">
+                            <div class="form-text">Séparez plusieurs numéros par un "/"</div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Email</label>
+                            <input type="text" id="f-company-email" class="form-control" placeholder="Ex: contact@assurance.com">
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Capital Social (KMF)</label>
+                            <input type="text" id="f-capital" class="form-control" placeholder="Ex: 55 550 000">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">N° Compte BIC</label>
+                            <input type="text" id="f-bic" class="form-control" placeholder="Ex: 01 210 394 001 96">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">N° d'Arrêté</label>
+                        <input type="text" class="form-control bg-light text-muted" value="Généré automatiquement (N°XXX/AAAA)" disabled>
+                        <div class="form-text">Calculé à partir de votre identifiant et de l'année d'inscription.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mention légale <span class="text-muted fw-normal">(personnalisable)</span></label>
+                        <textarea id="f-legal-notice" class="form-control" rows="3" placeholder="La présentation de ce document justificatif n'implique qu'une présomption de garantie à la charge de l'Assureur."></textarea>
+                        <div class="form-text">Laissez vide pour utiliser la mention par défaut.</div>
+                    </div>
+                    <hr class="my-3"/>
+                    <button class="btn btn-outline-primary w-100" onclick="previewExample()">
+                        <i class="fas fa-eye me-1"></i>Aperçu avec exemple
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aperçu -->
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0"><i class="fas fa-eye me-2"></i>Aperçu de la maquette</h6>
+                </div>
+                <div class="card-body p-3 bg-light" style="overflow-x:auto;">
+                    <div id="preview-placeholder" class="text-center text-muted py-5">
+                        <i class="fas fa-file-contract fa-3x mb-3 opacity-25"></i>
+                        <p>Cliquez sur "Aperçu" ou sélectionnez un modèle pour visualiser</p>
+                    </div>
+                    <div id="attestation-preview" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/attestation-builder.js') }}"></script>
+<script>
+let _logoB64        = '';
+let _selectedLayout = 1;
+let _insuranceId    = 1;
+let _insuranceYear  = new Date().getFullYear();
+
+const MODEL_DEFAULTS = {
+  1: '#fffff0',
+  2: '#1a4b8c',
+  3: '#2d6a4f',
+  4: '#8b1a2e',
+  5: '#333333',
+};
+
+/* ── Model picker ── */
+function renderModelPicker() {
+    const container = document.getElementById('model-picker');
+    container.innerHTML = window.ATTESTATION_MODELS.map(m => `
+        <div class="col-sm-6 col-md-4 col-xl-2-4">
+            <div id="model-card-${m.id}" class="card border-2 h-100 model-pick-card ${m.id === _selectedLayout ? 'border-primary' : 'border-transparent'}"
+                 style="cursor:pointer;transition:all .2s;" onclick="selectModel(${m.id})">
+                <div class="card-body p-2 text-center">
+                    <div class="model-thumb mb-2" style="height:60px;border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8f9fa;font-size:9px;">
+                        ${getModelThumb(m.id)}
+                    </div>
+                    <div class="fw-semibold small">${m.name}</div>
+                    <div class="text-muted" style="font-size:10px;">${m.desc}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function getModelThumb(id) {
+    const colors = { 1:'#c8b400', 2:'#1a4b8c', 3:'#2d6a4f', 4:'#8b1a2e', 5:'#555' };
+    const bgs    = { 1:'#fffff0', 2:'#fff', 3:'#f5fbf5', 4:'#fdf8f2', 5:'#fff' };
+    const c = colors[id], bg = bgs[id];
+    if (id === 1) return `<div style="width:100%;height:100%;background:${bg};border:1.5px solid #333;font-size:7px;padding:3px;text-align:left;"><div style="border-bottom:1px solid #333;padding-bottom:2px;margin-bottom:2px;font-weight:bold;font-size:6px;">CLASSIQUE</div><div style="font-size:5px;">N° Police ···</div><div style="font-size:5px;">Souscripteur ···</div></div>`;
+    if (id === 2) return `<div style="width:100%;height:100%;background:#fff;border:1.5px solid ${c};"><div style="background:${c};color:#fff;font-size:6px;padding:3px 4px;font-weight:bold;">MODERNE BLEU</div><div style="padding:3px;font-size:5px;">N° · Souscripteur · Valable du</div></div>`;
+    if (id === 3) return `<div style="width:100%;height:100%;background:${bg};border:1.5px solid ${c};"><div style="background:${c};color:#fff;font-size:6px;padding:3px 4px;text-align:center;font-weight:bold;">VERT FORÊT</div><div style="padding:3px;font-size:5px;color:#333;">N° · Souscripteur · Valable du</div></div>`;
+    if (id === 4) return `<div style="width:100%;height:100%;background:${bg};border:2px double ${c};padding:2px;font-size:6px;"><div style="border:1px solid ${c};height:100%;padding:2px;text-align:center;"><div style="color:${c};font-weight:bold;font-size:5px;">BORDEAUX</div><div style="font-size:4.5px;margin-top:2px;">N° · Souscripteur</div></div></div>`;
+    if (id === 5) return `<div style="width:100%;height:100%;background:#fff;border:1px solid #ccc;"><div style="height:3px;background:${c};"></div><div style="padding:3px;font-size:5px;color:#333;"><div style="font-weight:bold;color:${c};font-size:6px;">MINIMALISTE</div>N° · Souscripteur</div></div>`;
+}
+
+function selectModel(id) {
+    _selectedLayout = id;
+    document.querySelectorAll('.model-pick-card').forEach(el => {
+        el.classList.remove('border-primary');
+        el.classList.add('border-transparent');
+    });
+    const card = document.getElementById(`model-card-${id}`);
+    if (card) { card.classList.add('border-primary'); card.classList.remove('border-transparent'); }
+
+    // Set default color for model
+    const defaultColor = MODEL_DEFAULTS[id];
+    document.getElementById('f-card-color').value = defaultColor;
+
+    previewExample();
+}
+
+function resetColor() {
+    document.getElementById('f-card-color').value = MODEL_DEFAULTS[_selectedLayout] || '#fffff0';
+}
+
+/* ── Logo ── */
+function handleLogo(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        _logoB64 = e.target.result;
+        document.getElementById('logo-preview-img').src = _logoB64;
+        document.getElementById('logo-preview-img').style.display = '';
+        document.getElementById('logo-placeholder').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+function clearLogo() {
+    _logoB64 = '';
+    document.getElementById('f-logo-file').value = '';
+    document.getElementById('logo-preview-img').src = '';
+    document.getElementById('logo-preview-img').style.display = 'none';
+    document.getElementById('logo-placeholder').style.display = '';
+}
+
+/* ── Load / Save ── */
+async function loadMaquette() {
+    try {
+        const [meRes, tplRes] = await Promise.all([
+            fetch('/api/vehicles/insurance-accounts/me', { credentials: 'same-origin' }),
+            fetch('/api/vehicles/insurance-accounts/me/attestation-template', { credentials: 'same-origin' }),
+        ]);
+        if (meRes.ok) {
+            const me = await meRes.json();
+            _insuranceId   = me.insurance_id   || 1;
+            _insuranceYear = me.insurance_year || new Date().getFullYear();
+        }
+        if (!tplRes.ok) return;
+        const t = await tplRes.json();
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+        setVal('f-company-name',    t.company_name);
+        setVal('f-company-code',    t.company_code);
+        setVal('f-company-address', t.company_address);
+        setVal('f-company-phone',   t.company_phone);
+        setVal('f-company-email',   t.company_email);
+        setVal('f-capital',         t.capital);
+        setVal('f-bic',             t.bic);
+        setVal('f-legal-notice',    t.legal_notice);
+        if (t.card_color)  document.getElementById('f-card-color').value = t.card_color;
+        if (t.layout) _selectedLayout = parseInt(t.layout) || 1;
+        if (t.logo_b64) {
+            _logoB64 = t.logo_b64;
+            document.getElementById('logo-preview-img').src = _logoB64;
+            document.getElementById('logo-preview-img').style.display = '';
+            document.getElementById('logo-placeholder').style.display = 'none';
+        }
+        renderModelPicker();
+    } catch(e) { console.error(e); }
+}
+
+function getTpl() {
+    const g = id => (document.getElementById(id)?.value || '').trim();
+    return {
+        layout:          _selectedLayout,
+        company_name:    g('f-company-name'),
+        company_code:    g('f-company-code'),
+        company_address: g('f-company-address'),
+        company_phone:   g('f-company-phone'),
+        company_email:   g('f-company-email'),
+        capital:         g('f-capital'),
+        bic:             g('f-bic'),
+        legal_notice:    g('f-legal-notice'),
+        card_color:      g('f-card-color') || MODEL_DEFAULTS[_selectedLayout] || '#fffff0',
+        logo_b64:        _logoB64,
+    };
+}
+
+async function saveMaquette() {
+    const res = await fetch('/api/vehicles/insurance-accounts/me/attestation-template', {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(getTpl())
+    });
+    if (res.ok) {
+        const el = document.getElementById('save-alert');
+        el.classList.remove('d-none');
+        setTimeout(() => el.classList.add('d-none'), 3000);
+    }
+}
+
+function previewExample() {
+    const tpl = getTpl();
+    const today = new Date().toLocaleDateString('fr-FR');
+    const example = {
+        id: 695,
+        license_plate: '518 CJ 73',
+        owner_name: 'EXEMPLE PROPRIÉTAIRE',
+        owner_address: 'MORONI AMBASSADEUR',
+        vehicle_type: 'PROMENADE 02 PLACES',
+        model: 'ADV 150',
+        insurance_expiry: new Date(Date.now() + 365*24*3600*1000).toLocaleDateString('fr-FR'),
+        today,
+        insurance_id:   _insuranceId,
+        insurance_year: _insuranceYear,
+    };
+    document.getElementById('preview-placeholder').style.display = 'none';
+    const el = document.getElementById('attestation-preview');
+    el.style.display = '';
+    el.innerHTML = window.buildAttestationHTML(tpl, example);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    renderModelPicker();
+    await loadMaquette();
+});
+</script>
+
+<style>
+.col-xl-2-4 { flex: 0 0 auto; width: 20%; }
+@media (max-width: 1199px) { .col-xl-2-4 { width: 33.33%; } }
+@media (max-width: 767px)  { .col-xl-2-4 { width: 50%; } }
+.border-transparent { border-color: transparent !important; }
+.model-pick-card:hover { border-color: #86b7fe !important; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+</style>
+{% endblock %}
