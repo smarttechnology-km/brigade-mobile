@@ -2036,6 +2036,68 @@ def api_my_checked_out_phone():
         'success': True
     })
 
+@api_bp.route('/phone/exit-code-status', methods=['GET'])
+@jwt_required()
+def api_phone_exit_code_status():
+    """Mobile: returns whether an exit code is configured (not the code itself)."""
+    try:
+        from app.models import PhoneSetting
+        setting = PhoneSetting.get()
+        return jsonify({'has_code': bool(setting.exit_code)})
+    except Exception as e:
+        return jsonify({'has_code': False, 'error': str(e)}), 200
+
+
+@api_bp.route('/phone/verify-exit-code', methods=['POST'])
+@jwt_required()
+def api_verify_phone_exit_code():
+    """Mobile: verify the exit code before allowing app to go to background."""
+    try:
+        from app.models import PhoneSetting
+        data = request.get_json() or {}
+        entered = (data.get('code') or '').strip()
+        setting = PhoneSetting.get()
+        if not setting.exit_code:
+            return jsonify({'valid': True})
+        return jsonify({'valid': entered == setting.exit_code})
+    except Exception as e:
+        return jsonify({'valid': True, 'error': str(e)}), 200
+
+
+@api_bp.route('/phones/exit-code', methods=['GET'])
+@login_required
+def api_get_phone_exit_code():
+    try:
+        from app.models import PhoneSetting
+        if not current_user.is_admin:
+            return jsonify({'error': 'Unauthorized'}), 403
+        setting = PhoneSetting.get()
+        return jsonify({
+            'exit_code': setting.exit_code or '',
+            'generated_at': setting.exit_code_generated_at.isoformat() if setting.exit_code_generated_at else None,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/phones/exit-code/rotate', methods=['POST'])
+@login_required
+def api_rotate_phone_exit_code():
+    try:
+        from app.models import PhoneSetting
+        if not current_user.is_admin:
+            return jsonify({'error': 'Unauthorized'}), 403
+        setting = PhoneSetting.get()
+        setting.rotate_exit_code()
+        return jsonify({
+            'message': 'Nouveau code généré.',
+            'exit_code': setting.exit_code,
+            'generated_at': setting.exit_code_generated_at.isoformat() if setting.exit_code_generated_at else None,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/photo-submissions/upload', methods=['POST'])
 @jwt_required()
 def upload_photo_submission():

@@ -317,3 +317,18 @@ def apply_fine_late_rates():
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error in apply_fine_late_rates: {e}")
+
+
+def rotate_phone_exit_code():
+    """Rotate the phone app exit code every 2 days."""
+    app = get_app()
+    if not app:
+        return
+    with app.app_context():
+        try:
+            from app.models import PhoneSetting
+            setting = PhoneSetting.get()
+            setting.rotate_exit_code()
+            logger.info(f"rotate_phone_exit_code: new code generated ({setting.exit_code})")
+        except Exception as e:
+            logger.error(f"Error in rotate_phone_exit_code: {e}")
