@@ -4932,8 +4932,7 @@ def get_vehicle_attestation_data(vehicle_id):
         'insurance_year': insurance_year,
     }
 
-    # Strip logo_b64 — can be hundreds of KB; mobile shows initials fallback instead
-    tpl.pop('logo_b64', None)
+    tpl.pop('logo_b64', None)  # fetched separately via /attestation-logo
 
     return jsonify({
         'vehicle': vehicle_data,
@@ -4942,3 +4941,25 @@ def get_vehicle_attestation_data(vehicle_id):
         'arrete_number': arrete_number,
         'has_template': bool(tpl),
     })
+
+
+@api_bp.route('/vehicles/<int:vehicle_id>/attestation-logo', methods=['GET'])
+@jwt_required()
+def get_vehicle_attestation_logo(vehicle_id):
+    """Return only logo_b64 for the attestation — fetched separately so the main data loads fast."""
+    from app.models import InsuranceAccount
+
+    Vehicle.query.get_or_404(vehicle_id)
+    assignment = VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle_id).first()
+    if not assignment:
+        return jsonify({'logo_b64': None})
+
+    account = InsuranceAccount.query.get(assignment.insurance_account_id)
+    if not account or not account.attestation_template:
+        return jsonify({'logo_b64': None})
+
+    try:
+        tpl = json.loads(account.attestation_template)
+        return jsonify({'logo_b64': tpl.get('logo_b64')})
+    except Exception:
+        return jsonify({'logo_b64': None})
