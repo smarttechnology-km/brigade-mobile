@@ -1896,7 +1896,7 @@ def api_licences_list():
 def licences_card(license_id):
     import io, base64, qrcode as _qrcode
     from app.models import DriverLicense, LicenseSetting
-    from app.timezone_utils import now_comoros as _nc
+    from app.timezone_utils import now_comoros as _nc, now_comoros
     from app.routes import parse_category_details
 
     lic      = DriverLicense.query.get_or_404(license_id)
@@ -1913,14 +1913,22 @@ def licences_card(license_id):
 
     category_details = parse_category_details(lic)
 
+    from dateutil.relativedelta import relativedelta
+    from app.routes import compute_category_expiries
     computed_expiry = None
-    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
-        from dateutil.relativedelta import relativedelta
-        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    if not lic.expiry_date and lic.issue_date:
+        if lic.type_permis == 'temporaire':
+            computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+        else:
+            computed_expiry = lic.issue_date + relativedelta(years=(settings.permanent_validity_years or 10))
+    main_expiry = lic.expiry_date or computed_expiry
+    computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
 
-    return render_template('license_folded_card.html', lic=lic, settings=settings,
+    return render_template('license_card.html', lic=lic, settings=settings,
                            computed_expiry=computed_expiry, qr_data_uri=qr_data_uri,
-                           category_details=category_details)
+                           category_details=category_details,
+                           computed_cat_expiries=computed_cat_expiries,
+                           now_comoros=now_comoros)
 
 
 # ── Employés ──────────────────────────────────────────────────────────────────
