@@ -1142,20 +1142,55 @@ def dgrtr_add_license():
     return render_template('dgrtr_add_license.html')
 
 
+def compute_category_expiries(lic, settings, main_expiry):
+    """Return {code: 'DD/MM/YYYY'} for each owned category.
+    If category_validity[code].mode == 'custom', expiry = date_obtention + years.
+    Otherwise falls back to main_expiry (the license-level expiry date)."""
+    from dateutil.relativedelta import relativedelta
+    try:
+        raw_details = json.loads(lic.category_details) if lic.category_details else {}
+    except (ValueError, TypeError):
+        raw_details = {}
+    try:
+        cat_validity = json.loads(settings.category_validity) if settings.category_validity else {}
+    except (ValueError, TypeError):
+        cat_validity = {}
+    result = {}
+    for code, det in raw_details.items():
+        entry = cat_validity.get(code, {})
+        expiry = None
+        if entry.get('mode') == 'custom' and entry.get('years'):
+            date_str = det.get('date')
+            if date_str:
+                try:
+                    obtention = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    expiry = obtention + relativedelta(years=int(entry['years']))
+                except Exception:
+                    pass
+        if expiry is None:
+            expiry = main_expiry
+        if expiry:
+            result[code] = expiry.strftime('%d/%m/%Y')
+    return result
+
+
 @main_bp.route('/dgrtr/licenses/<int:license_id>/print-a4')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_license_print_a4(license_id):
     from app.models import DriverLicense, LicenseSetting
+    from dateutil.relativedelta import relativedelta
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
     category_details = parse_category_details(lic)
-    from dateutil.relativedelta import relativedelta
     months = settings.temp_validity_months or 12
     computed_expiry = lic.issue_date + relativedelta(months=months) if lic.issue_date else None
+    main_expiry = lic.expiry_date or computed_expiry
+    computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     # Le PDF A4 DGRTR est toujours un permis temporaire
     return render_template('dgrtr_license_a4.html', lic=lic, settings=settings,
                            category_details=category_details, force_temporaire=True,
-                           computed_expiry=computed_expiry)
+                           computed_expiry=main_expiry,
+                           computed_cat_expiries=computed_cat_expiries)
 
 
 @main_bp.route('/licenses/<int:license_id>/qrcode')
@@ -1197,17 +1232,22 @@ def parse_category_details(lic):
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_print(license_id):
     from app.models import DriverLicense, LicenseSetting
+    from dateutil.relativedelta import relativedelta
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
     force_temporaire = request.args.get('temporaire') == '1'
     computed_expiry = None
-    if force_temporaire and not lic.expiry_date and lic.issue_date:
-        months = settings.temp_validity_months or 12
-        from dateutil.relativedelta import relativedelta
-        computed_expiry = lic.issue_date + relativedelta(months=months)
+    if not lic.expiry_date and lic.issue_date:
+        if force_temporaire or lic.type_permis == 'temporaire':
+            computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+        else:
+            computed_expiry = lic.issue_date + relativedelta(years=(settings.permanent_validity_years or 10))
+    main_expiry = lic.expiry_date or computed_expiry
+    computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     category_details = parse_category_details(lic)
     return render_template('license_print.html', lic=lic, settings=settings,
                            force_temporaire=force_temporaire, computed_expiry=computed_expiry,
+                           computed_cat_expiries=computed_cat_expiries,
                            category_details=category_details)
 
 
@@ -1219,11 +1259,17 @@ def license_print_folded(license_id):
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
     computed_expiry = None
-    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
-        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    if not lic.expiry_date and lic.issue_date:
+        if lic.type_permis == 'temporaire':
+            computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+        else:
+            computed_expiry = lic.issue_date + relativedelta(years=(settings.permanent_validity_years or 10))
+    main_expiry = lic.expiry_date or computed_expiry
+    computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     category_details = parse_category_details(lic)
     return render_template('license_folded_card.html', lic=lic, settings=settings,
-                           computed_expiry=computed_expiry, category_details=category_details)
+                           computed_expiry=computed_expiry, category_details=category_details,
+                           computed_cat_expiries=computed_cat_expiries)
 
 
 @main_bp.route('/licenses/insurance-view/<license_number>')
@@ -1248,22 +1294,38 @@ def license_insurance_view(license_number):
     lic = DriverLicense.query.filter_by(license_number=num).first_or_404()
     settings = LicenseSetting.get()
     computed_expiry = None
-    if lic.type_permis == 'temporaire' and not lic.expiry_date and lic.issue_date:
-        computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    if not lic.expiry_date and lic.issue_date:
+        if lic.type_permis == 'temporaire':
+            computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+        else:
+            computed_expiry = lic.issue_date + relativedelta(years=(settings.permanent_validity_years or 10))
+    main_expiry = lic.expiry_date or computed_expiry
+    computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     category_details = parse_category_details(lic)
     return render_template('license_folded_card.html', lic=lic, settings=settings,
-                           computed_expiry=computed_expiry, category_details=category_details)
+                           computed_expiry=computed_expiry, category_details=category_details,
+                           computed_cat_expiries=computed_cat_expiries)
 
 
 @main_bp.route('/licenses/<int:license_id>/print-card')
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_print_card(license_id):
     from app.models import DriverLicense, LicenseSetting
+    from dateutil.relativedelta import relativedelta
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
+    computed_expiry = None
+    if not lic.expiry_date and lic.issue_date:
+        if lic.type_permis == 'temporaire':
+            computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+        else:
+            computed_expiry = lic.issue_date + relativedelta(years=(settings.permanent_validity_years or 10))
+    main_expiry = lic.expiry_date or computed_expiry
+    computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     category_details = parse_category_details(lic)
     return render_template('license_card.html', lic=lic, settings=settings, now_comoros=now_comoros,
-                            category_details=category_details)
+                           computed_expiry=computed_expiry, category_details=category_details,
+                           computed_cat_expiries=computed_cat_expiries)
 
 
 @main_bp.route('/licenses/print-requests')
@@ -6046,34 +6108,41 @@ def get_vehicle_assignments():
 @vehicle_bp.route('/assignments', methods=['POST'])
 @login_required
 def create_vehicle_assignment():
-    """Assign a vehicle to an insurance account (admin only)"""
-    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+    """Assign a vehicle to an insurance account (admin or the insurance account itself)"""
+    is_admin = hasattr(current_user, 'role') and current_user.role == 'administrateur'
+    is_insurance = isinstance(current_user, InsuranceAccount)
+    if not is_admin and not is_insurance:
         return jsonify({"error": "Forbidden"}), 403
-    
+
     data = request.get_json() or {}
     vehicle_id = data.get('vehicle_id')
     insurance_account_id = data.get('insurance_account_id')
-    
+
     if not vehicle_id or not insurance_account_id:
         return jsonify({"error": "vehicle_id and insurance_account_id are required"}), 400
-    
-    # Verify vehicle exists
+
+    # Insurance accounts can only create assignments for themselves
+    if is_insurance and insurance_account_id != current_user.id:
+        return jsonify({"error": "Forbidden"}), 403
+
     vehicle = Vehicle.query.get_or_404(vehicle_id)
-    
-    # Verify account exists
     account = InsuranceAccount.query.get_or_404(insurance_account_id)
-    
-    # Check if assignment already exists
+
+    driver_nums = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
+    if not driver_nums:
+        return jsonify({"error": "Au moins un numéro de permis conducteur est requis"}), 400
+
+    # Update existing assignment if one already exists
     existing = VehicleInsuranceAssignment.query.filter_by(
         vehicle_id=vehicle_id,
         insurance_account_id=insurance_account_id
     ).first()
     if existing:
-        return jsonify({"error": "This assignment already exists"}), 400
-    
-    driver_nums = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
-    if not driver_nums:
-        return jsonify({"error": "Au moins un numéro de permis conducteur est requis"}), 400
+        existing.driver_license_numbers = json.dumps(driver_nums)
+        existing.notes = data.get('notes', existing.notes or '')
+        db.session.commit()
+        return jsonify(existing.to_dict()), 200
+
     assignment = VehicleInsuranceAssignment(
         vehicle_id=vehicle_id,
         insurance_account_id=insurance_account_id,
@@ -6081,10 +6150,8 @@ def create_vehicle_assignment():
         notes=data.get('notes', ''),
         driver_license_numbers=json.dumps(driver_nums)
     )
-    
     db.session.add(assignment)
     db.session.commit()
-    
     return jsonify(assignment.to_dict()), 201
 
 
