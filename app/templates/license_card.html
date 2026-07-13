@@ -467,7 +467,7 @@
           <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
           <div class="id-pair-right">
             <span class="id-lbl">Expire le</span>
-            <span class="id-val">{{ lic.expiry_date.strftime('%d/%m/%Y') if lic.expiry_date else '—' }}</span>
+            <span class="id-val">{{ (lic.expiry_date or computed_expiry).strftime('%d/%m/%Y') if (lic.expiry_date or computed_expiry) else '—' }}</span>
           </div>
         </div>
         <div class="id-row">
@@ -607,7 +607,7 @@
               </td>
               {% if owned %}
                 <td class="cat-cell-date">{{ details.date if details and details.date else '—' }}</td>
-                <td class="cat-cell-date">{{ details.expiration if details and details.expiration else '—' }}</td>
+                <td class="cat-cell-date">{{ computed_cat_expiries.get(code, '—') }}</td>
               {% else %}
                 <td class="cat-cell-date cat-cell-empty">—</td>
                 <td class="cat-cell-date cat-cell-empty">—</td>

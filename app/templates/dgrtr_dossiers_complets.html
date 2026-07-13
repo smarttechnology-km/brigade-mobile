@@ -105,8 +105,14 @@
 
 <script>
 var allDossiers = [];
+var licenseSettings = { temp_validity_months: 12, permanent_validity_years: 10, category_validity: {} };
 
-document.addEventListener('DOMContentLoaded', loadDossiers);
+document.addEventListener('DOMContentLoaded', function() {
+  loadDossiers();
+  fetch('/api/licenses/settings')
+    .then(function(r){ return r.json(); })
+    .then(function(data){ if (data && !data.error) licenseSettings = data; });
+});
 
 function loadDossiers() {
   fetch('/api/dossiers-permis?status=complet')
@@ -169,8 +175,8 @@ function renderTable(data) {
     return `<tr>
       <td class="ps-4 fw-bold font-monospace text-primary" style="white-space:nowrap;">${d.dossier_number || '—'}</td>
       <td>
-        <div class="fw-semibold text-uppercase">${d.nom || ''}</div>
-        <div class="text-muted small">${d.prenom || ''}</div>
+        <div class="fw-semibold">${d.prenom || d.nom || ''}</div>
+        <div class="text-muted small text-uppercase">${d.prenom ? d.nom || '' : ''}</div>
       </td>
       <td class="fw-semibold font-monospace small" style="white-space:nowrap;">${d.license_number_proposed || '—'}</td>
       <td>${typeBadge}</td>
@@ -197,15 +203,50 @@ function openDetail(id) {
   if (!d) return;
 
   document.getElementById('detail-title').innerHTML =
-    `<i class="fas fa-folder-open me-2"></i>${d.nom || ''} ${d.prenom || ''} — <span class="font-monospace">${d.dossier_number || ''}</span>`;
+    `<i class="fas fa-folder-open me-2"></i>${((d.prenom || '') + ' ' + (d.nom || '')).trim()} — <span class="font-monospace">${d.dossier_number || ''}</span>`;
 
   var photoHtml = d.photo_filename
     ? `<img src="/uploads/license_photos/${d.photo_filename}" style="width:90px;height:112px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb;">`
     : `<div style="width:90px;height:112px;background:#f3f4f6;border-radius:8px;border:2px solid #e5e7eb;display:flex;align-items:center;justify-content:center;"><i class="fas fa-user-circle fa-3x text-muted"></i></div>`;
 
-  var catBadgesHtml = d.categories
-    ? d.categories.split(',').map(function(c){ return `<span class="badge-cat">${c.trim()}</span>`; }).join(' ')
-    : '—';
+  var catDetails = d.category_details || {};
+  var catValidity = licenseSettings.category_validity || {};
+  var licExpiry = d.expiry_date || '';
+
+  function computeCatExpiry(code, detDate) {
+    var entry = catValidity[code] || {};
+    if (entry.mode === 'custom' && entry.years && detDate) {
+      var dt = new Date(detDate);
+      dt.setFullYear(dt.getFullYear() + parseInt(entry.years));
+      var y = dt.getFullYear(), m = String(dt.getMonth()+1).padStart(2,'0'), day = String(dt.getDate()).padStart(2,'0');
+      return day + '/' + m + '/' + y;
+    }
+    if (!licExpiry) return '—';
+    // licExpiry is YYYY-MM-DD, reformat to DD/MM/YYYY
+    var p = licExpiry.split('-');
+    return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : licExpiry;
+  }
+
+  var catTableHtml = d.categories
+    ? (() => {
+        var cats = d.categories.split(',').map(function(c){ return c.trim(); });
+        return `<table class="table table-sm table-bordered mt-2 mb-0" style="font-size:13px;">
+          <thead class="table-light">
+            <tr><th style="width:70px;">Cat.</th><th style="width:140px;">Date d'obtention</th><th style="width:140px;">Date d'expiration</th></tr>
+          </thead>
+          <tbody>
+            ${cats.map(function(code) {
+              var det = catDetails[code] || {};
+              return `<tr>
+                <td><span class="badge bg-dark">${code}</span></td>
+                <td>${det.date || '—'}</td>
+                <td>${computeCatExpiry(code, det.date || '')}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+      })()
+    : '<span class="text-muted">—</span>';
 
   var typeBadge = d.type_permis === 'temporaire'
     ? '<span class="badge bg-warning text-dark">Temporaire</span>'
@@ -219,8 +260,8 @@ function openDetail(id) {
           <div class="col-md-4"><span class="text-muted">N° Dossier</span><br><strong class="font-monospace text-primary">${d.dossier_number || '—'}</strong></div>
           <div class="col-md-4"><span class="text-muted">N° Permis</span><br><strong class="font-monospace">${d.license_number_proposed || '—'}</strong></div>
           <div class="col-md-4"><span class="text-muted">Statut</span><br><span class="badge bg-success">Délivré</span></div>
-          <div class="col-md-4"><span class="text-muted">Nom</span><br><strong class="text-uppercase">${d.nom || '—'}</strong></div>
-          <div class="col-md-4"><span class="text-muted">Prénom</span><br><strong>${d.prenom || '—'}</strong></div>
+          <div class="col-md-4"><span class="text-muted">Nom</span><br><strong>${d.prenom || d.nom || '—'}</strong></div>
+          <div class="col-md-4"><span class="text-muted">Prénom</span><br><strong class="text-uppercase">${d.prenom ? d.nom || '—' : '—'}</strong></div>
           <div class="col-md-4"><span class="text-muted">Date de naissance</span><br>${d.date_naissance || '—'}</div>
           <div class="col-md-4"><span class="text-muted">Lieu de naissance</span><br>${d.lieu_naissance || '—'}</div>
           <div class="col-md-4"><span class="text-muted">Sexe</span><br>${d.sexe || '—'}</div>
@@ -239,7 +280,7 @@ function openDetail(id) {
       <div class="col-md-3"><span class="text-muted">Date de délivrance</span><br><strong>${d.issue_date || '—'}</strong></div>
       <div class="col-md-3"><span class="text-muted">Date d'expiration</span><br><strong>${d.expiry_date || '—'}</strong></div>
       <div class="col-md-3"><span class="text-muted">Centre</span><br>${d.centre_immatriculation || '—'}</div>
-      <div class="col-12"><span class="text-muted">Catégories</span><br><div class="mt-1">${catBadgesHtml}</div></div>
+      <div class="col-12"><span class="text-muted fw-semibold">Catégories autorisées</span>${catTableHtml}</div>
     </div>
 
     <hr class="my-3">

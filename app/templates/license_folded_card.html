@@ -655,7 +655,7 @@
             {% set det = category_details.get(code) %}
             <div class="fcc">
               <i class="fas {{ icon }} fcc-icon"></i>
-              <span class="fcc-exp">{{ det.expiration if det and det.expiration else '—' }}</span>
+              <span class="fcc-exp">{{ computed_cat_expiries.get(code, '—') }}</span>
             </div>
           {% endif %}
         {% endfor %}
@@ -810,7 +810,7 @@
               <td>{{ desc }}</td>
               {% if owned %}
                 <td class="td-center">{{ det.date if det and det.date else '—' }}</td>
-                <td class="td-center">{{ det.expiration if det and det.expiration else '—' }}</td>
+                <td class="td-center">{{ computed_cat_expiries.get(code, '—') }}</td>
               {% else %}
                 <td class="td-empty">—</td>
                 <td class="td-empty">—</td>

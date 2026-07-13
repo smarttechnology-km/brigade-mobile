@@ -322,11 +322,11 @@
         <div class="row g-2 mb-4">
           <div class="col-md-3">
             <label class="form-label small">Nom <span class="text-danger">*</span></label>
-            <input type="text" id="s2-nom" class="form-control text-uppercase" placeholder="NOM DE FAMILLE">
+            <input type="text" id="s2-prenom" class="form-control" placeholder="Prénom">
           </div>
           <div class="col-md-3">
             <label class="form-label small">Prénom <span class="text-danger">*</span></label>
-            <input type="text" id="s2-prenom" class="form-control" placeholder="Prénom">
+            <input type="text" id="s2-nom" class="form-control text-uppercase" placeholder="NOM DE FAMILLE">
           </div>
           <div class="col-md-3">
             <label class="form-label small">Date de naissance</label>
@@ -415,6 +415,7 @@
                 <th>Description</th>
                 <th style="width:90px;">Validité</th>
                 <th style="width:160px;">Date d'obtention</th>
+                <th style="width:160px;">N° d'identifiant</th>
                 <th style="width:60px;" class="text-center">Inclure</th>
               </tr>
             </thead>
@@ -435,6 +436,7 @@
                 <td class="small text-muted">{{ desc }}</td>
                 <td><span id="s2-cat-hint-{{ code }}" class="badge bg-light text-secondary border" style="font-size:11px;">—</span></td>
                 <td><input type="date" class="form-control form-control-sm" id="s2-cat-date-{{ code }}" disabled></td>
+                <td><input type="text" class="form-control form-control-sm" id="s2-cat-id-{{ code }}" placeholder="N° identifiant" disabled></td>
                 <td class="text-center">
                   <input type="checkbox" class="form-check-input" id="s2-cat-cb-{{ code }}"
                     data-code="{{ code }}" onchange="onS2CatToggle('{{ code }}')">
@@ -512,8 +514,8 @@
           </div>
           <div class="col-md-10">
             <div class="row g-2">
-              <div class="col-md-3"><label class="form-label small">Nom <span class="text-danger">*</span></label><input type="text" id="s4-nom" class="form-control text-uppercase"></div>
-              <div class="col-md-3"><label class="form-label small">Prénom <span class="text-danger">*</span></label><input type="text" id="s4-prenom" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label small">Nom <span class="text-danger">*</span></label><input type="text" id="s4-prenom" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label small">Prénom <span class="text-danger">*</span></label><input type="text" id="s4-nom" class="form-control text-uppercase"></div>
               <div class="col-md-3"><label class="form-label small">Date de naissance</label><input type="date" id="s4-dob" class="form-control"></div>
               <div class="col-md-3"><label class="form-label small">Lieu de naissance</label><input type="text" id="s4-lieu-naissance" class="form-control"></div>
               <div class="col-md-2"><label class="form-label small">Sexe</label><select id="s4-sexe" class="form-select"><option value="">—</option><option value="masculin">Masculin</option><option value="feminin">Féminin</option></select></div>
@@ -544,6 +546,7 @@
                 <th>Description</th>
                 <th style="width:90px;">Validité</th>
                 <th style="width:160px;">Date d'obtention</th>
+                <th style="width:160px;">N° d'identifiant</th>
                 <th style="width:60px;" class="text-center">Inclure</th>
               </tr>
             </thead>
@@ -564,6 +567,7 @@
                 <td class="small text-muted">{{ desc }}</td>
                 <td><span id="s4-cat-hint-{{ code }}" class="badge bg-light text-secondary border" style="font-size:11px;">—</span></td>
                 <td><input type="date" class="form-control form-control-sm" id="s4-cat-date-{{ code }}" disabled></td>
+                <td><input type="text" class="form-control form-control-sm" id="s4-cat-id-{{ code }}" placeholder="N° identifiant" disabled></td>
                 <td class="text-center"><input type="checkbox" class="form-check-input" id="s4-cat-cb-{{ code }}" data-code="{{ code }}" onchange="onS4CatToggle('{{ code }}')"></td>
               </tr>
               {% endfor %}
@@ -863,7 +867,7 @@ function renderDossiersTable(data) {
 
     return `<tr style="cursor:pointer;" onclick="openDetail(${d.id})">
       <td class="fw-bold font-monospace text-primary" style="white-space:nowrap;">${d.dossier_number || '<span class="text-muted fst-italic small">—</span>'}</td>
-      <td>${(d.prenom || d.nom) ? '<span class="fw-semibold">' + (d.nom + ' ' + d.prenom).trim() + '</span>' : '<span class="text-muted fst-italic small">Non renseigné</span>'}</td>
+      <td>${(d.prenom || d.nom) ? '<span class="fw-semibold">' + ((d.prenom || '') + ' ' + (d.nom || '')).trim() + '</span>' : '<span class="text-muted fst-italic small">Non renseigné</span>'}</td>
       <td class="small text-muted">${d.country || '—'}</td>
       <td>${stepDots}</td>
       <td>${statusBadge}</td>
@@ -920,7 +924,7 @@ function renderDossiers(data) {
                 : `<div class="text-muted small fst-italic">N° dossier en attente</div>`
               }
               ${(d.nom || d.prenom)
-                ? `<div class="fw-semibold mt-1">${(d.nom + ' ' + d.prenom).trim()}</div>`
+                ? `<div class="fw-semibold mt-1">${((d.prenom || '') + ' ' + (d.nom || '')).trim()}</div>`
                 : `<div class="text-muted small mt-1">Candidat non renseigné</div>`
               }
               <div class="text-muted small">${d.country || '—'}</div>
@@ -1024,7 +1028,7 @@ function openDetail(id) {
   if (d.step3_validated_at && !d.step2_validated_at) { openStep2(id); return; }
 
   var candidatLabel = (d.nom || d.prenom)
-    ? (d.nom + ' ' + d.prenom).trim()
+    ? ((d.prenom || '') + ' ' + (d.nom || '')).trim()
     : '<span class="text-muted fst-italic">Candidat non renseigné</span>';
   document.getElementById('detail-title').innerHTML =
     `<i class="fas fa-folder-open me-2"></i>${candidatLabel}` +
@@ -1065,8 +1069,8 @@ function openDetail(id) {
       done: !!d.step2_validated_at, by: d.step2_validated_by, at: d.step2_validated_at,
       content: d.step2_validated_at ? `
         <div class="row g-1 mt-1 text-muted small">
-          <div class="col-6"><b>Nom :</b> ${d.nom}</div>
-          <div class="col-6"><b>Prénom :</b> ${d.prenom}</div>
+          <div class="col-6"><b>Nom :</b> ${d.prenom || d.nom || '—'}</div>
+          <div class="col-6"><b>Prénom :</b> ${d.prenom ? d.nom || '—' : '—'}</div>
           <div class="col-6"><b>Type :</b> ${d.type_permis || '—'}</div>
           <div class="col-6"><b>N° permis proposé :</b> ${d.license_number_proposed || '—'}</div>
           <div class="col-6"><b>Catégories :</b> ${d.categories || '—'}</div>
@@ -1231,12 +1235,15 @@ function openStep2(dossierId) {
   var catDetails   = d && d.category_details ? d.category_details : {};
   var existingCats = d && d.categories ? d.categories.split(',').map(function(c){ return c.trim(); }) : [];
   ['A','A1','A2','B','C','D','E','F','P'].forEach(function(code) {
-    var cb   = document.getElementById('s2-cat-cb-' + code);
-    var date = document.getElementById('s2-cat-date-' + code);
+    var cb      = document.getElementById('s2-cat-cb-' + code);
+    var date    = document.getElementById('s2-cat-date-' + code);
+    var idInput = document.getElementById('s2-cat-id-' + code);
     var checked = existingCats.indexOf(code) !== -1;
-    cb.checked    = checked;
-    date.disabled = !checked;
+    cb.checked      = checked;
+    date.disabled   = !checked;
+    idInput.disabled = !checked;
     date.value    = (catDetails[code] && catDetails[code].date) ? catDetails[code].date : '';
+    idInput.value = (catDetails[code] && catDetails[code].identifiant) ? catDetails[code].identifiant : '';
   });
 
   applyCategoryHints('s2');
@@ -1245,10 +1252,12 @@ function openStep2(dossierId) {
 }
 
 function onS2CatToggle(code) {
-  var cb   = document.getElementById('s2-cat-cb-' + code);
-  var date = document.getElementById('s2-cat-date-' + code);
-  date.disabled = !cb.checked;
-  if (!cb.checked) date.value = '';
+  var cb      = document.getElementById('s2-cat-cb-' + code);
+  var date    = document.getElementById('s2-cat-date-' + code);
+  var idInput = document.getElementById('s2-cat-id-' + code);
+  date.disabled    = !cb.checked;
+  idInput.disabled = !cb.checked;
+  if (!cb.checked) { date.value = ''; idInput.value = ''; }
 }
 
 function onS2TypePermisChange() {
@@ -1268,10 +1277,12 @@ function onS2TypePermisChange() {
 }
 
 function onS4CatToggle(code) {
-  var cb   = document.getElementById('s4-cat-cb-' + code);
-  var date = document.getElementById('s4-cat-date-' + code);
-  date.disabled = !cb.checked;
-  if (!cb.checked) date.value = '';
+  var cb      = document.getElementById('s4-cat-cb-' + code);
+  var date    = document.getElementById('s4-cat-date-' + code);
+  var idInput = document.getElementById('s4-cat-id-' + code);
+  date.disabled    = !cb.checked;
+  idInput.disabled = !cb.checked;
+  if (!cb.checked) { date.value = ''; idInput.value = ''; }
 }
 
 function onS4TypePermisChange() {
@@ -1300,8 +1311,9 @@ function submitStep2() {
   ['A','A1','A2','B','C','D','E','F','P'].forEach(function(code) {
     if (document.getElementById('s2-cat-cb-' + code).checked) {
       s2cats.push(code);
-      var dv = document.getElementById('s2-cat-date-' + code).value;
-      s2catDetails[code] = { date: dv || null };
+      var dv  = document.getElementById('s2-cat-date-' + code).value;
+      var idv = document.getElementById('s2-cat-id-' + code).value.trim();
+      s2catDetails[code] = { date: dv || null, identifiant: idv || null };
     }
   });
 
@@ -1335,7 +1347,7 @@ function submitStep2() {
     } else {
       bootstrap.Modal.getOrCreateInstance(document.getElementById('step2Modal')).hide();
       loadDossiers();
-      showToast('Étape 2 enregistrée — ' + (data.nom || '') + ' ' + (data.prenom || ''), 'success');
+      showToast('Étape 2 enregistrée — ' + ((data.prenom || '') + ' ' + (data.nom || '')).trim(), 'success');
     }
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
@@ -1449,12 +1461,15 @@ function openStep4(dossierId) {
   var catDetails   = d && d.category_details ? d.category_details : {};
   var existingCats = d && d.categories ? d.categories.split(',').map(function(c){ return c.trim(); }) : [];
   ['A','A1','A2','B','C','D','E','F','P'].forEach(function(code) {
-    var cb   = document.getElementById('s4-cat-cb-' + code);
-    var date = document.getElementById('s4-cat-date-' + code);
+    var cb      = document.getElementById('s4-cat-cb-' + code);
+    var date    = document.getElementById('s4-cat-date-' + code);
+    var idInput = document.getElementById('s4-cat-id-' + code);
     var checked = existingCats.indexOf(code) !== -1;
-    cb.checked    = checked;
-    date.disabled = !checked;
+    cb.checked       = checked;
+    date.disabled    = !checked;
+    idInput.disabled = !checked;
     date.value    = (catDetails[code] && catDetails[code].date) ? catDetails[code].date : '';
+    idInput.value = (catDetails[code] && catDetails[code].identifiant) ? catDetails[code].identifiant : '';
   });
 
   // Photo preview
@@ -1479,8 +1494,9 @@ function submitStep4() {
   ['A','A1','A2','B','C','D','E','F','P'].forEach(function(code) {
     if (document.getElementById('s4-cat-cb-' + code).checked) {
       s4cats.push(code);
-      var dv = document.getElementById('s4-cat-date-' + code).value;
-      s4catDetails[code] = { date: dv || null };
+      var dv  = document.getElementById('s4-cat-date-' + code).value;
+      var idv = document.getElementById('s4-cat-id-' + code).value.trim();
+      s4catDetails[code] = { date: dv || null, identifiant: idv || null };
     }
   });
 
@@ -1547,7 +1563,7 @@ function openStep5Signature(dossierId) {
         <table class="table table-sm table-borderless mb-0" style="font-size:14px;">
           <tbody>
             <tr><td class="text-muted" style="width:170px;">Dossier n°</td><td class="fw-bold font-monospace text-primary">${d.dossier_number || '—'}</td></tr>
-            <tr><td class="text-muted">Nom complet</td><td class="fw-semibold text-uppercase">${d.nom || ''} ${d.prenom || ''}</td></tr>
+            <tr><td class="text-muted">Nom complet</td><td class="fw-semibold text-uppercase">${((d.prenom || '') + ' ' + (d.nom || '')).trim()}</td></tr>
             <tr><td class="text-muted">Date de naissance</td><td>${d.date_naissance || '—'}</td></tr>
             <tr><td class="text-muted">Île</td><td>${d.country || '—'}</td></tr>
           </tbody>
@@ -1624,7 +1640,7 @@ function openStep6(dossierId) {
         <table class="table table-sm table-borderless mb-0" style="font-size:14px;">
           <tbody>
             <tr><td class="text-muted" style="width:170px;">Dossier n°</td><td class="fw-bold font-monospace text-primary">${d.dossier_number || '—'}</td></tr>
-            <tr><td class="text-muted">Nom complet</td><td class="fw-semibold text-uppercase">${d.nom || ''} ${d.prenom || ''}</td></tr>
+            <tr><td class="text-muted">Nom complet</td><td class="fw-semibold text-uppercase">${((d.prenom || '') + ' ' + (d.nom || '')).trim()}</td></tr>
             <tr><td class="text-muted">Date de naissance</td><td>${d.date_naissance || '—'}</td></tr>
             <tr><td class="text-muted">Lieu de naissance</td><td>${d.lieu_naissance || '—'}</td></tr>
             <tr><td class="text-muted">Sexe</td><td>${d.sexe || '—'}</td></tr>

@@ -247,7 +247,7 @@
               </td>
               {% if owned %}
                 <td>{{ details.date if details and details.date else '—' }}</td>
-                <td>{{ details.expiration if details and details.expiration else '—' }}</td>
+                <td>{{ computed_cat_expiries.get(code, '—') }}</td>
               {% else %}
                 <td>—</td><td>—</td>
               {% endif %}

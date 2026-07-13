@@ -158,7 +158,7 @@
       </div>
 
       <div class="identity-info">
-        <div class="identity-name">{{ lic.holder_name }} {{ lic.holder_firstname or '' }}</div>
+        <div class="identity-name">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
         <div class="identity-sub">
           {{ lic.holder_island or '—' }}{% if lic.holder_phone %} · {{ lic.holder_phone }}{% endif %}
         </div>
@@ -195,7 +195,7 @@
       <div class="section">
         <div class="section-title">Détails du permis</div>
         <div class="field"><span class="field-label">Date de début</span><span class="field-value">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span></div>
-        <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ computed_expiry.strftime('%d/%m/%Y') if computed_expiry else '—' }}</span></div>
+        <div class="field"><span class="field-label">Date d'expiration</span><span class="field-value">{{ (lic.expiry_date or computed_expiry).strftime('%d/%m/%Y') if (lic.expiry_date or computed_expiry) else '—' }}</span></div>
         <div class="field"><span class="field-label">Centre d'immatriculation</span><span class="field-value">{{ lic.centre_immatriculation or '—' }}</span></div>
       </div>
     </div>
@@ -224,7 +224,7 @@
               </td>
               {% if owned %}
                 <td>{{ details.date if details and details.date else '—' }}</td>
-                <td>{{ details.expiration if details and details.expiration else '—' }}</td>
+                <td>{{ computed_cat_expiries.get(code, '—') }}</td>
               {% else %}
                 <td>—</td><td>—</td>
               {% endif %}

@@ -491,6 +491,10 @@ document.getElementById('vehicle-form').addEventListener('submit', async functio
                 driver_license_numbers: licenseNumbers
             })
         });
+        if (!assignResponse.ok) {
+            const assignErr = await assignResponse.json().catch(() => ({}));
+            throw new Error(assignErr.error || 'Erreur lors de l\'enregistrement des permis conducteurs');
+        }
 
         // Show success message
         successAlert.style.display = 'block';
