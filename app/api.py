@@ -5012,6 +5012,9 @@ def get_vehicle_attestation_html(vehicle_id):
     with open(builder_path, 'r', encoding='utf-8') as f:
         builder_js = f.read()
 
+    # Strip logo — sent separately via postMessage after page loads
+    tpl.pop('logo_b64', None)
+
     vehicle_json = json.dumps(vehicle_data, ensure_ascii=False)
     tpl_json = json.dumps(tpl, ensure_ascii=False)
 
@@ -5029,16 +5032,25 @@ html, body {{ background: #f0f0f0; display: flex; justify-content: center; align
 <body>
 <div id="card-container"></div>
 <script>
-const VEHICLE = {vehicle_json};
-const TPL = {tpl_json};
+window.VEHICLE = {vehicle_json};
+window.TPL = {tpl_json};
 </script>
 <script>
 {builder_js}
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {{
-    document.getElementById('card-container').innerHTML = window.buildAttestationHTML(TPL, VEHICLE);
+    document.getElementById('card-container').innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
 }});
+
+// Receive logo from React Native after initial render
+function _applyLogo(logoB64) {{
+    if (!logoB64 || logoB64 === 'null') return;
+    window.TPL.logo_b64 = logoB64;
+    document.getElementById('card-container').innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
+}}
+document.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
+window.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
 </script>
 </body>
 </html>"""
