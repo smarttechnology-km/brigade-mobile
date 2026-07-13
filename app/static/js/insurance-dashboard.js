@@ -216,7 +216,9 @@ function renderVehiclesTable() {
                         </ul>
                     </div>`;
 
-        const actionButton = editBtn + viewBtn;
+        const attestBtn = `<button class="btn btn-sm btn-outline-success ms-1" onclick="window.open('/insurance-attestation/${vehicle.id}/print','_blank')" title="Imprimer l'attestation"><i class="fas fa-file-contract"></i></button>`;
+
+        const actionButton = editBtn + viewBtn + attestBtn;
 
         return `
             <tr>
