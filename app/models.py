@@ -9,28 +9,6 @@ import json
 from app.timezone_utils import now_comoros
 
 
-class PhoneSetting(db.Model):
-    __tablename__ = 'phone_setting'
-    id = db.Column(db.Integer, primary_key=True)
-    exit_code = db.Column(db.String(20), nullable=True)
-    exit_code_generated_at = db.Column(db.DateTime, nullable=True)
-
-    @classmethod
-    def get(cls):
-        row = cls.query.first()
-        if not row:
-            row = cls()
-            db.session.add(row)
-            db.session.commit()
-        return row
-
-    def rotate_exit_code(self):
-        import random, string
-        self.exit_code = ''.join(random.choices(string.digits, k=6))
-        self.exit_code_generated_at = now_comoros()
-        db.session.commit()
-
-
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)

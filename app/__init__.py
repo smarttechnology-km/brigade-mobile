@@ -190,7 +190,7 @@ def create_app():
         tasks_set_app(app)
 
         # Add the exoneration task to run every hour
-        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_late_rates, rotate_phone_exit_code
+        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_late_rates
         scheduler.add_job(
             func=process_exonerated_fines,
             trigger=IntervalTrigger(hours=1),
@@ -232,13 +232,6 @@ def create_app():
             trigger=CronTrigger(hour=9, minute=0),
             id='apply_fine_late_rates',
             name='Apply late-rate percentage increases to unpaid fines daily at 09:00 AM',
-            replace_existing=True
-        )
-        scheduler.add_job(
-            func=rotate_phone_exit_code,
-            trigger=IntervalTrigger(days=2),
-            id='rotate_phone_exit_code',
-            name='Rotate phone app exit code every 2 days',
             replace_existing=True
         )
 
@@ -600,16 +593,6 @@ def create_app():
                             if col not in ld_cols:
                                 conn.execute(text(sql))
                                 logger.info(f"Added license_dossiers.{col} column")
-
-                    # Patch phone_setting table
-                    ps_table_exists = conn.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='phone_setting'")
-                    ).first() is not None
-                    if ps_table_exists:
-                        ps_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(phone_setting)")).fetchall()}
-                        if 'exit_code_generated_at' not in ps_cols:
-                            conn.execute(text("ALTER TABLE phone_setting ADD COLUMN exit_code_generated_at DATETIME"))
-                            logger.info("Added missing phone_setting.exit_code_generated_at column")
 
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
