@@ -8,7 +8,10 @@
             <h2><i class="fas fa-file-contract me-2"></i>Maquette d'Attestation d'Assurance</h2>
             <p class="text-muted mb-0">Choisissez un modèle, personnalisez-le, enregistrez — toutes vos attestations s'y conformeront.</p>
         </div>
-        <div class="col-auto">
+        <div class="col-auto d-flex gap-2">
+            <button id="btn-delete-maquette" class="btn btn-outline-danger d-none" onclick="deleteMaquette()">
+                <i class="fas fa-trash me-2"></i>Supprimer la maquette
+            </button>
             <button class="btn btn-success" onclick="saveMaquette()">
                 <i class="fas fa-save me-2"></i>Enregistrer
             </button>
@@ -16,6 +19,7 @@
     </div>
 
     <div id="save-alert" class="alert alert-success d-none mb-3"><i class="fas fa-check-circle me-2"></i>Maquette enregistrée avec succès.</div>
+    <div id="delete-alert" class="alert alert-warning d-none mb-3"><i class="fas fa-trash me-2"></i>Maquette supprimée.</div>
 
     <!-- Model picker -->
     <div class="card border-0 shadow-sm mb-4">
@@ -61,20 +65,20 @@
                     <hr class="my-3"/>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Nom complet de la société</label>
-                        <input type="text" id="f-company-name" class="form-control" placeholder="Ex: ASSURANCES GENERALES ET DE PRÉVOYANCE">
+                        <input type="text" id="f-company-name" class="form-control" placeholder="Ex: ASSURANCES">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Code d'assurance <span class="text-muted fw-normal">(optionnel)</span></label>
-                        <input type="text" id="f-company-code" class="form-control" placeholder="Ex: Société d'Assurance régie par le Code des Assurances, RCCM n°3049-B-05">
+                        <input type="text" id="f-company-code" class="form-control" placeholder="Ex: Société d'Assurance régie par le Code des Assurances, RCCM n°XXXX-XXXX">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Siège social / Adresse</label>
-                        <input type="text" id="f-company-address" class="form-control" placeholder="Ex: Moroni EGT, Gare du Nord">
+                        <input type="text" id="f-company-address" class="form-control" placeholder="Ex: Moroni, Comores">
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label fw-semibold">Téléphone(s)</label>
-                            <input type="text" id="f-company-phone" class="form-control" placeholder="Ex: 487 09 14 / 332 23 86">
+                            <input type="text" id="f-company-phone" class="form-control" placeholder="Ex: XXX XX XX / XXX XX XX">
                             <div class="form-text">Séparez plusieurs numéros par un "/"</div>
                         </div>
                         <div class="col-6">
@@ -85,11 +89,11 @@
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label fw-semibold">Capital Social (KMF)</label>
-                            <input type="text" id="f-capital" class="form-control" placeholder="Ex: 55 550 000">
+                            <input type="text" id="f-capital" class="form-control" placeholder="Ex: XX XXX XXX">
                         </div>
                         <div class="col-6">
-                            <label class="form-label fw-semibold">N° Compte BIC</label>
-                            <input type="text" id="f-bic" class="form-control" placeholder="Ex: 01 210 394 001 96">
+                            <label class="form-label fw-semibold">N° Compte </label>
+                            <input type="text" id="f-bic" class="form-control" placeholder="Ex: XX XXX XXX XXX XX">
                         </div>
                     </div>
                     <div class="mb-3">
@@ -246,7 +250,24 @@ async function loadMaquette() {
             document.getElementById('logo-placeholder').style.display = 'none';
         }
         renderModelPicker();
+        // Afficher le bouton supprimer uniquement si la maquette est non vide
+        if (t && Object.keys(t).length > 0) {
+            document.getElementById('btn-delete-maquette').classList.remove('d-none');
+        }
     } catch(e) { console.error(e); }
+}
+
+async function deleteMaquette() {
+    if (!confirm('Supprimer la maquette enregistrée ? Cette action est irréversible.')) return;
+    const res = await fetch('/api/vehicles/insurance-accounts/me/attestation-template', {
+        method: 'DELETE', credentials: 'same-origin',
+    });
+    if (res.ok) {
+        document.getElementById('btn-delete-maquette').classList.add('d-none');
+        const el = document.getElementById('delete-alert');
+        el.classList.remove('d-none');
+        setTimeout(() => el.classList.add('d-none'), 3000);
+    }
 }
 
 function getTpl() {
@@ -284,11 +305,11 @@ function previewExample() {
     const today = new Date().toLocaleDateString('fr-FR');
     const example = {
         id: 695,
-        license_plate: '518 CJ 73',
+        license_plate: 'XXX CJ 73',
         owner_name: 'EXEMPLE PROPRIÉTAIRE',
-        owner_address: 'MORONI AMBASSADEUR',
-        vehicle_type: 'PROMENADE 02 PLACES',
-        model: 'ADV 150',
+        owner_address: 'MORONI COMORES',
+        vehicle_type: '02 PLACES',
+        model: 'JUKE 1.5 DCI',
         insurance_expiry: new Date(Date.now() + 365*24*3600*1000).toLocaleDateString('fr-FR'),
         today,
         insurance_id:   _insuranceId,
