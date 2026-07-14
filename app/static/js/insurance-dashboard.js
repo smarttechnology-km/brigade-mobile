@@ -94,6 +94,7 @@ function loadCompanyInfo() {
             companyName.textContent = data.insurance_name || 'Assurance';
         }
         window.currentInsuranceAccountId = data.id;
+        window._hasMaquette = !!data.has_attestation_template;
     })
     .catch(err => {
         console.error('Error loading company info:', err);
@@ -216,7 +217,9 @@ function renderVehiclesTable() {
                         </ul>
                     </div>`;
 
-        const attestBtn = `<button class="btn btn-sm btn-outline-success ms-1" onclick="window.open('/insurance-attestation/${vehicle.id}/print','_blank')" title="Imprimer l'attestation"><i class="fas fa-file-contract"></i></button>`;
+        const attestBtn = window._hasMaquette
+            ? `<button class="btn btn-sm btn-outline-success ms-1" onclick="window.open('/insurance-attestation/${vehicle.id}/print','_blank')" title="Imprimer l'attestation"><i class="fas fa-file-contract"></i></button>`
+            : '';
 
         const actionButton = editBtn + viewBtn + attestBtn;
 
