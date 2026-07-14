@@ -286,6 +286,20 @@ def lookup():
     vehicle_payload['renewal_needed'] = renewal_needed
     vehicle_payload['renewal_period_open'] = bool(in_renewal_period)
 
+    # Attach whether the vehicle's insurance company has uploaded a maquette
+    from app.models import VehicleInsuranceAssignment as _VIA, InsuranceAccount as _InsAcct
+    import json as _json
+    _assign = _VIA.query.filter_by(vehicle_id=vehicle.id).first()
+    _has_tpl = False
+    if _assign:
+        _acc = _InsAcct.query.get(_assign.insurance_account_id)
+        if _acc and _acc.attestation_template:
+            try:
+                _has_tpl = bool(_json.loads(_acc.attestation_template))
+            except Exception:
+                pass
+    vehicle_payload['has_attestation_template'] = _has_tpl
+
     qr_expiry = ensure_comoros(vehicle.qr_code_expiry) if vehicle.qr_code_expiry else None
     qr_status = 'none'
     if qr_expiry:

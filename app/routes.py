@@ -4431,6 +4431,7 @@ def get_current_insurance_account():
     data = current_user.to_dict()
     data['insurance_id']   = current_user.id
     data['insurance_year'] = current_user.created_at.strftime('%Y') if current_user.created_at else now_comoros().strftime('%Y')
+    data['has_attestation_template'] = bool(current_user.attestation_template)
     return jsonify(data)
 
 
@@ -4485,6 +4486,16 @@ def save_attestation_template():
     current_user.attestation_template = json.dumps(data)
     db.session.commit()
     return jsonify({"message": "Maquette enregistrée"}), 200
+
+
+@vehicle_bp.route('/insurance-accounts/me/attestation-template', methods=['DELETE'])
+@login_required
+def delete_attestation_template():
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    current_user.attestation_template = None
+    db.session.commit()
+    return jsonify({"message": "Maquette supprimée"}), 200
 
 
 @main_bp.route('/insurance-attestation/<int:vehicle_id>/print')

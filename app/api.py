@@ -256,6 +256,19 @@ def api_track(token):
                 if suspension_entry.created_at else ''
             )
 
+    # Attach whether the vehicle's insurance company has uploaded a maquette
+    from app.models import InsuranceAccount as _InsAcct
+    _assign = VehicleInsuranceAssignment.query.filter_by(vehicle_id=vehicle.id).first()
+    _has_tpl = False
+    if _assign:
+        _acc = _InsAcct.query.get(_assign.insurance_account_id)
+        if _acc and _acc.attestation_template:
+            try:
+                _has_tpl = bool(json.loads(_acc.attestation_template))
+            except Exception:
+                pass
+    vehicle_dict['has_attestation_template'] = _has_tpl
+
     return jsonify({"vehicle": vehicle_dict, "fines": fines})
 
 
