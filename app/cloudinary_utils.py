@@ -60,7 +60,9 @@ def delete_file(stored_value, local_folder=None):
             print(f'[Cloudinary] delete error: {e}')
     elif local_folder:
         from flask import current_app
-        path = os.path.join(current_app.config['UPLOAD_FOLDER'], local_folder, stored_value)
+        # Accept both plain filename ("uuid.jpg") and full path ("/uploads/folder/uuid.jpg")
+        filename = stored_value.rsplit('/', 1)[-1] if '/' in stored_value else stored_value
+        path = os.path.join(current_app.config['UPLOAD_FOLDER'], local_folder, filename)
         if os.path.exists(path):
             try:
                 os.remove(path)

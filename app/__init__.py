@@ -180,7 +180,9 @@ def create_app():
 
     # Skip scheduler initialization during Flask CLI invocations (e.g. flask db)
     # to avoid side effects while migration commands load the app multiple times.
-    if not os.environ.get('FLASK_RUN_FROM_CLI'):
+    # On Render with auto-scale, only instance 0 runs the scheduler to avoid duplicate jobs.
+    _render_instance = os.environ.get('RENDER_INSTANCE_ID', '0')
+    if not os.environ.get('FLASK_RUN_FROM_CLI') and _render_instance == '0':
         # Initialize scheduler only once.
         if not scheduler.running:
             scheduler.start()

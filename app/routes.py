@@ -4489,11 +4489,57 @@ def save_attestation_template():
     return jsonify({"message": "Maquette enregistrée"}), 200
 
 
+@vehicle_bp.route('/insurance-accounts/me/attestation-logo', methods=['POST'])
+@login_required
+def upload_attestation_logo():
+    import uuid
+    from werkzeug.utils import secure_filename
+    if not isinstance(current_user, InsuranceAccount):
+        return jsonify({"error": "Forbidden"}), 403
+    file = request.files.get('logo')
+    if not file or not file.filename:
+        return jsonify({"error": "Aucun fichier reçu"}), 400
+    ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.png', '.webp', '.gif'}:
+        return jsonify({"error": "Format non autorisé (jpg, png, webp, gif)"}), 400
+    from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload, delete_file as cloud_delete, file_url as cloud_file_url
+    # Delete old logo if exists — use logo_stored (raw value) or fallback to logo_url
+    if current_user.attestation_template:
+        try:
+            tpl = json.loads(current_user.attestation_template)
+            old_stored = tpl.get('logo_stored') or tpl.get('logo_url')
+            if old_stored:
+                cloud_delete(old_stored, local_folder='insurance_logos')
+        except Exception:
+            pass
+    if is_cloudinary_enabled():
+        logo_stored = cloud_upload(file, 'insurance_logos')  # full https:// URL
+        logo_url = logo_stored
+    else:
+        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'insurance_logos')
+        os.makedirs(upload_dir, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        file.save(os.path.join(upload_dir, filename))
+        logo_stored = filename                              # raw filename for deletion
+        logo_url = cloud_file_url(filename, 'insurance_logos')  # display URL
+    return jsonify({"logo_url": logo_url, "logo_stored": logo_stored}), 200
+
+
 @vehicle_bp.route('/insurance-accounts/me/attestation-template', methods=['DELETE'])
 @login_required
 def delete_attestation_template():
     if not isinstance(current_user, InsuranceAccount):
         return jsonify({"error": "Forbidden"}), 403
+    # Delete logo file — use logo_stored (raw value) or fallback to logo_url
+    if current_user.attestation_template:
+        try:
+            tpl = json.loads(current_user.attestation_template)
+            old_stored = tpl.get('logo_stored') or tpl.get('logo_url')
+            if old_stored:
+                from app.cloudinary_utils import delete_file as cloud_delete
+                cloud_delete(old_stored, local_folder='insurance_logos')
+        except Exception:
+            pass
     current_user.attestation_template = None
     db.session.commit()
     return jsonify({"message": "Maquette supprimée"}), 200

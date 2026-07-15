@@ -5000,9 +5000,9 @@ def get_vehicle_attestation_logo(vehicle_id):
 
     try:
         tpl = json.loads(account.attestation_template)
-        return jsonify({'logo_b64': tpl.get('logo_b64')})
+        return jsonify({'logo_url': tpl.get('logo_url'), 'logo_b64': tpl.get('logo_b64')})
     except Exception:
-        return jsonify({'logo_b64': None})
+        return jsonify({'logo_url': None, 'logo_b64': None})
 
 
 @api_bp.route('/vehicles/<int:vehicle_id>/attestation-html', methods=['GET'])
@@ -5115,9 +5115,16 @@ document.addEventListener('DOMContentLoaded', function() {{
     _rotateCard();
 }});
 
-function _applyLogo(logoB64) {{
-    if (!logoB64 || logoB64 === 'null') return;
-    window.TPL.logo_b64 = logoB64;
+function _applyLogo(data) {{
+    if (!data || data === 'null') return;
+    try {{
+        var parsed = JSON.parse(data);
+        if (parsed.logo_url) window.TPL.logo_url = parsed.logo_url;
+        if (parsed.logo_b64) window.TPL.logo_b64 = parsed.logo_b64;
+    }} catch(e) {{
+        // legacy: plain base64 string
+        window.TPL.logo_b64 = data;
+    }}
     _container.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
     _rotateCard();
 }}

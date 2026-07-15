@@ -1187,7 +1187,7 @@ def citizen_attestation_html():
         'insurance_year': insurance_year,
     }
 
-    # Strip logo — sent via second request to avoid slow initial load
+    # Strip logo_b64 (heavy base64) — logo_url stays in tpl and renders directly
     logo_b64 = tpl.pop('logo_b64', None)
 
     builder_path = os.path.join(current_app.root_path, 'static', 'js', 'attestation-builder.js')
@@ -1196,7 +1196,7 @@ def citizen_attestation_html():
 
     vehicle_json = json.dumps(vehicle_data, ensure_ascii=False)
     tpl_json = json.dumps(tpl, ensure_ascii=False)
-    logo_json = json.dumps(logo_b64)
+    logo_json = json.dumps(logo_b64)  # only for old records without logo_url
 
     html = f"""<!doctype html>
 <html lang="fr">
@@ -1236,16 +1236,23 @@ function _rotate() {{
 document.addEventListener('DOMContentLoaded', function() {{
     _c.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
     _rotate();
-    if (_LOGO) {{
+    // _LOGO: old base64 fallback for records without logo_url
+    if (_LOGO && !window.TPL.logo_url) {{
         window.TPL.logo_b64 = _LOGO;
         _c.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
         _rotate();
     }}
 }});
 
-function _applyLogo(b64) {{
-    if (!b64 || b64 === 'null') return;
-    window.TPL.logo_b64 = b64;
+function _applyLogo(data) {{
+    if (!data || data === 'null') return;
+    try {{
+        var parsed = JSON.parse(data);
+        if (parsed.logo_url) window.TPL.logo_url = parsed.logo_url;
+        if (parsed.logo_b64) window.TPL.logo_b64 = parsed.logo_b64;
+    }} catch(e) {{
+        window.TPL.logo_b64 = data;
+    }}
     _c.innerHTML = window.buildAttestationHTML(window.TPL, window.VEHICLE);
     _rotate();
 }}
