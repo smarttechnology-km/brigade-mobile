@@ -641,7 +641,7 @@ async function openPhotoModal(submissionId) {
         photoPreviewContainer.innerHTML = '<div class="alert alert-info"><i class="fas fa-trash me-2"></i>Photo supprimée du serveur (résolution effectuée)</div>';
     } else {
         // Use static photo URL directly instead of API endpoint
-        const photoUrl = `/uploads/photo_submissions/${submission.photo_filename}`;
+        const photoUrl = submission.photo_url || `/uploads/photo_submissions/${submission.photo_filename}`;
         const img = document.createElement('img');
         img.id = 'photo-preview';
         img.src = photoUrl;
@@ -795,7 +795,7 @@ async function editVehicleFromSubmission(submissionId, licensePlate) {
     }
 
     // Afficher photo et infos de la soumission
-    const photoUrl = `/uploads/photo_submissions/${submission.photo_filename}`;
+    const photoUrl = submission.photo_url || `/uploads/photo_submissions/${submission.photo_filename}`;
     document.getElementById('vehicle-edit-photo').src = photoUrl;
     document.getElementById('expand-photo-btn').style.display = 'inline-block'; // Afficher le bouton Agrandir
     document.getElementById('vehicle-edit-plate').textContent = submission.license_plate || '-';

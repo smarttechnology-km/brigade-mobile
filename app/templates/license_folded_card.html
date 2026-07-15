@@ -611,7 +611,7 @@
       <div class="front-photo-row">
         <div class="front-photo">
           {% if lic.photo_filename %}
-            <img src="/uploads/license_photos/{{ lic.photo_filename }}" alt="Photo">
+            <img src="{{ lic.photo_url }}" alt="Photo">
           {% else %}
             <div class="no-photo">👤</div>
           {% endif %}
@@ -739,7 +739,7 @@
         <div class="sig-block">
           <div class="sig-lbl">Directeur Général des Routes<br>et Transports Routiers</div>
           {% if settings.directeur_signature_filename %}
-            <img class="sig-img" src="/uploads/signatures/{{ settings.directeur_signature_filename }}" alt="Signature">
+            <img class="sig-img" src="{{ settings.directeur_signature_url }}" alt="Signature">
           {% else %}
             <svg class="sig-placeholder" viewBox="0 0 130 36" xmlns="http://www.w3.org/2000/svg">
               <path d="M4,26 C14,10 20,34 28,20 C35,9 39,28 46,18 C53,8 58,30 65,18 C72,8 77,26 84,15 C89,7 94,22 100,14 C104,9 110,18 126,12"

@@ -205,8 +205,8 @@ function openDetail(id) {
   document.getElementById('detail-title').innerHTML =
     `<i class="fas fa-folder-open me-2"></i>${((d.prenom || '') + ' ' + (d.nom || '')).trim()} — <span class="font-monospace">${d.dossier_number || ''}</span>`;
 
-  var photoHtml = d.photo_filename
-    ? `<img src="/uploads/license_photos/${d.photo_filename}" style="width:90px;height:112px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb;">`
+  var photoHtml = (d.photo_url || d.photo_filename)
+    ? `<img src="${d.photo_url || '/uploads/license_photos/' + d.photo_filename}" style="width:90px;height:112px;object-fit:cover;border-radius:8px;border:2px solid #e5e7eb;">`
     : `<div style="width:90px;height:112px;background:#f3f4f6;border-radius:8px;border:2px solid #e5e7eb;display:flex;align-items:center;justify-content:center;"><i class="fas fa-user-circle fa-3x text-muted"></i></div>`;
 
   var catDetails = d.category_details || {};

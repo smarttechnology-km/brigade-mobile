@@ -484,8 +484,8 @@
 
                 grid.innerHTML = reqs.map(r => {
                     const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
-                    const photo = r.photo_filename
-                        ? `<img class="request-photo" src="/uploads/license_photos/${esc(r.photo_filename)}" alt="">`
+                    const photo = (r.photo_url || r.photo_filename)
+                        ? `<img class="request-photo" src="${r.photo_url || '/uploads/license_photos/' + esc(r.photo_filename)}" alt="">`
                         : `<div class="request-photo-empty"><i class="fas fa-user"></i></div>`;
                     return `
                     <div class="request-card" id="req-card-${r.id}">
@@ -657,8 +657,8 @@
             </tr></thead>
             <tbody>${reqs.map(r => {
                 const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
-                const photo = r.photo_filename
-                    ? `<img src="/uploads/license_photos/${esc(r.photo_filename)}" style="width:36px;height:44px;object-fit:cover;border-radius:5px;border:1px solid rgba(255,255,255,0.12);" alt="">`
+                const photo = (r.photo_url || r.photo_filename)
+                    ? `<img src="${r.photo_url || '/uploads/license_photos/' + esc(r.photo_filename)}" style="width:36px;height:44px;object-fit:cover;border-radius:5px;border:1px solid rgba(255,255,255,0.12);" alt="">`
                     : `<div style="width:36px;height:44px;border-radius:5px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:1.1rem;"><i class="fas fa-user"></i></div>`;
                 return `<tr>
                     <td>${photo}</td>

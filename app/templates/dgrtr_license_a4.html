@@ -150,7 +150,7 @@
     <div class="identity">
       <div class="identity-photo">
         {% if lic.photo_filename %}
-          <img src="/uploads/license_photos/{{ lic.photo_filename }}" alt="Photo">
+          <img src="{{ lic.photo_url }}" alt="Photo">
         {% else %}
           <div class="photo-placeholder">👤</div>
         {% endif %}
@@ -238,7 +238,7 @@
     <div class="signature-section">
       <div class="signature-block">
         {% if settings.directeur_signature_filename %}
-          <img class="signature-img" src="/uploads/signatures/{{ settings.directeur_signature_filename }}" alt="Signature">
+          <img class="signature-img" src="{{ settings.directeur_signature_url }}" alt="Signature">
         {% else %}
           <div class="signature-line"></div>
         {% endif %}
