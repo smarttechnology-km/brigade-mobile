@@ -327,9 +327,44 @@ function buildModel5(tpl, v) {
 </div>`;
 }
 
+/* ─── Expired stamp ─── */
+function _isExpired(vehicle) {
+  if (!vehicle || !vehicle.insurance_expiry) return false;
+  // insurance_expiry format: "DD/MM/YYYY"
+  const parts = vehicle.insurance_expiry.split('/');
+  if (parts.length !== 3) return false;
+  const expiry = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+  return expiry < new Date();
+}
+
+function _expiredStamp() {
+  return `<div style="
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    pointer-events:none;z-index:99;overflow:hidden;
+  ">
+    <div style="
+      transform:rotate(-30deg);
+      font-size:88px;font-weight:900;
+      font-family:'Arial Black',Arial,sans-serif;
+      color:rgba(210,0,0,0.82);
+      letter-spacing:4px;
+      border:10px solid rgba(210,0,0,0.82);
+      padding:6px 24px;
+      border-radius:8px;
+      text-transform:uppercase;
+      white-space:nowrap;
+      line-height:1;
+      user-select:none;
+    ">EXPIRÉ</div>
+  </div>`;
+}
+
 /* ─── Dispatcher ─── */
 window.buildAttestationHTML = function(tpl, vehicle) {
   const layout = parseInt(tpl.layout || 1);
   const builders = { 1: buildModel1, 2: buildModel2, 3: buildModel3, 4: buildModel4, 5: buildModel5 };
-  return (builders[layout] || buildModel1)(tpl, vehicle);
+  const cardHtml = (builders[layout] || buildModel1)(tpl, vehicle);
+  if (!_isExpired(vehicle)) return cardHtml;
+  return `<div style="position:relative;display:inline-block;">${cardHtml}${_expiredStamp()}</div>`;
 };
