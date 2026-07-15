@@ -24,11 +24,22 @@
   <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
       <div class="row g-2 align-items-end">
-        <div class="col-md-3">
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">Période</label>
+          <select id="archive-period" class="form-select">
+            <option value="30">30 derniers jours</option>
+            <option value="7">7 derniers jours</option>
+            <option value="today">Aujourd'hui</option>
+            <option value="month">Ce mois</option>
+            <option value="year">Cette année</option>
+            <option value="all">Tous</option>
+          </select>
+        </div>
+        <div class="col-md-2" id="custom-start-col">
           <label class="form-label small fw-semibold">Date de début</label>
           <input type="date" id="archive-start-date" class="form-control">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2" id="custom-end-col">
           <label class="form-label small fw-semibold">Date de fin</label>
           <input type="date" id="archive-end-date" class="form-control">
         </div>
