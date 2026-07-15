@@ -1,17 +1,57 @@
 let archiveDataCache = { direct_paid_fines: [], vignette_archive: [], qr_archive: [], totals: {} };
 
+function applyPeriod(period) {
+    const startInput = document.getElementById('archive-start-date');
+    const endInput = document.getElementById('archive-end-date');
+    const startCol = document.getElementById('custom-start-col');
+    const endCol = document.getElementById('custom-end-col');
+    const today = new Date();
+    const fmt = d => d.toISOString().split('T')[0];
+
+    // Show/hide the date inputs depending on the period
+    const isCustom = (period === 'custom');
+    if (startCol) startCol.style.display = isCustom ? '' : 'none';
+    if (endCol) endCol.style.display = isCustom ? '' : 'none';
+
+    if (period === 'all') {
+        if (startInput) startInput.value = '';
+        if (endInput) endInput.value = '';
+    } else if (period === 'today') {
+        if (startInput) startInput.value = fmt(today);
+        if (endInput) endInput.value = fmt(today);
+    } else if (period === '7') {
+        const s = new Date(today); s.setDate(s.getDate() - 7);
+        if (startInput) startInput.value = fmt(s);
+        if (endInput) endInput.value = fmt(today);
+    } else if (period === '30') {
+        const s = new Date(today); s.setDate(s.getDate() - 30);
+        if (startInput) startInput.value = fmt(s);
+        if (endInput) endInput.value = fmt(today);
+    } else if (period === 'month') {
+        const s = new Date(today.getFullYear(), today.getMonth(), 1);
+        if (startInput) startInput.value = fmt(s);
+        if (endInput) endInput.value = fmt(today);
+    } else if (period === 'year') {
+        const s = new Date(today.getFullYear(), 0, 1);
+        if (startInput) startInput.value = fmt(s);
+        if (endInput) endInput.value = fmt(today);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
-    const startDateInput = document.getElementById('archive-start-date');
-    const endDateInput = document.getElementById('archive-end-date');
+    const periodSelect = document.getElementById('archive-period');
     const refreshBtn = document.getElementById('archive-refresh-btn');
     const searchInput = document.getElementById('archive-search');
 
-    const today = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 30);
+    // Initialize with default period (30 days), hide date inputs
+    applyPeriod('30');
 
-    if (startDateInput) startDateInput.value = start.toISOString().split('T')[0];
-    if (endDateInput) endDateInput.value = today.toISOString().split('T')[0];
+    if (periodSelect) {
+        periodSelect.addEventListener('change', function () {
+            applyPeriod(this.value);
+            loadArchiveData();
+        });
+    }
 
     if (refreshBtn) {
         refreshBtn.addEventListener('click', loadArchiveData);
@@ -25,12 +65,17 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function loadArchiveData() {
-    const startDate = document.getElementById('archive-start-date').value;
-    const endDate = document.getElementById('archive-end-date').value;
+    const startDate = (document.getElementById('archive-start-date') || {}).value || '';
+    const endDate = (document.getElementById('archive-end-date') || {}).value || '';
+    const period = (document.getElementById('archive-period') || {}).value || '30';
 
     const query = new URLSearchParams();
-    if (startDate) query.set('start_date', startDate);
-    if (endDate) query.set('end_date', endDate);
+    if (period === 'all') {
+        query.set('all', 'true');
+    } else {
+        if (startDate) query.set('start_date', startDate);
+        if (endDate) query.set('end_date', endDate);
+    }
 
     const url = '/api/vehicles/mobile-money-archive?' + query.toString();
     const fineBody = document.getElementById('archive-fines-tbody');
