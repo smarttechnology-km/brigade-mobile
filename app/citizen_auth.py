@@ -978,7 +978,6 @@ def switch_vehicle():
             return jsonify({'error': 'Ce véhicule est inactif. Vous pouvez le voir, mais vous ne pouvez pas l’activer.'}), 403
 
         owner.last_login = datetime.utcnow()
-        owner.session_version = int(getattr(owner, 'session_version', 0)) + 1
         if device_id:
             owner.current_device_id = device_id
         db.session.commit()

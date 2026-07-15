@@ -2149,13 +2149,19 @@ def upload_photo_submission():
 
 @api_bp.route('/photo-submissions/count-pending', methods=['GET'])
 def count_pending_photo_submissions():
-    """Get count of pending photo submissions"""
+    """Get count of pending photo submissions + pending vehicle transfers"""
     user = get_current_user()
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    
-    pending_count = PhotoSubmission.query.filter_by(status='pending').count()
-    return jsonify({'pending_count': pending_count})
+
+    photos_count = PhotoSubmission.query.filter_by(status='pending').count()
+    transfers_count = VehicleTransfer.query.filter_by(status='pending').count()
+    pending_count = photos_count + transfers_count
+    return jsonify({
+        'pending_count': pending_count,
+        'photos_count': photos_count,
+        'transfers_count': transfers_count,
+    })
 
 
 @api_bp.route('/photo-submissions/list', methods=['GET'])
