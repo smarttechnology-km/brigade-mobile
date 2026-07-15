@@ -21,9 +21,10 @@ function _arrete(v) {
   const year = v.insurance_year || new Date().getFullYear();
   return `N°${id}/${year}`;
 }
-function _logoTag(b64, initials) {
-  return b64
-    ? `<img src="${b64}" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;">`
+function _logoTag(b64, initials, logoUrl) {
+  const src = logoUrl || b64;
+  return src
+    ? `<img src="${src}" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;">`
     : `<span style="font-size:20px;font-weight:900;color:#1a5c2a;line-height:1;">${initials}</span>`;
 }
 
@@ -34,7 +35,7 @@ function buildModel1(tpl, v) {
   const bg     = tpl.card_color || '#fffff0';
   const ini    = _initials(tpl.company_name);
   const police = _police(tpl, v.id);
-  const logo   = _logoTag(tpl.logo_b64, ini);
+  const logo   = _logoTag(tpl.logo_b64, ini, tpl.logo_url);
   return `
 <div style="background:${bg};border:2px solid #333;font-family:'Times New Roman',serif;font-size:11px;width:680px;color:#000;">
   <div style="display:grid;grid-template-columns:3fr 2fr;border-bottom:2px solid #333;">
@@ -88,7 +89,7 @@ function buildModel2(tpl, v) {
   const accent = tpl.card_color && tpl.card_color !== '#ffffff' ? tpl.card_color : '#1a4b8c';
   const ini    = _initials(tpl.company_name);
   const police = _police(tpl, v.id);
-  const logo   = _logoTag(tpl.logo_b64, ini);
+  const logo   = _logoTag(tpl.logo_b64, ini, tpl.logo_url);
   return `
 <div style="background:#fff;border:1.5px solid ${accent};font-family:Arial,sans-serif;font-size:11px;width:680px;color:#000;border-radius:4px;overflow:hidden;">
   <!-- Header bar -->
@@ -148,7 +149,7 @@ function buildModel3(tpl, v) {
   const bg     = '#f5fbf5';
   const ini    = _initials(tpl.company_name);
   const police = _police(tpl, v.id);
-  const logo   = _logoTag(tpl.logo_b64, ini);
+  const logo   = _logoTag(tpl.logo_b64, ini, tpl.logo_url);
   return `
 <div style="background:${bg};border:2px solid ${green};font-family:Georgia,serif;font-size:11px;width:680px;color:#000;">
   <!-- Top green bar -->
@@ -206,7 +207,7 @@ function buildModel4(tpl, v) {
   const bg     = '#fdf8f2';
   const ini    = _initials(tpl.company_name);
   const police = _police(tpl, v.id);
-  const logo   = _logoTag(tpl.logo_b64, ini);
+  const logo   = _logoTag(tpl.logo_b64, ini, tpl.logo_url);
   return `
 <div style="background:${bg};border:3px double ${red};font-family:'Times New Roman',serif;font-size:11px;width:680px;color:#000;padding:6px;">
   <div style="border:1px solid ${red};padding:0;">
@@ -265,7 +266,7 @@ function buildModel5(tpl, v) {
   const accent = tpl.card_color && tpl.card_color !== '#ffffff' ? tpl.card_color : '#333333';
   const ini    = _initials(tpl.company_name);
   const police = _police(tpl, v.id);
-  const logo   = _logoTag(tpl.logo_b64, ini);
+  const logo   = _logoTag(tpl.logo_b64, ini, tpl.logo_url);
   return `
 <div style="background:#fff;border:1px solid #ccc;font-family:Arial,Helvetica,sans-serif;font-size:11px;width:680px;color:#111;">
   <!-- Top strip -->
