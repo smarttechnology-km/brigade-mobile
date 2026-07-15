@@ -79,8 +79,8 @@
                 <td><strong>${esc(l.license_number)}</strong></td>
                 <td>
                     <div class="d-flex align-items-center gap-2">
-                        ${l.photo_filename
-                            ? `<img src="/uploads/license_photos/${esc(l.photo_filename)}" style="width:32px;height:38px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;" alt="">`
+                        ${l.photo_url || l.photo_filename
+                            ? `<img src="${l.photo_url || '/uploads/license_photos/' + esc(l.photo_filename)}" style="width:32px;height:38px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;" alt="">`
                             : `<span style="width:32px;height:38px;display:inline-flex;align-items:center;justify-content:center;background:#f0f0f0;border-radius:4px;color:#aaa;font-size:1rem;"><i class="fas fa-user"></i></span>`
                         }
                         <div>
@@ -243,9 +243,9 @@
                 }
             }
         });
-        if (l.photo_filename) {
+        if (l.photo_url || l.photo_filename) {
             const img = document.getElementById('photo-preview-img');
-            img.src = `/uploads/license_photos/${l.photo_filename}`;
+            img.src = l.photo_url || `/uploads/license_photos/${l.photo_filename}`;
             img.style.display = '';
             document.getElementById('photo-preview-icon').style.display = 'none';
         }
@@ -480,8 +480,8 @@
         const img    = document.getElementById('signature-preview-img');
         const empty  = document.getElementById('signature-preview-empty');
         const delBtn = document.getElementById('signature-remove-btn');
-        if (_settings.directeur_signature_filename) {
-            img.src = `/uploads/signatures/${_settings.directeur_signature_filename}`;
+        if (_settings.directeur_signature_url || _settings.directeur_signature_filename) {
+            img.src = _settings.directeur_signature_url || `/uploads/signatures/${_settings.directeur_signature_filename}`;
             img.style.display = '';
             empty.style.display = 'none';
             delBtn.style.display = '';
@@ -1129,8 +1129,8 @@
                 document.getElementById('view-body').innerHTML = `
                     <div class="row g-3 align-items-center">
                         <div class="col-auto">
-                            ${l.photo_filename
-                                ? `<img src="/uploads/license_photos/${esc(l.photo_filename)}" style="width:100px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #dee2e6;" alt="">`
+                            ${l.photo_url || l.photo_filename
+                                ? `<img src="${l.photo_url || '/uploads/license_photos/' + esc(l.photo_filename)}" style="width:100px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #dee2e6;" alt="">`
                                 : `<div style="width:100px;height:120px;background:#f0f0f0;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:3rem;"><i class="fas fa-user-circle"></i></div>`
                             }
                         </div>
