@@ -134,7 +134,9 @@
 
 <script src="{{ url_for('static', filename='js/attestation-builder.js') }}"></script>
 <script>
-let _logoB64        = '';
+let _logoB64        = '';   // backward compat only (old records)
+let _logoUrl        = '';   // display URL (/uploads/... or https://...)
+let _logoStored     = '';   // raw value for deletion (filename or https://...)
 let _selectedLayout = 1;
 let _insuranceId    = 1;
 let _insuranceYear  = new Date().getFullYear();
@@ -198,20 +200,40 @@ function resetColor() {
 }
 
 /* ── Logo ── */
-function handleLogo(event) {
+async function handleLogo(event) {
     const file = event.target.files[0];
     if (!file) return;
+    // Show local preview immediately
     const reader = new FileReader();
     reader.onload = e => {
-        _logoB64 = e.target.result;
-        document.getElementById('logo-preview-img').src = _logoB64;
+        document.getElementById('logo-preview-img').src = e.target.result;
         document.getElementById('logo-preview-img').style.display = '';
         document.getElementById('logo-placeholder').style.display = 'none';
     };
     reader.readAsDataURL(file);
+    // Upload to server (Cloudinary or local)
+    const formData = new FormData();
+    formData.append('logo', file);
+    try {
+        const res = await fetch('/api/vehicles/insurance-accounts/me/attestation-logo', {
+            method: 'POST', credentials: 'same-origin', body: formData,
+        });
+        if (res.ok) {
+            const data = await res.json();
+            _logoUrl    = data.logo_url;
+            _logoStored = data.logo_stored;
+            _logoB64    = ''; // clear old base64
+        } else {
+            console.error('Logo upload failed');
+        }
+    } catch(e) {
+        console.error('Logo upload error:', e);
+    }
 }
 function clearLogo() {
-    _logoB64 = '';
+    _logoB64    = '';
+    _logoUrl    = '';
+    _logoStored = '';
     document.getElementById('f-logo-file').value = '';
     document.getElementById('logo-preview-img').src = '';
     document.getElementById('logo-preview-img').style.display = 'none';
@@ -243,9 +265,11 @@ async function loadMaquette() {
         setVal('f-legal-notice',    t.legal_notice);
         if (t.card_color)  document.getElementById('f-card-color').value = t.card_color;
         if (t.layout) _selectedLayout = parseInt(t.layout) || 1;
-        if (t.logo_b64) {
-            _logoB64 = t.logo_b64;
-            document.getElementById('logo-preview-img').src = _logoB64;
+        const logoSrc = t.logo_url || t.logo_b64 || '';
+        if (logoSrc) {
+            if (t.logo_url) { _logoUrl = t.logo_url; _logoStored = t.logo_stored || ''; }
+            else _logoB64 = t.logo_b64;
+            document.getElementById('logo-preview-img').src = logoSrc;
             document.getElementById('logo-preview-img').style.display = '';
             document.getElementById('logo-placeholder').style.display = 'none';
         }
@@ -263,6 +287,7 @@ async function deleteMaquette() {
         method: 'DELETE', credentials: 'same-origin',
     });
     if (res.ok) {
+        clearLogo();
         document.getElementById('btn-delete-maquette').classList.add('d-none');
         const el = document.getElementById('delete-alert');
         el.classList.remove('d-none');
@@ -283,7 +308,9 @@ function getTpl() {
         bic:             g('f-bic'),
         legal_notice:    g('f-legal-notice'),
         card_color:      g('f-card-color') || MODEL_DEFAULTS[_selectedLayout] || '#fffff0',
-        logo_b64:        _logoB64,
+        logo_url:        _logoUrl,
+        logo_stored:     _logoStored,
+        logo_b64:        _logoUrl ? '' : _logoB64,  // keep b64 only for old records without URL
     };
 }
 

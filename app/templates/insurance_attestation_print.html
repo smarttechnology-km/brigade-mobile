@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const res = await fetch('/api/vehicles/insurance-accounts/me/attestation-template');
         if (res.ok) {
             const fullTpl = await res.json();
-            if (fullTpl && fullTpl.logo_b64) {
+            if (fullTpl && (fullTpl.logo_url || fullTpl.logo_b64)) {
                 container.innerHTML = window.buildAttestationHTML(fullTpl, VEHICLE);
                 // Wait for the logo image to actually paint before printing
                 const img = container.querySelector('img');
