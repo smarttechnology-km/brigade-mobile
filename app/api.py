@@ -4103,17 +4103,21 @@ def _save_alert_photos(alert, photo_files, primary_index=None):
     """Save uploaded photo files for an alert. Returns (saved_photos, None) on success,
     or (None, (response, status)) on failure. If primary_index is given (relative to
     these new files), mark that one primary and unset any previous primary."""
-    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'alert_photos')
+    from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload
     saved = []
     for idx, photo_file in enumerate(photo_files):
         if not photo_file or not photo_file.filename:
             continue
         if not photo_file.content_type.startswith('image/'):
             return None, (jsonify({'error': 'Seules les images sont autorisées pour les photos'}), 400)
-        os.makedirs(upload_dir, exist_ok=True)
-        ext = secure_filename(photo_file.filename).rsplit('.', 1)[-1] if '.' in photo_file.filename else 'jpg'
-        filename = f"{uuid.uuid4()}.{ext}"
-        photo_file.save(os.path.join(upload_dir, filename))
+        if is_cloudinary_enabled():
+            filename = cloud_upload(photo_file, 'alert_photos')
+        else:
+            upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'alert_photos')
+            os.makedirs(upload_dir, exist_ok=True)
+            ext = secure_filename(photo_file.filename).rsplit('.', 1)[-1] if '.' in photo_file.filename else 'jpg'
+            filename = f"{uuid.uuid4()}.{ext}"
+            photo_file.save(os.path.join(upload_dir, filename))
         is_primary = primary_index is not None and idx == primary_index
         if is_primary:
             for p in alert.photos:
@@ -4228,7 +4232,9 @@ def api_alerts_delete_photo(alert_id, photo_id):
     if not photo:
         return jsonify({'error': 'Photo introuvable'}), 404
 
+    from app.cloudinary_utils import delete_file as cloud_delete
     was_primary = photo.is_primary
+    cloud_delete(photo.filename, local_folder='alert_photos')
     db.session.delete(photo)
     db.session.flush()
     if was_primary:
@@ -4245,10 +4251,13 @@ def api_alerts_delete_photo(alert_id, photo_id):
 def api_alerts_delete(alert_id):
     if not _alerts_allowed():
         return jsonify({'error': 'Accès refusé'}), 403
+    from app.cloudinary_utils import delete_file as cloud_delete
     alert = Alert.query.get_or_404(alert_id)
     if current_user.role in ('policier', 'judiciaire') and current_user.country \
             and alert.island not in (current_user.country, Alert.NATIONAL):
         return jsonify({'error': 'Accès refusé à cette île'}), 403
+    for photo in alert.photos:
+        cloud_delete(photo.filename, local_folder='alert_photos')
     db.session.delete(alert)
     db.session.commit()
     return jsonify({'message': 'Alerte supprimée'})

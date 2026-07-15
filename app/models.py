@@ -813,6 +813,7 @@ class VehicleTransfer(db.Model):
             'transfer_type': self.transfer_type,
             'reason': self.reason,
             'identity_document_path': self.identity_document_path,
+            'identity_document_url': _cloud_url(self.identity_document_path, 'identity_documents'),
             'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'processed_at': self.processed_at.isoformat() if self.processed_at else None,
