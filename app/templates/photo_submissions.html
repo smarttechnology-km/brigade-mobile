@@ -1107,8 +1107,10 @@ async function showTransferModal(transferId) {
         const ro = isPending ? '' : 'readonly';
         const roStyle = isPending ? '' : 'style="background-color:#e9ecef;"';
         const plate = transfer.vehicle?.license_plate || 'N/A';
-        const hasDoc = !!transfer.identity_document_path;
-        const isPdf = hasDoc && transfer.identity_document_path.toLowerCase().endsWith('.pdf');
+        const hasDoc = !!(transfer.identity_document_url || transfer.identity_document_path);
+        const docSrc = transfer.identity_document_url || '';
+        const isCloudinary = docSrc.startsWith('https://');
+        const isPdf = hasDoc && (transfer.identity_document_path || '').toLowerCase().endsWith('.pdf');
 
         // Left column: document preview OR vehicle info card
         let leftCol = '';
@@ -1257,7 +1259,7 @@ async function showTransferModal(transferId) {
         document.getElementById('transfer-content').innerHTML = content;
 
         if (hasDoc) {
-            setTimeout(() => loadIdentityDocPreview(transfer.id, isPdf), 50);
+            setTimeout(() => loadIdentityDocPreview(transfer.id, isPdf, docSrc), 50);
         }
 
         // Footer
@@ -1377,10 +1379,21 @@ async function rejectTransfer(transferId) {
     }
 }
 
-async function loadIdentityDocPreview(transferId, isPdf) {
+async function loadIdentityDocPreview(transferId, isPdf, directUrl) {
     const container = document.getElementById(`doc-preview-${transferId}`);
     if (!container) return;
     try {
+        // Cloudinary URL: use directly — no credentialed cross-origin fetch needed
+        if (directUrl && directUrl.startsWith('https://')) {
+            if (isPdf) {
+                container.innerHTML = `<iframe src="${directUrl}" style="width:100%;height:540px;border:none;" title="Pièce d'identité"></iframe>`;
+            } else {
+                container.innerHTML = `<img src="${directUrl}" alt="Pièce d'identité"
+                    style="width:100%;max-height:540px;object-fit:contain;display:block;background:#f8f9fa;">`;
+            }
+            return;
+        }
+        // Local file: fetch through Flask
         const response = await fetch(`/api/vehicle-transfers/${transferId}/identity-document`, {
             credentials: 'include'
         });

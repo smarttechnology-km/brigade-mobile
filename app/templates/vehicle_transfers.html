@@ -312,13 +312,14 @@ async function showTransferModal(transferId) {
     `;
 
     // Pièce d'identité
-    if (transfer.identity_document_path) {
+    if (transfer.identity_document_url || transfer.identity_document_path) {
+      const docDirectUrl = transfer.identity_document_url || '';
       content += `
         <div class="alert alert-info d-flex align-items-center gap-2 mb-4">
           <i class="fas fa-file-pdf fa-lg"></i>
           <div>
             <strong>Pièce d'identité jointe</strong><br>
-            <a href="#" onclick="viewIdentityDocument(${transfer.id}); return false;" class="alert-link">
+            <a href="#" onclick="viewIdentityDocument(${transfer.id}, '${docDirectUrl.replace(/'/g, "\\'")}'); return false;" class="alert-link">
               Cliquer pour visualiser le document
             </a>
           </div>
@@ -463,9 +464,11 @@ async function saveTransfer(transferId) {
 }
 
 // View identity document in modal
-function viewIdentityDocument(transferId) {
-  const docUrl = `/api/vehicle-transfers/${transferId}/identity-document`;
-  
+function viewIdentityDocument(transferId, directUrl) {
+  const docUrl = (directUrl && directUrl.startsWith('https://'))
+    ? directUrl
+    : `/api/vehicle-transfers/${transferId}/identity-document`;
+
   // Create modal for document preview
   const modal = document.createElement('div');
   modal.className = 'modal fade';
