@@ -4,9 +4,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from sqlalchemy import event
 import uuid
-import os
 import json
 from app.timezone_utils import now_comoros
+
+
+def _cloud_url(stored_value, local_folder):
+    """Return the public URL for a stored file — Cloudinary URL or local /uploads/ path."""
+    if not stored_value:
+        return None
+    if stored_value.startswith('https://'):
+        return stored_value
+    return f'/uploads/{local_folder}/{stored_value}'
 
 
 class User(UserMixin, db.Model):
@@ -326,19 +334,17 @@ class Fine(db.Model):
             'notes': self.notes,
             'issued_at': self.issued_at.isoformat(),
             'issued_at_str': self.issued_at.strftime('%d/%m/%Y %H:%M') if self.issued_at else None,
-            'photo_url': f'/uploads/fine_photos/{self.photo_filename}' if self.photo_filename else None
+            'photo_url': _cloud_url(self.photo_filename, 'fine_photos')
         }
 
 
 def _delete_upload_file(filename, subdir):
-    """Remove a file from UPLOAD_FOLDER/<subdir>, regardless of which code path triggered it."""
+    """Remove a file — from Cloudinary if it's a URL, else from local disk."""
     if not filename:
         return
     try:
-        from flask import current_app
-        path = os.path.join(current_app.config['UPLOAD_FOLDER'], subdir, filename)
-        if os.path.exists(path):
-            os.remove(path)
+        from app.cloudinary_utils import delete_file as cloud_delete
+        cloud_delete(filename, local_folder=subdir)
     except Exception:
         pass
 
@@ -1566,7 +1572,7 @@ class AlertPhoto(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'photo_url': f'/uploads/alert_photos/{self.filename}',
+            'photo_url': _cloud_url(self.filename, 'alert_photos'),
             'is_primary': self.is_primary,
         }
 
@@ -1697,7 +1703,7 @@ class LicenseDossier(db.Model):
             'categories': self.categories or '',
             'category_details': json.loads(self.category_details) if self.category_details else {},
             'photo_filename': self.photo_filename or '',
-            'photo_url': f'/uploads/license_photos/{self.photo_filename}' if self.photo_filename else '',
+            'photo_url': _cloud_url(self.photo_filename, 'license_photos') or '',
             'final_status': self.final_status or 'actif',
             'doc_autoecole': self.doc_autoecole,
             'doc_medical': self.doc_medical,

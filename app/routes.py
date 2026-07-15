@@ -13,6 +13,7 @@ import csv
 from datetime import datetime, timedelta
 import os
 from app.timezone_utils import now_comoros, ensure_comoros
+from app.models import _cloud_url
 import json
 try:
     from reportlab.lib.pagesizes import A4
@@ -6160,7 +6161,7 @@ def driver_license_preview():
         "is_pro":                'P' in holder_cats,
         "categories":            display_cats,
         "category_details":      category_details,
-        "photo_url":             f"/uploads/license_photos/{lic.photo_filename}" if lic.photo_filename else None,
+        "photo_url":             _cloud_url(lic.photo_filename, 'license_photos'),
     })
 
 
@@ -6706,11 +6707,15 @@ def submit_vehicle_transfer():
                 if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
                     return jsonify({'error': 'Invalid file type. Allowed: PDF, JPG, PNG, GIF'}), 400
 
-                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'vehicle_transfers')
-                os.makedirs(upload_dir, exist_ok=True)
-                filename = secure_filename(f"{vehicle_id}_{datetime.now().timestamp()}_{file.filename}")
-                file.save(os.path.join(upload_dir, filename))
-                identity_document_path = os.path.join('vehicle_transfers', filename)
+                from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload
+                if is_cloudinary_enabled():
+                    identity_document_path = cloud_upload(file, 'vehicle_transfers')
+                else:
+                    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'vehicle_transfers')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    filename = secure_filename(f"{vehicle_id}_{datetime.now().timestamp()}_{file.filename}")
+                    file.save(os.path.join(upload_dir, filename))
+                    identity_document_path = os.path.join('vehicle_transfers', filename)
 
         # Create transfer record
         transfer = VehicleTransfer(

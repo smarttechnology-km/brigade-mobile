@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_file, g, current_app
+from flask import Blueprint, request, jsonify, send_file, redirect, g, current_app
 from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest, Alert, AlertPhoto, VehicleInsuranceAssignment, LicenseDossier
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
@@ -935,15 +935,24 @@ def api_fines_create():
         return jsonify({"error": "Vehicle not found"}), 404
 
     photo_filename = None
-    photo_file = request.files.get('photo')
-    if photo_file and photo_file.filename:
-        if not photo_file.content_type.startswith('image/'):
-            return jsonify({"error": "Only image files allowed for photo"}), 400
-        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'fine_photos')
-        os.makedirs(upload_dir, exist_ok=True)
-        ext = secure_filename(photo_file.filename).rsplit('.', 1)[-1] if '.' in photo_file.filename else 'jpg'
-        photo_filename = f"{uuid.uuid4()}.{ext}"
-        photo_file.save(os.path.join(upload_dir, photo_filename))
+    # Accept direct Cloudinary URL (mobile direct-upload flow)
+    photo_url_direct = request.form.get('photo_url') or request.json.get('photo_url') if request.is_json else request.form.get('photo_url')
+    if photo_url_direct and photo_url_direct.startswith('https://'):
+        photo_filename = photo_url_direct
+    else:
+        photo_file = request.files.get('photo')
+        if photo_file and photo_file.filename:
+            if not photo_file.content_type.startswith('image/'):
+                return jsonify({"error": "Only image files allowed for photo"}), 400
+            from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload
+            if is_cloudinary_enabled():
+                photo_filename = cloud_upload(photo_file, 'fine_photos')
+            else:
+                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'fine_photos')
+                os.makedirs(upload_dir, exist_ok=True)
+                ext = secure_filename(photo_file.filename).rsplit('.', 1)[-1] if '.' in photo_file.filename else 'jpg'
+                photo_filename = f"{uuid.uuid4()}.{ext}"
+                photo_file.save(os.path.join(upload_dir, photo_filename))
 
     fine = Fine(
         vehicle_id=vehicle_id,
@@ -2057,34 +2066,36 @@ def upload_photo_submission():
     if not user or user.role not in ['policier', 'administrateur']:
         return jsonify({"error": "Forbidden"}), 403
     
-    # Check if photo file is present
-    if 'photo' not in request.files:
-        return jsonify({"error": "No photo provided"}), 400
-    
-    photo_file = request.files['photo']
     description = request.form.get('description', '').strip() or None
     license_plate = request.form.get('license_plate', '').strip().upper() or None
     vehicle_id = request.form.get('vehicle_id', type=int)
-    
-    if photo_file.filename == '':
-        return jsonify({"error": "No photo selected"}), 400
-    
-    # Validate file type
-    if not photo_file.content_type.startswith('image/'):
-        return jsonify({"error": "Only image files allowed"}), 400
-    
-    # Create uploads directory if not exists
-    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'photo_submissions')
-    os.makedirs(upload_dir, exist_ok=True)
-    
-    # Generate unique filename
-    ext = secure_filename(photo_file.filename).split('.')[-1]
-    filename = f"{uuid.uuid4()}.{ext}"
-    filepath = os.path.join(upload_dir, filename)
-    
-    # Save file
-    photo_file.save(filepath)
-    
+
+    # Accept direct Cloudinary URL (mobile direct-upload flow)
+    photo_url_direct = request.form.get('photo_url')
+    if photo_url_direct and photo_url_direct.startswith('https://'):
+        filename = photo_url_direct
+        filepath = photo_url_direct
+    else:
+        if 'photo' not in request.files:
+            return jsonify({"error": "No photo provided"}), 400
+        photo_file = request.files['photo']
+        if photo_file.filename == '':
+            return jsonify({"error": "No photo selected"}), 400
+        if not photo_file.content_type.startswith('image/'):
+            return jsonify({"error": "Only image files allowed"}), 400
+        from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload
+        ext = secure_filename(photo_file.filename).split('.')[-1]
+        if is_cloudinary_enabled():
+            url = cloud_upload(photo_file, 'photo_submissions')
+            filename = url
+            filepath = url
+        else:
+            upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'photo_submissions')
+            os.makedirs(upload_dir, exist_ok=True)
+            filename = f"{uuid.uuid4()}.{ext}"
+            filepath = os.path.join(upload_dir, filename)
+            photo_file.save(filepath)
+
     # Create database entry
     submission = PhotoSubmission(
         user_id=user.id,
@@ -2228,9 +2239,10 @@ def review_photo_submission(submission_id):
     vehicle_plate = submission.license_plate or (submission.vehicle.license_plate if submission.vehicle else None)
     
     # Delete photo file if status is 'resolved' to save disk space
-    if status == 'resolved' and submission.photo_path and os.path.exists(submission.photo_path):
+    if status == 'resolved' and submission.photo_path:
         try:
-            os.remove(submission.photo_path)
+            from app.cloudinary_utils import delete_file as cloud_delete
+            cloud_delete(submission.photo_path, local_folder='photo_submissions')
             print(f"Deleted photo file: {submission.photo_path}")
         except Exception as e:
             print(f"Error deleting photo file: {e}")
@@ -2280,10 +2292,10 @@ def delete_photo_submission(submission_id):
                 return error_response
     
     # Delete photo file if it exists
-    if submission.photo_path and os.path.exists(submission.photo_path):
+    if submission.photo_path:
         try:
-            os.remove(submission.photo_path)
-            print(f"Deleted photo file: {submission.photo_path}")
+            from app.cloudinary_utils import delete_file as cloud_delete
+            cloud_delete(submission.photo_path, local_folder='photo_submissions')
         except Exception as e:
             print(f"Error deleting photo file: {e}")
     
@@ -2318,22 +2330,25 @@ def get_photo_submission(submission_id):
         return jsonify({"error": "Forbidden"}), 403
     
     submission = PhotoSubmission.query.get(submission_id)
-    if not submission or not os.path.exists(submission.photo_path):
+    if not submission or not submission.photo_path:
         return jsonify({"error": "Photo not found"}), 404
-    
+
     if submission.vehicle_id:
         vehicle = Vehicle.query.get(submission.vehicle_id)
         if vehicle and user.role == 'judiciaire':
             error_response = check_island_access(vehicle.owner_island)
             if error_response:
                 return error_response
-    
+
+    # Cloudinary URL — redirect directly to CDN
+    if submission.photo_path.startswith('https://'):
+        return redirect(submission.photo_path)
+
+    if not os.path.exists(submission.photo_path):
+        return jsonify({"error": "Photo not found"}), 404
+
     with open(submission.photo_path, 'rb') as photo:
-        return send_file(
-            photo,
-            mimetype='image/jpeg',
-            as_attachment=False
-        )
+        return send_file(photo, mimetype='image/jpeg', as_attachment=False)
     
 
 # ============================================================================
@@ -2452,29 +2467,28 @@ def create_vehicle_transfer():
         
         # Handle identity document upload
         identity_document_path = None
-        if 'identity_document' in request.files:
+        # Accept direct Cloudinary URL (mobile direct-upload flow)
+        doc_url_direct = request.form.get('identity_document_url')
+        if doc_url_direct and doc_url_direct.startswith('https://'):
+            identity_document_path = doc_url_direct
+        elif 'identity_document' in request.files:
             doc_file = request.files['identity_document']
-            
             if doc_file.filename != '':
-                # Validate file type (PDF or image)
                 allowed_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp']
                 if doc_file.content_type not in allowed_types:
                     return jsonify({'error': 'Only PDF and image files (JPEG, PNG, GIF, WebP) are allowed'}), 400
-                
-                # Create uploads directory if not exists
-                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'identity_documents')
-                os.makedirs(upload_dir, exist_ok=True)
-                
-                # Generate unique filename
                 ext = secure_filename(doc_file.filename).split('.')[-1]
-                filename = f"transfer_{uuid.uuid4()}.{ext}"
-                filepath = os.path.join(upload_dir, filename)
-                
-                # Save file
-                doc_file.save(filepath)
-                identity_document_path = filename
-                
-                print(f"[DEBUG] Identity document saved: {filename}")
+                from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload
+                if is_cloudinary_enabled():
+                    identity_document_path = cloud_upload(doc_file, 'identity_documents')
+                else:
+                    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'identity_documents')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    filename = f"transfer_{uuid.uuid4()}.{ext}"
+                    filepath = os.path.join(upload_dir, filename)
+                    doc_file.save(filepath)
+                    identity_document_path = filename
+                print(f"[DEBUG] Identity document saved: {identity_document_path}")
         
         # Create vehicle transfer record
         transfer = VehicleTransfer(
@@ -2598,29 +2612,32 @@ def get_transfer_identity_document(transfer_id):
         if not transfer or not transfer.identity_document_path:
             return jsonify({'error': 'Document not found'}), 404
         
-        # Build file path — handle two upload conventions:
-        # - Mobile/api.py uploads: path is just the filename, stored in static/identity_documents/
-        # - Web/routes.py uploads: path includes directory prefix like "vehicle_transfers/file.jpg"
+        doc_path_val = transfer.identity_document_path
+
+        # Cloudinary URL — redirect directly to CDN
+        if doc_path_val.startswith('https://'):
+            return redirect(doc_path_val)
+
+        # Local file — handle two upload conventions:
+        # - Mobile: filename only → identity_documents/<filename>
+        # - Web: includes dir prefix → vehicle_transfers/<filename>
         upload_base = current_app.config['UPLOAD_FOLDER']
-        if os.sep in transfer.identity_document_path or '/' in transfer.identity_document_path:
-            doc_path = os.path.join(upload_base, transfer.identity_document_path)
+        if os.sep in doc_path_val or '/' in doc_path_val:
+            doc_path = os.path.join(upload_base, doc_path_val)
         else:
-            doc_path = os.path.join(upload_base, 'identity_documents', transfer.identity_document_path)
+            doc_path = os.path.join(upload_base, 'identity_documents', doc_path_val)
 
         if not os.path.exists(doc_path):
             return jsonify({'error': 'Document file not found'}), 404
 
-        # Determine MIME type
-        ext = transfer.identity_document_path.rsplit('.', 1)[-1].lower()
+        ext = doc_path_val.rsplit('.', 1)[-1].lower()
         mime_type = 'application/pdf' if ext == 'pdf' else f'image/{ext}' if ext in ('jpg', 'jpeg', 'png', 'gif') else 'application/octet-stream'
-        
-        print(f"[DEBUG] Serving identity document: {transfer.identity_document_path}")
-        
+
         return send_file(
             doc_path,
             mimetype=mime_type,
             as_attachment=False,
-            download_name=f"transfer_{transfer.id}_identity.{transfer.identity_document_path.split('.')[-1]}"
+            download_name=f"transfer_{transfer.id}_identity.{ext}"
         )
     
     except Exception as e:
@@ -3002,14 +3019,16 @@ def api_licenses_settings_signature():
     if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
         return jsonify({'error': 'Format non autorisé (jpg, png, webp)'}), 400
     s = LicenseSetting.get()
-    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'signatures')
-    os.makedirs(upload_dir, exist_ok=True)
+    from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload, delete_file as cloud_delete
     if s.directeur_signature_filename:
-        old_path = os.path.join(upload_dir, s.directeur_signature_filename)
-        if os.path.exists(old_path):
-            os.remove(old_path)
-    filename = f'{uuid.uuid4().hex}{ext}'
-    file.save(os.path.join(upload_dir, filename))
+        cloud_delete(s.directeur_signature_filename, local_folder='signatures')
+    if is_cloudinary_enabled():
+        filename = cloud_upload(file, 'signatures')
+    else:
+        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'signatures')
+        os.makedirs(upload_dir, exist_ok=True)
+        filename = f'{uuid.uuid4().hex}{ext}'
+        file.save(os.path.join(upload_dir, filename))
     s.directeur_signature_filename = filename
     db.session.commit()
     return jsonify(s.to_dict())
@@ -3765,9 +3784,8 @@ def api_licenses_delete(license_id):
         return jsonify({'error': 'Ce permis a un historique de points et ne peut pas être supprimé.'}), 400
     if lic.photo_filename:
         try:
-            photo_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'license_photos', lic.photo_filename)
-            if os.path.exists(photo_path):
-                os.remove(photo_path)
+            from app.cloudinary_utils import delete_file as cloud_delete
+            cloud_delete(lic.photo_filename, local_folder='license_photos')
         except Exception:
             pass
     # Supprimer les demandes d'impression liées
@@ -3792,17 +3810,19 @@ def api_licenses_photo(license_id):
     ext = os.path.splitext(secure_filename(file.filename))[1].lower()
     if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
         return jsonify({'error': 'Format non autorisé (jpg, png, webp)'}), 400
-    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'license_photos')
-    os.makedirs(upload_dir, exist_ok=True)
+    from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload, delete_file as cloud_delete, file_url as cloud_file_url
     if lic.photo_filename:
-        old_path = os.path.join(upload_dir, lic.photo_filename)
-        if os.path.exists(old_path):
-            os.remove(old_path)
-    filename = f'{uuid.uuid4().hex}{ext}'
-    file.save(os.path.join(upload_dir, filename))
+        cloud_delete(lic.photo_filename, local_folder='license_photos')
+    if is_cloudinary_enabled():
+        filename = cloud_upload(file, 'license_photos')
+    else:
+        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'license_photos')
+        os.makedirs(upload_dir, exist_ok=True)
+        filename = f'{uuid.uuid4().hex}{ext}'
+        file.save(os.path.join(upload_dir, filename))
     lic.photo_filename = filename
     db.session.commit()
-    return jsonify({'photo_url': f'/uploads/license_photos/{filename}'})
+    return jsonify({'photo_url': cloud_file_url(filename, 'license_photos')})
 
 
 # ── License print requests ────────────────────────────────────────────────────
@@ -5101,3 +5121,41 @@ window.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
 </html>"""
 
     return Response(html, mimetype='text/html; charset=utf-8')
+
+
+# ── Cloudinary direct-upload signature ───────────────────────────────────────
+
+@api_bp.route('/cloudinary-signature', methods=['GET'])
+@jwt_required()
+def cloudinary_signature():
+    """Return a signed upload token so mobile apps can upload directly to Cloudinary.
+    Query param: folder=fine_photos|photo_submissions|identity_documents|...
+    Only active when USE_CLOUDINARY=true; returns 503 otherwise.
+    """
+    from app.cloudinary_utils import is_cloudinary_enabled, _configure
+    if not is_cloudinary_enabled():
+        return jsonify({'error': 'Cloudinary not enabled on this server'}), 503
+
+    _configure()
+    import cloudinary
+    import time, hashlib
+
+    folder = request.args.get('folder', 'misc')
+    allowed = {'fine_photos', 'photo_submissions', 'identity_documents', 'license_photos', 'signatures', 'vehicle_transfers'}
+    if folder not in allowed:
+        return jsonify({'error': 'Invalid folder'}), 400
+
+    timestamp = int(time.time())
+    cloud_folder = f'brigade/{folder}'
+    params_to_sign = f'folder={cloud_folder}&timestamp={timestamp}'
+    api_secret = cloudinary.config().api_secret
+    signature = hashlib.sha1(f'{params_to_sign}{api_secret}'.encode()).hexdigest()
+
+    return jsonify({
+        'cloud_name': cloudinary.config().cloud_name,
+        'api_key': cloudinary.config().api_key,
+        'timestamp': timestamp,
+        'signature': signature,
+        'folder': cloud_folder,
+        'upload_url': f'https://api.cloudinary.com/v1_1/{cloudinary.config().cloud_name}/auto/upload',
+    })
