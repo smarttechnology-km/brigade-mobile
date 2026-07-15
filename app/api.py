@@ -3039,6 +3039,7 @@ def api_licenses_settings_signature():
 def api_licenses_settings_signature_delete():
     if not _is_license_admin():
         return jsonify({'error': 'Accès refusé'}), 403
+    from app.cloudinary_utils import delete_file as cloud_delete
     s = LicenseSetting.get()
     if s.directeur_signature_filename:
         cloud_delete(s.directeur_signature_filename, local_folder='signatures')
