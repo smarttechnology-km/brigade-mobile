@@ -3041,9 +3041,7 @@ def api_licenses_settings_signature_delete():
         return jsonify({'error': 'Accès refusé'}), 403
     s = LicenseSetting.get()
     if s.directeur_signature_filename:
-        old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'signatures', s.directeur_signature_filename)
-        if os.path.exists(old_path):
-            os.remove(old_path)
+        cloud_delete(s.directeur_signature_filename, local_folder='signatures')
         s.directeur_signature_filename = None
         db.session.commit()
     return jsonify(s.to_dict())
@@ -4341,7 +4339,6 @@ def api_search_drivers():
         found = DriverLicense.query.filter(DriverLicense.license_number.in_(all_nums)).all()
         for lic in found:
             d = lic.to_dict()
-            d['photo_url'] = f'/uploads/license_photos/{lic.photo_filename}' if lic.photo_filename else None
             licenses_map[lic.license_number] = d
 
     results = []

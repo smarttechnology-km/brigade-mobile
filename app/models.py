@@ -737,6 +737,7 @@ class PhotoSubmission(db.Model):
             'review_notes': self.review_notes,
             'vehicle_type': self.vehicle.vehicle_type if self.vehicle else None,
             'usage_type': self.vehicle.usage_type if self.vehicle else None,
+            'photo_url': _cloud_url(self.photo_filename, 'photo_submissions'),
         }
 
 
@@ -1187,6 +1188,10 @@ class DriverLicense(db.Model):
     registered_at = db.Column(db.DateTime, nullable=True)
 
     @property
+    def photo_url(self):
+        return _cloud_url(self.photo_filename, 'license_photos') or ''
+
+    @property
     def is_expired(self):
         if not self.expiry_date:
             return False
@@ -1350,6 +1355,10 @@ class LicenseSetting(db.Model):
     directeur_signature_filename = db.Column(db.String(255), nullable=True)
     category_validity = db.Column(db.Text, nullable=True)
 
+    @property
+    def directeur_signature_url(self):
+        return _cloud_url(self.directeur_signature_filename, 'signatures') or ''
+
     @staticmethod
     def get():
         s = LicenseSetting.query.first()
@@ -1370,6 +1379,7 @@ class LicenseSetting(db.Model):
             'permanent_validity_years': self.permanent_validity_years,
             'directeur_general_name': self.directeur_general_name or '',
             'directeur_signature_filename': self.directeur_signature_filename or '',
+            'directeur_signature_url': self.directeur_signature_url,
             'category_validity': cat_validity,
         }
 
