@@ -5495,25 +5495,30 @@ def get_mobile_money_archive():
     """
     start_date_str = request.args.get('start_date', '')
     end_date_str = request.args.get('end_date', '')
+    show_all = request.args.get('all', '').lower() == 'true'
 
     now = datetime.utcnow()
-    if start_date_str:
-        try:
-            start_date = datetime.fromisoformat(start_date_str)
-        except Exception:
+    if show_all:
+        start_date = None
+        end_date = None
+    else:
+        if start_date_str:
+            try:
+                start_date = datetime.fromisoformat(start_date_str)
+            except Exception:
+                start_date = now - timedelta(days=30)
+        else:
             start_date = now - timedelta(days=30)
-    else:
-        start_date = now - timedelta(days=30)
 
-    if end_date_str:
-        try:
-            end_date = datetime.fromisoformat(end_date_str)
-        except Exception:
+        if end_date_str:
+            try:
+                end_date = datetime.fromisoformat(end_date_str)
+            except Exception:
+                end_date = now
+        else:
             end_date = now
-    else:
-        end_date = now
 
-    end_date = end_date.replace(hour=23, minute=59, second=59)
+        end_date = end_date.replace(hour=23, minute=59, second=59)
     user_country = getattr(current_user, 'country', None)
 
     # Mobile Money agents should be able to see transactions across all islands
@@ -5533,16 +5538,22 @@ def get_mobile_money_archive():
     ]
 
     # Direct paid fines: mobile agent OR citizen app (paid_by not a system user).
-    fines_query = Fine.query.filter(
+    fines_filters = [
         Fine.paid == True,
         Fine.paid_at.isnot(None),
-        Fine.paid_at >= start_date,
-        Fine.paid_at <= end_date,
-        db.or_(
+    ]
+    if start_date:
+        fines_filters.append(Fine.paid_at >= start_date)
+    if end_date:
+        fines_filters.append(Fine.paid_at <= end_date)
+    if other_system_usernames:
+        fines_filters.append(db.or_(
             Fine.paid_by.in_(mobile_agent_usernames),
             Fine.paid_by.notin_(other_system_usernames),
-        ) if other_system_usernames else Fine.paid_by.isnot(None),
-    )
+        ))
+    else:
+        fines_filters.append(Fine.paid_by.isnot(None))
+    fines_query = Fine.query.filter(*fines_filters)
     if user_country:
         fines_query = fines_query.join(Vehicle).filter(Vehicle.owner_island == user_country)
 
@@ -5569,15 +5580,19 @@ def get_mobile_money_archive():
         direct_fines_total += float(fine.amount or 0.0)
 
     # Vignettes: mobile agent OR citizen app (vignette_last_paid_by not a system user).
-    vignette_query = Vehicle.query.filter(
-        Vehicle.vignette_last_paid_at.isnot(None),
-        Vehicle.vignette_last_paid_at >= start_date,
-        Vehicle.vignette_last_paid_at <= end_date,
-        db.or_(
+    vignette_filters = [Vehicle.vignette_last_paid_at.isnot(None)]
+    if start_date:
+        vignette_filters.append(Vehicle.vignette_last_paid_at >= start_date)
+    if end_date:
+        vignette_filters.append(Vehicle.vignette_last_paid_at <= end_date)
+    if other_system_usernames:
+        vignette_filters.append(db.or_(
             Vehicle.vignette_last_paid_by.in_(mobile_agent_usernames),
             Vehicle.vignette_last_paid_by.notin_(other_system_usernames),
-        ) if other_system_usernames else Vehicle.vignette_last_paid_by.isnot(None),
-    )
+        ))
+    else:
+        vignette_filters.append(Vehicle.vignette_last_paid_by.isnot(None))
+    vignette_query = Vehicle.query.filter(*vignette_filters)
     if user_country:
         vignette_query = vignette_query.filter(Vehicle.owner_island == user_country)
 
@@ -5612,17 +5627,23 @@ def get_mobile_money_archive():
 
     # QR code renewals archive — mobile agents OR citizen app (recorded_by not a system user)
     from app.models import QRCodePayment
-    qr_query = QRCodePayment.query.filter(
+    qr_filters = [
         QRCodePayment.payment_type == 'renewal',
         QRCodePayment.status == 'paid',
         QRCodePayment.paid_at.isnot(None),
-        QRCodePayment.paid_at >= start_date,
-        QRCodePayment.paid_at <= end_date,
-        db.or_(
+    ]
+    if start_date:
+        qr_filters.append(QRCodePayment.paid_at >= start_date)
+    if end_date:
+        qr_filters.append(QRCodePayment.paid_at <= end_date)
+    if other_system_usernames:
+        qr_filters.append(db.or_(
             QRCodePayment.recorded_by.in_(mobile_agent_usernames),
             QRCodePayment.recorded_by.notin_(other_system_usernames),
-        ) if other_system_usernames else QRCodePayment.recorded_by.isnot(None),
-    )
+        ))
+    else:
+        qr_filters.append(QRCodePayment.recorded_by.isnot(None))
+    qr_query = QRCodePayment.query.filter(*qr_filters)
     if user_country:
         qr_query = qr_query.join(Vehicle, QRCodePayment.vehicle_id == Vehicle.id)\
                            .filter(Vehicle.owner_island == user_country)
@@ -5653,8 +5674,8 @@ def get_mobile_money_archive():
         qr_total += float(p.amount or 0.0)
 
     return jsonify({
-        'start_date': start_date.isoformat(),
-        'end_date': end_date.isoformat(),
+        'start_date': start_date.isoformat() if start_date else None,
+        'end_date': end_date.isoformat() if end_date else None,
         'totals': {
             'direct_fines_count': len(direct_paid_fines),
             'direct_fines_total': round(direct_fines_total, 2),

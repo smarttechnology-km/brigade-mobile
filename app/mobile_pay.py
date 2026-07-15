@@ -27,6 +27,38 @@ def _parse_vignette_datetime(value):
     return ensure_comoros(value)
 
 
+def _effective_days_late(vignette_expiry, now=None):
+    """Days late for penalty calculation, ignoring skipped renewal years.
+
+    Rule: penalties only count from the most recent March 31 deadline that has
+    already passed — never from an older expiry date. This way a vehicle that
+    missed a full year pays the same penalty as one that just missed this year's
+    deadline, because the skipped year is written off.
+
+    Returns 0 when we are still before the current year's March 31 (i.e. the
+    owner is in the early-renewal window and no new deadline has passed yet).
+    """
+    if now is None:
+        now = now_comoros()
+    if not vignette_expiry or vignette_expiry >= now:
+        return 0
+
+    from datetime import date as _date
+    current_year = now.year
+    march_31_this_year = ensure_comoros(datetime(current_year, 3, 31, 23, 59, 59))
+
+    if now.date() > _date(current_year, 3, 31):
+        # Past this year's deadline: cap the reference to this year's March 31
+        # so older missed years do not inflate the penalty.
+        effective_ref = max(vignette_expiry, march_31_this_year)
+    else:
+        # Still before this year's March 31 (early-renewal window).
+        # The previous year's penalties are forgiven; a new cycle is starting.
+        return 0
+
+    return max(0, (now - effective_ref).days)
+
+
 def _get_renewal_opening_datetime():
     """Return the configured renewal opening date as a timezone-aware Comoros datetime, or None."""
     try:
@@ -260,9 +292,7 @@ def lookup():
     if vignette_expiry:
         if vignette_expiry < now:
             vignette_status = 'expired'
-            # Penalties apply ONLY when vignette has expired (after March 31st)
-            # Aux Comores: Les pénalités s'appliquent uniquement après le 31 mars (expiration)
-            penalty_amount = float(_calculate_penalty_amount((now - vignette_expiry).days) or 0.0)
+            penalty_amount = float(_calculate_penalty_amount(_effective_days_late(vignette_expiry, now)) or 0.0)
         elif vignette_expiry < now + timedelta(days=30):
             vignette_status = 'expiring'
         else:
@@ -356,11 +386,7 @@ def _build_vignette_payment_payload(vehicle, requested_expiry=None):
     if vignette_price <= 0:
         raise ValueError('Impossible de calculer le montant de la vignette pour ce véhicule.')
 
-    # Calculate penalty amount if vignette has expired (after March 31st)
-    # Aux Comores: Les pénalités s'appliquent uniquement après le 31 mars (expiration)
-    penalty_amount = 0.0
-    if current_expiry and current_expiry < now:
-        penalty_amount = float(_calculate_penalty_amount((now - current_expiry).days) or 0.0)
+    penalty_amount = float(_calculate_penalty_amount(_effective_days_late(current_expiry, now)) or 0.0)
 
     unpaid_fines = vehicle.fines.filter_by(paid=False).all()
     unpaid_fines_ids = [f.id for f in unpaid_fines]
