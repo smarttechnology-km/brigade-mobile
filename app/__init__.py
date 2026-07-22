@@ -84,12 +84,13 @@ def create_app():
         Mobile tokens are validated against the VehicleOwner session_version so a
         new login on another phone invalidates the previous one."""
         try:
+            from flask import g
             # Check if this is a mobile/citizen token.
             # Can be in jwt_payload directly or inside 'sub'
             vehicle_id = jwt_payload.get('vehicle_id')
             if not vehicle_id and isinstance(jwt_payload.get('sub'), dict):
                 vehicle_id = jwt_payload.get('sub', {}).get('vehicle_id')
-            
+
             if vehicle_id:
                 from app.models import VehicleOwner
 
@@ -109,20 +110,22 @@ def create_app():
                 if owner.current_device_id:
                     if not token_device_id or str(owner.current_device_id) != str(token_device_id):
                         print(f"⚠️  Mobile device mismatch for vehicle_id={vehicle_id}")
+                        g.jwt_revoke_reason = 'session_revoked'
                         return True
 
                 result = int(token_session_version) != int(getattr(owner, 'session_version', 0))
                 if result:
                     print(f"⚠️  Mobile session version mismatch for vehicle_id={vehicle_id}")
+                    g.jwt_revoke_reason = 'session_revoked'
                 return result
-            
+
             # This is a web/user token
             uid = jwt_payload.get('sub')
-            
+
             # If 'sub' is a dict (old format), extract uid from it
             if isinstance(uid, dict):
                 uid = uid.get('id') or uid.get('user_id')
-            
+
             if not uid:
                 print(f"⚠️  No uid or vehicle_id in token")
                 return True
@@ -151,6 +154,9 @@ def create_app():
 
     @jwt.revoked_token_loader
     def revoked_token_callback(jwt_header, jwt_payload):
+        from flask import g
+        if getattr(g, 'jwt_revoke_reason', None) == 'session_revoked':
+            return jsonify({'error': 'session_revoked'}), 401
         return jsonify({'error': 'Session expired. Please login again.'}), 401
 
     @jwt.expired_token_loader
