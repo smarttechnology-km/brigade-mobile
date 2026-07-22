@@ -191,10 +191,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // (the vehicles page includes a #vehicles-tbody element). On the
     // dashboard we include this script only to reuse modal helpers, so
     // avoid replacing the dashboard table rows.
-    const addBtn = document.getElementById('btn-add-vehicle');
     const vehiclesTbody = document.getElementById('vehicles-tbody');
+    const paginationControls = document.getElementById('pagination-controls');
 
-    if (vehiclesTbody) {
+    if (vehiclesTbody && paginationControls) {
         // we're on the vehicles management page — load table
         loadVehicles();
 
