@@ -249,6 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         
+        const addBtn = document.getElementById('btn-add-vehicle');
         if (addBtn) {
             addBtn.addEventListener('click', function() {
                 openVehicleModal();
@@ -824,35 +825,36 @@ function saveVehicle() {
         // update
         fetch(`/api/vehicles/${vid}`, {
             method: 'PUT',
+            credentials: 'same-origin',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
-        }).then(r => {
-            if (!r.ok) throw r;
-            return r.json();
+        }).then(async r => {
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || `Erreur ${r.status}`);
+            return data;
         }).then(() => {
             safeHideModal();
             loadVehicles();
-        }).catch(async err => {
-            const text = err.json ? await err.json() : {error: 'Erreur'};
-            alert(text.error || 'Erreur lors de la mise à jour');
+        }).catch(err => {
+            alert(err.message || 'Erreur lors de la mise à jour');
         });
     } else {
         // create
         fetch('/api/vehicles', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
-        }).then(r => {
-            if (!r.ok) throw r;
-            return r.json();
+        }).then(async r => {
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || `Erreur ${r.status}`);
+            return data;
         }).then((created) => {
-            // created contains the new vehicle data
             safeHideModal();
             loadVehicles();
             try{ if(created && created.id) showQRCodeFor(created.id); }catch(e){}
-        }).catch(async err => {
-            const text = err.json ? await err.json() : {error: 'Erreur'};
-            alert(text.error || 'Erreur lors de la création');
+        }).catch(err => {
+            alert(err.message || 'Erreur lors de la création');
         });
     }
 }
