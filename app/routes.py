@@ -1453,6 +1453,15 @@ def vehicles_last_update():
     return jsonify({'last_update': last_update, 'total': result.total})
 
 
+@vehicle_bp.route('/<int:vehicle_id>', methods=['GET'])
+@login_required
+def get_vehicle_detail(vehicle_id):
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    d = vehicle.to_dict()
+    d['fines'] = [f.to_dict() for f in vehicle.fines.filter_by(paid=False).all()]
+    return jsonify(d)
+
+
 @vehicle_bp.route('/query', methods=['GET'])
 @login_required
 def query_vehicles():

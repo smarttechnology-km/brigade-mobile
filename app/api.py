@@ -787,6 +787,12 @@ def api_vehicles_update(vehicle_id):
         vehicle.owner_address = data['owner_address']
     if 'vin' in data:
         vehicle.vin = data['vin']
+    if 'fuel_type' in data:
+        vehicle.fuel_type = data['fuel_type']
+    if 'fiscal_class' in data:
+        vehicle.fiscal_class = data['fiscal_class']
+    if 'cv_class' in data:
+        vehicle.cv_class = data['cv_class']
     if 'status' in data:
         vehicle.status = data['status']
     if 'insurance_company' in data:
