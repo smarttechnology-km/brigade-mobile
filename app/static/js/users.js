@@ -88,19 +88,24 @@ function updateCountryRegionVisibility(){
     const role = document.getElementById('u-role').value;
     const countrySection = document.getElementById('country-section');
     const regionSection = document.getElementById('region-section');
-    
+    const dgrtrTypeSection = document.getElementById('dgrtr-type-section');
+
     if(role === 'administrateur'){
-        // Admin: hide both country and region
         countrySection.style.display = 'none';
         regionSection.style.display = 'none';
+        if(dgrtrTypeSection) dgrtrTypeSection.style.display = 'none';
     } else if(role === 'judiciaire'){
-        // Judiciaire: show country only
         countrySection.style.display = '';
         regionSection.style.display = 'none';
+        if(dgrtrTypeSection) dgrtrTypeSection.style.display = 'none';
     } else if(role === 'policier' || role === 'agent_impot'){
-        // Policier & Agent Impot: show both country and region
         countrySection.style.display = '';
         regionSection.style.display = '';
+        if(dgrtrTypeSection) dgrtrTypeSection.style.display = 'none';
+    } else if(role === 'dgrtr'){
+        countrySection.style.display = '';
+        regionSection.style.display = 'none';
+        if(dgrtrTypeSection) dgrtrTypeSection.style.display = '';
     }
 }
 
@@ -135,11 +140,14 @@ function loadUsers(roleFilter = null){
         const judgeCount = usersCache.filter(u => u.role === 'judiciaire').length;
         const policeCount = usersCache.filter(u => u.role === 'policier').length;
         const agentCount = usersCache.filter(u => u.role === 'agent_impot').length;
-        
+        const dgrtrCount = usersCache.filter(u => u.role === 'dgrtr').length;
+
         document.getElementById('count-admin').textContent = adminCount;
         document.getElementById('count-judge').textContent = judgeCount;
         document.getElementById('count-police').textContent = policeCount;
         document.getElementById('count-agent').textContent = agentCount;
+        const dgrtrBadge = document.getElementById('count-dgrtr');
+        if(dgrtrBadge) dgrtrBadge.textContent = dgrtrCount;
         
         // Apply current role filter when re-rendering
         let filtered = usersCache;
@@ -173,19 +181,27 @@ function renderUsersByRole(list, roles){
     const adminCount = usersCache.filter(u => u.role === 'administrateur').length;
 
     // Sort roles for consistent display
-    const roleOrder = ['administrateur', 'judiciaire', 'policier', 'agent_impot'];
+    const roleOrder = ['administrateur', 'judiciaire', 'policier', 'agent_impot', 'dgrtr'];
     const sortedRoles = roles.sort((a, b) => {
         const aIdx = roleOrder.indexOf(a);
         const bIdx = roleOrder.indexOf(b);
         return (aIdx >= 0 ? aIdx : 999) - (bIdx >= 0 ? bIdx : 999);
     });
-    
+
+    const dgrtrTypeLabels = {
+        'directeur_general':   'Directeur Général',
+        'directeur_technique': 'Directeur Technique',
+        'directeur_regional':  'Directeur Régional',
+        'employe':             'Employée DGRTR',
+    };
+
     // Role labels in French with icons
     const roleLabels = {
         'administrateur': '👤 Administrateurs',
         'judiciaire': '⚖️ Judiciaires',
         'policier': '🚔 Policiers',
-        'agent_impot': '💰 Agents Impôt'
+        'agent_impot': '💰 Agents Impôt',
+        'dgrtr': '🏛️ DGRTR',
     };
     
     // Show section headers only if viewing multiple roles
@@ -220,7 +236,7 @@ function renderUsersByRole(list, roles){
                 <td>${escapeHtml(u.phone||'')}</td>
                 <td>${escapeHtml(u.country||'')}</td>
                 <td>${escapeHtml(u.region||'')}</td>
-                <td><span class="badge bg-secondary">${escapeHtml(u.role||'')}</span></td>
+                <td><span class="badge bg-secondary">${escapeHtml(u.role||'')}</span>${u.role === 'dgrtr' && u.dgrtr_type ? `<br><small class="text-muted">${escapeHtml(dgrtrTypeLabels[u.dgrtr_type] || u.dgrtr_type)}</small>` : ''}</td>
                 <td>${u.is_active ? '<span class="badge bg-success">Actif</span>' : '<span class="badge bg-secondary">Inactif</span>'}</td>
                 <td>${escapeHtml(u.created_at||'')}</td>
                 <td>
@@ -291,7 +307,11 @@ function openEditUser(id){
     document.getElementById('u-role').value = u.role || 'policier';
     document.getElementById('u-active').checked = !!u.is_active;
     document.getElementById('user-error').textContent='';
-    updateCountryRegionVisibility(); // Update visibility based on role
+    updateCountryRegionVisibility();
+    if(u.role === 'dgrtr'){
+        const dgrtrSel = document.getElementById('u-dgrtr-type');
+        if(dgrtrSel) dgrtrSel.value = u.dgrtr_type || 'directeur_general';
+    }
     
     // Update modal title
     const modalTitle = document.getElementById('modal-title-text');
@@ -389,14 +409,18 @@ function saveUser(){
         if(password && password !== password_confirm){ err.textContent = 'Les mots de passe ne correspondent pas'; return; }
 
         const payload = { username, role, full_name, email, phone, is_active };
-        
-        // Add country/region based on role
+
+        // Add country/region/dgrtr_type based on role
         if(role === 'policier' || role === 'agent_impot'){
             payload.country = country;
             payload.region = region;
         } else if(role === 'judiciaire'){
             payload.country = country;
-            payload.region = ''; // Don't send region for judiciaire
+            payload.region = '';
+        } else if(role === 'dgrtr'){
+            payload.country = country;
+            payload.region = '';
+            payload.dgrtr_type = document.getElementById('u-dgrtr-type').value;
         }
         // For admin, don't send country or region
         

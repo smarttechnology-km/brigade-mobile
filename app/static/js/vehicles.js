@@ -165,7 +165,7 @@ function setupInsuranceCompanyToggle(){
 function setupIslandInsuranceFilter(){
     const islandEl = document.getElementById('owner_island');
     if(!islandEl) return;
-    
+
     islandEl.addEventListener('change', function(){
         const selectedIsland = islandEl.value;
         console.log('Island changed to:', selectedIsland);
@@ -176,7 +176,133 @@ function setupIslandInsuranceFilter(){
         } else {
             console.error('updateInsuranceSelect is not defined');
         }
+        // Also refresh work zone options when island changes
+        _refreshWorkZoneOptions();
     });
+}
+
+var WORK_ZONE_BY_ISLAND = {
+    'Grande Comores': [
+        'Centre-ville (Moroni)',
+        'Mitsamiouli',
+        'Mbéni',
+        'Foumbouni',
+        'Sima',
+        'Ntsoudjini',
+        'Autre région'
+    ],
+    'Anjouan': [
+        'Centre-ville (Mutsamudu)',
+        'Domoni',
+        'Ouani',
+        'Sima',
+        'Koni',
+        'Bambao',
+        'Autre région'
+    ],
+    'Moheli': [
+        'Centre-ville (Fomboni)',
+        'Nioumachoua',
+        'Djando',
+        'Miringoni',
+        'Ouallah',
+        'Autre région'
+    ]
+};
+
+function _refreshWorkZoneOptions(currentZone){
+    var islandEl = document.getElementById('owner_island');
+    var zoneEl = document.getElementById('work_zone');
+    var otherEl = document.getElementById('work_zone_other');
+    if(!zoneEl) return;
+    var island = islandEl ? islandEl.value : '';
+    zoneEl.innerHTML = '<option value="">-- Sélectionner une zone --</option>';
+    var allZones = [];
+    if(island && WORK_ZONE_BY_ISLAND[island]){
+        // Specific island selected: flat list
+        var zones = WORK_ZONE_BY_ISLAND[island];
+        zones.forEach(function(z){
+            var opt = document.createElement('option');
+            opt.value = z; opt.textContent = z;
+            zoneEl.appendChild(opt);
+        });
+        allZones = zones;
+    } else {
+        // No island: grouped by island with <optgroup>
+        ['Grande Comores','Anjouan','Moheli'].forEach(function(ile){
+            var grp = document.createElement('optgroup');
+            grp.label = '🏝️ ' + ile;
+            WORK_ZONE_BY_ISLAND[ile].forEach(function(z){
+                var opt = document.createElement('option');
+                opt.value = z; opt.textContent = z;
+                grp.appendChild(opt);
+                allZones.push(z);
+            });
+            zoneEl.appendChild(grp);
+        });
+    }
+    // restore saved zone
+    if(currentZone && currentZone !== ''){
+        if(allZones.indexOf(currentZone) !== -1){
+            zoneEl.value = currentZone;
+            if(otherEl){ otherEl.classList.add('d-none'); otherEl.value = ''; }
+        } else {
+            zoneEl.value = 'Autre région';
+            if(otherEl){ otherEl.classList.remove('d-none'); otherEl.value = currentZone; }
+        }
+    } else {
+        if(otherEl){ otherEl.classList.add('d-none'); otherEl.value = ''; }
+    }
+}
+
+function setupWorkZoneToggle(){
+    var usageEl = document.getElementById('usage_type_select');
+    var insuranceEl = document.getElementById('insurance_company');
+    var groupEl = document.getElementById('work_zone_group');
+    if(!usageEl || !groupEl) return;
+
+    function _isTaxiLike(){
+        return usageEl.value === 'Taxi' || usageEl.value === 'Transport public';
+    }
+    function _hasInsurance(){
+        if(!insuranceEl) return false;
+        var val = insuranceEl.value;
+        return val && val !== '';
+    }
+
+    function _update(){
+        if(_isTaxiLike() && _hasInsurance()){
+            _refreshWorkZoneOptions();
+            groupEl.classList.remove('d-none');
+        } else {
+            groupEl.classList.add('d-none');
+            var zoneEl = document.getElementById('work_zone');
+            var otherEl = document.getElementById('work_zone_other');
+            if(zoneEl) zoneEl.value = '';
+            if(otherEl){ otherEl.classList.add('d-none'); otherEl.value = ''; }
+        }
+    }
+
+    usageEl.addEventListener('change', _update);
+    if(insuranceEl) insuranceEl.addEventListener('change', _update);
+
+    // Show/hide free-text input when "Autre région" is selected
+    var zoneEl = document.getElementById('work_zone');
+    if(zoneEl){
+        zoneEl.addEventListener('change', function(){
+            var otherEl = document.getElementById('work_zone_other');
+            if(!otherEl) return;
+            if(zoneEl.value === 'Autre région'){
+                otherEl.classList.remove('d-none');
+                otherEl.focus();
+            } else {
+                otherEl.classList.add('d-none');
+                otherEl.value = '';
+            }
+        });
+    }
+
+    _update();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -309,6 +435,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Wire island select to filter insurances
     setupIslandInsuranceFilter();
+
+    // Wire work zone visibility to usage type
+    setupWorkZoneToggle();
 
     const saveBtn = document.getElementById('save-vehicle-btn');
     if (saveBtn) saveBtn.addEventListener('click', saveVehicle);
@@ -700,6 +829,23 @@ function openVehicleModal(vehicle) {
         if(document.getElementById('insurance_expiry')) document.getElementById('insurance_expiry').value = vehicle.insurance_expiry || '';
         if(document.getElementById('fiscal_class')) document.getElementById('fiscal_class').value = vehicle.fiscal_class || '';
         if(document.getElementById('cv_class')) document.getElementById('cv_class').value = vehicle.cv_class || '';
+        // Populate work zone: show if Taxi/Transport public + insurance set, OR if a value already exists (set by insurance)
+        var workZoneGroup = document.getElementById('work_zone_group');
+        var workZoneEl = document.getElementById('work_zone');
+        var workZoneOtherEl = document.getElementById('work_zone_other');
+        var ut2 = (vehicle.usage_type || '').toString();
+        var hasIns = !!(vehicle.insurance_company && vehicle.insurance_company.trim() !== '');
+        var hasZone = !!(vehicle.work_zone && vehicle.work_zone.trim() !== '');
+        if(workZoneGroup && workZoneEl){
+            if(((ut2 === 'Taxi' || ut2 === 'Transport public') && hasIns) || hasZone){
+                _refreshWorkZoneOptions(vehicle.work_zone || '');
+                workZoneGroup.classList.remove('d-none');
+            } else {
+                workZoneGroup.classList.add('d-none');
+                workZoneEl.value = '';
+                if(workZoneOtherEl){ workZoneOtherEl.classList.add('d-none'); workZoneOtherEl.value = ''; }
+            }
+        }
 
         // Afficher la plaque sous le champ VIN
         const vinHint = document.getElementById('vin-plate-hint');
@@ -809,7 +955,16 @@ function saveVehicle() {
         vignette_expiry: document.getElementById('vignette_expiry') ? document.getElementById('vignette_expiry').value : '',
         insurance_company: insuranceCompanyValue,
         fiscal_class: document.getElementById('fiscal_class') ? document.getElementById('fiscal_class').value : '',
-        cv_class: document.getElementById('cv_class') ? document.getElementById('cv_class').value : ''
+        cv_class: document.getElementById('cv_class') ? document.getElementById('cv_class').value : '',
+        work_zone: (function(){
+            var grp = document.getElementById('work_zone_group');
+            if (!grp || grp.classList.contains('d-none')) return undefined;
+            var wz = document.getElementById('work_zone');
+            var wzOther = document.getElementById('work_zone_other');
+            if(!wz) return undefined;
+            if(wz.value === 'Autre région') return wzOther ? wzOther.value.trim() : '';
+            return wz.value;
+        })()
     };
 
     if(document.getElementById('insurance_expiry')){

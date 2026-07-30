@@ -7,6 +7,7 @@ let vehiclesCache = [];
 let currentEditVehicle = null;
 let editLicenseNumbers = [];
 
+
 async function editAddLicense() {
     const input = document.getElementById('edit-license-num-input');
     const val = (input.value || '').trim().toUpperCase();
@@ -307,6 +308,20 @@ function openEditDatesModal(vehicleId) {
     document.getElementById('edit-owner-phone').value = vehicle.owner_phone || '';
     document.getElementById('edit-usage-type').value = vehicle.usage_type || '';
     document.getElementById('edit-insurance-expiry').value = vehicle.insurance_expiry ? vehicle.insurance_expiry.split('T')[0] : '';
+
+    const wzRow     = document.getElementById('edit-work-zone-row');
+    const wzDisplay = document.getElementById('edit-work-zone-display');
+    const hasZone   = !!(vehicle.work_zone && vehicle.work_zone.trim());
+    if (wzRow && wzDisplay) {
+        if (hasZone) {
+            wzDisplay.value = vehicle.work_zone;
+            wzRow.classList.remove('d-none');
+        } else {
+            wzRow.classList.add('d-none');
+            wzDisplay.value = '';
+        }
+    }
+
     const insuranceInput = document.getElementById('edit-insurance-expiry');
     const saveBtn        = document.getElementById('save-dates-btn');
     const alertEl        = document.getElementById('edit-dates-alert');
