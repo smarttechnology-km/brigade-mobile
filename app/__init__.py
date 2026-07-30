@@ -380,6 +380,7 @@ def create_app():
                             'vignette_last_paid_total_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_total_amount FLOAT NOT NULL DEFAULT 0.0",
                             'created_by': "ALTER TABLE vehicles ADD COLUMN created_by VARCHAR(80)",
                             'qr_renewed_by': "ALTER TABLE vehicles ADD COLUMN qr_renewed_by VARCHAR(80)",
+                            'work_zone': "ALTER TABLE vehicles ADD COLUMN work_zone VARCHAR(100)",
                         }
                         for column_name, alter_sql in vehicle_column_definitions.items():
                             if column_name not in vehicle_columns:
@@ -606,6 +607,33 @@ def create_app():
                             if col not in ld_cols:
                                 conn.execute(text(sql))
                                 logger.info(f"Added license_dossiers.{col} column")
+
+                        # carte_grise_setting patches
+                        cgs_cols_res = conn.execute(text("PRAGMA table_info(carte_grise_setting)"))
+                        cgs_cols = {r[1] for r in cgs_cols_res.fetchall()}
+                        cgs_col_defs = {
+                            'signature_filename': "ALTER TABLE carte_grise_setting ADD COLUMN signature_filename VARCHAR(255)",
+                            'island': "ALTER TABLE carte_grise_setting ADD COLUMN island VARCHAR(50) NOT NULL DEFAULT 'Grande Comores'",
+                        }
+                        for col, sql in cgs_col_defs.items():
+                            if col not in cgs_cols:
+                                conn.execute(text(sql))
+                                logger.info(f"Added carte_grise_setting.{col} column")
+
+                        # carte_grise workflow patches
+                        cg_cols_res = conn.execute(text("PRAGMA table_info(carte_grise)"))
+                        cg_cols = {r[1] for r in cg_cols_res.fetchall()}
+                        cg_col_defs = {
+                            'status':                 "ALTER TABLE carte_grise ADD COLUMN status VARCHAR(30) NOT NULL DEFAULT 'brouillon'",
+                            'signature_requested_at': "ALTER TABLE carte_grise ADD COLUMN signature_requested_at DATETIME",
+                            'signature_requested_by': "ALTER TABLE carte_grise ADD COLUMN signature_requested_by VARCHAR(100)",
+                            'signed_at':              "ALTER TABLE carte_grise ADD COLUMN signed_at DATETIME",
+                            'signed_by':              "ALTER TABLE carte_grise ADD COLUMN signed_by VARCHAR(100)",
+                        }
+                        for col, sql in cg_col_defs.items():
+                            if col not in cg_cols:
+                                conn.execute(text(sql))
+                                logger.info(f"Added carte_grise.{col} column")
 
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")

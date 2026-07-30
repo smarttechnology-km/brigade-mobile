@@ -654,6 +654,7 @@ def api_vehicles_create():
         vin=data.get('vin', ''),
         status=data.get('status', 'active'),
         insurance_company=data.get('insurance_company', ''),
+        work_zone=data.get('work_zone', ''),
         notes=data.get('notes', '')
     )
     
@@ -728,7 +729,7 @@ def api_vehicles_update(vehicle_id):
 
     # Insurance accounts may only update usage_type, insurance_company and insurance_expiry
     if is_insurance:
-        allowed = {k: v for k, v in data.items() if k in ('usage_type', 'insurance_company', 'insurance_expiry')}
+        allowed = {k: v for k, v in data.items() if k in ('usage_type', 'insurance_company', 'insurance_expiry', 'work_zone')}
         if not allowed:
             return jsonify({"error": "Aucun champ modifiable fourni"}), 400
         old_usage = vehicle.usage_type
@@ -736,6 +737,8 @@ def api_vehicles_update(vehicle_id):
             vehicle.usage_type = allowed['usage_type']
         if 'insurance_company' in allowed:
             vehicle.insurance_company = allowed['insurance_company']
+        if 'work_zone' in allowed:
+            vehicle.work_zone = allowed['work_zone']
         if 'insurance_expiry' in allowed and allowed['insurance_expiry']:
             try:
                 vehicle.insurance_expiry = datetime.strptime(allowed['insurance_expiry'], '%Y-%m-%d')
@@ -797,6 +800,8 @@ def api_vehicles_update(vehicle_id):
         vehicle.status = data['status']
     if 'insurance_company' in data:
         vehicle.insurance_company = data['insurance_company']
+    if 'work_zone' in data:
+        vehicle.work_zone = data['work_zone']
     if 'notes' in data:
         vehicle.notes = data['notes']
 
@@ -4302,6 +4307,7 @@ def api_search_drivers():
     model         = (request.args.get('model')         or '').strip()
     color         = (request.args.get('color')         or '').strip()
     usage_type    = (request.args.get('usage_type')    or '').strip()
+    work_zone     = (request.args.get('work_zone')     or '').strip()
 
     try:
         page     = max(1, int(request.args.get('page', 1)))
@@ -4312,7 +4318,7 @@ def api_search_drivers():
     vehicle_types = [v for v in vehicle_type.split(',') if v] if vehicle_type else []
     usage_types   = [v for v in usage_type.split(',')   if v] if usage_type   else []
 
-    if not any([license_plate, vehicle_types, make, model, color, usage_types]):
+    if not any([license_plate, vehicle_types, make, model, color, usage_types, work_zone]):
         return jsonify({'error': 'Au moins un critère de recherche est requis'}), 400
 
     q = Vehicle.query
@@ -4328,6 +4334,8 @@ def api_search_drivers():
         q = q.filter(Vehicle.color.ilike(f'%{color}%'))
     if usage_types:
         q = q.filter(Vehicle.usage_type.in_(usage_types))
+    if work_zone:
+        q = q.filter(Vehicle.work_zone.ilike(f'%{work_zone}%'))
 
     total      = q.count()
     pagination = q.offset((page - 1) * per_page).limit(per_page).all()

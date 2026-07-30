@@ -115,6 +115,7 @@ class Vehicle(db.Model):
     qr_code_expiry = db.Column(db.DateTime, nullable=True)  # When QR code expires (1 year after generation)
     fiscal_class = db.Column(db.String(10))  # A, B, C, D
     cv_class = db.Column(db.String(20))  # 0-5 CV, 6-9 CV, 10-12 CV, 12 CV et +
+    work_zone = db.Column(db.String(100))  # Zone de travail for Taxi / Transport public
     notes = db.Column(db.Text)
     created_by = db.Column(db.String(80), nullable=True)   # username who registered the vehicle
     qr_renewed_by = db.Column(db.String(80), nullable=True)  # username who last renewed the QR code
@@ -178,6 +179,7 @@ class Vehicle(db.Model):
             'vin': self.vin,
             'fiscal_class': self.fiscal_class,
             'cv_class': self.cv_class,
+            'work_zone': self.work_zone,
             'registration_expiry': format_date(self.registration_expiry),
             'insurance_company': self.insurance_company,
             'insurance_expiry': format_date(self.insurance_expiry),
@@ -1751,3 +1753,78 @@ class LicenseDossier(db.Model):
         }
 
 
+class CarteGrise(db.Model):
+    __tablename__ = 'carte_grise'
+
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), unique=True, nullable=False)
+
+    carrosserie            = db.Column(db.String(100))
+    places_assises         = db.Column(db.String(20))
+    poids_total_autorise   = db.Column(db.String(50))
+    poids_a_vide           = db.Column(db.String(50))
+    charge_utile_ptc       = db.Column(db.String(50))
+    profession_proprietaire = db.Column(db.String(150))
+    observation            = db.Column(db.Text)
+    date_emission          = db.Column(db.Date)
+
+    # Workflow: brouillon → en_attente → signee
+    status                     = db.Column(db.String(30), default='brouillon', nullable=False)
+    signature_requested_at     = db.Column(db.DateTime)
+    signature_requested_by     = db.Column(db.String(100))
+    signed_at                  = db.Column(db.DateTime)
+    signed_by                  = db.Column(db.String(100))
+
+    created_at  = db.Column(db.DateTime, default=now_comoros)
+    updated_at  = db.Column(db.DateTime, default=now_comoros, onupdate=now_comoros)
+    created_by  = db.Column(db.String(100))
+
+    vehicle = db.relationship('Vehicle', backref=db.backref('carte_grise', uselist=False))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'carrosserie': self.carrosserie or '',
+            'places_assises': self.places_assises or '',
+            'poids_total_autorise': self.poids_total_autorise or '',
+            'poids_a_vide': self.poids_a_vide or '',
+            'charge_utile_ptc': self.charge_utile_ptc or '',
+            'profession_proprietaire': self.profession_proprietaire or '',
+            'observation': self.observation or '',
+            'date_emission': self.date_emission.strftime('%Y-%m-%d') if self.date_emission else '',
+            'status': self.status or 'brouillon',
+            'signature_requested_at': self.signature_requested_at.strftime('%d/%m/%Y %H:%M') if self.signature_requested_at else '',
+            'signature_requested_by': self.signature_requested_by or '',
+            'signed_at': self.signed_at.strftime('%d/%m/%Y %H:%M') if self.signed_at else '',
+            'signed_by': self.signed_by or '',
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else '',
+            'created_by': self.created_by or '',
+            'updated_at': self.updated_at.strftime('%d/%m/%Y %H:%M') if self.updated_at else '',
+        }
+
+
+
+
+class CarteGriseSetting(db.Model):
+    __tablename__ = 'carte_grise_setting'
+    id                    = db.Column(db.Integer, primary_key=True)
+    island                = db.Column(db.String(50), nullable=False, default='Grande Comores')
+    directeur_nom         = db.Column(db.String(200))
+    signature_filename    = db.Column(db.String(255))
+    duree_validite        = db.Column(db.Integer, default=90)
+    footer_telephone      = db.Column(db.String(100))
+    footer_adresse        = db.Column(db.String(200))
+
+    @property
+    def signature_url(self):
+        return _cloud_url(self.signature_filename, 'signatures') or ''
+
+    @classmethod
+    def get(cls, island='Grande Comores'):
+        obj = cls.query.filter_by(island=island).first()
+        if obj is None:
+            obj = cls(island=island, duree_validite=90)
+            db.session.add(obj)
+            db.session.commit()
+        return obj

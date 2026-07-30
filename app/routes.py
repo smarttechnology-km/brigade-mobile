@@ -85,7 +85,7 @@ def apply_island_filter(query, island_field, force_country=None):
     if force_country and current_user.role == 'administrateur':
         query = query.filter(island_field == force_country)
     # Otherwise apply default role-based filtering
-    elif current_user.role in ['judiciaire', 'policier'] and current_user.country:
+    elif current_user.role in ['judiciaire', 'policier', 'dgrtr'] and current_user.country:
         query = query.filter(island_field == current_user.country)
     return query
 
@@ -644,9 +644,9 @@ def index():
 
 
 @main_bp.route('/dashboard')
-@roles_required('administrateur','judiciaire')
+@roles_required('administrateur','judiciaire','dgrtr')
 def dashboard():
-    """Page du dashboard avec statistiques des véhicules (protected)"""
+    _require_dr_only()
     query = Vehicle.query
     if current_user.role == 'judiciaire' and current_user.country:
         query = query.filter(Vehicle.owner_island == current_user.country)
@@ -1108,21 +1108,23 @@ def add_vehicle_insurance_page():
 
 
 @main_bp.route('/vehicles')
-@roles_required('administrateur','judiciaire')
+@roles_required('administrateur','judiciaire','dgrtr')
 def vehicles_page():
-    """Page de gestion des véhicules"""
+    _require_dr_only()
     return render_template('vehicles.html')
 
 
 @main_bp.route('/licenses')
-@roles_required('administrateur', 'judiciaire', 'dgrtr')
+@roles_required('administrateur', 'dgrtr')
 def licenses_page():
+    _require_dgrtr_staff()
     return render_template('licenses.html')
 
 
 @main_bp.route('/dgrtr-dashboard')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_dashboard():
+    _require_dgrtr_staff()
     return render_template('dgrtr_dashboard.html')
 
 
@@ -1186,6 +1188,7 @@ def compute_category_expiries(lic, settings, main_expiry):
 @main_bp.route('/dgrtr/licenses/<int:license_id>/print-a4')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_license_print_a4(license_id):
+    _require_dgrtr_staff()
     from app.models import DriverLicense, LicenseSetting
     from dateutil.relativedelta import relativedelta
     lic = DriverLicense.query.get_or_404(license_id)
@@ -1355,9 +1358,9 @@ def license_print_history(license_id):
 
 
 @main_bp.route('/reports')
-@roles_required('administrateur','judiciaire')
+@roles_required('administrateur','judiciaire','dgrtr')
 def reports_page():
-    """Page de rapports (placeholder)"""
+    _require_dr_only()
     return render_template('reports.html')
 
 
@@ -1383,9 +1386,9 @@ def exoneration_page():
 
 
 @main_bp.route('/alerts')
-@roles_required('policier', 'judiciaire')
+@roles_required('policier', 'judiciaire', 'dgrtr')
 def alerts_page():
-    """Page de gestion des alertes (accidents, travaux, recherches de véhicule...)"""
+    _require_dr_only()
     return render_template('alerts.html')
 
 
@@ -3395,10 +3398,10 @@ def api_users_list():
     if current_role == 'administrateur':
         if not current_country:
             # Super admin: show all users (all roles)
-            target_roles = ['administrateur', 'judiciaire', 'policier', 'agent_impot']
+            target_roles = ['administrateur', 'judiciaire', 'policier', 'agent_impot', 'dgrtr']
         else:
-            # Regular admin: show judiciaire + policier + agent_impot users
-            target_roles = ['judiciaire', 'policier', 'agent_impot']
+            # Regular admin: show judiciaire + policier + agent_impot + dgrtr users
+            target_roles = ['judiciaire', 'policier', 'agent_impot', 'dgrtr']
     elif current_role == 'judiciaire':
         # Judiciaire: show policier + agent_impot users
         target_roles = ['policier', 'agent_impot']
@@ -3419,6 +3422,7 @@ def api_users_list():
             'phone': getattr(u, 'phone', '') or '',
             'country': getattr(u, 'country', '') or '',
             'region': getattr(u, 'region', '') or '',
+            'dgrtr_type': getattr(u, 'dgrtr_type', '') or '',
             'is_active': bool(getattr(u, 'is_active', True)),
             'created_at': u.created_at.strftime('%Y-%m-%d %H:%M')
         })
@@ -3438,6 +3442,13 @@ def api_users_create():
     country = data.get('country')
     region = data.get('region')
     is_active = data.get('is_active', True)
+    # dgrtr users: only DG can create dgrtr + judiciaire; others cannot create users
+    if current_user.role == 'dgrtr':
+        is_dg = getattr(current_user, 'dgrtr_type', None) == 'directeur_general'
+        if not is_dg:
+            return jsonify({'error': 'Accès refusé'}), 403
+        if role not in ('dgrtr', 'judiciaire'):
+            return jsonify({'error': 'Accès refusé'}), 403
     if not username or not password:
         return jsonify({'error':'username and password required'}), 400
     if User.query.filter_by(username=username).first():
@@ -3504,6 +3515,8 @@ def api_users_delete(user_id):
     if current_user.id == user_id:
         return jsonify({'error':'cannot delete yourself'}), 400
     u = User.query.get_or_404(user_id)
+    if current_user.role == 'dgrtr' and u.role not in ('dgrtr', 'judiciaire'):
+        return jsonify({'error': 'Accès refusé'}), 403
     if u.role == 'administrateur' and User.query.filter_by(role='administrateur').count() <= 1:
         return jsonify({'error': 'Impossible de supprimer le dernier administrateur.'}), 400
     
@@ -3856,7 +3869,7 @@ def update_vehicle(vehicle_id):
 
     # Mettre à jour les champs autorisés
     date_fields = ['registration_expiry', 'insurance_expiry', 'vignette_expiry']
-    for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'fuel_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry', 'vignette_expiry', 'fiscal_class', 'cv_class', 'notes']:
+    for field in ['license_plate', 'owner_name', 'owner_phone', 'owner_island', 'vehicle_type', 'fuel_type', 'usage_type', 'color', 'status', 'make', 'model', 'year', 'vin', 'owner_address', 'registration_expiry', 'insurance_company', 'insurance_expiry', 'vignette_expiry', 'fiscal_class', 'cv_class', 'notes', 'work_zone']:
         if field in data and data.get(field) is not None:
             # Handle empty strings for date fields - set to None instead
             if field in date_fields and data.get(field) == '':
@@ -6820,6 +6833,408 @@ def submit_vehicle_transfer():
 
 
 # Route removed — handled by api_bp in api.py (supports both session and JWT auth)
+
+
+# ─────────────────────────────────────────────────────────────
+#  DGRTR — Gestion des comptes
+# ─────────────────────────────────────────────────────────────
+
+def _is_dgrtr_director():
+    """True if the current user is admin OR dgrtr directeur_general."""
+    if current_user.role == 'administrateur':
+        return True
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general':
+        return True
+    return False
+
+
+@main_bp.route('/dgrtr/comptes')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_comptes():
+    if not _is_dgrtr_director():
+        abort(403)
+    return render_template('dgrtr_comptes.html')
+
+
+@main_bp.route('/api/dgrtr-users')
+@roles_required('administrateur', 'dgrtr')
+def api_dgrtr_users():
+    if not _is_dgrtr_director():
+        return jsonify({'error': 'Accès refusé'}), 403
+    users = User.query.filter(
+        User.role.in_(['dgrtr', 'judiciaire'])
+    ).order_by(User.created_at.desc()).all()
+    out = []
+    for u in users:
+        out.append({
+            'id': u.id,
+            'username': u.username,
+            'full_name': u.full_name or '',
+            'role': u.role,
+            'dgrtr_type': u.dgrtr_type or 'employe',
+            'country': u.country or '',
+            'is_active': bool(u.is_active),
+            'created_at': u.created_at.strftime('%d/%m/%Y'),
+        })
+    return jsonify(out)
+
+
+# ─────────────────────────────────────────────────────────────
+#  DGRTR — Cartes Grises
+# ─────────────────────────────────────────────────────────────
+
+def _require_cg_access():
+    """Block dgrtr users who are not directeur_regional from cartes-grises pages."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_regional':
+        abort(403)
+
+
+def _require_dr_only():
+    """Block dgrtr users who are not directeur_regional from police-style pages."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_regional':
+        abort(403)
+
+
+def _require_dgrtr_staff():
+    """Block directeur_regional from DGRTR-internal pages (dashboard, licences, stats, etc.)."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional':
+        abort(403)
+
+@main_bp.route('/dgrtr/cartes-grises')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cartes_grises():
+    _require_cg_access()
+    return render_template('dgrtr_cartes_grises.html')
+
+
+@main_bp.route('/dgrtr/cartes-grises/<int:vehicle_id>/print')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_carte_grise_print(vehicle_id):
+    _require_cg_access()
+    from app.models import Vehicle, CarteGrise, CarteGriseSetting
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    cg = CarteGrise.query.filter_by(vehicle_id=vehicle_id).first()
+    if not cg or cg.status != 'signee':
+        from flask import abort
+        abort(403)
+    island = vehicle.owner_island or 'Grande Comores'
+    cg_settings = CarteGriseSetting.get(island)
+    return render_template('dgrtr_carte_grise_print.html', vehicle=vehicle, cg=cg, cg_settings=cg_settings)
+
+
+@main_bp.route('/dgrtr/parametres-cg')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_parametres_cg():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
+        abort(403)
+    return render_template('dgrtr_parametres_cg.html')
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/search')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cg_search():
+    _require_cg_access()
+    from app.models import Vehicle, CarteGrise
+    q = request.args.get('q', '').strip()
+    query = Vehicle.query
+    if q:
+        query = query.filter(
+            db.or_(
+                Vehicle.license_plate.ilike(f'%{q}%'),
+                Vehicle.owner_name.ilike(f'%{q}%'),
+                Vehicle.owner_phone.ilike(f'%{q}%'),
+            )
+        )
+    query = apply_island_filter(query, Vehicle.owner_island)
+    limit = int(request.args.get('limit', 200))
+    vehicles = query.order_by(Vehicle.license_plate).limit(limit).all()
+    results = []
+    for v in vehicles:
+        d = {
+            'id': v.id,
+            'license_plate': v.license_plate,
+            'owner_name': v.owner_name,
+            'owner_phone': v.owner_phone or '',
+            'owner_address': v.owner_address or '',
+            'vehicle_type': v.vehicle_type or '',
+            'make': v.make or '',
+            'model': v.model or '',
+            'year': v.year or '',
+            'fuel_type': v.fuel_type or '',
+            'cv_class': v.cv_class or '',
+            'vin': v.vin or '',
+            'has_carte_grise': v.carte_grise is not None,
+            'carte_grise': v.carte_grise.to_dict() if v.carte_grise else None,
+        }
+        results.append(d)
+    return jsonify(results)
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/<int:vehicle_id>', methods=['GET', 'POST', 'PUT'])
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cg_vehicle(vehicle_id):
+    _require_cg_access()
+    from app.models import Vehicle, CarteGrise
+    from datetime import date
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    if request.method == 'GET':
+        cg = vehicle.carte_grise
+        return jsonify(cg.to_dict() if cg else {})
+
+    data = request.get_json() or {}
+    cg = vehicle.carte_grise
+    if cg is None:
+        cg = CarteGrise(vehicle_id=vehicle_id, created_by=current_user.username)
+        db.session.add(cg)
+
+    cg.carrosserie             = (data.get('carrosserie') or '').strip() or None
+    cg.places_assises          = (data.get('places_assises') or '').strip() or None
+    cg.poids_total_autorise    = (data.get('poids_total_autorise') or '').strip() or None
+    cg.poids_a_vide            = (data.get('poids_a_vide') or '').strip() or None
+    cg.charge_utile_ptc        = (data.get('charge_utile_ptc') or '').strip() or None
+    cg.profession_proprietaire = (data.get('profession_proprietaire') or '').strip() or None
+    cg.observation             = (data.get('observation') or '').strip() or None
+    cg.updated_at              = now_comoros()
+
+    raw_date = (data.get('date_emission') or '').strip()
+    if raw_date:
+        try:
+            cg.date_emission = date.fromisoformat(raw_date)
+        except ValueError:
+            cg.date_emission = None
+    else:
+        cg.date_emission = None
+
+    db.session.commit()
+    return jsonify({'success': True, 'carte_grise': cg.to_dict()})
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/<int:vehicle_id>/request-signature', methods=['POST'])
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cg_request_signature(vehicle_id):
+    _require_cg_access()
+    from app.models import CarteGrise, Vehicle
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    cg = vehicle.carte_grise
+    if not cg:
+        return jsonify({'error': 'Carte grise non trouvée'}), 404
+    if cg.status == 'signee':
+        return jsonify({'error': 'Déjà signée'}), 400
+    cg.status = 'en_attente'
+    cg.signature_requested_at = now_comoros()
+    cg.signature_requested_by = current_user.username
+    db.session.commit()
+    return jsonify({'success': True, 'carte_grise': cg.to_dict()})
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/<int:vehicle_id>/sign', methods=['POST'])
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_cg_sign(vehicle_id):
+    # Only DG, DT, DR can sign — not employe
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'employe':
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import CarteGrise, Vehicle
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    cg = vehicle.carte_grise
+    if not cg:
+        return jsonify({'error': 'Carte grise non trouvée'}), 404
+    cg.status = 'signee'
+    cg.signed_at = now_comoros()
+    cg.signed_by = current_user.username
+    db.session.commit()
+    return jsonify({'success': True, 'carte_grise': cg.to_dict()})
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/stats')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cg_stats():
+    _require_cg_access()
+    from app.models import CarteGrise, Vehicle
+    from sqlalchemy import func
+    base_q = CarteGrise.query.join(Vehicle)
+    base_q = apply_island_filter(base_q, Vehicle.owner_island)
+    total    = base_q.count()
+    pending  = base_q.filter(CarteGrise.status == 'en_attente').count()
+    signed   = base_q.filter(CarteGrise.status == 'signee').count()
+    draft    = base_q.filter(CarteGrise.status == 'brouillon').count()
+    return jsonify({'total': total, 'en_attente': pending, 'signee': signed, 'brouillon': draft})
+
+
+@main_bp.route('/api/dgrtr/rapport-cg')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_rapport_cg_api():
+    _require_cg_access()
+    from app.models import CarteGrise, Vehicle
+    from collections import defaultdict
+    from datetime import date, timedelta
+    base_q = CarteGrise.query.join(Vehicle)
+    base_q = apply_island_filter(base_q, Vehicle.owner_island)
+    cgs = base_q.all()
+
+    monthly = defaultdict(lambda: {'crees': 0, 'signees': 0})
+    vehicle_types = defaultdict(int)
+
+    for cg in cgs:
+        if cg.created_at:
+            monthly[cg.created_at.strftime('%Y-%m')]['crees'] += 1
+        if cg.signed_at:
+            monthly[cg.signed_at.strftime('%Y-%m')]['signees'] += 1
+        if cg.vehicle:
+            vehicle_types[cg.vehicle.vehicle_type or 'Autre'] += 1
+
+    today = date.today()
+    months_out = []
+    for i in range(17, -1, -1):
+        d = today.replace(day=1)
+        for _ in range(i):
+            d = (d - timedelta(days=1)).replace(day=1)
+        key = d.strftime('%Y-%m')
+        months_out.append({
+            'key': key,
+            'label': d.strftime('%m/%Y'),
+            'crees':   monthly[key]['crees'],
+            'signees': monthly[key]['signees'],
+        })
+
+    this_month = today.strftime('%Y-%m')
+    last_month = ((today.replace(day=1)) - timedelta(days=1)).strftime('%Y-%m')
+
+    total        = len(cgs)
+    total_signed = sum(1 for cg in cgs if cg.status == 'signee')
+    total_pending= sum(1 for cg in cgs if cg.status == 'en_attente')
+
+    return jsonify({
+        'monthly': months_out,
+        'vehicle_types': [{'type': k, 'count': v} for k, v in sorted(vehicle_types.items(), key=lambda x: -x[1])],
+        'totals': {'total': total, 'signee': total_signed, 'en_attente': total_pending},
+        'this_month': monthly[this_month],
+        'last_month': monthly[last_month],
+    })
+
+
+@main_bp.route('/dgrtr/rapport-cg')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_rapport_cg():
+    _require_cg_access()
+    return render_template('dgrtr_rapport_cg.html')
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/pending')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_cg_pending():
+    _require_cg_access()
+    from app.models import CarteGrise, Vehicle
+    query = CarteGrise.query.filter_by(status='en_attente').join(Vehicle)
+    query = apply_island_filter(query, Vehicle.owner_island)
+    cgs = query.order_by(CarteGrise.signature_requested_at).all()
+    results = []
+    for cg in cgs:
+        v = cg.vehicle
+        results.append({
+            'vehicle_id': v.id,
+            'license_plate': v.license_plate,
+            'owner_name': v.owner_name,
+            'make': v.make or '',
+            'model': v.model or '',
+            'requested_at': cg.signature_requested_at.strftime('%d/%m/%Y %H:%M') if cg.signature_requested_at else '',
+            'requested_by': cg.signature_requested_by or '',
+        })
+    return jsonify(results)
+
+
+def _require_cg_settings_access():
+    """Allow DR, DT, judiciaire, and admin to manage cartes grises settings."""
+    if current_user.role == 'dgrtr':
+        dt = getattr(current_user, 'dgrtr_type', None)
+        if dt not in ('directeur_regional', 'directeur_technique'):
+            abort(403)
+
+
+ISLANDS = ('Grande Comores', 'Anjouan', 'Moheli')
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/settings', methods=['GET', 'POST'])
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cg_settings():
+    _require_cg_settings_access()
+    from app.models import CarteGriseSetting
+    island = request.args.get('island') or (request.get_json() or {}).get('island') or 'Grande Comores'
+    if island not in ISLANDS:
+        return jsonify({'error': 'Île invalide'}), 400
+    s = CarteGriseSetting.get(island)
+    if request.method == 'GET':
+        return jsonify({
+            'island':           s.island,
+            'directeur_nom':    s.directeur_nom or '',
+            'signature_url':    s.signature_url,
+            'duree_validite':   s.duree_validite or 90,
+            'footer_telephone': s.footer_telephone or '',
+            'footer_adresse':   s.footer_adresse or '',
+        })
+    data = request.get_json() or {}
+    if 'directeur_nom' in data:
+        s.directeur_nom    = (data['directeur_nom'] or '').strip() or None
+    if 'duree_validite' in data:
+        try:
+            s.duree_validite = int(data['duree_validite'])
+        except (ValueError, TypeError):
+            pass
+    if 'footer_telephone' in data:
+        s.footer_telephone = (data['footer_telephone'] or '').strip() or None
+    if 'footer_adresse' in data:
+        s.footer_adresse   = (data['footer_adresse'] or '').strip() or None
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/settings/signature', methods=['POST'])
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cg_settings_signature_upload():
+    _require_cg_settings_access()
+    import os, uuid
+    from werkzeug.utils import secure_filename
+    from app.models import CarteGriseSetting
+    from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload, delete_file as cloud_delete
+    island = request.form.get('island') or 'Grande Comores'
+    if island not in ISLANDS:
+        return jsonify({'error': 'Île invalide'}), 400
+    file = request.files.get('signature')
+    if not file or not file.filename:
+        return jsonify({'error': 'Aucun fichier reçu'}), 400
+    ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+        return jsonify({'error': 'Format non autorisé (jpg, png, webp)'}), 400
+    s = CarteGriseSetting.get(island)
+    if s.signature_filename:
+        cloud_delete(s.signature_filename, local_folder='signatures')
+    if is_cloudinary_enabled():
+        filename = cloud_upload(file, 'signatures')
+    else:
+        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'signatures')
+        os.makedirs(upload_dir, exist_ok=True)
+        filename = f'{uuid.uuid4().hex}{ext}'
+        file.save(os.path.join(upload_dir, filename))
+    s.signature_filename = filename
+    db.session.commit()
+    return jsonify({'success': True, 'signature_url': s.signature_url})
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/settings/signature', methods=['DELETE'])
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cg_settings_signature_delete():
+    _require_cg_settings_access()
+    from app.models import CarteGriseSetting
+    from app.cloudinary_utils import delete_file as cloud_delete
+    island = request.args.get('island') or 'Grande Comores'
+    if island not in ISLANDS:
+        return jsonify({'error': 'Île invalide'}), 400
+    s = CarteGriseSetting.get(island)
+    if s.signature_filename:
+        cloud_delete(s.signature_filename, local_folder='signatures')
+        s.signature_filename = None
+        db.session.commit()
+    return jsonify({'success': True})
 
 
 
