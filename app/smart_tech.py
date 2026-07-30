@@ -2144,6 +2144,31 @@ def api_st_restore():
     sorted_names = sorted(backup_data.keys())
     app = current_app._get_current_object()
 
+    # Column renames between old backups and current schema
+    _COL_RENAMES = {
+        'carte_grise_setting': {'signature_image': 'signature_filename'},
+    }
+
+    def _adapt_row(table_name, row, actual_cols):
+        """Rename legacy columns and strip columns absent from the current schema."""
+        renames = _COL_RENAMES.get(table_name, {})
+        adapted = {}
+        for k, v in row.items():
+            k2 = renames.get(k, k)
+            if k2 in actual_cols:
+                adapted[k2] = v
+        return adapted
+
+    def _actual_cols_sqlite(conn, name):
+        rows = conn.execute(text(f"PRAGMA table_info(\"{name}\")")).fetchall()
+        return {r[1] for r in rows}
+
+    def _actual_cols_pg(conn, name):
+        rows = conn.execute(text(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = :t"
+        ), {'t': name}).fetchall()
+        return {r[0] for r in rows}
+
     def do_restore():
         from sqlalchemy import text, inspect
         with app.app_context():
@@ -2166,12 +2191,18 @@ def api_st_restore():
                             if not rows:
                                 stats[name] = 0
                                 continue
-                            cols = list(rows[0].keys())
+                            actual_cols = _actual_cols_sqlite(conn, name)
+                            adapted = [_adapt_row(name, r, actual_cols) for r in rows]
+                            adapted = [r for r in adapted if r]
+                            if not adapted:
+                                stats[name] = 0
+                                continue
+                            cols = list(adapted[0].keys())
                             placeholders = ', '.join(f':{c}' for c in cols)
                             col_list = ', '.join(f'"{c}"' for c in cols)
-                            for row in rows:
+                            for row in adapted:
                                 conn.execute(text(f'INSERT OR IGNORE INTO "{name}" ({col_list}) VALUES ({placeholders})'), row)
-                            stats[name] = len(rows)
+                            stats[name] = len(adapted)
                         conn.execute(text('PRAGMA foreign_keys = ON'))
                     else:
                         for name in reversed(tables_to_restore):
@@ -2184,12 +2215,18 @@ def api_st_restore():
                             if not rows:
                                 stats[name] = 0
                                 continue
-                            cols = list(rows[0].keys())
+                            actual_cols = _actual_cols_pg(conn, name)
+                            adapted = [_adapt_row(name, r, actual_cols) for r in rows]
+                            adapted = [r for r in adapted if r]
+                            if not adapted:
+                                stats[name] = 0
+                                continue
+                            cols = list(adapted[0].keys())
                             placeholders = ', '.join(f':{c}' for c in cols)
                             col_list = ', '.join(f'"{c}"' for c in cols)
-                            for row in rows:
+                            for row in adapted:
                                 conn.execute(text(f'INSERT INTO "{name}" ({col_list}) VALUES ({placeholders}) ON CONFLICT DO NOTHING'), row)
-                            stats[name] = len(rows)
+                            stats[name] = len(adapted)
                         # Reset sequences so new inserts don't conflict with restored IDs
                         for name in tables_to_restore:
                             if name not in existing_tables:
