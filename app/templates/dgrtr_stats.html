@@ -1,20 +1,27 @@
 {% extends "base.html" %}
+{% block title %}Statistiques DGRTR{% endblock %}
 {% block content %}
 
 <style>
-.stat-card   { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px 20px; text-align:center; height:100%; }
-.stat-num    { font-size:28px; font-weight:800; line-height:1.1; color:#0f172a; }
-.stat-lbl    { font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
-.chart-card  { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:22px 24px; }
-.chart-title { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#374151; margin-bottom:16px; }
-.tab-btn     { border:none; background:none; padding:6px 16px; border-radius:20px; font-size:13px; font-weight:600; color:#6b7280; cursor:pointer; }
-.tab-btn.active { background:#1d4ed8; color:#fff; }
+.stat-card  { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:18px 22px; height:100%; }
+.stat-num   { font-size:30px; font-weight:800; line-height:1.1; color:#0f172a; }
+.stat-lbl   { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:.07em; margin-top:4px; }
+.stat-sub   { font-size:12px; color:#6b7280; margin-top:6px; }
+.chart-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:22px 24px; }
+.chart-ttl  { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#374151; margin-bottom:18px; }
+.period-btn { border:none; background:none; padding:5px 14px; border-radius:20px; font-size:12px; font-weight:600; color:#6b7280; cursor:pointer; }
+.period-btn.active { background:#1d4ed8; color:#fff; }
+.trend-up   { color:#10b981; font-size:12px; }
+.trend-down { color:#ef4444; font-size:12px; }
+.trend-eq   { color:#6b7280; font-size:12px; }
+.month-table th { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; border-bottom:2px solid #e5e7eb; }
+.month-table td { font-size:13px; vertical-align:middle; }
 </style>
 
-<div class="container-fluid py-4">
+<div class="container-fluid py-4 px-4">
 
   <!-- Header -->
-  <div class="d-flex align-items-center justify-content-between mb-4">
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
       <h4 class="fw-bold mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>Statistiques DGRTR</h4>
       <small class="text-muted">Suivi de la délivrance des permis de conduire</small>
@@ -24,66 +31,150 @@
     </a>
   </div>
 
-
-  <!-- Graphique principal avec onglets Jour/Mois/Année -->
-  <div class="chart-card mb-4">
-    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-      <div class="chart-title mb-0">Permis délivrés</div>
-      <div class="d-flex gap-1 bg-light rounded-pill p-1">
-        <button class="tab-btn active" id="tab-jour"  onclick="setTab('jour')">Par jour</button>
-        <button class="tab-btn"        id="tab-mois"  onclick="setTab('mois')">Par mois</button>
-        <button class="tab-btn"        id="tab-annee" onclick="setTab('annee')">Par année</button>
+  <!-- Summary cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="stat-card" style="border-top:4px solid #6366f1;">
+        <div class="stat-lbl">Total dossiers</div>
+        <div class="stat-num" id="s-total">—</div>
+        <div class="stat-sub">Depuis le début</div>
       </div>
     </div>
-    <div style="position:relative;height:280px;">
+    <div class="col-6 col-lg-3">
+      <div class="stat-card" style="border-top:4px solid #10b981;">
+        <div class="stat-lbl">Complétés</div>
+        <div class="stat-num" id="s-complets">—</div>
+        <div class="stat-sub" id="s-complets-pct">—</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card" style="border-top:4px solid #3b82f6;">
+        <div class="stat-lbl">Ce mois-ci</div>
+        <div class="stat-num" id="s-ce-mois">—</div>
+        <div class="stat-sub" id="s-ce-mois-sub">Permis complétés</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stat-card" style="border-top:4px solid #f59e0b;">
+        <div class="stat-lbl">En cours</div>
+        <div class="stat-num" id="s-en-cours">—</div>
+        <div class="stat-sub" id="s-rejetes-sub">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main chart -->
+  <div class="chart-card mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-1 flex-wrap gap-2">
+      <div class="chart-ttl mb-0">Permis délivrés</div>
+      <div class="d-flex gap-1 bg-light rounded-pill p-1">
+        <button class="period-btn active" id="tab-jour"  onclick="setTab('jour')">Par jour</button>
+        <button class="period-btn"        id="tab-mois"  onclick="setTab('mois')">Par mois</button>
+        <button class="period-btn"        id="tab-annee" onclick="setTab('annee')">Par année</button>
+      </div>
+    </div>
+    <div style="position:relative;height:270px;">
       <canvas id="main-chart"></canvas>
     </div>
     <div class="text-muted small mt-2 text-end" id="chart-subtitle"></div>
   </div>
 
-  <!-- Ligne basse : répartition par île + type -->
-  <div class="row g-3">
-    <div class="col-md-6">
-      <div class="chart-card">
-        <div class="chart-title">Répartition par île</div>
-        <div style="position:relative;height:220px;">
+  <!-- Bottom row : île + perm/temp -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-5">
+      <div class="chart-card h-100">
+        <div class="chart-ttl">Répartition par île</div>
+        <div style="position:relative;height:230px;">
           <canvas id="island-chart"></canvas>
         </div>
       </div>
     </div>
-    <div class="col-md-6">
-      <div class="chart-card">
-        <div class="chart-title">Permanents vs Temporaires</div>
-        <div style="position:relative;height:220px;">
+    <div class="col-md-7">
+      <div class="chart-card h-100">
+        <div class="chart-ttl">Permanents vs Temporaires</div>
+        <div style="position:relative;height:230px;">
           <canvas id="type-chart"></canvas>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Monthly recap table -->
+  <div class="chart-card">
+    <div class="chart-ttl">Tableau récapitulatif — <span id="table-year">—</span></div>
+    <div class="table-responsive">
+      <table class="table month-table">
+        <thead>
+          <tr>
+            <th>Mois</th>
+            <th class="text-center">Permis complétés</th>
+            <th>Évolution vs mois précédent</th>
+          </tr>
+        </thead>
+        <tbody id="month-tbody">
+          <tr><td colspan="3" class="text-center text-muted py-4">
+            <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
-<script>
-var statsData = null;
-var mainChart = null;
-var currentTab = 'jour';
 
+<script>
+const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const MONTH_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
+var statsData   = null;
+var mainChart   = null;
+var currentTab  = 'jour';
+
+/* ── helpers ── */
+function trend(cur, prev) {
+  if (prev === undefined || prev === null) return '<span class="trend-eq">—</span>';
+  if (!prev && !cur) return '<span class="trend-eq">—</span>';
+  if (!prev) return `<span class="trend-up"><i class="fas fa-arrow-up me-1"></i>+${cur}</span>`;
+  const diff = cur - prev;
+  const pct  = Math.round(Math.abs(diff) / prev * 100);
+  if (diff > 0) return `<span class="trend-up"><i class="fas fa-arrow-up me-1"></i>+${diff} (${pct}%)</span>`;
+  if (diff < 0) return `<span class="trend-down"><i class="fas fa-arrow-down me-1"></i>${diff} (${pct}%)</span>`;
+  return '<span class="trend-eq"><i class="fas fa-minus me-1"></i>Stable</span>';
+}
+
+/* ── data load ── */
 document.addEventListener('DOMContentLoaded', function() {
   fetch('/api/dgrtr/stats')
-    .then(function(r){ return r.json(); })
+    .then(function(r) { return r.json(); })
     .then(function(data) {
       statsData = data;
+      renderSummary(data);
       renderMainChart(data, 'jour');
       renderIslandChart(data);
       renderTypeChart(data);
+      renderTable(data);
     })
     .catch(function() {
-      document.getElementById('stat-cards').innerHTML =
-        '<div class="col-12 text-danger text-center py-4">Erreur de chargement des statistiques.</div>';
+      document.getElementById('month-tbody').innerHTML =
+        '<tr><td colspan="3" class="text-center text-danger py-4"><i class="fas fa-exclamation-circle me-2"></i>Erreur de chargement des statistiques.</td></tr>';
     });
 });
 
+/* ── summary cards ── */
+function renderSummary(data) {
+  var t = data.totals;
+  var pct = t.dossiers > 0 ? Math.round(t.complets / t.dossiers * 100) : 0;
+  document.getElementById('s-total').textContent   = t.dossiers;
+  document.getElementById('s-complets').textContent = t.complets;
+  document.getElementById('s-complets-pct').textContent = pct + '% du total';
+  document.getElementById('s-ce-mois').textContent  = t.ce_mois;
+  document.getElementById('s-en-cours').textContent  = t.en_cours;
+  document.getElementById('s-rejetes-sub').innerHTML =
+    '<span style="color:#ef4444;">' + t.rejetes + ' rejeté' + (t.rejetes > 1 ? 's' : '') + '</span>';
+}
 
+/* ── period toggle ── */
 function setTab(tab) {
   currentTab = tab;
   ['jour','mois','annee'].forEach(function(t) {
@@ -92,23 +183,23 @@ function setTab(tab) {
   renderMainChart(statsData, tab);
 }
 
+/* ── main bar chart ── */
 function renderMainChart(data, tab) {
   var labels, values, subtitle;
   if (tab === 'jour') {
-    labels   = data.par_jour.map(function(r){ return r.date; });
-    values   = data.par_jour.map(function(r){ return r.count; });
+    labels   = data.par_jour.map(function(r) { return r.date; });
+    values   = data.par_jour.map(function(r) { return r.count; });
     subtitle = '30 derniers jours';
   } else if (tab === 'mois') {
-    labels   = data.par_mois.map(function(r){ return r.month; });
-    values   = data.par_mois.map(function(r){ return r.count; });
+    labels   = data.par_mois.map(function(r) { return r.month; });
+    values   = data.par_mois.map(function(r) { return r.count; });
     subtitle = 'Année ' + data.current_year;
   } else {
-    labels   = data.par_annee.map(function(r){ return String(r.year); });
-    values   = data.par_annee.map(function(r){ return r.count; });
+    labels   = data.par_annee.map(function(r) { return String(r.year); });
+    values   = data.par_annee.map(function(r) { return r.count; });
     subtitle = 'Toutes les années';
   }
   document.getElementById('chart-subtitle').textContent = subtitle;
-
   if (mainChart) mainChart.destroy();
   var ctx = document.getElementById('main-chart').getContext('2d');
   mainChart = new Chart(ctx, {
@@ -126,50 +217,41 @@ function renderMainChart(data, tab) {
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { stepSize: 1, precision: 0 },
-          grid: { color: 'rgba(0,0,0,.05)' }
-        },
+        y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 }, grid: { color: 'rgba(0,0,0,.05)' } },
         x: { grid: { display: false } }
       }
     }
   });
 }
 
+/* ── island donut ── */
 function renderIslandChart(data) {
   var islands = data.par_ile;
-  if (!islands.length) {
-    document.getElementById('island-chart').closest('.chart-card').querySelector('.chart-title').insertAdjacentHTML('afterend','<p class="text-muted small text-center py-4">Aucune donnée</p>');
-    return;
-  }
-  var colors = ['#1d4ed8','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6'];
+  if (!islands.length) return;
+  var colors = ['#1d4ed8','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
   var ctx = document.getElementById('island-chart').getContext('2d');
   new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: islands.map(function(r){ return r.island; }),
+      labels: islands.map(function(r) { return r.island; }),
       datasets: [{
-        data: islands.map(function(r){ return r.count; }),
+        data: islands.map(function(r) { return r.count; }),
         backgroundColor: colors.slice(0, islands.length),
-        borderWidth: 2,
-        borderColor: '#fff',
+        borderWidth: 2, borderColor: '#fff',
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 12 } }
-      }
+      responsive: true, maintainAspectRatio: false,
+      cutout: '58%',
+      plugins: { legend: { position: 'right', labels: { font: { size: 12 }, padding: 14 } } }
     }
   });
 }
 
+/* ── perm/temp donut ── */
 function renderTypeChart(data) {
   var perm = data.totals.permanent;
   var temp = data.totals.temporaire;
@@ -181,18 +263,41 @@ function renderTypeChart(data) {
       datasets: [{
         data: [perm, temp],
         backgroundColor: ['#1d4ed8', '#7c3aed'],
-        borderWidth: 2,
-        borderColor: '#fff',
+        borderWidth: 2, borderColor: '#fff',
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 12 } }
-      }
+      responsive: true, maintainAspectRatio: false,
+      cutout: '58%',
+      plugins: { legend: { position: 'right', labels: { font: { size: 12 }, padding: 14 } } }
     }
   });
+}
+
+/* ── monthly recap table ── */
+function renderTable(data) {
+  var year = data.current_year;
+  document.getElementById('table-year').textContent = year;
+  var months = data.par_mois; // [{month:'Jan', count:N}, …] index 0=Jan
+  var tbody = document.getElementById('month-tbody');
+
+  // We only have total counts per month; build rows from Jan→Dec for current year
+  var rows = months.map(function(m, i) {
+    return { label: MONTH_NAMES[i], short: MONTH_SHORT[i], count: m.count };
+  }).reverse(); // most recent first
+
+  var html = rows.map(function(row, i) {
+    var prev = rows[i + 1];
+    if (row.count === 0 && (!prev || prev.count === 0)) return '';
+    return '<tr>' +
+      '<td class="fw-semibold">' + row.label + ' ' + year + '</td>' +
+      '<td class="text-center fw-bold" style="color:#1d4ed8;">' + row.count + '</td>' +
+      '<td>' + trend(row.count, prev ? prev.count : null) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  tbody.innerHTML = html ||
+    '<tr><td colspan="3" class="text-center text-muted py-4">Aucune donnée pour cette année</td></tr>';
 }
 </script>
 

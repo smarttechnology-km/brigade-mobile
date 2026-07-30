@@ -82,7 +82,7 @@
                         <label for="usage_type" class="form-label">
                             <i class="fas fa-briefcase text-muted me-1"></i>Usage
                         </label>
-                        <select class="form-select" id="usage_type" name="usage_type" onchange="toggleUsageOtherAdd(this)">
+                        <select class="form-select" id="usage_type" name="usage_type" onchange="toggleUsageOtherAdd(this); toggleWorkZone()">
                             <option value="Personnelle">👤 Personnelle</option>
                             <option value="Taxi">🚕 Taxi</option>
                             <option value="Transport public">🚌 Transport public</option>
@@ -95,6 +95,15 @@
                             <option value="autre">➕ Autre...</option>
                         </select>
                         <input type="text" id="usage_type_other_add" class="form-control mt-2 d-none" placeholder="Précisez le type d'usage" />
+                    </div>
+                    <div class="col-md-6 mb-3 d-none" id="work_zone_group">
+                        <label class="form-label">
+                            <i class="fas fa-map-marked-alt text-muted me-1"></i>Zone de travail
+                        </label>
+                        <select class="form-select" id="work_zone" name="work_zone" onchange="toggleWorkZoneOther()">
+                            <option value="">-- Sélectionner une zone --</option>
+                        </select>
+                        <input type="text" id="work_zone_other" class="form-control mt-2 d-none" placeholder="Précisez la zone de travail" />
                     </div>
                 </div>
 
@@ -210,6 +219,90 @@ function renderLicenseTags() {
         </span>`).join('');
 }
 
+var INS_WORK_ZONE_BY_ISLAND = {
+    'Grande Comores': ['Centre-ville (Moroni)', 'Mitsamiouli', 'Mbéni', 'Foumbouni', 'Sima', 'Ntsoudjini', 'Autre région'],
+    'Anjouan':        ['Centre-ville (Mutsamudu)', 'Domoni', 'Ouani', 'Sima', 'Koni', 'Bambao', 'Autre région'],
+    'Moheli':         ['Centre-ville (Fomboni)', 'Nioumachoua', 'Djando', 'Miringoni', 'Ouallah', 'Autre région'],
+};
+
+function refreshInsWorkZoneOptions(currentZone) {
+    var zoneEl  = document.getElementById('work_zone');
+    var otherEl = document.getElementById('work_zone_other');
+    var islandVal = (document.getElementById('owner_island').value || '').trim();
+    if (!zoneEl) return;
+    zoneEl.innerHTML = '<option value="">-- Sélectionner une zone --</option>';
+    var allZones = [];
+    if (islandVal && INS_WORK_ZONE_BY_ISLAND[islandVal]) {
+        INS_WORK_ZONE_BY_ISLAND[islandVal].forEach(function(z) {
+            var opt = document.createElement('option');
+            opt.value = z; opt.textContent = z;
+            zoneEl.appendChild(opt);
+            allZones.push(z);
+        });
+    } else {
+        ['Grande Comores', 'Anjouan', 'Moheli'].forEach(function(ile) {
+            var grp = document.createElement('optgroup');
+            grp.label = '🏝️ ' + ile;
+            INS_WORK_ZONE_BY_ISLAND[ile].forEach(function(z) {
+                var opt = document.createElement('option');
+                opt.value = z; opt.textContent = z;
+                grp.appendChild(opt);
+                allZones.push(z);
+            });
+            zoneEl.appendChild(grp);
+        });
+    }
+    if (currentZone) {
+        if (allZones.indexOf(currentZone) !== -1) {
+            zoneEl.value = currentZone;
+            if (otherEl) { otherEl.classList.add('d-none'); otherEl.value = ''; }
+        } else {
+            zoneEl.value = 'Autre région';
+            if (otherEl) { otherEl.classList.remove('d-none'); otherEl.value = currentZone; }
+        }
+    } else {
+        if (otherEl) { otherEl.classList.add('d-none'); otherEl.value = ''; }
+    }
+}
+
+function toggleWorkZone() {
+    var sel     = document.getElementById('usage_type');
+    var groupEl = document.getElementById('work_zone_group');
+    var zoneEl  = document.getElementById('work_zone');
+    var otherEl = document.getElementById('work_zone_other');
+    if (!sel || !groupEl) return;
+    var isTaxi = sel.value === 'Taxi' || sel.value === 'Transport public';
+    if (isTaxi) {
+        refreshInsWorkZoneOptions();
+        groupEl.classList.remove('d-none');
+    } else {
+        groupEl.classList.add('d-none');
+        if (zoneEl)  zoneEl.value = '';
+        if (otherEl) { otherEl.classList.add('d-none'); otherEl.value = ''; }
+    }
+}
+
+function toggleWorkZoneOther() {
+    var zoneEl  = document.getElementById('work_zone');
+    var otherEl = document.getElementById('work_zone_other');
+    if (!zoneEl || !otherEl) return;
+    if (zoneEl.value === 'Autre région') {
+        otherEl.classList.remove('d-none');
+        otherEl.focus();
+    } else {
+        otherEl.classList.add('d-none');
+        otherEl.value = '';
+    }
+}
+
+function getWorkZoneValue() {
+    var zoneEl  = document.getElementById('work_zone');
+    var otherEl = document.getElementById('work_zone_other');
+    if (!zoneEl || document.getElementById('work_zone_group').classList.contains('d-none')) return '';
+    if (zoneEl.value === 'Autre région') return otherEl ? otherEl.value.trim() : '';
+    return zoneEl.value;
+}
+
 function toggleUsageOtherAdd(sel) {
     var other = document.getElementById('usage_type_other_add');
     if (!other) return;
@@ -319,6 +412,17 @@ document.getElementById('license_plate').addEventListener('change', async functi
                 if (otherInp) { otherInp.value = loadedVehicle.usage_type || ''; otherInp.classList.remove('d-none'); }
             }
         }
+        // Restore work zone
+        var isTaxi = (loadedVehicle.usage_type === 'Taxi' || loadedVehicle.usage_type === 'Transport public');
+        var wzGroup = document.getElementById('work_zone_group');
+        if (wzGroup) {
+            if (isTaxi) {
+                refreshInsWorkZoneOptions(loadedVehicle.work_zone || '');
+                wzGroup.classList.remove('d-none');
+            } else {
+                wzGroup.classList.add('d-none');
+            }
+        }
 
         if (vehicleHasUnpaidFines) {
             searchStatus.textContent = data.block_reason || '✗ Véhicule avec amende non payée';
@@ -381,6 +485,12 @@ function clearVehicleFields() {
     document.getElementById('owner_island').value = '';
     document.getElementById('usage_type').value = '';
     document.getElementById('insurance_expiry').value = '';
+    var wzGroup = document.getElementById('work_zone_group');
+    if (wzGroup) wzGroup.classList.add('d-none');
+    var wzEl = document.getElementById('work_zone');
+    if (wzEl) wzEl.value = '';
+    var wzOther = document.getElementById('work_zone_other');
+    if (wzOther) { wzOther.classList.add('d-none'); wzOther.value = ''; }
     licenseNumbers = [];
     renderLicenseTags();
     loadedVehicle = null;
@@ -461,7 +571,8 @@ document.getElementById('vehicle-form').addEventListener('submit', async functio
         const data = {
             insurance_company: insuranceCompanyName,
             insurance_expiry: insuranceExpiry,
-            usage_type: getUsageTypeAdd() || undefined
+            usage_type: getUsageTypeAdd() || undefined,
+            work_zone: getWorkZoneValue() || undefined
         };
 
         // Update the vehicle with new insurance company and date

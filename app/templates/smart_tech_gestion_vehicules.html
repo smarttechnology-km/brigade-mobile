@@ -318,7 +318,7 @@
                     <select id="type-filter" class="st-input" style="width:150px;" onchange="filterTable()">
                         <option value="">Tous les types</option>
                         <option value="voiture">Voiture</option>
-                        <option value="taxi">Taxi</option>
+                        <option value="pickup">Pickup</option>
                         <option value="moto">Moto</option>
                         <option value="camion">Camion</option>
                         <option value="minibus">Minibus</option>
@@ -478,7 +478,7 @@
                     <label class="form-label-st">Type <span class="req">*</span></label>
                     <select id="f-vehicle_type_select" class="st-input lg" onchange="onTypeChange()">
                         <option value="voiture">🚗 Voiture</option>
-                        <option value="taxi">🚕 Taxi</option>
+                        <option value="pickup">🛻 Pickup</option>
                         <option value="moto">🏍️ Moto</option>
                         <option value="camion">🚚 Camion</option>
                         <option value="minibus">🚐 Minibus</option>
@@ -595,6 +595,13 @@
                 <div class="col-md-6">
                     <label class="form-label-st">Date d'expiration assurance</label>
                     <input type="date" id="f-insurance_expiry" class="st-input lg">
+                </div>
+                <div class="col-12 d-none" id="f-work_zone_group">
+                    <label class="form-label-st"><i class="fas fa-map-marked-alt me-1"></i>Zone de travail</label>
+                    <select id="f-work_zone" class="st-input lg" onchange="onWorkZoneChange()">
+                        <option value="">-- Sélectionner une zone --</option>
+                    </select>
+                    <input type="text" id="f-work_zone_other" class="st-input lg mt-1 d-none" placeholder="Précisez la zone de travail">
                 </div>
             </div>
 
@@ -783,6 +790,11 @@
         document.getElementById('f-fuel_type_other').classList.add('d-none');
         document.getElementById('st-vin-hint').classList.add('d-none');
         document.getElementById('st-phone-hint').classList.add('d-none');
+        // Reset zone de travail
+        document.getElementById('f-work_zone_group').classList.add('d-none');
+        document.getElementById('f-work_zone').value = '';
+        document.getElementById('f-work_zone_other').classList.add('d-none');
+        document.getElementById('f-work_zone_other').value = '';
         setModalMode('add');
         document.getElementById('add-modal').classList.add('open');
     };
@@ -802,7 +814,7 @@
                 document.getElementById('f-owner_name').value    = v.owner_name    || '';
                 document.getElementById('f-owner_phone').value   = v.owner_phone   || '';
                 document.getElementById('f-owner_address').value = v.owner_address || '';
-                loadInsuranceSelect(v.insurance_company || '');
+                loadInsuranceSelect(v.insurance_company || '', v.work_zone || '');
                 document.getElementById('f-notes').value = v.notes || '';
                 // vignette_expiry: format YYYY-MM-DD
                 if (v.vignette_expiry) {
@@ -870,14 +882,100 @@
     window.onUsageChange = function() {
         const v = document.getElementById('f-usage_type').value;
         document.getElementById('f-usage_type_other').classList.toggle('d-none', v !== 'autre');
+        stUpdateWorkZoneVisibility();
     };
     window.onInsuranceCompanyChange = function() {
         const v = document.getElementById('f-insurance_company').value;
         document.getElementById('f-insurance_company_other').classList.toggle('d-none', v !== 'Autre');
+        stUpdateWorkZoneVisibility();
+    };
+    window.onWorkZoneChange = function() {
+        const v = document.getElementById('f-work_zone').value;
+        const otherEl = document.getElementById('f-work_zone_other');
+        if (v === 'Autre région') {
+            otherEl.classList.remove('d-none');
+            otherEl.focus();
+        } else {
+            otherEl.classList.add('d-none');
+            otherEl.value = '';
+        }
     };
 
+    const ST_WORK_ZONE_BY_ISLAND = {
+        'Grande Comores': ['Centre-ville (Moroni)', 'Mitsamiouli', 'Mbéni', 'Foumbouni', 'Sima', 'Ntsoudjini', 'Autre région'],
+        'Anjouan':        ['Centre-ville (Mutsamudu)', 'Domoni', 'Ouani', 'Sima', 'Koni', 'Bambao', 'Autre région'],
+        'Moheli':         ['Centre-ville (Fomboni)', 'Nioumachoua', 'Djando', 'Miringoni', 'Ouallah', 'Autre région'],
+    };
+
+    function stRefreshWorkZoneOptions(currentZone) {
+        const islandEl = document.getElementById('f-owner_island');
+        const zoneEl   = document.getElementById('f-work_zone');
+        const otherEl  = document.getElementById('f-work_zone_other');
+        if (!zoneEl) return;
+        const island = islandEl ? islandEl.value : '';
+        zoneEl.innerHTML = '<option value="">-- Sélectionner une zone --</option>';
+        const allZones = [];
+        if (island && ST_WORK_ZONE_BY_ISLAND[island]) {
+            // Specific island: flat list
+            ST_WORK_ZONE_BY_ISLAND[island].forEach(z => {
+                const opt = document.createElement('option');
+                opt.value = z; opt.textContent = z;
+                zoneEl.appendChild(opt);
+                allZones.push(z);
+            });
+        } else {
+            // No island selected: grouped by island with <optgroup>
+            ['Grande Comores', 'Anjouan', 'Moheli'].forEach(ile => {
+                const grp = document.createElement('optgroup');
+                grp.label = '🏝️ ' + ile;
+                ST_WORK_ZONE_BY_ISLAND[ile].forEach(z => {
+                    const opt = document.createElement('option');
+                    opt.value = z; opt.textContent = z;
+                    grp.appendChild(opt);
+                    allZones.push(z);
+                });
+                zoneEl.appendChild(grp);
+            });
+        }
+        if (currentZone) {
+            if (allZones.includes(currentZone)) {
+                zoneEl.value = currentZone;
+                if (otherEl) { otherEl.classList.add('d-none'); otherEl.value = ''; }
+            } else {
+                zoneEl.value = 'Autre région';
+                if (otherEl) { otherEl.classList.remove('d-none'); otherEl.value = currentZone; }
+            }
+        } else {
+            if (otherEl) { otherEl.classList.add('d-none'); otherEl.value = ''; }
+        }
+    }
+
+    function stUpdateWorkZoneVisibility(currentZone) {
+        const usageEl     = document.getElementById('f-usage_type');
+        const insuranceEl = document.getElementById('f-insurance_company');
+        const groupEl     = document.getElementById('f-work_zone_group');
+        const zoneEl      = document.getElementById('f-work_zone');
+        const otherEl     = document.getElementById('f-work_zone_other');
+        if (!usageEl || !groupEl) return;
+        const isTaxi = usageEl.value === 'Taxi' || usageEl.value === 'Transport public';
+        const hasIns = insuranceEl && insuranceEl.value && insuranceEl.value !== '';
+        if (isTaxi && hasIns) {
+            stRefreshWorkZoneOptions(currentZone);
+            groupEl.classList.remove('d-none');
+        } else {
+            groupEl.classList.add('d-none');
+            if (zoneEl)  zoneEl.value = '';
+            if (otherEl) { otherEl.classList.add('d-none'); otherEl.value = ''; }
+        }
+    }
+
+    // Refresh zone options when island changes
+    document.getElementById('f-owner_island').addEventListener('change', function() {
+        stRefreshWorkZoneOptions();
+    });
+
     /* ── Load insurance companies into select ── */
-    function loadInsuranceSelect(currentValue) {
+    function loadInsuranceSelect(currentValue, currentWorkZone) {
         fetch('/api/vehicles/insurances', { credentials: 'same-origin' })
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(data => {
@@ -903,6 +1001,7 @@
                         document.getElementById('f-insurance_company_other').classList.remove('d-none');
                     }
                 }
+                stUpdateWorkZoneVisibility(currentWorkZone);
             })
             .catch(() => {});
     }
@@ -943,6 +1042,15 @@
                                    ? document.getElementById('f-insurance_company_other').value.trim()
                                    : document.getElementById('f-insurance_company').value,
             insurance_expiry:  document.getElementById('f-insurance_expiry').value,
+            work_zone: (() => {
+                const grp = document.getElementById('f-work_zone_group');
+                if (!grp || grp.classList.contains('d-none')) return undefined;
+                const wz = document.getElementById('f-work_zone');
+                const wzOther = document.getElementById('f-work_zone_other');
+                if (!wz) return undefined;
+                if (wz.value === 'Autre région') return wzOther ? wzOther.value.trim() : '';
+                return wz.value;
+            })(),
             notes:             document.getElementById('f-notes').value.trim(),
         };
 

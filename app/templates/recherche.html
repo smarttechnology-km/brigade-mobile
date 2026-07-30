@@ -413,7 +413,7 @@
           </div>
           <div class="fbi-ms-dropdown" id="ms-type-dropdown">
             <label class="fbi-ms-option"><input type="checkbox" value="voiture" onchange="updateMs('ms-type')"> Voiture</label>
-            <label class="fbi-ms-option"><input type="checkbox" value="taxi" onchange="updateMs('ms-type')"> Taxi</label>
+            <label class="fbi-ms-option"><input type="checkbox" value="pickup" onchange="updateMs('ms-type')"> Pickup</label>
             <label class="fbi-ms-option"><input type="checkbox" value="moto" onchange="updateMs('ms-type')"> Moto</label>
             <label class="fbi-ms-option"><input type="checkbox" value="camion" onchange="updateMs('ms-type')"> Camion</label>
             <label class="fbi-ms-option"><input type="checkbox" value="minibus" onchange="updateMs('ms-type')"> Minibus</label>
@@ -454,6 +454,36 @@
             <label class="fbi-ms-option"><input type="checkbox" value="Auto-école" onchange="updateMs('ms-usage')"> Auto-école</label>
           </div>
         </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="fbi-label">Zone de travail</label>
+        <select class="form-select fbi-input" id="s-zone">
+          <option value="">Toutes les zones</option>
+          <optgroup label="🏝️ Grande Comores">
+            <option value="Centre-ville (Moroni)">Centre-ville (Moroni)</option>
+            <option value="Mitsamiouli">Mitsamiouli</option>
+            <option value="Mbéni">Mbéni</option>
+            <option value="Foumbouni">Foumbouni</option>
+            <option value="Sima">Sima</option>
+            <option value="Ntsoudjini">Ntsoudjini</option>
+          </optgroup>
+          <optgroup label="🏝️ Anjouan">
+            <option value="Centre-ville (Mutsamudu)">Centre-ville (Mutsamudu)</option>
+            <option value="Domoni">Domoni</option>
+            <option value="Ouani">Ouani</option>
+            <option value="Sima">Sima</option>
+            <option value="Koni">Koni</option>
+            <option value="Bambao">Bambao</option>
+          </optgroup>
+          <optgroup label="🏝️ Moheli">
+            <option value="Centre-ville (Fomboni)">Centre-ville (Fomboni)</option>
+            <option value="Nioumachoua">Nioumachoua</option>
+            <option value="Djando">Djando</option>
+            <option value="Miringoni">Miringoni</option>
+            <option value="Ouallah">Ouallah</option>
+          </optgroup>
+          <option value="Autre région">Autre région</option>
+        </select>
       </div>
       <div class="col-12 d-flex gap-2 mt-2">
         <button class="btn-fbi-search" id="btn-search" onclick="doSearch()">
@@ -1002,8 +1032,9 @@ async function doSearch() {
   const model = document.getElementById('s-model').value.trim();
   const color = document.getElementById('s-color').value.trim();
   const usages = getMsValues('ms-usage');
+  const zone   = document.getElementById('s-zone').value;
 
-  if (!plate && !types.length && !make && !model && !color && !usages.length) {
+  if (!plate && !types.length && !make && !model && !color && !usages.length && !zone) {
     document.getElementById('search-results').innerHTML =
       `<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:14px 18px;color:#f59e0b;font-size:.85rem;">
         <i class="fas fa-exclamation-triangle me-2"></i>Veuillez saisir au moins un critère de recherche.
@@ -1028,6 +1059,7 @@ async function doSearch() {
   if (model)         params.append('model', model);
   if (color)         params.append('color', color);
   if (usages.length) params.append('usage_type', usages.join(','));
+  if (zone)          params.append('work_zone', zone);
   searchParams = params;
 
   const iv = showScanAnimation();
@@ -1303,6 +1335,7 @@ function clearSearch() {
   ['s-plate','s-make','s-model','s-color'].forEach(id => document.getElementById(id).value = '');
   resetMs('ms-type');
   resetMs('ms-usage');
+  document.getElementById('s-zone').value = '';
   document.getElementById('search-results').innerHTML = '';
   searchResults = [];
 }

@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Paramètres Cartes Grises{% endblock %}
+{% block content %}
+
+<style>
+.island-tab-btn { border:none; background:none; padding:8px 18px; border-bottom:3px solid transparent;
+  font-weight:600; color:#6b7280; cursor:pointer; }
+.island-tab-btn.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
+.sig-preview-box { width:180px; height:60px; border:1px solid #dee2e6; border-radius:6px;
+  display:flex; align-items:center; justify-content:center; background:#f8f9fa; overflow:hidden; }
+</style>
+
+<div class="container py-4" style="max-width:720px;">
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <i class="fas fa-cog fa-lg text-secondary"></i>
+    <div>
+      <h4 class="fw-bold mb-0">Paramètres — Cartes Grises</h4>
+      <small class="text-muted">Configuration par île (Directeur Technique)</small>
+    </div>
+  </div>
+
+  <!-- Island tabs -->
+  <div class="border-bottom mb-4 d-flex gap-1">
+    <button class="island-tab-btn active" id="tab-gc" onclick="switchTab('Grande Comores')">🏝 Grande Comores</button>
+    <button class="island-tab-btn" id="tab-aj" onclick="switchTab('Anjouan')">🏝 Anjouan</button>
+    <button class="island-tab-btn" id="tab-mh" onclick="switchTab('Moheli')">🏝 Moheli</button>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-4">
+      <div class="row g-3">
+
+        <div class="col-12">
+          <label class="form-label fw-semibold">Nom complet du Directeur Régional</label>
+          <input type="text" class="form-control" id="s-directeur-nom" placeholder="ex: M. Ahmed Ali">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Durée de validité (jours)</label>
+          <input type="number" class="form-control" id="s-duree" min="1" max="365" placeholder="90">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Téléphone (footer)</label>
+          <input type="text" class="form-control" id="s-telephone" placeholder="ex: 7738643">
+        </div>
+
+        <div class="col-12">
+          <label class="form-label fw-semibold">Adresse (footer)</label>
+          <input type="text" class="form-control" id="s-adresse" placeholder="ex: MORONI MAGOUDJOU — BP: 6091 MORONI">
+        </div>
+
+        <div class="col-12">
+          <label class="form-label fw-semibold">Signature du Directeur Régional</label>
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="sig-preview-box">
+              <img id="cg-sig-preview-img" src="" alt="" style="max-width:100%;max-height:100%;display:none;">
+              <span id="cg-sig-preview-empty" class="text-muted small">Aucune</span>
+            </div>
+            <input type="file" id="cg-sig-file" accept="image/png,image/jpeg,image/webp" class="form-control" style="max-width:220px;" onchange="uploadSigFile(this)">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openSigPad()">
+              <i class="fas fa-signature me-1"></i>Signer à l'écran
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" id="cg-sig-remove-btn" style="display:none;" onclick="removeSig()">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="mt-4 d-flex justify-content-end">
+        <button class="btn btn-primary px-4" onclick="saveSettings()">
+          <i class="fas fa-save me-1"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- toast anchor -->
+  <div id="toast-anchor" class="position-fixed bottom-0 end-0 p-3" style="z-index:9999;"></div>
+</div>
+
+
+<!-- Signature pad modal -->
+<div class="modal fade" id="sigPadModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-signature me-2"></i>Signer à l'écran</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">Dessinez la signature avec la souris, le trackpad ou le doigt.</p>
+        <canvas id="sig-pad-canvas" width="500" height="130"
+          style="width:100%;aspect-ratio:108/28;border:1px solid #dee2e6;border-radius:8px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" onclick="clearSigPad()"><i class="fas fa-eraser me-1"></i>Effacer</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="sig-pad-save-btn" onclick="saveSigPad()">
+          <i class="fas fa-save me-1"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+let _activeIsland = 'Grande Comores';
+let _sigCtx = null, _sigDrawing = false, _sigHasStrokes = false;
+
+const TAB_IDS = { 'Grande Comores': 'tab-gc', 'Anjouan': 'tab-aj', 'Moheli': 'tab-mh' };
+
+function switchTab(island) {
+  _activeIsland = island;
+  Object.entries(TAB_IDS).forEach(([isl, id]) => {
+    document.getElementById(id).classList.toggle('active', isl === island);
+  });
+  loadIsland(island);
+}
+
+async function loadIsland(island) {
+  const res = await fetch('/api/dgrtr/cartes-grises/settings?island=' + encodeURIComponent(island));
+  const s = await res.json();
+  document.getElementById('s-directeur-nom').value = s.directeur_nom || '';
+  document.getElementById('s-duree').value          = s.duree_validite || 90;
+  document.getElementById('s-telephone').value      = s.footer_telephone || '';
+  document.getElementById('s-adresse').value        = s.footer_adresse || '';
+  document.getElementById('cg-sig-file').value = '';
+  renderSig(s.signature_url || '');
+}
+
+function renderSig(url) {
+  const img   = document.getElementById('cg-sig-preview-img');
+  const empty = document.getElementById('cg-sig-preview-empty');
+  const del   = document.getElementById('cg-sig-remove-btn');
+  if (url) {
+    img.src = url; img.style.display = ''; empty.style.display = 'none'; del.style.display = '';
+  } else {
+    img.style.display = 'none'; empty.style.display = ''; del.style.display = 'none';
+  }
+}
+
+async function saveSettings() {
+  try {
+    const payload = {
+      island:           _activeIsland,
+      directeur_nom:    document.getElementById('s-directeur-nom').value.trim(),
+      duree_validite:   parseInt(document.getElementById('s-duree').value) || 90,
+      footer_telephone: document.getElementById('s-telephone').value.trim(),
+      footer_adresse:   document.getElementById('s-adresse').value.trim(),
+    };
+    const res = await fetch('/api/dgrtr/cartes-grises/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Erreur');
+    const t = document.getElementById('toast-anchor');
+    t.innerHTML = `<div class="toast show align-items-center text-bg-success border-0"><div class="d-flex"><div class="toast-body"><i class="fas fa-check me-2"></i>Paramètres enregistrés pour ${_activeIsland}.</div><button class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`;
+    setTimeout(() => { t.innerHTML = ''; }, 3000);
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+async function uploadSigBlob(blob, filename) {
+  const fd = new FormData();
+  fd.append('signature', blob, filename);
+  fd.append('island', _activeIsland);
+  const r = await fetch('/api/dgrtr/cartes-grises/settings/signature', { method: 'POST', body: fd });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'Erreur upload');
+  renderSig(d.signature_url);
+}
+
+async function uploadSigFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  try { await uploadSigBlob(file, file.name); }
+  catch(e) { alert(e.message); }
+  finally { input.value = ''; }
+}
+
+async function removeSig() {
+  if (!confirm('Supprimer la signature ?')) return;
+  try {
+    await fetch('/api/dgrtr/cartes-grises/settings/signature?island=' + encodeURIComponent(_activeIsland), { method: 'DELETE' });
+    renderSig('');
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+/* signature pad */
+function openSigPad() {
+  const canvas = document.getElementById('sig-pad-canvas');
+  if (!canvas._bound) {
+    canvas._bound = true;
+    canvas.addEventListener('pointerdown', e => {
+      _sigDrawing = true; _sigHasStrokes = true;
+      const r = canvas.getBoundingClientRect();
+      _sigCtx.beginPath(); _sigCtx.moveTo(e.clientX - r.left, e.clientY - r.top);
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (!_sigDrawing) return;
+      const r = canvas.getBoundingClientRect();
+      _sigCtx.lineTo(e.clientX - r.left, e.clientY - r.top); _sigCtx.stroke();
+    });
+    const stop = () => { _sigDrawing = false; };
+    canvas.addEventListener('pointerup', stop);
+    canvas.addEventListener('pointerleave', stop);
+    canvas.addEventListener('pointercancel', stop);
+  }
+  const modalEl = document.getElementById('sigPadModal');
+  modalEl.addEventListener('shown.bs.modal', function onShown() {
+    modalEl.removeEventListener('shown.bs.modal', onShown);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width; canvas.height = rect.height;
+    _sigCtx = canvas.getContext('2d');
+    _sigCtx.strokeStyle = '#14306e'; _sigCtx.lineWidth = 4;
+    _sigCtx.lineCap = 'round'; _sigCtx.lineJoin = 'round';
+    _sigHasStrokes = false;
+  });
+  new bootstrap.Modal(modalEl).show();
+}
+
+function clearSigPad() {
+  const canvas = document.getElementById('sig-pad-canvas');
+  if (_sigCtx) _sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+  _sigHasStrokes = false;
+}
+
+function saveSigPad() {
+  if (!_sigHasStrokes) { alert('Veuillez dessiner une signature.'); return; }
+  const canvas = document.getElementById('sig-pad-canvas');
+  const btn = document.getElementById('sig-pad-save-btn');
+  btn.disabled = true;
+  canvas.toBlob(async (blob) => {
+    try {
+      await uploadSigBlob(blob, 'signature.png');
+      bootstrap.Modal.getInstance(document.getElementById('sigPadModal'))?.hide();
+    } catch(e) { alert(e.message); }
+    finally { btn.disabled = false; }
+  }, 'image/png');
+}
+
+/* load initial island on page load */
+loadIsland('Grande Comores');
+</script>
+
+{% endblock %}

@@ -56,7 +56,7 @@
             <div class="flex-grow-1 text-center">
                 {% if current_user.is_authenticated and (current_user.is_insurance_account or (current_user.role == 'agent_impot')) %}
                 <span class="text-white fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</span>
-                {% elif current_user.is_authenticated and current_user.role == 'dgrtr' %}
+                {% elif current_user.is_authenticated and current_user.role == 'dgrtr' and current_user.dgrtr_type != 'directeur_regional' %}
                 <a href="/dgrtr-dashboard" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</a>
                 {% else %}
                 <a href="/" class="text-white text-decoration-none fw-bold" style="font-size: 1.1rem;">S.I.G.V.A</a>
@@ -77,7 +77,7 @@
                 <i class="fas fa-car"></i>
                 <span class="ms-2">S.I.G.V.A</span>
             </span>
-            {% elif current_user.is_authenticated and current_user.role == 'dgrtr' %}
+            {% elif current_user.is_authenticated and current_user.role == 'dgrtr' and current_user.dgrtr_type != 'directeur_regional' %}
             <a class="navbar-brand text-white" href="/dgrtr-dashboard">
                 <i class="fas fa-car"></i>
                 <span class="ms-2">S.I.G.V.A</span>
@@ -119,10 +119,13 @@
             <a class="nav-link text-white {% if request.path.startswith('/insurance-profile') %}active{% endif %}" href="/insurance-profile"><i class="fas fa-user-circle me-2"></i> Mon Profil</a>
             {% endif %}
             
-            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+            {%- set _is_dr_dt = current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' -%}
+            {% if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'judiciaire' or _is_dr_dt) %}
             <a class="nav-link text-white {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard"><i class="fas fa-chart-line me-2"></i> Dashboard</a>
             <a class="nav-link text-white {% if request.path.startswith('/vehicles') %}active{% endif %}" href="/vehicles"><i class="fas fa-car-side me-2"></i> Véhicules</a>
+            {% if current_user.is_admin %}
             <a class="nav-link text-white {% if request.path.startswith('/licenses') %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
+            {% endif %}
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'policier')) %}
@@ -132,12 +135,15 @@
             <a class="nav-link text-white {% if request.path.startswith('/fines/stats') %}active{% endif %}" href="/fines/stats"><i class="fas fa-chart-bar me-2"></i> Stats Amendes</a>
             {% endif %}
 
-            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role in ['policier','judiciaire'])) %}
+            {% if current_user.is_authenticated and (current_user.is_admin or current_user.role in ['policier','judiciaire'] or _is_dr_dt) %}
             <a class="nav-link text-white {% if request.path.startswith('/alerts') %}active{% endif %}" href="/alerts"><i class="fas fa-exclamation-triangle me-2"></i> Alertes</a>
             {% endif %}
 
-            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+            {% if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'judiciaire' or _is_dr_dt) %}
             <a class="nav-link text-white {% if request.path.startswith('/reports') %}active{% endif %}" href="/reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.role == 'judiciaire' %}
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/cartes-grises') %}active{% endif %}" href="/dgrtr/cartes-grises"><i class="fas fa-car me-2"></i> Cartes Grises Provi</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'policier') %}
@@ -146,18 +152,24 @@
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'dgrtr') %}
+            {% if current_user.dgrtr_type == 'directeur_regional' %}
+            {# DR : nav "police-style" — Cartes Grises + Rapport CG #}
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/cartes-grises') %}active{% endif %}" href="/dgrtr/cartes-grises"><i class="fas fa-car me-2"></i> Cartes Grises Provi</a>
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/rapport-cg') %}active{% endif %}" href="/dgrtr/rapport-cg"><i class="fas fa-chart-bar me-2"></i> Rapport CG</a>
+            {% elif current_user.dgrtr_type == 'employe' %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis</a>
-            {% if current_user.dgrtr_type == 'employe' %}
             <a class="nav-link text-white {% if request.path == '/dgrtr/ajouter-permis' %}active{% endif %}" href="/dgrtr/ajouter-permis"><i class="fas fa-plus-circle me-2"></i> Ajouter un permis</a>
-            {% endif %}
-            {% if current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
+            {% elif current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr-dossiers-complets' %}active{% endif %}" href="/dgrtr-dossiers-complets"><i class="fas fa-check-circle me-2"></i> Dossiers Complétés</a>
-            {% endif %}
-            {% if current_user.dgrtr_type != 'employe' %}
             <a class="nav-link text-white {% if request.path == '/licenses' %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
-            {% endif %}
-            {% if current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-statistiques' %}active{% endif %}" href="/dgrtr-statistiques"><i class="fas fa-chart-bar me-2"></i> Statistiques</a>
+            {% if current_user.dgrtr_type == 'directeur_technique' %}
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/parametres-cg') %}active{% endif %}" href="/dgrtr/parametres-cg"><i class="fas fa-cog me-2"></i> Paramètres CG</a>
+            {% endif %}
+            {% if current_user.dgrtr_type == 'directeur_general' %}
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/comptes') %}active{% endif %}" href="/dgrtr/comptes"><i class="fas fa-users-cog me-2"></i> Gestion des comptes</a>
+            {% endif %}
             {% endif %}
             {% endif %}
 

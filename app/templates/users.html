@@ -49,6 +49,11 @@
             <i class="fas fa-file-invoice-dollar me-1"></i> Agents Impôt <span class="badge bg-info ms-1" id="count-agent">0</span>
           </button>
         </li>
+        <li class="nav-item">
+          <button class="nav-link" id="tab-dgrtr" data-role="dgrtr" type="button">
+            <i class="fas fa-user-tie me-1"></i> DGRTR <span class="badge bg-info ms-1" id="count-dgrtr">0</span>
+          </button>
+        </li>
       </ul>
     </div>
   </div>
@@ -160,11 +165,12 @@
         <div class="row">
           <div class="col-md-8 mb-3">
             <label class="form-label fw-semibold">Rôle <span class="text-danger">*</span></label>
-            <select id="u-role" class="form-select">
+            <select id="u-role" class="form-select" onchange="updateCountryRegionVisibility()">
               <option value="administrateur">👤 Administrateur - Accès complet au système</option>
               <option value="policier" selected>🚔 Policier - Gestion des véhicules et amendes</option>
               <option value="judiciaire">⚖️ Judiciaire - Validation des paiements</option>
               <option value="agent_impot">💰 Agent Impôt - Gestion des impôts et revenus</option>
+              <option value="dgrtr">🏛️ DGRTR - Direction Générale</option>
             </select>
           </div>
           <div class="col-md-4 mb-3 d-flex align-items-end">
@@ -174,9 +180,21 @@
             </div>
           </div>
         </div>
-        
+
+        <div class="row" id="dgrtr-type-section" style="display:none;">
+          <div class="col-md-8 mb-3">
+            <label class="form-label fw-semibold">Type de compte DGRTR <span class="text-danger">*</span></label>
+            <select id="u-dgrtr-type" class="form-select">
+              <option value="directeur_general">Directeur Général</option>
+              <option value="directeur_technique">Directeur Technique</option>
+              <option value="directeur_regional">Directeur Régional</option>
+              <option value="employe">Employée DGRTR</option>
+            </select>
+          </div>
+        </div>
+
         <hr class="my-4"/>
-        
+
         <div class="row">
           <div class="col-md-6 mb-3" id="country-section">
             <label class="form-label fw-semibold">Pays/Île</label>

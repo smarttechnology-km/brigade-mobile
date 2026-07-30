@@ -1,0 +1,890 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.badge-cg { display:inline-flex; align-items:center; gap:5px; padding:3px 10px;
+  border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+.badge-empty    { background:#fef9c3; color:#854d0e; }
+.badge-pending  { background:#dbeafe; color:#1d4ed8; }
+.badge-signed   { background:#dcfce7; color:#15803d; }
+.badge-draft    { background:#f3f4f6; color:#6b7280; }
+.pending-card {
+  background:#fff; border:1px solid #bfdbfe; border-radius:10px;
+  padding:14px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+}
+#cg-table th { font-size:12px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.04em; color:#6b7280; border-bottom:2px solid #e5e7eb; }
+#cg-table td { vertical-align:middle; font-size:13.5px; }
+/* Status tabs */
+.cg-status-tab {
+  background: none; border: none; border-bottom: 3px solid transparent;
+  padding: 8px 16px; font-size: 13.5px; font-weight: 600; color: #6b7280;
+  cursor: pointer; margin-bottom: -2px; transition: color .15s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.cg-status-tab:hover { color: #374151; }
+.cg-status-tab.active { color: #1d4ed8; border-bottom-color: #1d4ed8; }
+.cg-tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 10px; font-size: 11px; font-weight: 700;
+  background: #e5e7eb; color: #374151;
+}
+.cg-tab-badge:empty { display: none; }
+.badge-pending-tab { background: #dbeafe; color: #1d4ed8; }
+.badge-signed-tab  { background: #dcfce7; color: #15803d; }
+</style>
+
+<div class="container-fluid py-4 px-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h4 class="fw-bold mb-0"><i class="fas fa-car text-primary me-2"></i>Cartes Grises Provisoires</h4>
+      <small class="text-muted">
+        {% if current_user.role == 'judiciaire' %}Saisie et envoi pour signature{% else %}Documents en attente de signature{% endif %}
+      </small>
+    </div>
+    {% if current_user.role != 'judiciaire' %}
+    <button class="btn btn-outline-secondary" onclick="openSettings()">
+      <i class="fas fa-cog me-2"></i>Paramètres
+    </button>
+    {% endif %}
+  </div>
+
+  <!-- ── Cartes statistiques (DR) ── -->
+  {% if current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' %}
+  <div class="row g-3 mb-4" id="dr-stats-row">
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #6366f1 !important;">
+        <div class="card-body py-3 px-4">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Total</div>
+              <div class="fw-bold mt-1" id="stat-total" style="font-size:26px;line-height:1;">—</div>
+            </div>
+            <div style="width:42px;height:42px;border-radius:10px;background:#ede9fe;display:flex;align-items:center;justify-content:center;">
+              <i class="fas fa-file-alt" style="color:#6366f1;font-size:18px;"></i>
+            </div>
+          </div>
+          <div class="mt-2 text-muted" style="font-size:12px;">Cartes grises émises</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #f59e0b !important;">
+        <div class="card-body py-3 px-4">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">En attente</div>
+              <div class="fw-bold mt-1" id="stat-pending" style="font-size:26px;line-height:1;">—</div>
+            </div>
+            <div style="width:42px;height:42px;border-radius:10px;background:#fef3c7;display:flex;align-items:center;justify-content:center;">
+              <i class="fas fa-clock" style="color:#f59e0b;font-size:18px;"></i>
+            </div>
+          </div>
+          <div class="mt-2 text-muted" style="font-size:12px;">En attente de signature</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #10b981 !important;">
+        <div class="card-body py-3 px-4">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Signées</div>
+              <div class="fw-bold mt-1" id="stat-signed" style="font-size:26px;line-height:1;">—</div>
+            </div>
+            <div style="width:42px;height:42px;border-radius:10px;background:#d1fae5;display:flex;align-items:center;justify-content:center;">
+              <i class="fas fa-check-circle" style="color:#10b981;font-size:18px;"></i>
+            </div>
+          </div>
+          <div class="mt-2 text-muted" style="font-size:12px;">Documents signés</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #6b7280 !important;">
+        <div class="card-body py-3 px-4">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Brouillon</div>
+              <div class="fw-bold mt-1" id="stat-draft" style="font-size:26px;line-height:1;">—</div>
+            </div>
+            <div style="width:42px;height:42px;border-radius:10px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;">
+              <i class="fas fa-edit" style="color:#6b7280;font-size:18px;"></i>
+            </div>
+          </div>
+          <div class="mt-2 text-muted" style="font-size:12px;">En cours de saisie</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Demandes en attente (DGRTR/admin) ── -->
+  {% if current_user.role != 'judiciaire' %}
+  <div id="pending-section" style="display:none;">
+    <h6 class="fw-bold text-primary mb-3">
+      <i class="fas fa-clock me-2"></i>Documents en attente de signature
+      <span id="pending-count" class="badge bg-primary ms-1">0</span>
+    </h6>
+    <div id="pending-list" class="d-flex flex-column gap-2"></div>
+    <div id="pending-empty" class="text-muted py-4 text-center" style="display:none;">
+      <i class="fas fa-check-circle me-2 text-success"></i>Aucun document en attente
+    </div>
+  </div>
+  {% else %}
+  <div id="pending-section" style="display:none;"><div id="pending-list"></div></div>
+  <span id="pending-count" style="display:none;"></span>
+  {% endif %}
+
+  <!-- Tableau + recherche (judiciaire uniquement) -->
+  {% if current_user.role == 'judiciaire' %}
+
+  <!-- Status tabs -->
+  <div class="mb-3" style="border-bottom:2px solid #e5e7eb;">
+    <div class="d-flex gap-1 align-items-center flex-wrap">
+      <button class="cg-status-tab active" data-val="" onclick="setCgTab(this,'')">
+        <i class="fas fa-list me-1"></i>Tous
+        <span class="cg-tab-badge" id="badge-all"></span>
+      </button>
+      <button class="cg-status-tab" data-val="en_attente" onclick="setCgTab(this,'en_attente')">
+        <i class="fas fa-clock me-1"></i>En attente
+        <span class="cg-tab-badge badge-pending-tab" id="badge-pending"></span>
+      </button>
+      <button class="cg-status-tab" data-val="signee" onclick="setCgTab(this,'signee')">
+        <i class="fas fa-check-circle me-1"></i>Signée
+        <span class="cg-tab-badge badge-signed-tab" id="badge-signed"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Search bar -->
+  <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+    <div class="input-group" style="max-width:380px;">
+      <span class="input-group-text"><i class="fas fa-search"></i></span>
+      <input type="text" id="search-input" class="form-control"
+        placeholder="Immatriculation, propriétaire…"
+        oninput="debounceSearch()" autocomplete="off">
+    </div>
+    <select id="filter-status" style="display:none;" onchange="doSearch()">
+      <option value=""></option>
+      <option value="none">À compléter</option>
+      <option value="brouillon">Brouillon</option>
+      <option value="en_attente">En attente</option>
+      <option value="signee">Signée</option>
+    </select>
+    <span id="result-count" class="text-muted" style="font-size:13px;"></span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover bg-white rounded shadow-sm" id="cg-table">
+      <thead>
+        <tr>
+          <th>Immatriculation</th>
+          <th>Propriétaire</th>
+          <th>Marque / Modèle</th>
+          <th>Genre</th>
+          <th>Statut</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="results-tbody">
+        <tr><td colspan="6" class="text-center text-muted py-5">
+          <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <!-- éléments fictifs pour que le JS ne plante pas -->
+  <input type="text" id="search-input" style="display:none;">
+  <select id="filter-status" style="display:none;"></select>
+  <span id="result-count" style="display:none;"></span>
+  <table style="display:none;"><tbody id="results-tbody"></tbody></table>
+  {% endif %}
+
+</div>
+
+
+<!-- ── Modal Paramètres ──────────────────────────────────────── -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fas fa-cog me-2 text-secondary"></i>Paramètres — Cartes Grises</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Island tabs -->
+        <ul class="nav nav-tabs mb-3" id="cg-island-tabs">
+          <li class="nav-item" id="cg-tab-gc">
+            <button class="nav-link active" onclick="switchCgIsland('Grande Comores')">🏝 Grande Comores</button>
+          </li>
+          <li class="nav-item" id="cg-tab-aj">
+            <button class="nav-link" onclick="switchCgIsland('Anjouan')">🏝 Anjouan</button>
+          </li>
+          <li class="nav-item" id="cg-tab-mh">
+            <button class="nav-link" onclick="switchCgIsland('Moheli')">🏝 Moheli</button>
+          </li>
+        </ul>
+
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Nom complet du Directeur Régional</label>
+            <input type="text" class="form-control" id="s-directeur-nom" placeholder="ex: M. Ahmed Ali">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Durée de validité (jours)</label>
+            <input type="number" class="form-control" id="s-duree" min="1" max="365" placeholder="90">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Téléphone (footer)</label>
+            <input type="text" class="form-control" id="s-telephone" placeholder="ex: 7738643">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Adresse (footer)</label>
+            <input type="text" class="form-control" id="s-adresse" placeholder="ex: MORONI MAGOUDJOU — BP: 6091 MORONI">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Signature du Directeur Régional</label>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+              <div id="cg-sig-preview-wrap" style="width:160px;height:55px;border:1px solid #dee2e6;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;overflow:hidden;">
+                <img id="cg-sig-preview-img" src="" alt="" style="max-width:100%;max-height:100%;display:none;">
+                <span id="cg-sig-preview-empty" class="text-muted small">Aucune</span>
+              </div>
+              <input type="file" id="cg-sig-file" accept="image/png,image/jpeg,image/webp" class="form-control" style="max-width:200px;" onchange="uploadCgSigFile(this)">
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openCgSignaturePad()">
+                <i class="fas fa-signature me-1"></i>Signer à l'écran
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger" id="cg-sig-remove-btn" style="display:none;" onclick="removeCgSignature()">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="saveSettings()">
+          <i class="fas fa-save me-1"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Modal Pad Signature ───────────────────────────────────── -->
+<div class="modal fade" id="cgSigPadModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-signature me-2"></i>Signer à l'écran</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">Dessinez la signature avec la souris, le trackpad ou le doigt (écran tactile).</p>
+        <canvas id="cg-sig-pad-canvas" width="500" height="130"
+          style="width:100%;aspect-ratio:108/28;border:1px solid #dee2e6;border-radius:8px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
+        <p class="text-muted small mt-1 mb-0">Le cadre a les proportions de l'emplacement sur la carte.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" onclick="clearCgSigPad()">
+          <i class="fas fa-eraser me-1"></i>Effacer
+        </button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="cg-sig-pad-save-btn" onclick="saveCgSigPad()">
+          <i class="fas fa-save me-1"></i>Enregistrer la signature
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Modal Formulaire Carte Grise ─────────────────────────── -->
+<div class="modal fade" id="cgModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fas fa-file-alt me-2 text-primary"></i>Carte Grise Provisoire</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Info véhicule (readonly) -->
+        <div class="alert alert-light border mb-3 p-3" id="cg-vehicle-summary"></div>
+
+        <hr class="my-3">
+        <h6 class="fw-semibold text-secondary mb-3">Informations complémentaires</h6>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Carrosserie</label>
+            <select class="form-select" id="cg-carrosserie">
+              <option value="">— Sélectionner —</option>
+              <option>Solo</option>
+              <option>Berline</option>
+              <option>Break</option>
+              <option>SUV</option>
+              <option>Pick-up</option>
+              <option>Fourgon</option>
+              <option>Camionnette</option>
+              <option>Bus</option>
+              <option>Minibus</option>
+              <option>Camion</option>
+              <option>Tricycle</option>
+              <option>Autre</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Profession du propriétaire</label>
+            <input type="text" class="form-control" id="cg-profession" placeholder="ex: Commerçant, Fonctionnaire…">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Places assises</label>
+            <input type="text" class="form-control" id="cg-places" placeholder="ex: 002">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Poids total autorisé (kg)</label>
+            <input type="text" class="form-control" id="cg-poids-total" placeholder="ex: 1500">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Poids à vide (kg)</label>
+            <input type="text" class="form-control" id="cg-poids-vide" placeholder="ex: 900">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Charge utile PTC (kg)</label>
+            <input type="text" class="form-control" id="cg-charge-utile" placeholder="ex: 600">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Date d'émission</label>
+            <input type="date" class="form-control" id="cg-date-emission">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Observation</label>
+            <textarea class="form-control" id="cg-observation" rows="2" placeholder="Observations…"></textarea>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" onclick="saveCG()">
+          <i class="fas fa-save me-1"></i>Enregistrer
+        </button>
+        <button type="button" id="btn-request-sig" class="btn btn-warning d-none" onclick="requestSignature()">
+          <i class="fas fa-paper-plane me-1"></i>Envoyer pour signature
+        </button>
+        <button type="button" id="btn-sign-cg" class="btn btn-success d-none" onclick="signCG()">
+          <i class="fas fa-signature me-1"></i>Valider & Signer
+        </button>
+        <a id="btn-print-cg" href="#" target="_blank" class="btn btn-primary d-none">
+          <i class="fas fa-print me-1"></i>Imprimer
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+const USER_ROLE = {{ current_user.role | tojson }};
+const USER_DGRTR_TYPE = {{ (current_user.dgrtr_type or '') | tojson }};
+const USER_COUNTRY = {{ (current_user.country or '') | tojson }};
+let _activeIsland = 'Grande Comores';
+let _currentVehicleId = null;
+let _searchTimer = null;
+let _allVehicles = [];
+
+function setCgTab(btn, val) {
+  document.querySelectorAll('.cg-status-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('filter-status').value = val;
+  doSearch();
+}
+
+function _updateCgTabBadges() {
+  const counts = { all: 0, en_attente: 0, signee: 0 };
+  _allVehicles.forEach(v => {
+    counts.all++;
+    const s = v.carte_grise ? (v.carte_grise.status || 'brouillon') : 'none';
+    if (s === 'en_attente') counts.en_attente++;
+    if (s === 'signee')     counts.signee++;
+  });
+  const ba = document.getElementById('badge-all');
+  const bp = document.getElementById('badge-pending');
+  const bs = document.getElementById('badge-signed');
+  if (ba) ba.textContent = counts.all || '';
+  if (bp) bp.textContent = counts.en_attente || '';
+  if (bs) bs.textContent = counts.signee || '';
+}
+/* ── Signature preview helpers ── */
+function renderCgSigPreview(url) {
+  const img   = document.getElementById('cg-sig-preview-img');
+  const empty = document.getElementById('cg-sig-preview-empty');
+  const del   = document.getElementById('cg-sig-remove-btn');
+  if (url) {
+    img.src = url; img.style.display = ''; empty.style.display = 'none'; del.style.display = '';
+  } else {
+    img.style.display = 'none'; empty.style.display = ''; del.style.display = 'none';
+  }
+}
+
+async function uploadCgSigBlob(blob, filename) {
+  const fd = new FormData();
+  fd.append('signature', blob, filename);
+  fd.append('island', _activeIsland);
+  const r = await fetch('/api/dgrtr/cartes-grises/settings/signature', { method: 'POST', body: fd });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'Erreur upload');
+  renderCgSigPreview(d.signature_url);
+}
+
+async function uploadCgSigFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  try { await uploadCgSigBlob(file, file.name); }
+  catch(e) { alert(e.message); }
+  finally { input.value = ''; }
+}
+
+async function removeCgSignature() {
+  if (!confirm('Supprimer la signature ?')) return;
+  try {
+    await fetch('/api/dgrtr/cartes-grises/settings/signature?island=' + encodeURIComponent(_activeIsland), { method: 'DELETE' });
+    renderCgSigPreview('');
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+/* ── Signature pad ── */
+let _cgSigCtx = null, _cgSigDrawing = false, _cgSigHasStrokes = false;
+
+function _cgSigPos(e, canvas) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function setupCgSigPad() {
+  const canvas = document.getElementById('cg-sig-pad-canvas');
+  if (!canvas || canvas._bound) return;
+  canvas._bound = true;
+  canvas.addEventListener('pointerdown', e => {
+    _cgSigDrawing = true; _cgSigHasStrokes = true;
+    const {x,y} = _cgSigPos(e, canvas);
+    _cgSigCtx.beginPath(); _cgSigCtx.moveTo(x, y);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!_cgSigDrawing) return;
+    const {x,y} = _cgSigPos(e, canvas);
+    _cgSigCtx.lineTo(x, y); _cgSigCtx.stroke();
+  });
+  const stop = () => { _cgSigDrawing = false; };
+  canvas.addEventListener('pointerup', stop);
+  canvas.addEventListener('pointerleave', stop);
+  canvas.addEventListener('pointercancel', stop);
+}
+
+function openCgSignaturePad() {
+  const canvas = document.getElementById('cg-sig-pad-canvas');
+  setupCgSigPad();
+  const modalEl = document.getElementById('cgSigPadModal');
+  modalEl.addEventListener('shown.bs.modal', function onShown() {
+    modalEl.removeEventListener('shown.bs.modal', onShown);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width; canvas.height = rect.height;
+    _cgSigCtx = canvas.getContext('2d');
+    _cgSigCtx.strokeStyle = '#14306e';
+    _cgSigCtx.lineWidth = 4;
+    _cgSigCtx.lineCap = 'round';
+    _cgSigCtx.lineJoin = 'round';
+    _cgSigHasStrokes = false;
+  });
+  new bootstrap.Modal(modalEl).show();
+}
+
+function clearCgSigPad() {
+  const canvas = document.getElementById('cg-sig-pad-canvas');
+  if (_cgSigCtx) _cgSigCtx.clearRect(0, 0, canvas.width, canvas.height);
+  _cgSigHasStrokes = false;
+}
+
+function saveCgSigPad() {
+  if (!_cgSigHasStrokes) { alert('Veuillez dessiner une signature avant d\'enregistrer.'); return; }
+  const canvas = document.getElementById('cg-sig-pad-canvas');
+  const btn = document.getElementById('cg-sig-pad-save-btn');
+  btn.disabled = true;
+  canvas.toBlob(async (blob) => {
+    try {
+      await uploadCgSigBlob(blob, 'signature.png');
+      bootstrap.Modal.getInstance(document.getElementById('cgSigPadModal'))?.hide();
+    } catch(e) { alert(e.message); }
+    finally { btn.disabled = false; }
+  }, 'image/png');
+}
+
+/* ── Paramètres ── */
+const _CG_ISLAND_TABS = {
+  'Grande Comores': 'cg-tab-gc',
+  'Anjouan':        'cg-tab-aj',
+  'Moheli':         'cg-tab-mh',
+};
+
+function _setupCgIslandTabs() {
+  const isDR = USER_DGRTR_TYPE === 'directeur_regional';
+  Object.entries(_CG_ISLAND_TABS).forEach(([island, tabId]) => {
+    const li = document.getElementById(tabId);
+    if (!li) return;
+    if (isDR && island !== USER_COUNTRY) {
+      li.style.display = 'none';
+    } else {
+      li.style.display = '';
+    }
+  });
+}
+
+function _setCgIslandActiveTab(island) {
+  Object.entries(_CG_ISLAND_TABS).forEach(([isl, tabId]) => {
+    const btn = document.querySelector(`#${tabId} button`);
+    if (btn) btn.classList.toggle('active', isl === island);
+  });
+}
+
+async function _loadCgIslandData(island) {
+  const res = await fetch('/api/dgrtr/cartes-grises/settings?island=' + encodeURIComponent(island));
+  const s = await res.json();
+  document.getElementById('s-directeur-nom').value = s.directeur_nom || '';
+  document.getElementById('s-duree').value          = s.duree_validite || 90;
+  document.getElementById('s-telephone').value      = s.footer_telephone || '';
+  document.getElementById('s-adresse').value        = s.footer_adresse || '';
+  document.getElementById('cg-sig-file').value = '';
+  renderCgSigPreview(s.signature_url || '');
+}
+
+async function switchCgIsland(island) {
+  _activeIsland = island;
+  _setCgIslandActiveTab(island);
+  await _loadCgIslandData(island);
+}
+
+async function openSettings() {
+  if (USER_DGRTR_TYPE === 'directeur_regional') {
+    _activeIsland = USER_COUNTRY || 'Grande Comores';
+  } else {
+    _activeIsland = 'Grande Comores';
+  }
+  _setupCgIslandTabs();
+  _setCgIslandActiveTab(_activeIsland);
+  await _loadCgIslandData(_activeIsland);
+  new bootstrap.Modal(document.getElementById('settingsModal')).show();
+}
+
+async function saveSettings() {
+  try {
+    const payload = {
+      island:           _activeIsland,
+      directeur_nom:    document.getElementById('s-directeur-nom').value.trim(),
+      duree_validite:   parseInt(document.getElementById('s-duree').value) || 90,
+      footer_telephone: document.getElementById('s-telephone').value.trim(),
+      footer_adresse:   document.getElementById('s-adresse').value.trim(),
+    };
+    const res = await fetch('/api/dgrtr/cartes-grises/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Erreur');
+    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+    const t = document.createElement('div');
+    t.className = 'position-fixed bottom-0 end-0 p-3'; t.style.zIndex = 9999;
+    t.innerHTML = `<div class="toast show align-items-center text-bg-success border-0"><div class="d-flex"><div class="toast-body"><i class="fas fa-check me-2"></i>Paramètres enregistrés.</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`;
+    document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+function debounceSearch() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(doSearch, 300);
+}
+
+function statusBadge(cg) {
+  if (!cg) return `<span class="badge-cg badge-empty"><i class="fas fa-exclamation-triangle"></i> À compléter</span>`;
+  const s = cg.status || 'brouillon';
+  if (s === 'signee')     return `<span class="badge-cg badge-signed"><i class="fas fa-check-circle"></i> Signée</span>`;
+  if (s === 'en_attente') return `<span class="badge-cg badge-pending"><i class="fas fa-clock"></i> En attente</span>`;
+  return `<span class="badge-cg badge-draft"><i class="fas fa-edit"></i> Brouillon</span>`;
+}
+
+function rowActions(v) {
+  const cg = v.carte_grise;
+  const status = cg ? (cg.status || 'brouillon') : null;
+  const vj = JSON.stringify(v).replace(/"/g,'&quot;');
+  let btns = `<button class="btn btn-sm btn-outline-primary" onclick="openCG(${vj})">
+    <i class="fas fa-edit me-1"></i>${v.has_carte_grise ? 'Modifier' : 'Saisir'}
+  </button>`;
+  if (USER_ROLE === 'judiciaire' && v.carte_grise && status !== 'signee') {
+    btns += ` <button class="btn btn-sm btn-warning" onclick="_quickRequestSig(${v.id})">
+      <i class="fas fa-paper-plane me-1"></i>Envoyer
+    </button>`;
+  }
+  if ((USER_ROLE === 'dgrtr' || USER_ROLE === 'administrateur') && status === 'en_attente') {
+    btns += ` <button class="btn btn-sm btn-success" onclick="signCG(${v.id})">
+      <i class="fas fa-signature me-1"></i>Signer
+    </button>`;
+  }
+  if (status === 'signee') {
+    btns += ` <a href="/dgrtr/cartes-grises/${v.id}/print" target="_blank" class="btn btn-sm btn-primary">
+      <i class="fas fa-print me-1"></i>Imprimer
+    </a>`;
+  }
+  return btns;
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('results-tbody');
+  document.getElementById('result-count').textContent = `${data.length} véhicule${data.length!==1?'s':''}`;
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-inbox me-2"></i>Aucun véhicule trouvé</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(v => `
+    <tr>
+      <td><span class="fw-bold">${v.license_plate}</span></td>
+      <td>${v.owner_name}</td>
+      <td>${v.make ? v.make + (v.model ? ' ' + v.model : '') : '—'}</td>
+      <td>${v.vehicle_type || '—'}</td>
+      <td>${statusBadge(v.carte_grise)}</td>
+      <td class="text-end" style="white-space:nowrap;">${rowActions(v)}</td>
+    </tr>`).join('');
+}
+
+async function doSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  const filterStatus = document.getElementById('filter-status').value;
+  let filtered = _allVehicles;
+  if (q) {
+    const ql = q.toLowerCase();
+    filtered = filtered.filter(v =>
+      v.license_plate.toLowerCase().includes(ql) ||
+      v.owner_name.toLowerCase().includes(ql) ||
+      (v.owner_phone && v.owner_phone.includes(ql))
+    );
+  }
+  if (filterStatus) {
+    filtered = filtered.filter(v => {
+      const s = v.carte_grise ? (v.carte_grise.status || 'brouillon') : 'none';
+      return s === filterStatus;
+    });
+  }
+  renderTable(filtered);
+}
+
+async function loadAllVehicles() {
+  const tbody = document.getElementById('results-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+  try {
+    const res = await fetch('/api/dgrtr/cartes-grises/search?limit=500');
+    _allVehicles = await res.json();
+    _updateCgTabBadges();
+    doSearch();
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4"><i class="fas fa-exclamation-circle me-2"></i>Erreur de chargement</td></tr>';
+  }
+}
+
+async function viewDetails(vehicleId, licensePlate) {
+  try {
+    const res = await fetch(`/api/dgrtr/cartes-grises/search?q=${encodeURIComponent(licensePlate)}`);
+    const data = await res.json();
+    const v = data.find(x => x.id === vehicleId);
+    if (!v) { alert('Véhicule introuvable'); return; }
+    openCG(v);
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+async function _quickRequestSig(vehicleId) {
+  try {
+    const res = await fetch(`/api/dgrtr/cartes-grises/${vehicleId}/request-signature`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    const v = _allVehicles.find(x => x.id === vehicleId);
+    if (v && v.carte_grise) v.carte_grise.status = 'en_attente';
+    _updateCgTabBadges();
+    doSearch();
+    showToast('Demande de signature envoyée au Directeur Régional.');
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+function openCG(v) {
+  _currentVehicleId = v.id;
+  const cg = v.carte_grise || {};
+  const status = cg.status || 'brouillon';
+
+  document.getElementById('cg-vehicle-summary').innerHTML = `
+    <div class="row g-2" style="font-size:13px;">
+      <div class="col-6"><b>Immatriculation :</b> ${v.license_plate}</div>
+      <div class="col-6"><b>Propriétaire :</b> ${v.owner_name}</div>
+      <div class="col-6"><b>Genre :</b> ${v.vehicle_type || '—'}</div>
+      <div class="col-6"><b>Marque :</b> ${v.make || '—'} ${v.model || ''}</div>
+      <div class="col-6"><b>Carburant :</b> ${v.fuel_type || '—'}</div>
+      <div class="col-6"><b>Puissance :</b> ${v.cv_class || '—'}</div>
+      <div class="col-12"><b>N° série :</b> ${v.vin || '—'}</div>
+      <div class="col-12"><b>Domicile :</b> ${v.owner_address || '—'}</div>
+    </div>`;
+
+  document.getElementById('cg-carrosserie').value   = cg.carrosserie || '';
+  document.getElementById('cg-profession').value    = cg.profession_proprietaire || '';
+  document.getElementById('cg-places').value        = cg.places_assises || '';
+  document.getElementById('cg-poids-total').value   = cg.poids_total_autorise || '';
+  document.getElementById('cg-poids-vide').value    = cg.poids_a_vide || '';
+  document.getElementById('cg-charge-utile').value  = cg.charge_utile_ptc || '';
+  document.getElementById('cg-date-emission').value = cg.date_emission || '';
+  document.getElementById('cg-observation').value   = cg.observation || '';
+
+  // Judiciaire : Envoyer pour signature si carte saisie et pas encore signée
+  document.getElementById('btn-request-sig').classList.toggle('d-none',
+    !(USER_ROLE === 'judiciaire' && v.has_carte_grise && status !== 'signee'));
+
+  // DGRTR/admin : Valider & Signer si en attente
+  document.getElementById('btn-sign-cg').classList.toggle('d-none',
+    !((USER_ROLE === 'dgrtr' || USER_ROLE === 'administrateur') && status === 'en_attente'));
+
+  // Print : seulement si signée
+  const btnPrint = document.getElementById('btn-print-cg');
+  if (status === 'signee') {
+    btnPrint.href = `/dgrtr/cartes-grises/${v.id}/print`;
+    btnPrint.classList.remove('d-none');
+  } else {
+    btnPrint.classList.add('d-none');
+  }
+
+  new bootstrap.Modal(document.getElementById('cgModal')).show();
+}
+
+async function saveCG() {
+  if (!_currentVehicleId) return;
+  const payload = {
+    carrosserie:             document.getElementById('cg-carrosserie').value.trim(),
+    profession_proprietaire: document.getElementById('cg-profession').value.trim(),
+    places_assises:          document.getElementById('cg-places').value.trim(),
+    poids_total_autorise:    document.getElementById('cg-poids-total').value.trim(),
+    poids_a_vide:            document.getElementById('cg-poids-vide').value.trim(),
+    charge_utile_ptc:        document.getElementById('cg-charge-utile').value.trim(),
+    date_emission:           document.getElementById('cg-date-emission').value,
+    observation:             document.getElementById('cg-observation').value.trim(),
+  };
+  try {
+    const res = await fetch(`/api/dgrtr/cartes-grises/${_currentVehicleId}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    const v = _allVehicles.find(x => x.id === _currentVehicleId);
+    if (v) { v.carte_grise = data.carte_grise; v.has_carte_grise = true; }
+    bootstrap.Modal.getInstance(document.getElementById('cgModal')).hide();
+    _updateCgTabBadges();
+    doSearch();
+    showToast('Carte grise enregistrée.');
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+async function requestSignature() {
+  if (!_currentVehicleId) return;
+  try {
+    const res = await fetch(`/api/dgrtr/cartes-grises/${_currentVehicleId}/request-signature`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    const v = _allVehicles.find(x => x.id === _currentVehicleId);
+    if (v && v.carte_grise) v.carte_grise.status = 'en_attente';
+    bootstrap.Modal.getInstance(document.getElementById('cgModal')).hide();
+    _updateCgTabBadges();
+    doSearch();
+    showToast('Demande de signature envoyée au Directeur Régional.');
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+async function signCG(vehicleId) {
+  vehicleId = vehicleId || _currentVehicleId;
+  if (!vehicleId) return;
+  try {
+    const res = await fetch(`/api/dgrtr/cartes-grises/${vehicleId}/sign`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    const v = _allVehicles.find(x => x.id === vehicleId);
+    if (v && v.carte_grise) v.carte_grise.status = 'signee';
+    bootstrap.Modal.getInstance(document.getElementById('cgModal'))?.hide();
+    loadPending();
+    if (USER_DGRTR_TYPE === 'directeur_regional') loadDrStats();
+    _updateCgTabBadges();
+    doSearch();
+    showToast('Carte grise signée — impression disponible.');
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'position-fixed bottom-0 end-0 p-3'; t.style.zIndex = 9999;
+  t.innerHTML = `<div class="toast show align-items-center text-bg-success border-0"><div class="d-flex"><div class="toast-body"><i class="fas fa-check me-2"></i>${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 3500);
+}
+
+async function loadPending() {
+  if (USER_ROLE === 'judiciaire') return;
+  try {
+    const data = await fetch('/api/dgrtr/cartes-grises/pending').then(r => r.json());
+    const section   = document.getElementById('pending-section');
+    const list      = document.getElementById('pending-list');
+    const count     = document.getElementById('pending-count');
+    const emptyMsg  = document.getElementById('pending-empty');
+    section.style.display = '';
+    if (!data.length) {
+      list.innerHTML = '';
+      if (emptyMsg) emptyMsg.style.display = '';
+      if (count) count.textContent = 0;
+      return;
+    }
+    if (emptyMsg) emptyMsg.style.display = 'none';
+    if (count) count.textContent = data.length;
+    list.innerHTML = data.map(p => `
+      <div class="pending-card flex-wrap">
+        <div>
+          <span class="fw-bold">${p.license_plate}</span>
+          <span class="text-secondary ms-2" style="font-size:13px;">${p.owner_name}</span>
+          ${p.make ? `<span class="text-muted ms-2" style="font-size:12px;">${p.make} ${p.model}</span>` : ''}
+        </div>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          <span class="text-muted" style="font-size:12px;"><i class="fas fa-clock me-1"></i>${p.requested_at} · ${p.requested_by}</span>
+          <button class="btn btn-sm btn-outline-secondary" onclick="viewDetails(${p.vehicle_id}, '${p.license_plate}')">
+            <i class="fas fa-eye me-1"></i>Détails
+          </button>
+          <button class="btn btn-sm btn-success" onclick="signCG(${p.vehicle_id})">
+            <i class="fas fa-signature me-1"></i>Signer
+          </button>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function loadDrStats() {
+  try {
+    const s = await fetch('/api/dgrtr/cartes-grises/stats').then(r => r.json());
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('stat-total',   s.total ?? '—');
+    set('stat-pending', s.en_attente ?? '—');
+    set('stat-signed',  s.signee ?? '—');
+    set('stat-draft',   s.brouillon ?? '—');
+  } catch(e) { /* ignore */ }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (USER_ROLE === 'judiciaire') {
+    loadAllVehicles();
+  } else {
+    loadPending();
+    if (USER_DGRTR_TYPE === 'directeur_regional') loadDrStats();
+  }
+});
+</script>
+
+{% endblock %}
