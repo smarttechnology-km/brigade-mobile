@@ -2144,33 +2144,32 @@ def api_st_restore():
     sorted_names = sorted(backup_data.keys())
     app = current_app._get_current_object()
 
-    # Column renames between old backups and current schema
-    _COL_RENAMES = {
-        'carte_grise_setting': {'signature_image': 'signature_filename'},
-    }
-
-    def _adapt_row(table_name, row, actual_cols):
-        """Rename legacy columns and strip columns absent from the current schema."""
-        renames = _COL_RENAMES.get(table_name, {})
-        adapted = {}
-        for k, v in row.items():
-            k2 = renames.get(k, k)
-            if k2 in actual_cols:
-                adapted[k2] = v
-        return adapted
-
-    def _actual_cols_sqlite(conn, name):
-        rows = conn.execute(text(f"PRAGMA table_info(\"{name}\")")).fetchall()
-        return {r[1] for r in rows}
-
-    def _actual_cols_pg(conn, name):
-        rows = conn.execute(text(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = :t"
-        ), {'t': name}).fetchall()
-        return {r[0] for r in rows}
-
     def do_restore():
         from sqlalchemy import text, inspect
+
+        _COL_RENAMES = {
+            'carte_grise_setting': {'signature_image': 'signature_filename'},
+        }
+
+        def _adapt_row(table_name, row, actual_cols):
+            renames = _COL_RENAMES.get(table_name, {})
+            adapted = {}
+            for k, v in row.items():
+                k2 = renames.get(k, k)
+                if k2 in actual_cols:
+                    adapted[k2] = v
+            return adapted
+
+        def _actual_cols_sqlite(conn, name):
+            rows = conn.execute(text(f"PRAGMA table_info(\"{name}\")")).fetchall()
+            return {r[1] for r in rows}
+
+        def _actual_cols_pg(conn, name):
+            rows = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = :t"
+            ), {'t': name}).fetchall()
+            return {r[0] for r in rows}
+
         with app.app_context():
             try:
                 inspector = inspect(db.engine)
