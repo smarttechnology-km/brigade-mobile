@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
 // Regions data for each country
 const regionsData = {
-    'Grande Comores': ['Moroni', 'Koimbani', 'Foumbouni', 'Mitsamiouli', 'Iconi'],
+    'Grande Comore': ['Moroni', 'Koimbani', 'Foumbouni', 'Mitsamiouli', 'Iconi'],
     'Anjouan': ['Mutsamudu', 'Domoni', 'Tsembéhou', 'Sima'],
     'Moheli': ['Fomboni', 'Nioumachoua']
 };

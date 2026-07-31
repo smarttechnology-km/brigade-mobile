@@ -1,6 +1,9 @@
 var vehicleModalInstance = window.vehicleModalInstance || null;
 window.vehicleModalInstance = vehicleModalInstance;
 
+// Active tab for status filtering
+var activeVehicleTab = 'all';
+
 window.generateLicensePlate = async function() {
     const btn = document.getElementById('btn-gen-plate');
     const input = document.getElementById('license_plate');
@@ -182,7 +185,7 @@ function setupIslandInsuranceFilter(){
 }
 
 var WORK_ZONE_BY_ISLAND = {
-    'Grande Comores': [
+    'Grande Comore': [
         'Centre-ville (Moroni)',
         'Mitsamiouli',
         'Mbéni',
@@ -229,7 +232,7 @@ function _refreshWorkZoneOptions(currentZone){
         allZones = zones;
     } else {
         // No island: grouped by island with <optgroup>
-        ['Grande Comores','Anjouan','Moheli'].forEach(function(ile){
+        ['Grande Comore','Anjouan','Moheli'].forEach(function(ile){
             var grp = document.createElement('optgroup');
             grp.label = '🏝️ ' + ile;
             WORK_ZONE_BY_ISLAND[ile].forEach(function(z){
@@ -354,16 +357,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // debounce to avoid rapid re-renders
                 if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
                 searchDebounceTimer = setTimeout(()=>{
-                    loadVehicles();
+                    filterAndRenderVehicles(q);
                 }, 200);
-            });
-        }
-        
-        // wire status filter if present
-        const statusFilter = document.getElementById('status-filter');
-        if (statusFilter) {
-            statusFilter.addEventListener('change', function() {
-                loadVehicles();
             });
         }
         
@@ -381,6 +376,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 openVehicleModal();
             });
         }
+
+        // Wire status tabs
+        document.querySelectorAll('#vehicle-status-tabs .nav-link').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('#vehicle-status-tabs .nav-link').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                activeVehicleTab = this.getAttribute('data-tab');
+                applyTabFilter();
+            });
+        });
     }
 
     // Auto-fill / notify owner name from phone lookup
@@ -494,12 +499,6 @@ function loadVehicles() {
         params.append('q', searchInput.value.trim());
     }
     
-    // Get status filter
-    const statusFilter = document.getElementById('status-filter');
-    if (statusFilter && statusFilter.value) {
-        params.append('status', statusFilter.value);
-    }
-    
     // Get country filter
     const countryFilter = document.getElementById('country-filter');
     if (countryFilter && countryFilter.value) {
@@ -530,11 +529,37 @@ function loadVehicles() {
         });
 }
 
-function renderVehiclesTable(vehicles) {
-    // Store the vehicles to display and reset to page 1
-    currentVehiclesDisplayed = vehicles || [];
+function updateTabCounts(all) {
+    const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+    set('tab-count-all',       all.length);
+    set('tab-count-active',    all.filter(v => !v.qr_pending_approval && v.status === 'active').length);
+    set('tab-count-inactive',  all.filter(v => !v.qr_pending_approval && v.status === 'inactive').length);
+    set('tab-count-suspended', all.filter(v => !v.qr_pending_approval && v.status === 'suspended').length);
+    set('tab-count-pending',   all.filter(v => v.qr_pending_approval).length);
+}
+
+function applyTabFilter() {
+    const all = vehiclesCache || [];
+    let filtered;
+    if (activeVehicleTab === 'pending') {
+        filtered = all.filter(v => v.qr_pending_approval);
+    } else if (activeVehicleTab === 'active') {
+        filtered = all.filter(v => !v.qr_pending_approval && v.status === 'active');
+    } else if (activeVehicleTab === 'inactive') {
+        filtered = all.filter(v => !v.qr_pending_approval && v.status === 'inactive');
+    } else if (activeVehicleTab === 'suspended') {
+        filtered = all.filter(v => !v.qr_pending_approval && v.status === 'suspended');
+    } else {
+        filtered = all;
+    }
+    currentVehiclesDisplayed = filtered;
     currentPageVehicles = 1;
     displayVehiclesPage();
+}
+
+function renderVehiclesTable(vehicles) {
+    updateTabCounts(vehicles || []);
+    applyTabFilter();
 }
 
 function displayVehiclesPage() {
@@ -568,7 +593,11 @@ function displayVehiclesPage() {
             <td><strong>${v.license_plate}</strong></td>
             <td>${v.owner_name}</td>
             <td>${capitalizeFirst(v.vehicle_type)}</td>
-            <td><span class="badge ${statusBadgeClass(v.status)}">${statusLabel(v.status)}</span></td>
+            <td>
+              ${v.qr_pending_approval
+                ? '<span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>En attente QR</span>'
+                : `<span class="badge ${statusBadgeClass(v.status)}">${statusLabel(v.status)}</span>`}
+            </td>
             <td>${v.registration_date || ''}</td>
             <td>
                 <button class="btn btn-sm btn-outline-primary" title="Détails" onclick="viewVehicle('${v.track_token}')"><i class="fas fa-eye"></i></button>
@@ -650,7 +679,18 @@ function filterAndRenderVehicles(query){
                (v.vehicle_type && v.vehicle_type.toLowerCase().includes(q)) ||
                (v.vin && v.vin.toLowerCase().includes(q));
     });
-    renderVehiclesTable(filtered);
+    // update counts on the full filtered set, then apply tab
+    updateTabCounts(filtered);
+    const tab = activeVehicleTab;
+    let tabFiltered;
+    if (tab === 'pending') tabFiltered = filtered.filter(v => v.qr_pending_approval);
+    else if (tab === 'active') tabFiltered = filtered.filter(v => !v.qr_pending_approval && v.status === 'active');
+    else if (tab === 'inactive') tabFiltered = filtered.filter(v => !v.qr_pending_approval && v.status === 'inactive');
+    else if (tab === 'suspended') tabFiltered = filtered.filter(v => !v.qr_pending_approval && v.status === 'suspended');
+    else tabFiltered = filtered;
+    currentVehiclesDisplayed = tabFiltered;
+    currentPageVehicles = 1;
+    displayVehiclesPage();
 }
 
 function _setSaveBlocked(blocked) {
@@ -679,12 +719,22 @@ function openVehicleModal(vehicle) {
     // Update modal title with icon
     const modalTitle = document.getElementById('vehicleModalLabel');
     const genBtn = document.getElementById('btn-gen-plate');
+    // CG extra section: always visible, but badge/alert only shown on creation
+    const cgSection        = document.getElementById('cg-extra-section');
+    const cgPendingBadge   = document.getElementById('cg-pending-badge');
+    const cgPendingAlert   = document.getElementById('cg-pending-alert');
     if(vehicle) {
         modalTitle.innerHTML = '<i class="fas fa-edit me-2"></i><span>Éditer le véhicule</span>';
         if(genBtn) genBtn.style.display = 'none';
+        if(cgSection)      cgSection.classList.remove('d-none');
+        if(cgPendingBadge) cgPendingBadge.style.display = 'none';
+        if(cgPendingAlert) cgPendingAlert.style.display = 'none';
     } else {
         modalTitle.innerHTML = '<i class="fas fa-car me-2"></i><span>Ajouter un véhicule</span>';
         if(genBtn) genBtn.style.display = '';
+        if(cgSection)      cgSection.classList.remove('d-none');
+        if(cgPendingBadge) cgPendingBadge.style.display = '';
+        if(cgPendingAlert) cgPendingAlert.style.display = '';
     }
     
     // ensure type controls are in known default state
@@ -857,6 +907,18 @@ function openVehicleModal(vehicle) {
             vinHint.classList.add('d-none');
         }
 
+        // Populate CarteGrise extra fields
+        const cg = vehicle.carte_grise || {};
+        const _cgSet = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
+        _cgSet('cg_carrosserie',           cg.carrosserie);
+        _cgSet('cg_places_assises',        cg.places_assises);
+        _cgSet('cg_poids_total_autorise',  cg.poids_total_autorise);
+        _cgSet('cg_poids_a_vide',          cg.poids_a_vide);
+        _cgSet('cg_charge_utile_ptc',      cg.charge_utile_ptc);
+        _cgSet('cg_profession_proprietaire', cg.profession_proprietaire);
+        _cgSet('cg_date_emission',         cg.date_emission);
+        _cgSet('cg_observation',           cg.observation);
+
         // Afficher uniquement les amendes non payées
         const finesSection = document.getElementById('vehicle-fines-section');
         const finesList = document.getElementById('vehicle-fines-list');
@@ -971,9 +1033,37 @@ function saveVehicle() {
         payload.insurance_expiry = document.getElementById('insurance_expiry').value || '';
     }
 
+    const _cgGet = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    const cgPayload = {
+        carrosserie:             _cgGet('cg_carrosserie'),
+        places_assises:          _cgGet('cg_places_assises'),
+        poids_total_autorise:    _cgGet('cg_poids_total_autorise'),
+        poids_a_vide:            _cgGet('cg_poids_a_vide'),
+        charge_utile_ptc:        _cgGet('cg_charge_utile_ptc'),
+        profession_proprietaire: _cgGet('cg_profession_proprietaire'),
+        date_emission:           document.getElementById('cg_date_emission') ? document.getElementById('cg_date_emission').value : '',
+        observation:             _cgGet('cg_observation'),
+    };
+
+    // Include CG fields in the main payload so the PUT handler saves them atomically
+    Object.assign(payload, cgPayload);
+
+    if (!vid) {
+        payload.pending_approval = true;
+    }
+
     if (!payload.license_plate || !payload.owner_name || !payload.owner_phone || !payload.vehicle_type) {
         alert('Veuillez remplir les champs requis, y compris le numéro de téléphone');
         return;
+    }
+
+    function saveCgData(vehicleId) {
+        return fetch(`/api/vehicles/${vehicleId}/save-cg`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(cgPayload)
+        }).catch(() => {});
     }
 
     if (vid) {
@@ -988,6 +1078,7 @@ function saveVehicle() {
             if (!r.ok) throw new Error(data.error || `Erreur ${r.status}`);
             return data;
         }).then(() => {
+            saveCgData(vid);
             safeHideModal();
             loadVehicles();
         }).catch(err => {
@@ -1004,10 +1095,12 @@ function saveVehicle() {
             const data = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(data.error || `Erreur ${r.status}`);
             return data;
-        }).then((created) => {
+        }).then(data => {
+            const newId = data.vehicle ? data.vehicle.id : (data.id || null);
+            if (newId) saveCgData(newId);
             safeHideModal();
             loadVehicles();
-            try{ if(created && created.id) showQRCodeFor(created.id); }catch(e){}
+            alert('Véhicule ajouté avec succès !\n\nLe QR Code sera généré après validation par le système SmartTech.');
         }).catch(err => {
             alert(err.message || 'Erreur lors de la création');
         });
