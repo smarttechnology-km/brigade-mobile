@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Development — Rapport Journalier QR</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg:#0d1117; --st-surface:#161b22; --st-border:rgba(255,255,255,0.08);
+            --st-cyan:#00d4ff; --st-green:#3fb950; --st-yellow:#f0b429;
+            --st-red:#f85149; --st-blue:#58a6ff; --st-purple:#bc8cff;
+            --st-orange:#f78166; --sidebar-w:260px;
+        }
+        *{box-sizing:border-box;}
+        body{background:var(--st-bg);color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;margin:0;}
+
+        /* Sidebar */
+        .st-sidebar{background:linear-gradient(180deg,#1a1a2e 0%,#0f3460 100%);width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;padding:1.4rem 1rem;border-right:1px solid rgba(0,212,255,0.1);z-index:100;display:flex;flex-direction:column;}
+        .st-brand{display:flex;align-items:center;gap:10px;padding-bottom:1.2rem;border-bottom:1px solid rgba(0,212,255,0.15);margin-bottom:1.5rem;}
+        .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
+        .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
+        .st-brand-sub{font-size:.7rem;color:var(--st-cyan);}
+        .st-nav{flex:1;overflow-y:auto;min-height:0;}
+        .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
+        .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
+        .st-nav-item.active{border-left:3px solid var(--st-cyan);}
+        .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
+        .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
+        .st-bottom-row{display:flex;border-top:1px solid rgba(255,255,255,0.07);}
+        .st-bottom-row .st-nav-item{flex:1;justify-content:center;padding:.7rem .4rem;font-size:.8rem;border-left:none!important;}
+        .nav-badge{margin-left:auto;background:var(--st-yellow);color:#000;border-radius:20px;font-size:.65rem;font-weight:700;padding:.15em .55em;}
+
+        /* Main */
+        .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;}
+        .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
+        .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
+        .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);}
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+        .st-theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .2s;}
+        .st-theme-btn:hover{background:rgba(0,212,255,0.15);border-color:var(--st-cyan);color:var(--st-cyan);}
+
+        /* Period bar */
+        .period-bar{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.4rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+        /* Island tabs */
+        .island-tabs{display:flex;gap:0;margin-bottom:1.2rem;border-bottom:2px solid var(--st-border);}
+        .island-tab{padding:.45rem 1.2rem;border:none;background:transparent;color:rgba(255,255,255,0.42);font-size:.85rem;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .18s;border-radius:0;}
+        .island-tab:hover{color:rgba(255,255,255,0.72);}
+        .island-tab.active{color:var(--st-cyan);border-bottom-color:var(--st-cyan);}
+        html[data-theme="light"] .island-tab{color:rgba(0,0,0,0.38);}
+        html[data-theme="light"] .island-tab:hover{color:rgba(0,0,0,0.65);}
+        html[data-theme="light"] .island-tab.active{color:#0095b3;border-bottom-color:#0095b3;}
+        html[data-theme="light"] .island-tabs{border-bottom-color:rgba(0,0,0,0.1);}
+        .st-form-ctrl{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.83rem;padding:.4rem .65rem;outline:none;transition:border-color .18s;}
+        .st-form-ctrl:focus{border-color:var(--st-cyan);}
+        .btn-load{background:linear-gradient(135deg,rgba(0,212,255,0.18),rgba(0,128,255,0.14));border:1px solid rgba(0,212,255,0.3);color:var(--st-cyan);border-radius:8px;padding:.4rem 1rem;font-size:.83rem;font-weight:600;cursor:pointer;transition:all .18s;}
+        .btn-load:hover{background:linear-gradient(135deg,rgba(0,212,255,0.28),rgba(0,128,255,0.22));border-color:var(--st-cyan);}
+        .btn-print{background:linear-gradient(135deg,rgba(63,185,80,0.18),rgba(30,120,50,0.14));border:1px solid rgba(63,185,80,0.35);color:var(--st-green);border-radius:8px;padding:.4rem 1rem;font-size:.83rem;font-weight:600;cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;gap:.4rem;}
+        .btn-print:hover{background:linear-gradient(135deg,rgba(63,185,80,0.28),rgba(30,120,50,0.22));border-color:var(--st-green);}
+
+        /* Stat cards */
+        .st-card{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;padding:1.1rem 1rem;height:100%;}
+        .st-card-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:.95rem;margin-bottom:.65rem;}
+        .icon-blue{background:rgba(88,166,255,0.12);color:var(--st-blue);}
+        .icon-green{background:rgba(63,185,80,0.12);color:var(--st-green);}
+        .icon-yellow{background:rgba(240,180,41,0.12);color:var(--st-yellow);}
+        .icon-cyan{background:rgba(0,212,255,0.12);color:var(--st-cyan);}
+        .icon-purple{background:rgba(188,140,255,0.12);color:var(--st-purple);}
+        .st-stat-label{font-size:.72rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.2rem;}
+        .st-stat-val{font-size:1.4rem;font-weight:700;}
+
+        /* Section/table */
+        .st-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;overflow:hidden;margin-bottom:1.2rem;}
+        .st-section-header{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1.2rem;border-bottom:1px solid var(--st-border);}
+        .st-section-title{font-size:.86rem;font-weight:600;color:#fff;}
+        .table{--bs-table-color:#e6edf3;--bs-table-bg:transparent;color:#e6edf3;margin:0;font-size:.81rem;}
+        .table thead th{background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.45);border-color:var(--st-border);font-weight:500;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;padding:.6rem 1rem;}
+        .table tbody td{border-color:rgba(255,255,255,0.04);padding:.65rem 1rem;vertical-align:middle;}
+        .table tbody tr:hover td{background:rgba(0,212,255,0.07);color:#e6edf3;}
+        .pill{display:inline-block;font-size:.7rem;font-weight:500;padding:.2em .65em;border-radius:20px;}
+        .pill-activation{background:rgba(0,212,255,0.13);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.28);}
+        .pill-renewal{background:rgba(188,140,255,0.13);color:var(--st-purple);border:1px solid rgba(188,140,255,0.28);}
+        .empty-state{padding:2.5rem;text-align:center;color:rgba(255,255,255,0.3);font-size:.84rem;}
+        .td-muted{color:rgba(255,255,255,0.5);}
+        html[data-theme="light"] .td-muted{color:rgba(0,0,0,0.45);}
+        .label-muted{color:rgba(255,255,255,0.6);}
+        #table-count{color:rgba(255,255,255,0.4);}
+
+        /* Mobile */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}}
+
+        /* Light mode */
+        html[data-theme="light"] body{background:#f0f2f5;color:#1a1a2e;}
+        html[data-theme="light"] .st-card,html[data-theme="light"] .st-section,html[data-theme="light"] .period-bar{background:#fff;border-color:rgba(0,0,0,0.08);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+        html[data-theme="light"] .st-form-ctrl{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .table{--bs-table-color:#1a1a2e;color:#1a1a2e;}
+        html[data-theme="light"] .table thead th{background:#f6f8fa;color:rgba(0,0,0,0.5);border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .table tbody td{border-color:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .table tbody tr:hover td{color:#1a1a2e;background:rgba(0,149,179,0.06);}
+        html[data-theme="light"] .st-section-header{border-bottom-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .st-section-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-stat-label{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .empty-state{color:rgba(0,0,0,0.35);}
+        html[data-theme="light"] .pill-activation{background:rgba(0,149,179,.1);color:#0095b3;border-color:rgba(0,149,179,.3);}
+        html[data-theme="light"] .pill-renewal{background:rgba(130,80,255,.1);color:#6f42c1;border-color:rgba(130,80,255,.3);}
+        html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .st-page-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.45);}
+        html[data-theme="light"] .st-user-pill{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .label-muted{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] #table-count{color:rgba(0,0,0,0.45);}
+
+        /* ── Print document (hidden on screen, visible on print) ── */
+        .print-doc { display: none; }
+        @media print {
+            body { background: #fff !important; color: #000 !important; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+            .st-sidebar, .st-main > *:not(.print-doc) { display: none !important; }
+            .st-main { margin: 0 !important; padding: 0 !important; }
+            .print-doc { display: block !important; width: 210mm; margin: 0 auto; padding: 12mm 14mm 10mm; font-size: 11pt; color: #000; }
+            .print-doc * { color: #000 !important; border-color: #000 !important; background: none !important; }
+            .pd-header { text-align: center; margin-bottom: 8mm; }
+            .pd-org { font-size: 14pt; font-weight: 800; letter-spacing: .5px; margin-bottom: 2px; }
+            .pd-sub { font-size: 9.5pt; color: #555 !important; margin-bottom: 6mm; }
+            .pd-title { font-size: 13pt; font-weight: 700; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 4px 0; margin: 0 0 6mm; }
+            .pd-meta { display: flex; justify-content: space-between; font-size: 9.5pt; margin-bottom: 5mm; }
+            .pd-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
+            .pd-table th { border: 1px solid #aaa; padding: 5px 8px; font-size: 9pt; background: #eee !important; text-align: left; }
+            .pd-table td { border: 1px solid #aaa; padding: 5px 8px; font-size: 9.5pt; }
+            .pd-table tr.total-row td { font-weight: 700; border-top: 2px solid #000; }
+            .pd-totals { font-size: 10.5pt; margin-bottom: 8mm; }
+            .pd-totals-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #ddd; }
+            .pd-totals-row.grand { font-weight: 800; font-size: 12pt; border-bottom: 2px solid #000; border-top: 2px solid #000; padding: 5px 0; margin-top: 3px; }
+            .pd-signatures { margin-top: 10mm; display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; }
+            .pd-sig-box { border: 1px solid #aaa; border-radius: 4px; padding: 8px 10px; min-height: 32mm; }
+            .pd-sig-label { font-size: 8.5pt; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4mm; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+            .pd-sig-line { border-bottom: 1px solid #888; margin-top: 18mm; }
+            .pd-footer-note { margin-top: 8mm; font-size: 8pt; color: #666 !important; text-align: center; border-top: 1px solid #ddd; padding-top: 4mm; }
+        }
+    </style>
+    <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- Sidebar -->
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">SIGVA Administration</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        {% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire', 'employe'] %}
+        <a href="{{ url_for('smart_tech.rapport_journalier_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-calendar-day"></i></span>Rapport Journalier
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+    <div class="st-bottom-row">
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<!-- Main -->
+<main class="st-main">
+
+    <!-- Topbar -->
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-calendar-day me-2" style="color:var(--st-cyan);"></i>Rapport Journalier QR</div>
+            <div class="st-page-sub" id="page-sub">QR codes validés — sélectionnez une date</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Island tabs (admin/secretaire only) -->
+    {% if current_user.role in ['admin', 'secretaire'] %}
+    <div class="island-tabs" id="island-tabs">
+        <button class="island-tab active" data-island="" onclick="setIsland(this)">Toutes les îles</button>
+        <button class="island-tab" data-island="Grande Comore" onclick="setIsland(this)">Grande Comore</button>
+        <button class="island-tab" data-island="Anjouan" onclick="setIsland(this)">Anjouan</button>
+        <button class="island-tab" data-island="Moheli" onclick="setIsland(this)">Mohéli</button>
+    </div>
+    {% endif %}
+
+    <!-- Date picker bar -->
+    <div class="period-bar">
+        <label class="label-muted" style="font-size:.83rem;">Date :</label>
+        <input type="date" id="input-date" class="st-form-ctrl" value="{{ today }}">
+        <button class="btn-load" onclick="loadReport()"><i class="fas fa-sync-alt me-1"></i>Générer</button>
+        <button class="btn-print" id="btn-print" onclick="window.print()" style="display:none;">
+            <i class="fas fa-print"></i>Imprimer
+        </button>
+    </div>
+
+    <!-- Stat cards (hidden until loaded) -->
+    <div id="stats-row" class="row g-3 mb-4" style="display:none!important;">
+        <div class="col-6 col-md-3">
+            <div class="st-card">
+                <div class="st-card-icon icon-cyan"><i class="fas fa-qrcode"></i></div>
+                <div class="st-stat-label">Total QR validés</div>
+                <div class="st-stat-val" id="s-total">0</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="st-card">
+                <div class="st-card-icon icon-blue"><i class="fas fa-plus-circle"></i></div>
+                <div class="st-stat-label">Activations</div>
+                <div class="st-stat-val" style="color:var(--st-cyan);" id="s-act">0</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="st-card">
+                <div class="st-card-icon icon-purple"><i class="fas fa-redo"></i></div>
+                <div class="st-stat-label">Renouvellements</div>
+                <div class="st-stat-val" style="color:var(--st-purple);" id="s-ren">0</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="st-card">
+                <div class="st-card-icon icon-green"><i class="fas fa-coins"></i></div>
+                <div class="st-stat-label">Montant total</div>
+                <div class="st-stat-val" style="color:var(--st-green);" id="s-amount">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table section -->
+    <div class="st-section" id="table-section" style="display:none;">
+        <div class="st-section-header">
+            <span class="st-section-title"><i class="fas fa-list me-2" style="color:var(--st-cyan);"></i>Détail des validations</span>
+            <span style="font-size:.76rem;" id="table-count"></span>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Heure</th>
+                        <th>Immatriculation</th>
+                        <th>Propriétaire</th>
+                        {% if current_user.role in ['admin', 'secretaire'] %}<th>Île</th>{% endif %}
+                        <th>Type</th>
+                        <th class="text-end">Montant (FC)</th>
+                        <th>Enregistré par</th>
+                    </tr>
+                </thead>
+                <tbody id="main-tbody">
+                    <tr><td colspan="6" class="empty-state">—</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="st-section" style="display:none;">
+        <div class="empty-state">
+            <i class="fas fa-calendar-times fa-2x mb-3" style="opacity:.3;"></i><br>
+            Aucun QR code validé ce jour-là.
+        </div>
+    </div>
+
+    <!-- Print document (hidden on screen) -->
+    <div class="print-doc" id="print-doc">
+        <div class="pd-header">
+            <div class="pd-org">SMART DEVELOPMENT</div>
+            <div class="pd-sub">Système de Gestion des QR Codes Véhicules — SIGVA</div>
+            <div class="pd-title">RAPPORT JOURNALIER DE VALIDATION QR</div>
+        </div>
+        <div class="pd-meta">
+            <span><strong>Date :</strong> <span id="pd-date">—</span></span>
+            <span><strong>Généré le :</strong> <span id="pd-generated">—</span></span>
+        </div>
+
+        <table class="pd-table" id="pd-table">
+            <thead>
+                <tr>
+                    <th style="width:10%;">Heure</th>
+                    <th style="width:18%;">Immatriculation</th>
+                    <th style="width:28%;">Propriétaire</th>
+                    <th style="width:16%;">Type</th>
+                    <th style="width:14%;text-align:right;">Montant (FC)</th>
+                    <th style="width:14%;">Enregistré par</th>
+                </tr>
+            </thead>
+            <tbody id="pd-tbody"></tbody>
+        </table>
+
+        <div class="pd-totals">
+            <div class="pd-totals-row">
+                <span>Nombre d'activations</span>
+                <span id="pd-nb-act">—</span>
+            </div>
+            <div class="pd-totals-row">
+                <span>Nombre de renouvellements</span>
+                <span id="pd-nb-ren">—</span>
+            </div>
+            <div class="pd-totals-row grand">
+                <span>TOTAL À PERCEVOIR</span>
+                <span id="pd-total">—</span>
+            </div>
+        </div>
+
+        <div class="pd-signatures">
+            <div class="pd-sig-box">
+                <div class="pd-sig-label">Responsable Smart Development</div>
+                <div style="font-size:9pt;margin-bottom:2mm;">Nom &amp; Prénom :</div>
+                <div class="pd-sig-line"></div>
+                <div style="font-size:8pt;margin-top:3mm;">Signature &amp; Cachet</div>
+            </div>
+            <div class="pd-sig-box">
+                <div class="pd-sig-label">Autorité de contrôle</div>
+                <div style="font-size:9pt;margin-bottom:2mm;">Nom &amp; Prénom :</div>
+                <div class="pd-sig-line"></div>
+                <div style="font-size:8pt;margin-top:3mm;">Signature &amp; Cachet</div>
+            </div>
+        </div>
+
+        <div class="pd-footer-note">
+            Ce document atteste des QR codes validés par Smart Development pour la date indiquée et du montant correspondant dû.
+        </div>
+    </div>
+
+</main>
+
+<script>
+// Theme toggle
+const themeBtn = document.getElementById('theme-toggle');
+const themeIcon = document.getElementById('theme-icon');
+function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('st_theme', t);
+    themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+}
+applyTheme(localStorage.getItem('st_theme') || 'dark');
+themeBtn.addEventListener('click', () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+
+// Mobile sidebar
+function openSidebar() {
+    document.querySelector('.st-sidebar').classList.add('mob-open');
+    document.getElementById('mob-overlay').classList.add('active');
+}
+function closeSidebar() {
+    document.querySelector('.st-sidebar').classList.remove('mob-open');
+    document.getElementById('mob-overlay').classList.remove('active');
+}
+
+function fmtNum(n) { return Number(n).toLocaleString('fr-FR'); }
+function fmtNow() {
+    const now = new Date();
+    return now.toLocaleDateString('fr-FR') + ' à ' + now.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+}
+
+const SHOW_ISLAND = {{ 'true' if current_user.role in ['admin', 'secretaire'] else 'false' }};
+
+let _lastData = null;
+let _selectedIsland = '';
+
+function setIsland(btn) {
+    document.querySelectorAll('.island-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    _selectedIsland = btn.dataset.island;
+    loadReport();
+}
+
+async function loadReport() {
+    const day = document.getElementById('input-date').value;
+    if (!day) return;
+
+    document.getElementById('stats-row').style.setProperty('display', 'none', 'important');
+    document.getElementById('table-section').style.display = 'none';
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('btn-print').style.display = 'none';
+
+    let url = '/smart-tech/api/rapport-journalier?date=' + day;
+    if (_selectedIsland) url += '&island=' + encodeURIComponent(_selectedIsland);
+    const res = await fetch(url, {credentials: 'same-origin'});
+    if (!res.ok) { alert('Erreur de chargement.'); return; }
+    const d = await res.json();
+    _lastData = d;
+
+    document.getElementById('page-sub').textContent = 'QR codes validés le ' + d.date;
+
+    document.getElementById('s-total').textContent  = d.nb_total;
+    document.getElementById('s-act').textContent    = d.nb_activations;
+    document.getElementById('s-ren').textContent    = d.nb_renewals;
+    document.getElementById('s-amount').textContent = fmtNum(d.total_amount) + ' FC';
+
+    document.getElementById('stats-row').style.removeProperty('display');
+    document.getElementById('stats-row').style.display = 'flex';
+
+    if (!d.rows.length) {
+        document.getElementById('empty-state').style.display = 'block';
+        return;
+    }
+
+    // Main table
+    document.getElementById('main-tbody').innerHTML = d.rows.map(r => `
+        <tr>
+            <td class="td-muted" style="font-size:.75rem;">${r.paid_at}</td>
+            <td class="fw-semibold">${r.license_plate}</td>
+            <td>${r.owner_name}</td>
+            ${SHOW_ISLAND ? `<td class="td-muted" style="font-size:.78rem;">${r.owner_island || '—'}</td>` : ''}
+            <td><span class="pill pill-${r.payment_type}">${r.payment_type === 'activation' ? 'Activation' : 'Renouvellement'}</span></td>
+            <td class="text-end fw-semibold">${fmtNum(r.amount)}</td>
+            <td class="td-muted" style="font-size:.78rem;">${r.recorded_by}</td>
+        </tr>`).join('');
+
+    document.getElementById('table-count').textContent = d.nb_total + ' enregistrement' + (d.nb_total > 1 ? 's' : '');
+    document.getElementById('table-section').style.display = 'block';
+
+    // Print document
+    document.getElementById('pd-date').textContent      = d.date;
+    document.getElementById('pd-generated').textContent = fmtNow();
+    document.getElementById('pd-nb-act').textContent    = d.nb_activations + ' activation' + (d.nb_activations !== 1 ? 's' : '');
+    document.getElementById('pd-nb-ren').textContent    = d.nb_renewals + ' renouvellement' + (d.nb_renewals !== 1 ? 's' : '');
+    document.getElementById('pd-total').textContent     = fmtNum(d.total_amount) + ' FC';
+
+    document.getElementById('pd-tbody').innerHTML = d.rows.map(r =>
+        `<tr>
+            <td>${r.paid_at}</td>
+            <td>${r.license_plate}</td>
+            <td>${r.owner_name}</td>
+            <td>${r.payment_type === 'activation' ? 'Activation' : 'Renouvellement'}</td>
+            <td style="text-align:right;">${fmtNum(r.amount)}</td>
+            <td>${r.recorded_by}</td>
+        </tr>`).join('');
+
+    document.getElementById('btn-print').style.display = 'inline-flex';
+}
+
+// Auto-load today
+loadReport();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.stat-card {
+  background:#fff; border-radius:12px; padding:20px 24px;
+  border:1px solid #e5e7eb; box-shadow:0 1px 4px rgba(0,0,0,.06);
+}
+.stat-label { font-size:12px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.05em; color:#6b7280; margin-bottom:6px; }
+.stat-value { font-size:32px; font-weight:800; line-height:1; }
+.stat-sub   { font-size:12px; color:#9ca3af; margin-top:6px; }
+#rec-table th { font-size:12px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.04em; color:#6b7280; border-bottom:2px solid #e5e7eb; }
+#rec-table td { font-size:13.5px; vertical-align:middle; }
+</style>
+
+<div class="container-fluid py-4 px-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h4 class="fw-bold mb-0"><i class="fas fa-coins text-success me-2"></i>Recettes — Cartes Grises</h4>
+      <small class="text-muted">Montant encaissé sur les cartes grises provisoires signées</small>
+    </div>
+  </div>
+
+  <!-- Filtres -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-auto">
+          <label class="form-label fw-semibold mb-1" style="font-size:13px;">Du</label>
+          <input type="date" class="form-control form-control-sm" id="f-date-from">
+        </div>
+        <div class="col-auto">
+          <label class="form-label fw-semibold mb-1" style="font-size:13px;">Au</label>
+          <input type="date" class="form-control form-control-sm" id="f-date-to">
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-primary btn-sm" onclick="loadData()">
+            <i class="fas fa-search me-1"></i>Filtrer
+          </button>
+          <button class="btn btn-outline-secondary btn-sm ms-1" onclick="resetFilter()">
+            <i class="fas fa-times me-1"></i>Réinitialiser
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cartes stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+      <div class="stat-card" style="border-left:4px solid #3b82f6;">
+        <div class="stat-label">Véhicules enregistrés</div>
+        <div class="stat-value text-primary" id="s-count">—</div>
+        <div class="stat-sub">Cartes grises signées</div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="stat-card" style="border-left:4px solid #10b981;">
+        <div class="stat-label">Montant total encaissé</div>
+        <div class="stat-value text-success" id="s-total">—</div>
+        <div class="stat-sub">Somme des prix saisis</div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="stat-card" style="border-left:4px solid #f59e0b;">
+        <div class="stat-label">Sans prix renseigné</div>
+        <div class="stat-value text-warning" id="s-missing">—</div>
+        <div class="stat-sub">CGs signées sans montant</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tableau -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <div class="px-4 py-3 d-flex align-items-center justify-content-between border-bottom">
+        <span class="fw-semibold" style="font-size:14px;">
+          Détail des cartes grises signées
+          <span class="text-muted fw-normal ms-1" id="row-count"></span>
+        </span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="rec-table">
+          <thead>
+            <tr>
+              <th class="px-4">Immatriculation</th>
+              <th>Propriétaire</th>
+              <th>Date de signature</th>
+              <th>Date d'émission</th>
+              <th class="text-end pe-4">Prix (FC)</th>
+            </tr>
+          </thead>
+          <tbody id="rec-tbody">
+            <tr><td colspan="5" class="text-center text-muted py-4">
+              <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function fmt(n) {
+  if (n === null || n === undefined) return '<span class="text-muted">—</span>';
+  return Number(n).toLocaleString('fr-FR') + ' FC';
+}
+function fmtTotal(n) {
+  return Number(n).toLocaleString('fr-FR') + ' FC';
+}
+
+async function loadData() {
+  const from = document.getElementById('f-date-from').value;
+  const to   = document.getElementById('f-date-to').value;
+  let url = '/api/dgrtr/recettes-cg';
+  const params = [];
+  if (from) params.push('date_from=' + from);
+  if (to)   params.push('date_to='   + to);
+  if (params.length) url += '?' + params.join('&');
+
+  const tbody = document.getElementById('rec-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+
+  try {
+    const res  = await fetch(url, { credentials: 'same-origin' });
+    const data = await res.json();
+
+    document.getElementById('s-count').textContent   = data.count;
+    document.getElementById('s-total').textContent   = fmtTotal(data.total_montant);
+    document.getElementById('s-missing').textContent = data.count - data.nb_avec_prix;
+    document.getElementById('row-count').textContent = `(${data.count})`;
+
+    if (!data.rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-inbox me-2"></i>Aucun résultat</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.rows.map(r => `
+      <tr>
+        <td class="px-4 fw-bold">${r.license_plate}</td>
+        <td>${r.civilite ? r.civilite + ' ' : ''}${r.owner_name}</td>
+        <td>${r.signed_at || '—'}</td>
+        <td>${r.date_emission || '—'}</td>
+        <td class="text-end pe-4 fw-semibold">${fmt(r.prix)}</td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Erreur de chargement</td></tr>';
+  }
+}
+
+function resetFilter() {
+  document.getElementById('f-date-from').value = '';
+  document.getElementById('f-date-to').value   = '';
+  loadData();
+}
+
+loadData();
+</script>
+
+{% endblock %}

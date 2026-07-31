@@ -219,13 +219,13 @@
         <!-- Island tabs -->
         <ul class="nav nav-tabs mb-3" id="cg-island-tabs">
           <li class="nav-item" id="cg-tab-gc">
-            <button class="nav-link active" onclick="switchCgIsland('Grande Comores')">🏝 Grande Comores</button>
+            <button class="nav-link active" onclick="switchCgIsland('Grande Comore')">🏝 Grande Comore</button>
           </li>
           <li class="nav-item" id="cg-tab-aj">
             <button class="nav-link" onclick="switchCgIsland('Anjouan')">🏝 Anjouan</button>
           </li>
           <li class="nav-item" id="cg-tab-mh">
-            <button class="nav-link" onclick="switchCgIsland('Moheli')">🏝 Moheli</button>
+            <button class="nav-link" onclick="switchCgIsland('Moheli')">🏝 Mohéli</button>
           </li>
         </ul>
 
@@ -313,65 +313,61 @@
       </div>
       <div class="modal-body">
 
-        <!-- Info véhicule (readonly) -->
-        <div class="alert alert-light border mb-3 p-3" id="cg-vehicle-summary"></div>
+        <!-- Info véhicule + CG complémentaires (tout en lecture seule) -->
+        <div class="border rounded p-3 mb-4 bg-light" id="cg-vehicle-summary" style="font-size:13px;"></div>
 
-        <hr class="my-3">
-        <h6 class="fw-semibold text-secondary mb-3">Informations complémentaires</h6>
+        <!-- Mise à jour civilité + prix sur CG signée (aperçu) -->
+        <div id="cg-signed-update" class="d-none mt-3 p-3 border rounded bg-light">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold mb-1" style="font-size:13px;">Civilité</label>
+              <select class="form-select form-select-sm" id="cg-civilite-signed">
+                <option value="">-- Choisir --</option>
+                <option value="Mr">Mr</option>
+                <option value="Mme">Mme</option>
+                <option value="Mlle">Mlle</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <button class="btn btn-sm btn-success w-100" onclick="saveSignedUpdate()">
+                <i class="fas fa-save me-1"></i>Mettre à jour
+              </button>
+            </div>
+          </div>
+        </div>
 
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Carrosserie</label>
-            <select class="form-select" id="cg-carrosserie">
-              <option value="">— Sélectionner —</option>
-              <option>Solo</option>
-              <option>Berline</option>
-              <option>Break</option>
-              <option>SUV</option>
-              <option>Pick-up</option>
-              <option>Fourgon</option>
-              <option>Camionnette</option>
-              <option>Bus</option>
-              <option>Minibus</option>
-              <option>Camion</option>
-              <option>Tricycle</option>
-              <option>Autre</option>
+        <!-- Champs éditables -->
+        <div class="row g-3" id="cg-editable-fields">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Civilité <span class="text-danger">*</span></label>
+            <select class="form-select" id="cg-civilite">
+              <option value="">-- Choisir --</option>
+              <option value="Mr">Mr</option>
+              <option value="Mme">Mme</option>
+              <option value="Mlle">Mlle</option>
             </select>
           </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Profession du propriétaire</label>
-            <input type="text" class="form-control" id="cg-profession" placeholder="ex: Commerçant, Fonctionnaire…">
-          </div>
           <div class="col-md-4">
-            <label class="form-label fw-semibold">Places assises</label>
-            <input type="text" class="form-control" id="cg-places" placeholder="ex: 002">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label fw-semibold">Poids total autorisé (kg)</label>
-            <input type="text" class="form-control" id="cg-poids-total" placeholder="ex: 1500">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label fw-semibold">Poids à vide (kg)</label>
-            <input type="text" class="form-control" id="cg-poids-vide" placeholder="ex: 900">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Charge utile PTC (kg)</label>
-            <input type="text" class="form-control" id="cg-charge-utile" placeholder="ex: 600">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Date d'émission</label>
+            <label class="form-label fw-semibold">Date d'émission <span class="text-danger">*</span></label>
             <input type="date" class="form-control" id="cg-date-emission">
           </div>
-          <div class="col-12">
-            <label class="form-label fw-semibold">Observation</label>
-            <textarea class="form-control" id="cg-observation" rows="2" placeholder="Observations…"></textarea>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Prix (FC) <span class="text-danger">*</span></label>
+            <input type="number" min="0" step="any" class="form-control" id="cg-prix" placeholder="ex: 25000">
           </div>
+        </div>
+
+        <!-- Hidden inputs to keep JS references intact -->
+        <div style="display:none;">
+          <input id="cg-carrosserie"><input id="cg-profession"><input id="cg-places">
+          <input id="cg-poids-total"><input id="cg-poids-vide"><input id="cg-charge-utile">
+          <input id="cg-observation">
         </div>
 
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-success" onclick="saveCG()">
+        <button type="button" id="btn-save-cg" class="btn btn-success" onclick="saveCG()">
           <i class="fas fa-save me-1"></i>Enregistrer
         </button>
         <button type="button" id="btn-request-sig" class="btn btn-warning d-none" onclick="requestSignature()">
@@ -393,7 +389,7 @@
 const USER_ROLE = {{ current_user.role | tojson }};
 const USER_DGRTR_TYPE = {{ (current_user.dgrtr_type or '') | tojson }};
 const USER_COUNTRY = {{ (current_user.country or '') | tojson }};
-let _activeIsland = 'Grande Comores';
+let _activeIsland = 'Grande Comore';
 let _currentVehicleId = null;
 let _searchTimer = null;
 let _allVehicles = [];
@@ -526,7 +522,7 @@ function saveCgSigPad() {
 
 /* ── Paramètres ── */
 const _CG_ISLAND_TABS = {
-  'Grande Comores': 'cg-tab-gc',
+  'Grande Comore': 'cg-tab-gc',
   'Anjouan':        'cg-tab-aj',
   'Moheli':         'cg-tab-mh',
 };
@@ -570,9 +566,9 @@ async function switchCgIsland(island) {
 
 async function openSettings() {
   if (USER_DGRTR_TYPE === 'directeur_regional') {
-    _activeIsland = USER_COUNTRY || 'Grande Comores';
+    _activeIsland = USER_COUNTRY || 'Grande Comore';
   } else {
-    _activeIsland = 'Grande Comores';
+    _activeIsland = 'Grande Comore';
   }
   _setupCgIslandTabs();
   _setCgIslandActiveTab(_activeIsland);
@@ -620,12 +616,14 @@ function rowActions(v) {
   const cg = v.carte_grise;
   const status = cg ? (cg.status || 'brouillon') : null;
   const vj = JSON.stringify(v).replace(/"/g,'&quot;');
-  let btns = `<button class="btn btn-sm btn-outline-primary" onclick="openCG(${vj})">
-    <i class="fas fa-edit me-1"></i>${v.has_carte_grise ? 'Modifier' : 'Saisir'}
-  </button>`;
-  if (USER_ROLE === 'judiciaire' && v.carte_grise && status !== 'signee') {
-    btns += ` <button class="btn btn-sm btn-warning" onclick="_quickRequestSig(${v.id})">
-      <i class="fas fa-paper-plane me-1"></i>Envoyer
+  let btns = '';
+  if (status !== 'en_attente' && status !== 'signee') {
+    btns += `<button class="btn btn-sm btn-outline-primary" onclick="openCG(${vj})">
+      <i class="fas fa-edit me-1"></i>${v.has_carte_grise ? 'Modifier' : 'Saisir'}
+    </button>`;
+  } else {
+    btns += `<button class="btn btn-sm btn-outline-secondary" onclick="openCG(${vj}, true)">
+      <i class="fas fa-eye me-1"></i>Aperçu
     </button>`;
   }
   if ((USER_ROLE === 'dgrtr' || USER_ROLE === 'administrateur') && status === 'en_attente') {
@@ -636,6 +634,9 @@ function rowActions(v) {
   if (status === 'signee') {
     btns += ` <a href="/dgrtr/cartes-grises/${v.id}/print" target="_blank" class="btn btn-sm btn-primary">
       <i class="fas fa-print me-1"></i>Imprimer
+    </a>`;
+    btns += ` <a href="/dgrtr/cartes-grises/${v.id}/print?print=receipt" target="_blank" class="btn btn-sm btn-success">
+      <i class="fas fa-receipt me-1"></i>Reçu
     </a>`;
   }
   return btns;
@@ -716,31 +717,63 @@ async function _quickRequestSig(vehicleId) {
   } catch(e) { alert('Erreur : ' + e.message); }
 }
 
-function openCG(v) {
+function openCG(v, apercu = false) {
   _currentVehicleId = v.id;
   const cg = v.carte_grise || {};
   const status = cg.status || 'brouillon';
 
+  const _r = (v) => v || '—';
+  const _cgRow = (label, val) => val
+    ? `<div class="col-6"><span class="text-muted">${label} :</span> <b>${val}</b></div>`
+    : '';
+
+  const prixFormatted = (cg.prix !== undefined && cg.prix !== '') ? Number(cg.prix).toLocaleString('fr-FR') + ' FC' : '';
+
   document.getElementById('cg-vehicle-summary').innerHTML = `
-    <div class="row g-2" style="font-size:13px;">
-      <div class="col-6"><b>Immatriculation :</b> ${v.license_plate}</div>
-      <div class="col-6"><b>Propriétaire :</b> ${v.owner_name}</div>
-      <div class="col-6"><b>Genre :</b> ${v.vehicle_type || '—'}</div>
-      <div class="col-6"><b>Marque :</b> ${v.make || '—'} ${v.model || ''}</div>
-      <div class="col-6"><b>Carburant :</b> ${v.fuel_type || '—'}</div>
-      <div class="col-6"><b>Puissance :</b> ${v.cv_class || '—'}</div>
-      <div class="col-12"><b>N° série :</b> ${v.vin || '—'}</div>
-      <div class="col-12"><b>Domicile :</b> ${v.owner_address || '—'}</div>
+    <div class="row g-2">
+      <div class="col-6"><span class="text-muted">Immatriculation :</span> <b>${v.license_plate}</b></div>
+      <div class="col-6"><span class="text-muted">Propriétaire :</span> <b>${_r(v.owner_name)}</b></div>
+      <div class="col-6"><span class="text-muted">Genre :</span> <b>${_r(v.vehicle_type)}</b></div>
+      <div class="col-6"><span class="text-muted">Marque :</span> <b>${_r(v.make)} ${v.model || ''}</b></div>
+      <div class="col-6"><span class="text-muted">Carburant :</span> <b>${_r(v.fuel_type)}</b></div>
+      <div class="col-6"><span class="text-muted">Puissance :</span> <b>${_r(v.cv_class)}</b></div>
+      <div class="col-6"><span class="text-muted">N° série :</span> <b>${_r(v.vin)}</b></div>
+      <div class="col-6"><span class="text-muted">Domicile :</span> <b>${_r(v.owner_address)}</b></div>
+      ${_cgRow('Carrosserie', cg.carrosserie)}
+      ${_cgRow('Profession', cg.profession_proprietaire)}
+      ${_cgRow('Places assises', cg.places_assises)}
+      ${_cgRow('Poids total autorisé', cg.poids_total_autorise ? cg.poids_total_autorise + ' kg' : '')}
+      ${_cgRow('Poids à vide', cg.poids_a_vide ? cg.poids_a_vide + ' kg' : '')}
+      ${_cgRow('Charge utile PTC', cg.charge_utile_ptc ? cg.charge_utile_ptc + ' kg' : '')}
+      ${_cgRow('Observation', cg.observation)}
+      ${apercu ? _cgRow("Date d'émission", cg.date_emission || '') : ''}
+      ${apercu ? _cgRow('Prix de la carte grise', prixFormatted) : ''}
     </div>`;
 
-  document.getElementById('cg-carrosserie').value   = cg.carrosserie || '';
-  document.getElementById('cg-profession').value    = cg.profession_proprietaire || '';
-  document.getElementById('cg-places').value        = cg.places_assises || '';
-  document.getElementById('cg-poids-total').value   = cg.poids_total_autorise || '';
-  document.getElementById('cg-poids-vide').value    = cg.poids_a_vide || '';
-  document.getElementById('cg-charge-utile').value  = cg.charge_utile_ptc || '';
+  // Show/hide editable fields and save button depending on mode
+  document.getElementById('cg-editable-fields').style.display = apercu ? 'none' : '';
+  document.getElementById('btn-save-cg').classList.toggle('d-none', apercu);
+
+  // In aperçu (signed), show civilite+prix update form
+  const signedUpdate = document.getElementById('cg-signed-update');
+  if (apercu && status === 'signee') {
+    signedUpdate.classList.remove('d-none');
+    document.getElementById('cg-civilite-signed').value = cg.civilite || '';
+  } else {
+    signedUpdate.classList.add('d-none');
+  }
+
+  // Populate hidden inputs (needed by requestSignature check)
+  document.getElementById('cg-carrosserie').value  = cg.carrosserie || '';
+  document.getElementById('cg-profession').value   = cg.profession_proprietaire || '';
+  document.getElementById('cg-places').value       = cg.places_assises || '';
+  document.getElementById('cg-poids-total').value  = cg.poids_total_autorise || '';
+  document.getElementById('cg-poids-vide').value   = cg.poids_a_vide || '';
+  document.getElementById('cg-charge-utile').value = cg.charge_utile_ptc || '';
+  document.getElementById('cg-observation').value  = cg.observation || '';
+  document.getElementById('cg-civilite').value      = cg.civilite || '';
   document.getElementById('cg-date-emission').value = cg.date_emission || '';
-  document.getElementById('cg-observation').value   = cg.observation || '';
+  document.getElementById('cg-prix').value          = cg.prix !== undefined && cg.prix !== '' ? cg.prix : '';
 
   // Judiciaire : Envoyer pour signature si carte saisie et pas encore signée
   document.getElementById('btn-request-sig').classList.toggle('d-none',
@@ -762,17 +795,36 @@ function openCG(v) {
   new bootstrap.Modal(document.getElementById('cgModal')).show();
 }
 
+async function saveSignedUpdate() {
+  if (!_currentVehicleId) return;
+  const civilite = document.getElementById('cg-civilite-signed').value;
+  if (!civilite) { alert('Veuillez choisir une civilité.'); return; }
+  try {
+    const res = await fetch(`/api/dgrtr/cartes-grises/${_currentVehicleId}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ civilite }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    const v = _allVehicles.find(x => x.id === _currentVehicleId);
+    if (v) v.carte_grise = data.carte_grise;
+    showToast('Mis à jour.');
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
 async function saveCG() {
   if (!_currentVehicleId) return;
+  const civiliteVal = document.getElementById('cg-civilite').value;
+  const dateVal = document.getElementById('cg-date-emission').value.trim();
+  const prixVal = document.getElementById('cg-prix').value.trim();
+  if (!civiliteVal || !dateVal || !prixVal) {
+    alert('Veuillez renseigner la Civilité, la Date d\'émission et le Prix avant d\'enregistrer.');
+    return;
+  }
   const payload = {
-    carrosserie:             document.getElementById('cg-carrosserie').value.trim(),
-    profession_proprietaire: document.getElementById('cg-profession').value.trim(),
-    places_assises:          document.getElementById('cg-places').value.trim(),
-    poids_total_autorise:    document.getElementById('cg-poids-total').value.trim(),
-    poids_a_vide:            document.getElementById('cg-poids-vide').value.trim(),
-    charge_utile_ptc:        document.getElementById('cg-charge-utile').value.trim(),
-    date_emission:           document.getElementById('cg-date-emission').value,
-    observation:             document.getElementById('cg-observation').value.trim(),
+    civilite:      civiliteVal,
+    date_emission: dateVal,
+    prix:          prixVal,
   };
   try {
     const res = await fetch(`/api/dgrtr/cartes-grises/${_currentVehicleId}`, {
@@ -791,6 +843,30 @@ async function saveCG() {
 
 async function requestSignature() {
   if (!_currentVehicleId) return;
+
+  const dateVal = document.getElementById('cg-date-emission').value.trim();
+  const prixVal = document.getElementById('cg-prix').value.trim();
+  if (!dateVal || !prixVal) {
+    alert('Veuillez renseigner la Date d\'émission et le Prix de la carte grise avant d\'envoyer pour signature.');
+    return;
+  }
+
+  // Save date + prix before sending for signature
+  try {
+    const saveRes = await fetch(`/api/dgrtr/cartes-grises/${_currentVehicleId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ civilite: document.getElementById('cg-civilite').value, date_emission: dateVal, prix: prixVal }),
+    });
+    if (!saveRes.ok) throw new Error('Erreur lors de la sauvegarde');
+    const saveData = await saveRes.json();
+    const v = _allVehicles.find(x => x.id === _currentVehicleId);
+    if (v) { v.carte_grise = saveData.carte_grise; v.has_carte_grise = true; }
+  } catch(e) {
+    alert('Erreur lors de la sauvegarde : ' + e.message);
+    return;
+  }
+
   try {
     const res = await fetch(`/api/dgrtr/cartes-grises/${_currentVehicleId}/request-signature`, { method: 'POST' });
     const data = await res.json();

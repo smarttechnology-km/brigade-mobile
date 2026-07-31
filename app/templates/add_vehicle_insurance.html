@@ -220,7 +220,7 @@ function renderLicenseTags() {
 }
 
 var INS_WORK_ZONE_BY_ISLAND = {
-    'Grande Comores': ['Centre-ville (Moroni)', 'Mitsamiouli', 'Mbéni', 'Foumbouni', 'Sima', 'Ntsoudjini', 'Autre région'],
+    'Grande Comore': ['Centre-ville (Moroni)', 'Mitsamiouli', 'Mbéni', 'Foumbouni', 'Sima', 'Ntsoudjini', 'Autre région'],
     'Anjouan':        ['Centre-ville (Mutsamudu)', 'Domoni', 'Ouani', 'Sima', 'Koni', 'Bambao', 'Autre région'],
     'Moheli':         ['Centre-ville (Fomboni)', 'Nioumachoua', 'Djando', 'Miringoni', 'Ouallah', 'Autre région'],
 };
@@ -240,7 +240,7 @@ function refreshInsWorkZoneOptions(currentZone) {
             allZones.push(z);
         });
     } else {
-        ['Grande Comores', 'Anjouan', 'Moheli'].forEach(function(ile) {
+        ['Grande Comore', 'Anjouan', 'Moheli'].forEach(function(ile) {
             var grp = document.createElement('optgroup');
             grp.label = '🏝️ ' + ile;
             INS_WORK_ZONE_BY_ISLAND[ile].forEach(function(z) {

@@ -92,8 +92,7 @@
       margin: 7px auto;
     }
     .service-left {
-      font-weight: 700; font-size: 10.5px;
-      text-transform: uppercase; letter-spacing: .04em;
+      font-size: 10.5px;
       text-align: center;
       line-height: 1.5;
     }
@@ -122,7 +121,7 @@
       display: flex;
       flex-direction: column;
     }
-    .doc-fields { flex: 1; }
+    .doc-fields { }
 
     .intro-text { font-size: 15.5px; margin-bottom: 8px; }
 
@@ -163,11 +162,12 @@
       display: flex;
       justify-content: space-between;
       align-items: flex-end;
-      margin-top: 22px;
+      margin-top: 40px;
     }
     .remark-block { font-size: 14px; line-height: 1.9; font-weight: 700; }
     .remark-block .remark-title { text-decoration: underline; margin-bottom: 4px; }
 
+    .qr-block { text-align: center; min-width: 110px; }
     .sig-block { text-align: center; min-width: 220px; }
     .sig-date { font-size: 15px; margin-bottom: 22px; }
     .sig-space {
@@ -199,13 +199,75 @@
       position: relative; z-index: 1;
     }
 
+    /* ── Reçu de paiement ── */
+    .receipt-page {
+      display: none;
+      width: 210mm;
+      margin: 24px auto 0;
+      background: #fff;
+      border: 1px solid #bbb;
+      box-shadow: 0 2px 16px rgba(0,0,0,.15);
+      padding: 10mm 14mm;
+      font-family: 'Times New Roman', Times, serif;
+      color: #000;
+    }
+    body.print-receipt-only .receipt-page { display: block; }
+    .receipt-title {
+      text-align: center;
+      font-size: 18px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: #004a99;
+      margin-bottom: 6px;
+    }
+    .receipt-subtitle {
+      text-align: center; font-size: 13px; color: #555;
+      margin-bottom: 20px;
+    }
+    .receipt-divider {
+      border: none; border-top: 2px solid #004a99; margin: 14px 0;
+    }
+    .receipt-row {
+      display: flex; justify-content: space-between;
+      font-size: 14px; padding: 5px 0;
+      border-bottom: 1px dotted #ccc;
+    }
+    .receipt-row .rl { color: #555; }
+    .receipt-row .rv { font-weight: 700; }
+    .receipt-amount {
+      text-align: center; margin: 20px 0 10px;
+      font-size: 26px; font-weight: 700; color: #004a99;
+      letter-spacing: .02em;
+    }
+    .receipt-amount-label {
+      text-align: center; font-size: 13px; color: #666; margin-bottom: 20px;
+    }
+    .receipt-sig {
+      display: flex; justify-content: flex-end; margin-top: 24px;
+    }
+    .receipt-sig-block { text-align: center; min-width: 200px; }
+    .receipt-sig-block .rs-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+    .receipt-sig-block img { height: 55px; max-width: 170px; object-fit: contain; display: block; margin: 0 auto 4px; }
+    .receipt-sig-block .rs-name {
+      font-size: 13px; font-weight: 700; text-transform: uppercase;
+      border-top: 1.5px solid #000; padding-top: 5px; margin-top: 4px;
+    }
+    .receipt-footer {
+      margin-top: 18px; padding-top: 6px;
+      border-top: 1px solid #aaa;
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: #555;
+    }
+
     /* ── Impression ── */
     @page {
       size: A4 portrait;
       margin: 0;
     }
     @media print {
-      body { background: #fff; padding: 0; margin: 0; }
+      body {
+        background: #fff; padding: 0; margin: 0;
+        break-after: avoid; page-break-after: avoid;
+      }
       .toolbar { display: none; }
       .document {
         border: none; box-shadow: none;
@@ -214,6 +276,7 @@
         min-height: unset;
         overflow: hidden;
         margin: 0;
+        break-after: avoid;
         page-break-after: avoid;
         padding: 7mm 14mm 6mm 14mm;
       }
@@ -221,13 +284,19 @@
       .field-block { margin-bottom: 13px; }
       .g2 { margin-bottom: 13px; }
       .g3 { margin-bottom: 13px; }
-      .doc-bottom { margin-top: 14px; }
+      .doc-bottom { margin-top: 40px; }
       .doc-footer {
         color: #000;
         border-top-color: #000;
         margin-top: 10px;
       }
       .sig-space { border-color: transparent; color: transparent; }
+      /* Receipt (only in DOM when ?print=receipt) */
+      .receipt-page {
+        border: none; box-shadow: none;
+        width: 210mm; margin: 0; padding: 12mm 14mm;
+      }
+      .receipt-footer { color: #000; border-top-color: #000; }
     }
   </style>
 </head>
@@ -241,9 +310,14 @@
     <button class="btn-print" onclick="window.print()">&#128424; Imprimer</button>
   </div>
 </div>
+{% if request.args.get('print') == 'receipt' %}
+<script>
+  window.addEventListener('load', function () { window.print(); });
+</script>
+{% endif %}
 
 <!-- Document -->
-<div class="document">
+<div class="document"{% if request.args.get('print') == 'receipt' %} style="display:none!important;"{% endif %}>
 
   <img class="watermark" src="/static/img/logo_comores.png" alt="">
 
@@ -255,11 +329,10 @@
       <hr class="left-sep">
       <div class="ministere">
         Ministère de l'Aménagement du<br>
-        Territoire, de l'Urbanisme, des Transports<br>
-        Terrestres, chargé des Affaires Foncières
+        Territoire, de l'Urbanisme chargé des Affaires Foncières, des Transports Terrestres<br> 
       </div>
       <hr class="left-sep">
-      <div class="service-left">SERVICE DE LA CIRCULATION<br>ET DE LA SECURITE ROUTIERE</div>
+      <div class="service-left">Direction Générale des Routes<br>et de Transport Routière</div>
     </div>
 
     <div class="header-center">
@@ -288,11 +361,11 @@
 
       <p class="intro-text">
         {% if vehicle.owner_island == 'Anjouan' %}
-        Je soussigné, Directeur Général des Infrastructures et des mines de L'île Autonome de Ndzuani.
+        Je soussigné, Directeur Régional des routes et de transport routières L'île de Ndzuani.
         {% elif vehicle.owner_island == 'Moheli' %}
-        Je soussigné, Directeur Général des Infrastructures et des mines de L'île Autonome de Mwali.
+        Je soussigné, Directeur Régional des routes et de transport routières L'île de Mwali.
         {% else %}
-        Je soussigné, Directeur Général des Infrastructures et des mines de L'île Autonome de Ngazidja.
+        Je soussigné, Directeur Régional des routes et de transport routières L'île de Ngazidja.
         {% endif %}
       </p>
       <p class="intro-text" style="margin-bottom:24px;">Certifie que</p>
@@ -300,17 +373,25 @@
       <!-- Propriétaire -->
       <div class="field-block">
         <div class="field-row">
-          <span class="fl">Mr, Mme ou Mlle :&nbsp;</span>
+          <span class="fl">{{ cg.civilite if cg and cg.civilite else 'Mr, Mme ou Mlle' }} :&nbsp;</span>
           <span class="fv">{{ vehicle.owner_name }}</span>
         </div>
       </div>
 
-      <!-- Profession / Domicile -->
+      <!-- Profession / Téléphone -->
       <div class="g2">
         <div class="field-row">
           <span class="fl">Profession :&nbsp;</span>
           <span class="fv">{{ (cg.profession_proprietaire if cg) or '' }}</span>
         </div>
+        <div class="field-row">
+          <span class="fl">Téléphone :&nbsp;</span>
+          <span class="fv fv-normal">{{ vehicle.owner_phone or '' }}</span>
+        </div>
+      </div>
+
+      <!-- Domicile -->
+      <div class="field-block">
         <div class="field-row">
           <span class="fl">Domicile à&nbsp;</span>
           <span class="fv">{{ vehicle.owner_address or '' }}</span>
@@ -389,11 +470,15 @@
         </div>
       </div>
 
-      <!-- Charge utile -->
-      <div class="field-block">
+      <!-- Charge utile + Date d'expiration -->
+      <div class="g2">
         <div class="field-row">
           <span class="fl">Charge utile PTC :&nbsp;</span>
           <span class="fv">{{ (cg.charge_utile_ptc if cg) or '' }}</span>
+        </div>
+        <div class="field-row">
+          <span class="fl">Date d'expiration :&nbsp;</span>
+          <span class="fv">{% if date_expiration %}{{ date_expiration.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</span>
         </div>
       </div>
 
@@ -409,15 +494,21 @@
       <div class="remark-block" style="margin-top:6px;">
         <div class="remark-title">Remarque</div>
         Récupération de la carte grise originale<br>
-        Tous les jours à partir de 11 heures
+        Du Lundi au Vendredi à partir de 8 heures
       </div>
 
     </div><!-- /doc-fields -->
 
-    <!-- Bas : Signature (poussé vers le bas) -->
+    <!-- Bas : QR Code + Signature -->
     <div class="doc-bottom">
 
-      <div></div>
+      <div class="qr-block">
+        {% if vehicle_qr_data_uri %}
+        <div style="font-size:11px; text-align:center; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">QR Code Véhicule</div>
+        <img src="{{ vehicle_qr_data_uri }}" style="width:90px; height:90px; display:block; margin:0 auto;">
+        <div style="font-size:10px; text-align:center; margin-top:3px; font-weight:700;">{{ vehicle.license_plate }}</div>
+        {% endif %}
+      </div>
 
       <div class="sig-block">
         <div class="sig-date">
@@ -443,6 +534,72 @@
   </div>
 
 </div><!-- /document -->
+
+{% if request.args.get('print') == 'receipt' %}
+<!-- ── Reçu de paiement ── -->
+<div class="receipt-page" style="display:block;">
+
+  <div class="receipt-title">Reçu de Paiement</div>
+  <div class="receipt-subtitle">Carte Grise Provisoire &mdash; {{ vehicle.license_plate }}</div>
+
+  <hr class="receipt-divider">
+
+  <div class="receipt-row">
+    <span class="rl">Propriétaire</span>
+    <span class="rv">{{ vehicle.owner_name }}</span>
+  </div>
+  <div class="receipt-row">
+    <span class="rl">Immatriculation</span>
+    <span class="rv">{{ vehicle.license_plate }}</span>
+  </div>
+  <div class="receipt-row">
+    <span class="rl">Genre</span>
+    <span class="rv">{{ vehicle.vehicle_type or '—' }}</span>
+  </div>
+  <div class="receipt-row">
+    <span class="rl">Marque / Type</span>
+    <span class="rv">{{ (vehicle.make or '') }}{% if vehicle.model %} {{ vehicle.model }}{% endif %}</span>
+  </div>
+  <div class="receipt-row">
+    <span class="rl">N° de série (VIN)</span>
+    <span class="rv">{{ vehicle.vin or '—' }}</span>
+  </div>
+  <div class="receipt-row">
+    <span class="rl">Date d'émission</span>
+    <span class="rv">{% if cg and cg.date_emission %}{{ cg.date_emission.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</span>
+  </div>
+
+  <hr class="receipt-divider">
+
+  <div class="receipt-amount">
+    {% if cg and cg.prix is not none and cg.prix != '' %}
+      {{ '{:,.0f}'.format(cg.prix | float).replace(',', ' ') }} FC
+    {% else %}—{% endif %}
+  </div>
+  <div class="receipt-amount-label">Montant perçu pour la carte grise provisoire</div>
+
+  <div class="receipt-sig">
+    <div class="receipt-sig-block">
+      <div class="rs-title">
+        Moroni, le {% if cg and cg.date_emission %}{{ cg.date_emission.strftime('%d/%m/%Y') }}{% else %}___/___/______{% endif %}
+      </div>
+      <div style="font-size:14px; margin-bottom:6px; font-weight:600;">Le Directeur Régional</div>
+      {% if cg_settings.signature_url %}
+      <img src="{{ cg_settings.signature_url }}">
+      {% else %}
+      <div style="height:55px;"></div>
+      {% endif %}
+      <div class="rs-name">{{ cg_settings.directeur_nom or 'LE DIRECTEUR' }}</div>
+    </div>
+  </div>
+
+  <div class="receipt-footer">
+    <span>{% if cg_settings.footer_telephone %}&#9990;&nbsp;{{ cg_settings.footer_telephone }}{% endif %}</span>
+    <span>{{ cg_settings.footer_adresse or '' }}</span>
+  </div>
+
+</div><!-- /receipt-page -->
+{% endif %}
 
 </body>
 </html>

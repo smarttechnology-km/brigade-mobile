@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Technology — Gestion des Véhicules</title>
+    <title>Smart Development — Gestion des Véhicules</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -267,6 +267,11 @@
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
         </a>
         {% endif %}
+        {% if current_user.role in ['admin', 'secretaire', 'employe'] %}
+        <a href="{{ url_for('smart_tech.rapport_journalier_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-calendar-day"></i></span>Rapport Journalier
+        </a>
+        {% endif %}
         {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
@@ -296,13 +301,43 @@
             <button id="theme-toggle" class="st-theme-btn" title="Changer le thème">
                 <i id="theme-icon" class="fas fa-sun"></i>
             </button>
-            <button class="btn-add" onclick="openAddModal()">
-                <i class="fas fa-plus"></i>Ajouter un véhicule
-            </button>
             <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
                 <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
                 {{ current_user.full_name or current_user.username }}
             </a>
+        </div>
+    </div>
+
+    <!-- ── Pending QR Approval Banner ── -->
+    <div class="st-section" id="pending-qr-section" style="display:none;border-top:3px solid #f59e0b;margin-bottom:0.5rem;">
+        <div class="st-section-header" style="cursor:pointer;" onclick="togglePendingPanel()">
+            <div style="display:flex;align-items:center;gap:0.6rem;">
+                <i class="fas fa-clock" style="color:#f59e0b;"></i>
+                <strong style="color:#f59e0b;">Véhicules en attente d'activation QR</strong>
+                <span id="pending-badge" class="badge" style="background:#f59e0b;color:#000;font-size:0.7rem;">0</span>
+                <small class="text-muted" style="font-size:0.72rem;">Créés depuis l'espace administratif — cliquer pour voir</small>
+            </div>
+            <i class="fas fa-chevron-down" id="pending-chevron" style="color:var(--st-text-muted);transition:transform .2s;"></i>
+        </div>
+        <div id="pending-panel" style="display:none;padding:0 0.25rem 0.5rem;">
+            <div style="overflow-x:auto;">
+                <table class="table" style="font-size:0.82rem;">
+                    <thead>
+                        <tr>
+                            <th>Immatriculation</th>
+                            <th>Propriétaire</th>
+                            <th>Île</th>
+                            <th>Type</th>
+                            <th>Ajouté par</th>
+                            <th>Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pending-qr-tbody">
+                        <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -388,7 +423,7 @@
         <div style="text-align:center;padding:0.75rem 0 1rem;border-bottom:1px dashed rgba(255,255,255,0.12);margin-bottom:1rem;">
           <div style="font-size:1.6rem;margin-bottom:4px;">🧾</div>
           <div style="font-weight:700;font-size:0.95rem;color:#fff;">SIGVA</div>
-          <div style="font-size:0.74rem;color:rgba(255,255,255,0.45);">Smart Technology</div>
+          <div style="font-size:0.74rem;color:rgba(255,255,255,0.45);">Smart Development</div>
         </div>
         <!-- Amount highlight -->
         <div style="text-align:center;margin-bottom:1rem;">
@@ -572,7 +607,7 @@
                     <label class="form-label-st">Île</label>
                     <select id="f-owner_island" class="st-input lg">
                         <option value="">-- Sélectionner --</option>
-                        <option value="Grande Comores">Grande Comores</option>
+                        <option value="Grande Comore">Grande Comore</option>
                         <option value="Anjouan">Anjouan</option>
                         <option value="Moheli">Mohéli</option>
                     </select>
@@ -652,6 +687,69 @@
     let currentPage = 1;
     const perPage = 50;
     let firstLoad = true;
+
+    /* ── Pending QR vehicles ── */
+    let _pendingOpen = false;
+
+    window.togglePendingPanel = function() {
+        _pendingOpen = !_pendingOpen;
+        document.getElementById('pending-panel').style.display = _pendingOpen ? '' : 'none';
+        const chev = document.getElementById('pending-chevron');
+        if (chev) chev.style.transform = _pendingOpen ? 'rotate(180deg)' : '';
+    };
+
+    function loadPendingQr() {
+        fetch('/smart-tech/api/pending-qr-vehicles', { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                const section = document.getElementById('pending-qr-section');
+                const badge   = document.getElementById('pending-badge');
+                const tbody   = document.getElementById('pending-qr-tbody');
+                const count   = (data.vehicles || []).length;
+                badge.textContent = count;
+                section.style.display = count > 0 ? '' : 'none';
+                if (count === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Aucun véhicule en attente</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.vehicles.map(v => `<tr>
+                    <td><strong style="color:var(--st-cyan);font-family:monospace;">${esc(v.license_plate)}</strong></td>
+                    <td>${esc(v.owner_name)}</td>
+                    <td>${esc(v.owner_island || '—')}</td>
+                    <td>${esc(v.vehicle_type || '—')}${v.make ? ' · ' + esc(v.make) : ''}</td>
+                    <td class="text-muted">${esc(v.created_by || '—')}</td>
+                    <td class="text-muted" style="font-size:0.78rem;">${esc(v.created_at)}</td>
+                    <td>
+                        <button onclick="activatePendingQR(${v.id}, '${esc(v.license_plate)}', '${esc(v.owner_name)}')"
+                                class="btn-action btn-action-qr" style="font-size:0.78rem;">
+                            <i class="fas fa-qrcode me-1"></i>Activer QR
+                        </button>
+                    </td>
+                </tr>`).join('');
+            })
+            .catch(() => {
+                document.getElementById('pending-qr-section').style.display = 'none';
+            });
+    }
+
+    window.activatePendingQR = async function(vid, plate, ownerName) {
+        if (!confirm(`Activer le QR Code pour ${plate} — ${ownerName} ?\n\nCela enregistrera le paiement d'activation et rendra le véhicule pleinement opérationnel.`)) return;
+        try {
+            const r = await fetch('/api/vehicles/' + vid + '/qrcode/activate', {
+                method: 'POST', credentials: 'same-origin'
+            });
+            const rd = await r.json().catch(() => ({}));
+            if (r.ok) {
+                loadPendingQr();
+                loadVehicles(true);
+                showQRReceipt(rd);
+            } else {
+                showToast(rd.error || 'Erreur lors de l\'activation', 'error');
+            }
+        } catch {
+            showToast('Erreur réseau', 'error');
+        }
+    };
 
     /* ── Load vehicles ── */
     function loadVehicles(silent) {
@@ -902,7 +1000,7 @@
     };
 
     const ST_WORK_ZONE_BY_ISLAND = {
-        'Grande Comores': ['Centre-ville (Moroni)', 'Mitsamiouli', 'Mbéni', 'Foumbouni', 'Sima', 'Ntsoudjini', 'Autre région'],
+        'Grande Comore': ['Centre-ville (Moroni)', 'Mitsamiouli', 'Mbéni', 'Foumbouni', 'Sima', 'Ntsoudjini', 'Autre région'],
         'Anjouan':        ['Centre-ville (Mutsamudu)', 'Domoni', 'Ouani', 'Sima', 'Koni', 'Bambao', 'Autre région'],
         'Moheli':         ['Centre-ville (Fomboni)', 'Nioumachoua', 'Djando', 'Miringoni', 'Ouallah', 'Autre région'],
     };
@@ -925,7 +1023,7 @@
             });
         } else {
             // No island selected: grouped by island with <optgroup>
-            ['Grande Comores', 'Anjouan', 'Moheli'].forEach(ile => {
+            ['Grande Comore', 'Anjouan', 'Moheli'].forEach(ile => {
                 const grp = document.createElement('optgroup');
                 grp.label = '🏝️ ' + ile;
                 ST_WORK_ZONE_BY_ISLAND[ile].forEach(z => {
@@ -1083,9 +1181,10 @@
         .then(async created => {
             closeAddModal();
             loadVehicles(false);
-            if (!isEdit && created && created.id) {
+            const createdId = !isEdit && created && (created.vehicle ? created.vehicle.id : created.id);
+            if (!isEdit && createdId) {
                 try {
-                    const ar = await fetch('/api/vehicles/' + created.id + '/qrcode/activate', {
+                    const ar = await fetch('/api/vehicles/' + createdId + '/qrcode/activate', {
                         method: 'POST', credentials: 'same-origin'
                     });
                     const rd = await ar.json().catch(() => ({}));
@@ -1153,7 +1252,7 @@
   <div class="copy-label">${copy}</div>
   <div class="receipt-header">
     <div class="org">Brigade Mobile — Comores</div>
-    <div class="sub">Smart Technology · Gestion des Véhicules</div>
+    <div class="sub">Smart Development · Gestion des Véhicules</div>
     <span class="receipt-type">${typeLabel}</span>
   </div>
   <div class="amount-block">
@@ -1277,6 +1376,7 @@
 
     /* ── Init ── */
     loadVehicles(false);
+    loadPendingQr();
 
     // Lightweight real-time sync: poll last-update every 5 s, full reload only on change
     let _lastKey = null;
@@ -1288,7 +1388,7 @@
                 if (!d) return;
                 const key = d.last_update + '|' + d.total;
                 if (_lastKey === null) { _lastKey = key; return; }
-                if (key !== _lastKey) { _lastKey = key; loadVehicles(true); }
+                if (key !== _lastKey) { _lastKey = key; loadVehicles(true); loadPendingQr(); }
             })
             .catch(() => {});
     }

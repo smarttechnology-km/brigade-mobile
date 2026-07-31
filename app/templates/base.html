@@ -95,9 +95,9 @@
         <div class="px-3 pb-3 border-bottom border-secondary">
             <select id="global-country-filter" class="form-select form-select-sm">
                 <option value="">Tous les pays</option>
-                <option value="Grande Comores">🏝️ Grande Comores</option>
+                <option value="Grande Comore">🏝️ Grande Comore</option>
                 <option value="Anjouan">🏝️ Anjouan</option>
-                <option value="Moheli">🏝️ Moheli</option>
+                <option value="Moheli">🏝️ Mohéli</option>
             </select>
             <script>
                 document.getElementById('global-country-filter').value = localStorage.getItem('admin_country_filter') || '';
@@ -156,6 +156,7 @@
             {# DR : nav "police-style" — Cartes Grises + Rapport CG #}
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/cartes-grises') %}active{% endif %}" href="/dgrtr/cartes-grises"><i class="fas fa-car me-2"></i> Cartes Grises Provi</a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/rapport-cg') %}active{% endif %}" href="/dgrtr/rapport-cg"><i class="fas fa-chart-bar me-2"></i> Rapport CG</a>
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/recettes-cg') %}active{% endif %}" href="/dgrtr/recettes-cg"><i class="fas fa-coins me-2"></i> Recettes</a>
             {% elif current_user.dgrtr_type == 'employe' %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/ajouter-permis' %}active{% endif %}" href="/dgrtr/ajouter-permis"><i class="fas fa-plus-circle me-2"></i> Ajouter un permis</a>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Technology — Statistiques par île</title>
+    <title>Smart Development — Statistiques par île</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -239,6 +239,11 @@
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
         </a>
         {% endif %}
+        {% if current_user.role in ['admin', 'secretaire', 'employe'] %}
+        <a href="{{ url_for('smart_tech.rapport_journalier_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-calendar-day"></i></span>Rapport Journalier
+        </a>
+        {% endif %}
         {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item active">
             <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
@@ -264,7 +269,7 @@
     <div class="st-topbar">
         <div>
             <div class="st-page-title"><i class="fas fa-map-marked-alt me-2" style="color:var(--st-green);"></i>Statistiques par île</div>
-            <div class="st-page-sub">Grande Comores · Anjouan · Moheli</div>
+            <div class="st-page-sub">Grande Comore · Anjouan · Mohéli</div>
         </div>
         <div class="d-flex align-items-center gap-3">
             <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
@@ -333,9 +338,9 @@
                     <div class="progress-section-title"><i class="fas fa-car me-2" style="color:var(--st-cyan);"></i>Répartition des véhicules</div>
                     <div id="bar-vehicles"></div>
                     <div class="progress-legend mt-3">
-                        <span class="legend-item"><span class="legend-dot" style="background:var(--gc);"></span>Grande Comores</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--gc);"></span>Grande Comore</span>
                         <span class="legend-item"><span class="legend-dot" style="background:var(--an);"></span>Anjouan</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:var(--mo);"></span>Moheli</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--mo);"></span>Mohéli</span>
                     </div>
                 </div>
             </div>
@@ -344,9 +349,9 @@
                     <div class="progress-section-title"><i class="fas fa-coins me-2" style="color:var(--st-yellow);"></i>Revenus QR par île</div>
                     <div id="bar-revenue"></div>
                     <div class="progress-legend mt-3">
-                        <span class="legend-item"><span class="legend-dot" style="background:var(--gc);"></span>Grande Comores</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--gc);"></span>Grande Comore</span>
                         <span class="legend-item"><span class="legend-dot" style="background:var(--an);"></span>Anjouan</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:var(--mo);"></span>Moheli</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:var(--mo);"></span>Mohéli</span>
                     </div>
                 </div>
             </div>
@@ -402,10 +407,10 @@
     function fmtN(n)   { return n.toLocaleString('fr'); }
     function pct(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; }
 
-    const ISLANDS = ['Grande Comores', 'Anjouan', 'Moheli'];
-    const ISLAND_CSS = { 'Grande Comores': 'gc', 'Anjouan': 'an', 'Moheli': 'mo', 'Autre': 'ot' };
+    const ISLANDS = ['Grande Comore', 'Anjouan', 'Moheli'];
+    const ISLAND_CSS = { 'Grande Comore': 'gc', 'Anjouan': 'an', 'Moheli': 'mo', 'Autre': 'ot' };
     const ISLAND_ICON = {
-        'Grande Comores': '🌋',
+        'Grande Comore': '🌋',
         'Anjouan':        '🌿',
         'Moheli':         '🐢',
         'Autre':          '📍',
@@ -511,7 +516,7 @@
         /* Bar charts */
         const maxV = Math.max(...ISLANDS.map(i => (d.islands[i] || {}).vehicles || 0), 1);
         const maxR = Math.max(...ISLANDS.map(i => (d.islands[i] || {}).revenue  || 0), 1);
-        const barColors = {'Grande Comores': 'var(--gc)', 'Anjouan': 'var(--an)', 'Moheli': 'var(--mo)'};
+        const barColors = {'Grande Comore': 'var(--gc)', 'Anjouan': 'var(--an)', 'Moheli': 'var(--mo)'};
 
         document.getElementById('bar-vehicles').innerHTML = ISLANDS.map(function (isl) {
             const v = (d.islands[isl] || {}).vehicles || 0;

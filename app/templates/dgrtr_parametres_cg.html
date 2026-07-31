@@ -21,9 +21,9 @@
 
   <!-- Island tabs -->
   <div class="border-bottom mb-4 d-flex gap-1">
-    <button class="island-tab-btn active" id="tab-gc" onclick="switchTab('Grande Comores')">🏝 Grande Comores</button>
+    <button class="island-tab-btn active" id="tab-gc" onclick="switchTab('Grande Comore')">🏝 Grande Comore</button>
     <button class="island-tab-btn" id="tab-aj" onclick="switchTab('Anjouan')">🏝 Anjouan</button>
-    <button class="island-tab-btn" id="tab-mh" onclick="switchTab('Moheli')">🏝 Moheli</button>
+    <button class="island-tab-btn" id="tab-mh" onclick="switchTab('Moheli')">🏝 Mohéli</button>
   </div>
 
   <div class="card shadow-sm border-0">
@@ -108,10 +108,10 @@
 
 
 <script>
-let _activeIsland = 'Grande Comores';
+let _activeIsland = 'Grande Comore';
 let _sigCtx = null, _sigDrawing = false, _sigHasStrokes = false;
 
-const TAB_IDS = { 'Grande Comores': 'tab-gc', 'Anjouan': 'tab-aj', 'Moheli': 'tab-mh' };
+const TAB_IDS = { 'Grande Comore': 'tab-gc', 'Anjouan': 'tab-aj', 'Moheli': 'tab-mh' };
 
 function switchTab(island) {
   _activeIsland = island;
@@ -244,7 +244,7 @@ function saveSigPad() {
 }
 
 /* load initial island on page load */
-loadIsland('Grande Comores');
+loadIsland('Grande Comore');
 </script>
 
 {% endblock %}

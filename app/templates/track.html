@@ -43,6 +43,12 @@
               <br/><i class="fas fa-island fa-fw"></i> 🏝️ {{ vehicle.owner_island }}
             {% endif %}
           </p>
+          {% if vehicle.qr_pending_approval %}
+          <div class="alert alert-warning py-2 mb-0 d-flex align-items-center gap-2" style="font-size:0.88rem;">
+            <i class="fas fa-clock"></i>
+            <span>QR Code en attente de validation SmartTech</span>
+          </div>
+          {% else %}
           <div class="d-flex gap-2 align-items-center mb-0">
             <div class="qr-box me-2">
               <img src="{{ url_for('main.public_track_qrcode', token=vehicle.track_token) }}" alt="QR Code" class="img-fluid" style="max-width:140px;" />
@@ -51,6 +57,7 @@
               <div class="small text-muted">Token: <code>{{ vehicle.track_token }}</code></div>
             </div>
           </div>
+          {% endif %}
         </div>
       </div>
 
@@ -154,7 +161,9 @@
                 <i class="fas fa-qrcode text-success me-2 mt-1"></i>
                 <div>
                   <small class="text-muted d-block">Code QR de suivi</small>
-                  {% if vehicle.qr_code_expiry %}
+                  {% if vehicle.qr_pending_approval %}
+                    <span class="badge bg-warning text-dark">En attente SmartTech</span>
+                  {% elif vehicle.qr_code_expiry %}
                     <strong>Expire le : {{ vehicle.qr_code_expiry.strftime('%d/%m/%Y') }}</strong>
                     {% set days_qr = (vehicle.qr_code_expiry - now()).days %}
                     {% if days_qr < 0 %}
