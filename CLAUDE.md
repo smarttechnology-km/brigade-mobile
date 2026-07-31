@@ -64,7 +64,7 @@ Flask app using the application factory pattern (`app/__init__.py` → `create_a
 
 **Role-based access:**
 - `administrateur` – full access across all islands
-- `policier` / `judiciaire` – automatically filtered to their `country` field (Grande Comores, Anjouan, Moheli)
+- `policier` / `judiciaire` – automatically filtered to their `country` field (Grande Comore, Anjouan, Moheli)
 - `mobile_money_agent` – separate dashboard for vignette/mobile money flows
 - `InsuranceAccount` – can only manage their own assigned vehicles
 
