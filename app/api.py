@@ -211,9 +211,9 @@ def api_track(token):
     if not user or user.role not in ['policier', 'administrateur']:
         return jsonify({"error": "Forbidden"}), 403
     vehicle = Vehicle.query.filter_by(track_token=token).first()
-    if not vehicle:
+    if not vehicle or vehicle.qr_pending_approval:
         return jsonify({"error": "Not found"}), 404
-    
+
     # Note: Policiers can access vehicles from any island (patrol can happen anywhere)
     # Island filtering only applies to judiciaire/dashboard access
     if user.role == 'judiciaire' and user.country:
@@ -553,7 +553,8 @@ def api_vehicles_search():
     
     # Exact plate match only — no partial search
     vehicles_query = Vehicle.query.filter(
-        Vehicle.license_plate == q.upper().strip()
+        Vehicle.license_plate == q.upper().strip(),
+        Vehicle.qr_pending_approval == False
     )
 
     if user.role == 'judiciaire' and user.country:
@@ -625,9 +626,9 @@ def api_vehicle_qrcode_renew(vehicle_id):
 @jwt_required(optional=True)
 def api_vehicles_create():
     user = get_current_user()
-    if not user or user.role not in ['administrateur']:
+    if not user or user.role not in ['administrateur', 'judiciaire']:
         return jsonify({"error": "Forbidden"}), 403
-    
+
     data = request.get_json() or {}
     license_plate = data.get('license_plate', '').upper().strip()
 
@@ -689,7 +690,31 @@ def api_vehicles_create():
         except:
             pass
     
+    vehicle.qr_pending_approval = True
+
     db.session.add(vehicle)
+    db.session.commit()
+
+    # Always create (or update) a CarteGrise record for admin-created vehicles
+    from app.models import CarteGrise
+    from datetime import datetime as _dt
+    _s = lambda k: (data.get(k) or '').strip()
+    cg = CarteGrise.query.filter_by(vehicle_id=vehicle.id).first()
+    if cg is None:
+        cg = CarteGrise(vehicle_id=vehicle.id, status='brouillon', created_by=user.username)
+        db.session.add(cg)
+    cg.carrosserie            = _s('carrosserie') or None
+    cg.places_assises         = _s('places_assises') or None
+    cg.poids_total_autorise   = _s('poids_total_autorise') or None
+    cg.poids_a_vide           = _s('poids_a_vide') or None
+    cg.charge_utile_ptc       = _s('charge_utile_ptc') or None
+    cg.profession_proprietaire = _s('profession_proprietaire') or None
+    cg.observation            = _s('observation') or None
+    if _s('date_emission'):
+        try:
+            cg.date_emission = _dt.strptime(_s('date_emission'), '%Y-%m-%d').date()
+        except Exception:
+            pass
     db.session.commit()
 
     if vehicle.owner_phone:
@@ -700,7 +725,7 @@ def api_vehicles_create():
         'Véhicule créé (mobile)',
         f"Véhicule {vehicle.license_plate} - {vehicle.owner_name} ({vehicle.vehicle_type})"
     )
-    
+
     return jsonify({
         "message": "Vehicle created successfully",
         "vehicle": vehicle.to_dict()
@@ -839,6 +864,39 @@ def api_vehicles_update(vehicle_id):
     vehicle.updated_at = now_comoros()
     db.session.commit()
 
+    # Always update (or create) CarteGrise record from the edited vehicle form
+    from app.models import CarteGrise
+    from datetime import datetime as _cg_dt
+    _cs = lambda k: (data.get(k) or '').strip()
+    cg = CarteGrise.query.filter_by(vehicle_id=vehicle.id).first()
+    if cg is None:
+        cg = CarteGrise(vehicle_id=vehicle.id, status='brouillon', created_by=getattr(user, 'username', ''))
+        db.session.add(cg)
+    if 'carrosserie' in data:
+        cg.carrosserie = _cs('carrosserie') or None
+    if 'places_assises' in data:
+        cg.places_assises = _cs('places_assises') or None
+    if 'poids_total_autorise' in data:
+        cg.poids_total_autorise = _cs('poids_total_autorise') or None
+    if 'poids_a_vide' in data:
+        cg.poids_a_vide = _cs('poids_a_vide') or None
+    if 'charge_utile_ptc' in data:
+        cg.charge_utile_ptc = _cs('charge_utile_ptc') or None
+    if 'profession_proprietaire' in data:
+        cg.profession_proprietaire = _cs('profession_proprietaire') or None
+    if 'observation' in data:
+        cg.observation = _cs('observation') or None
+    if 'date_emission' in data:
+        raw_de = _cs('date_emission')
+        if raw_de:
+            try:
+                cg.date_emission = _cg_dt.strptime(raw_de, '%Y-%m-%d').date()
+            except Exception:
+                pass
+        else:
+            cg.date_emission = None
+    db.session.commit()
+
     if 'owner_phone' in data or 'owner_name' in data:
         _sync_vehicle_owner_link(vehicle)
 
@@ -864,6 +922,41 @@ def api_vehicles_update(vehicle_id):
         "message": "Vehicle updated successfully",
         "vehicle": vehicle.to_dict()
     })
+
+
+@api_bp.route('/vehicles/<int:vehicle_id>/save-cg', methods=['POST'])
+@login_required
+def api_vehicle_save_cg(vehicle_id):
+    """Dedicated endpoint to save Carte Grise fields for a vehicle."""
+    from app.models import CarteGrise
+    from datetime import datetime as _cg_dt
+    user = get_current_user()
+    if not user or getattr(user, 'role', None) not in ['administrateur', 'judiciaire']:
+        return jsonify({'error': 'Forbidden'}), 403
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    data = request.get_json() or {}
+    _s = lambda k: (data.get(k) or '').strip()
+    cg = CarteGrise.query.filter_by(vehicle_id=vehicle_id).first()
+    if cg is None:
+        cg = CarteGrise(vehicle_id=vehicle_id, status='brouillon', created_by=getattr(user, 'username', ''))
+        db.session.add(cg)
+    cg.carrosserie             = _s('carrosserie') or None
+    cg.places_assises          = _s('places_assises') or None
+    cg.poids_total_autorise    = _s('poids_total_autorise') or None
+    cg.poids_a_vide            = _s('poids_a_vide') or None
+    cg.charge_utile_ptc        = _s('charge_utile_ptc') or None
+    cg.profession_proprietaire = _s('profession_proprietaire') or None
+    cg.observation             = _s('observation') or None
+    raw_de = _s('date_emission')
+    if raw_de:
+        try:
+            cg.date_emission = _cg_dt.strptime(raw_de, '%Y-%m-%d').date()
+        except Exception:
+            pass
+    else:
+        cg.date_emission = None
+    db.session.commit()
+    return jsonify({'success': True, 'carte_grise': cg.to_dict()})
 
 
 @api_bp.route('/vehicles/<int:vehicle_id>/status', methods=['PUT'])
@@ -4321,7 +4414,7 @@ def api_search_drivers():
     if not any([license_plate, vehicle_types, make, model, color, usage_types, work_zone]):
         return jsonify({'error': 'Au moins un critère de recherche est requis'}), 400
 
-    q = Vehicle.query
+    q = Vehicle.query.filter(Vehicle.qr_pending_approval == False)
     if license_plate:
         q = q.filter(Vehicle.license_plate.ilike(f'%{license_plate}%'))
     if vehicle_types:

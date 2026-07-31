@@ -381,6 +381,7 @@ def create_app():
                             'created_by': "ALTER TABLE vehicles ADD COLUMN created_by VARCHAR(80)",
                             'qr_renewed_by': "ALTER TABLE vehicles ADD COLUMN qr_renewed_by VARCHAR(80)",
                             'work_zone': "ALTER TABLE vehicles ADD COLUMN work_zone VARCHAR(100)",
+                            'qr_pending_approval': "ALTER TABLE vehicles ADD COLUMN qr_pending_approval BOOLEAN NOT NULL DEFAULT 0",
                         }
                         for column_name, alter_sql in vehicle_column_definitions.items():
                             if column_name not in vehicle_columns:
@@ -613,7 +614,7 @@ def create_app():
                         cgs_cols = {r[1] for r in cgs_cols_res.fetchall()}
                         cgs_col_defs = {
                             'signature_filename': "ALTER TABLE carte_grise_setting ADD COLUMN signature_filename VARCHAR(255)",
-                            'island': "ALTER TABLE carte_grise_setting ADD COLUMN island VARCHAR(50) NOT NULL DEFAULT 'Grande Comores'",
+                            'island': "ALTER TABLE carte_grise_setting ADD COLUMN island VARCHAR(50) NOT NULL DEFAULT 'Grande Comore'",
                         }
                         for col, sql in cgs_col_defs.items():
                             if col not in cgs_cols:
@@ -629,6 +630,8 @@ def create_app():
                             'signature_requested_by': "ALTER TABLE carte_grise ADD COLUMN signature_requested_by VARCHAR(100)",
                             'signed_at':              "ALTER TABLE carte_grise ADD COLUMN signed_at DATETIME",
                             'signed_by':              "ALTER TABLE carte_grise ADD COLUMN signed_by VARCHAR(100)",
+                            'prix':                   "ALTER TABLE carte_grise ADD COLUMN prix FLOAT",
+                            'civilite':               "ALTER TABLE carte_grise ADD COLUMN civilite VARCHAR(10)",
                         }
                         for col, sql in cg_col_defs.items():
                             if col not in cg_cols:
@@ -676,7 +679,7 @@ def create_app():
         # S'assurer qu'un compte SmartTech par défaut existe toujours
         from app.models import SmartTechAccount
         if not SmartTechAccount.query.first():
-            default_st = SmartTechAccount(username='smarttech', full_name='Smart Technology', role='admin', is_active=True)
+            default_st = SmartTechAccount(username='smarttech', full_name='Smart Development', role='admin', is_active=True)
             default_st.set_password('smarttech123')
             db.session.add(default_st)
             db.session.commit()
@@ -697,7 +700,7 @@ def create_app():
                 db.session.add(PhotoSubmissionReason(label=label, sort_order=i + 1))
             db.session.commit()
 
-        # Initialiser les paramètres par défaut Smart Technology
+        # Initialiser les paramètres par défaut Smart Development
         from app.models import SmartTechSetting
         for key, default_val in [('qr_activation_price', '5000'), ('qr_renewal_price', '3000')]:
             if not SmartTechSetting.query.filter_by(key=key).first():

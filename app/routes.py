@@ -812,7 +812,7 @@ def insurance_sigva_receipt(month):
     # HEADER BAND
     # ══════════════════════════════════════════════
     hdr_left = [
-        Paragraph('Smart Technology', hdr_brand),
+        Paragraph('Smart Development', hdr_brand),
         Paragraph('Système S.I.G.V.A · Commission Assurance', hdr_sub),
     ]
     hdr_right = [
@@ -855,7 +855,7 @@ def insurance_sigva_receipt(month):
     # ══════════════════════════════════════════════
     emetteur = [
         Paragraph('ÉMETTEUR', sec_s),
-        Paragraph('Smart Technology', val_s),
+        Paragraph('Smart Development', val_s),
         Paragraph('Système S.I.G.V.A', ps('e2', fontSize=8.5, textColor=SLATE, leading=11)),
         Paragraph('République des Comores', ps('e3', fontSize=8.5, textColor=SLATE, leading=11)),
     ]
@@ -1007,7 +1007,7 @@ def insurance_sigva_receipt(month):
     ]))
     story.append(Spacer(1, 0.2*cm))
     story.append(Paragraph(
-        f'Ce document est généré automatiquement par le Système S.I.G.V.A — Smart Technology · {generated_at}',
+        f'Ce document est généré automatiquement par le Système S.I.G.V.A — Smart Development · {generated_at}',
         foot_s))
 
     doc.build(story)
@@ -1462,6 +1462,11 @@ def get_vehicle_detail(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     d = vehicle.to_dict()
     d['fines'] = [f.to_dict() for f in vehicle.fines.filter_by(paid=False).all()]
+    cg = getattr(vehicle, 'carte_grise', None)
+    if cg:
+        d['carte_grise'] = cg.to_dict()
+    else:
+        d['carte_grise'] = None
     return jsonify(d)
 
 
@@ -1479,9 +1484,17 @@ def query_vehicles():
     expired = request.args.get('expired', type=str)
     qr_expired = request.args.get('qr_expired', type=str)
     insurance_expired = request.args.get('insurance_expired', type=str)
-    
+
     query = Vehicle.query
     query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
+    from app.models import SmartTechAccount
+    if isinstance(current_user, SmartTechAccount):
+        # Pending vehicles are only shown in "En attente d'activation QR", never in the main table
+        query = query.filter(Vehicle.qr_pending_approval == False)
+        if current_user.role == 'employe':
+            emp_island = current_user.employee.island if current_user.employee else None
+            if emp_island:
+                query = query.filter(Vehicle.owner_island == emp_island)
     if vtype:
         query = query.filter(Vehicle.vehicle_type == vtype)
     if status:
@@ -1723,6 +1736,7 @@ def create_vehicle():
             pass
     if current_user and getattr(current_user, 'is_authenticated', False):
         vehicle.created_by = getattr(current_user, 'username', None)
+    vehicle.qr_pending_approval = True
     db.session.add(vehicle)
     db.session.flush()  # Flush to get the vehicle ID before committing
     
@@ -1747,9 +1761,36 @@ def create_vehicle():
     
     db.session.commit()
 
+    # Create CarteGrise record with complementary fields from payload
+    try:
+        from app.models import CarteGrise as _CG
+        from datetime import datetime as _cg_dt
+        _s = lambda k: (data.get(k) or '').strip()
+        cg = _CG.query.filter_by(vehicle_id=vehicle.id).first()
+        if cg is None:
+            cg = _CG(vehicle_id=vehicle.id, status='brouillon',
+                     created_by=getattr(current_user, 'username', ''))
+            db.session.add(cg)
+        cg.carrosserie             = _s('carrosserie') or None
+        cg.places_assises          = _s('places_assises') or None
+        cg.poids_total_autorise    = _s('poids_total_autorise') or None
+        cg.poids_a_vide            = _s('poids_a_vide') or None
+        cg.charge_utile_ptc        = _s('charge_utile_ptc') or None
+        cg.profession_proprietaire = _s('profession_proprietaire') or None
+        cg.observation             = _s('observation') or None
+        raw_de = _s('date_emission')
+        if raw_de:
+            try:
+                cg.date_emission = _cg_dt.strptime(raw_de, '%Y-%m-%d').date()
+            except Exception:
+                pass
+        db.session.commit()
+    except Exception as e:
+        print(f'Warning: CarteGrise creation failed for vehicle {vehicle.id}: {e}')
+
     if vehicle.owner_phone:
         _sync_vehicle_owner_link(vehicle)
-    
+
     # Log action in user history
     try:
         from app.models import UserHistory
@@ -1762,8 +1803,8 @@ def create_vehicle():
         db.session.commit()
     except Exception as e:
         print(f'Error logging vehicle creation: {e}')
-    
-    return jsonify(vehicle.to_dict()), 201
+
+    return jsonify({'message': 'Vehicle created successfully', 'vehicle': vehicle.to_dict()}), 201
 @vehicle_bp.route('/lookup-vin', methods=['GET'])
 @login_required
 def lookup_vehicle_by_vin():
@@ -2423,7 +2464,10 @@ def get_fines_stats():
 def get_vehicle_qrcode(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
-    
+
+    if vehicle.qr_pending_approval:
+        return jsonify({'error': 'QR Code en attente de validation SmartTech.'}), 403
+
     # Initialize QR code expiry if not already set
     if not vehicle.qr_code_expiry:
         vehicle.generate_qr_code_with_expiry()
@@ -2449,7 +2493,10 @@ def get_vehicle_qrcode_pdf(vehicle_id):
     """Retourne un PDF avec QR code + numéro d'immatriculation + texte descriptif"""
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
-    
+
+    if vehicle.qr_pending_approval:
+        return jsonify({'error': 'QR Code en attente de validation SmartTech.'}), 403
+
     if not REPORTLAB_AVAILABLE:
         return jsonify({'error': 'PDF generation not available'}), 500
     
@@ -2460,12 +2507,7 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import cm
         from reportlab.lib.enums import TA_CENTER
-        
-        # Initialize QR code expiry if not set
-        if not vehicle.qr_code_expiry:
-            vehicle.generate_qr_code_with_expiry()
-            db.session.commit()
-            _record_qr_payment(vehicle, 'activation', current_user.username)
+
 
         # Générer QR code
         track_url = vehicle.license_plate
@@ -2764,10 +2806,12 @@ def activate_vehicle_qrcode(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
     try:
-        already_active = bool(vehicle.qr_code_expiry and not vehicle.is_qr_expired)
+        already_active = bool(vehicle.qr_code_expiry and not vehicle.is_qr_code_expired())
         if not vehicle.qr_code_expiry:
             vehicle.generate_qr_code_with_expiry()
-            db.session.commit()
+        if vehicle.qr_pending_approval:
+            vehicle.qr_pending_approval = False
+        db.session.commit()
         _record_qr_payment(vehicle, 'activation', current_user.username)
         from app.models import SmartTechSetting
         activation_amount = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000)
@@ -3672,6 +3716,8 @@ def public_track_qrcode(token):
     if not current_user.is_authenticated:
         abort(403)
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
+    if vehicle.qr_pending_approval:
+        abort(403)
     # point the QR to the public tracking page itself
     track_url = vehicle.license_plate
     qr = qrcode.QRCode(box_size=6, border=2)
@@ -3691,7 +3737,10 @@ def public_track_qrcode_pdf(token):
         abort(403)
     
     vehicle = Vehicle.query.filter_by(track_token=token).first_or_404()
-    
+
+    if vehicle.qr_pending_approval:
+        abort(403)
+
     if not REPORTLAB_AVAILABLE:
         return jsonify({'error': 'PDF generation not available'}), 500
     
@@ -3702,12 +3751,7 @@ def public_track_qrcode_pdf(token):
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import cm
         from reportlab.lib.enums import TA_CENTER
-        
-        # Initialize QR code expiry if not set
-        if not vehicle.qr_code_expiry:
-            vehicle.generate_qr_code_with_expiry()
-            db.session.commit()
-            _record_qr_payment(vehicle, 'activation', current_user.username)
+
 
         # Générer QR code
         track_url = vehicle.license_plate
@@ -4651,13 +4695,18 @@ def get_insurance_vehicles():
     vehicle_ids = [a.vehicle_id for a in assignments]
     
     if vehicle_ids:
-        assigned_vehicles = Vehicle.query.filter(Vehicle.id.in_(vehicle_ids)).order_by(Vehicle.license_plate).all()
+        assigned_vehicles = Vehicle.query.filter(
+            Vehicle.id.in_(vehicle_ids),
+            Vehicle.qr_pending_approval == False
+        ).order_by(Vehicle.license_plate).all()
         vehicles.extend(assigned_vehicles)
-    
+
     # Method 2: Also get vehicles that have this insurance company in insurance_company field (for backward compatibility)
     # This handles existing vehicles that haven't been formally assigned yet
     if insurance_company_name:
-        legacy_vehicles = Vehicle.query.filter_by(insurance_company=insurance_company_name).order_by(Vehicle.license_plate).all()
+        legacy_vehicles = Vehicle.query.filter_by(
+            insurance_company=insurance_company_name
+        ).filter(Vehicle.qr_pending_approval == False).order_by(Vehicle.license_plate).all()
         # Avoid duplicates
         existing_ids = set(v.id for v in vehicles)
         for v in legacy_vehicles:
@@ -4766,6 +4815,7 @@ def get_vignette_vehicles():
     
     # Base query: vehicles with an active vignette or a pending payment request
     query = Vehicle.query.filter(
+        Vehicle.qr_pending_approval == False,
         (Vehicle.vignette_expiry.isnot(None)) | (Vehicle.vignette_payment_requested_at.isnot(None))
     )
     # Exclude vehicles missing required attributes (treat them as if they don't have a vignette)
@@ -5039,6 +5089,9 @@ def request_vignette_payment(vehicle_id):
 
     vehicle = Vehicle.query.get_or_404(vehicle_id)
 
+    if vehicle.qr_pending_approval:
+        return jsonify({'error': 'Ce véhicule est en attente de validation SmartTech. Aucune vignette ne peut être ajoutée pour l\'instant.'}), 403
+
     # Validation: VIN is required to add a vignette
     if not vehicle.vin or not str(vehicle.vin).strip():
         return jsonify({'error': 'Impossible d\'ajouter une vignette: le véhicule n\'a pas de VIN (Numéro de série) enregistré. Veuillez d\'abord ajouter le VIN du véhicule.'}), 400
@@ -5125,7 +5178,9 @@ def get_vignette_vehicles_without():
     user_country = getattr(current_user, 'country', None)
 
     # Include vehicles that either have no vignette expiry OR are missing required fields
-    query = Vehicle.query.filter(or_(
+    query = Vehicle.query.filter(
+        Vehicle.qr_pending_approval == False
+    ).filter(or_(
         Vehicle.vignette_expiry.is_(None),
         Vehicle.fuel_type.is_(None), Vehicle.fuel_type == '',
         Vehicle.fiscal_class.is_(None), Vehicle.fiscal_class == '',
@@ -6056,6 +6111,7 @@ def get_uninsured_vehicles():
     
     # Get all vehicles with NO insurance company OR expired insurance on the same island
     uninsured = Vehicle.query.filter(
+        Vehicle.qr_pending_approval == False,
         ((Vehicle.insurance_company == None) | (Vehicle.insurance_company == '') | (Vehicle.insurance_expiry < now_dt_naive)) &
         (Vehicle.owner_island == insurance_island)
     ).order_by(Vehicle.license_plate).all()
@@ -6917,9 +6973,34 @@ def dgrtr_carte_grise_print(vehicle_id):
     if not cg or cg.status != 'signee':
         from flask import abort
         abort(403)
-    island = vehicle.owner_island or 'Grande Comores'
+    island = vehicle.owner_island or 'Grande Comore'
     cg_settings = CarteGriseSetting.get(island)
-    return render_template('dgrtr_carte_grise_print.html', vehicle=vehicle, cg=cg, cg_settings=cg_settings)
+
+    # Generate vehicle QR code as base64 PNG
+    vehicle_qr_data_uri = None
+    if vehicle.track_token:
+        try:
+            import qrcode, io, base64 as _b64
+            _qr = qrcode.QRCode(box_size=5, border=2)
+            _qr.add_data(f'VEHICLE_TRACK:{vehicle.track_token}')
+            _qr.make(fit=True)
+            _img = _qr.make_image(fill_color='black', back_color='white')
+            _buf = io.BytesIO()
+            _img.save(_buf, format='PNG')
+            vehicle_qr_data_uri = 'data:image/png;base64,' + _b64.b64encode(_buf.getvalue()).decode()
+        except Exception:
+            pass
+
+    from datetime import timedelta
+    date_expiration = None
+    if cg.date_emission and cg_settings.duree_validite:
+        date_expiration = cg.date_emission + timedelta(days=cg_settings.duree_validite)
+
+    return render_template('dgrtr_carte_grise_print.html',
+                           vehicle=vehicle, cg=cg,
+                           cg_settings=cg_settings,
+                           vehicle_qr_data_uri=vehicle_qr_data_uri,
+                           date_expiration=date_expiration)
 
 
 @main_bp.route('/dgrtr/parametres-cg')
@@ -6936,7 +7017,7 @@ def dgrtr_cg_search():
     _require_cg_access()
     from app.models import Vehicle, CarteGrise
     q = request.args.get('q', '').strip()
-    query = Vehicle.query
+    query = Vehicle.query.filter(Vehicle.qr_pending_approval == False)
     if q:
         query = query.filter(
             db.or_(
@@ -6947,7 +7028,7 @@ def dgrtr_cg_search():
         )
     query = apply_island_filter(query, Vehicle.owner_island)
     limit = int(request.args.get('limit', 200))
-    vehicles = query.order_by(Vehicle.license_plate).limit(limit).all()
+    vehicles = query.order_by(Vehicle.created_at.desc()).limit(limit).all()
     results = []
     for v in vehicles:
         d = {
@@ -6988,24 +7069,30 @@ def dgrtr_cg_vehicle(vehicle_id):
         cg = CarteGrise(vehicle_id=vehicle_id, created_by=current_user.username)
         db.session.add(cg)
 
-    cg.carrosserie             = (data.get('carrosserie') or '').strip() or None
-    cg.places_assises          = (data.get('places_assises') or '').strip() or None
-    cg.poids_total_autorise    = (data.get('poids_total_autorise') or '').strip() or None
-    cg.poids_a_vide            = (data.get('poids_a_vide') or '').strip() or None
-    cg.charge_utile_ptc        = (data.get('charge_utile_ptc') or '').strip() or None
-    cg.profession_proprietaire = (data.get('profession_proprietaire') or '').strip() or None
-    cg.observation             = (data.get('observation') or '').strip() or None
-    cg.updated_at              = now_comoros()
-
-    raw_date = (data.get('date_emission') or '').strip()
-    if raw_date:
-        try:
-            cg.date_emission = date.fromisoformat(raw_date)
-        except ValueError:
+    # date_emission, prix and civilite are editable from the CG page modal
+    raw_civilite = (data.get('civilite') or '').strip()
+    if raw_civilite in ('Mr', 'Mme', 'Mlle'):
+        cg.civilite = raw_civilite
+    if 'date_emission' in data:
+        raw_date = (data.get('date_emission') or '').strip()
+        if raw_date:
+            try:
+                cg.date_emission = date.fromisoformat(raw_date)
+            except ValueError:
+                cg.date_emission = None
+        else:
             cg.date_emission = None
-    else:
-        cg.date_emission = None
 
+    raw_prix = data.get('prix')
+    if raw_prix is not None and raw_prix != '':
+        try:
+            cg.prix = float(str(raw_prix).replace(',', '.'))
+        except (ValueError, TypeError):
+            pass
+    else:
+        cg.prix = None
+
+    cg.updated_at = now_comoros()
     db.session.commit()
     return jsonify({'success': True, 'carte_grise': cg.to_dict()})
 
@@ -7120,6 +7207,61 @@ def dgrtr_rapport_cg():
     return render_template('dgrtr_rapport_cg.html')
 
 
+@main_bp.route('/dgrtr/recettes-cg')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_recettes_cg():
+    _require_cg_access()
+    return render_template('dgrtr_recettes_cg.html')
+
+
+@main_bp.route('/api/dgrtr/recettes-cg')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_recettes_cg_api():
+    _require_cg_access()
+    from app.models import CarteGrise, Vehicle
+    from sqlalchemy import func
+    from datetime import date
+    date_from = request.args.get('date_from')
+    date_to   = request.args.get('date_to')
+
+    q = CarteGrise.query.filter_by(status='signee').join(Vehicle)
+    q = apply_island_filter(q, Vehicle.owner_island)
+    if date_from:
+        try:
+            q = q.filter(CarteGrise.signed_at >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            q = q.filter(CarteGrise.signed_at <= date.fromisoformat(date_to))
+        except ValueError:
+            pass
+
+    cgs = q.order_by(CarteGrise.signed_at.desc()).all()
+    total_montant = sum(c.prix for c in cgs if c.prix is not None)
+    nb_avec_prix  = sum(1 for c in cgs if c.prix is not None)
+
+    rows = []
+    for c in cgs:
+        v = c.vehicle
+        rows.append({
+            'id': c.id,
+            'vehicle_id': v.id,
+            'license_plate': v.license_plate,
+            'owner_name': v.owner_name or '',
+            'civilite': c.civilite or '',
+            'signed_at': c.signed_at.strftime('%d/%m/%Y') if c.signed_at else '',
+            'date_emission': c.date_emission.strftime('%d/%m/%Y') if c.date_emission else '',
+            'prix': c.prix if c.prix is not None else None,
+        })
+    return jsonify({
+        'count': len(cgs),
+        'nb_avec_prix': nb_avec_prix,
+        'total_montant': total_montant,
+        'rows': rows,
+    })
+
+
 @main_bp.route('/api/dgrtr/cartes-grises/pending')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_cg_pending():
@@ -7151,7 +7293,7 @@ def _require_cg_settings_access():
             abort(403)
 
 
-ISLANDS = ('Grande Comores', 'Anjouan', 'Moheli')
+ISLANDS = ('Grande Comore', 'Anjouan', 'Moheli')
 
 
 @main_bp.route('/api/dgrtr/cartes-grises/settings', methods=['GET', 'POST'])
@@ -7159,7 +7301,7 @@ ISLANDS = ('Grande Comores', 'Anjouan', 'Moheli')
 def dgrtr_cg_settings():
     _require_cg_settings_access()
     from app.models import CarteGriseSetting
-    island = request.args.get('island') or (request.get_json() or {}).get('island') or 'Grande Comores'
+    island = request.args.get('island') or (request.get_json() or {}).get('island') or 'Grande Comore'
     if island not in ISLANDS:
         return jsonify({'error': 'Île invalide'}), 400
     s = CarteGriseSetting.get(island)
@@ -7196,7 +7338,7 @@ def dgrtr_cg_settings_signature_upload():
     from werkzeug.utils import secure_filename
     from app.models import CarteGriseSetting
     from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload, delete_file as cloud_delete
-    island = request.form.get('island') or 'Grande Comores'
+    island = request.form.get('island') or 'Grande Comore'
     if island not in ISLANDS:
         return jsonify({'error': 'Île invalide'}), 400
     file = request.files.get('signature')
@@ -7226,7 +7368,7 @@ def dgrtr_cg_settings_signature_delete():
     _require_cg_settings_access()
     from app.models import CarteGriseSetting
     from app.cloudinary_utils import delete_file as cloud_delete
-    island = request.args.get('island') or 'Grande Comores'
+    island = request.args.get('island') or 'Grande Comore'
     if island not in ISLANDS:
         return jsonify({'error': 'Île invalide'}), 400
     s = CarteGriseSetting.get(island)

@@ -10,7 +10,7 @@ smart_tech_bp = Blueprint('smart_tech', __name__, url_prefix='/smart-tech')
 @smart_tech_bp.context_processor
 def inject_licences_pending_count():
     try:
-        count = LicensePrintRequest.query.filter_by(status='pending').count()
+        count = _lpr_q().filter(LicensePrintRequest.status == 'pending').count()
     except Exception:
         count = 0
     return {'pending_count': count}
@@ -60,6 +60,41 @@ def st_admin_or_secretaire_required(f):
             return redirect(url_for('smart_tech.dashboard'))
         return f(*args, **kwargs)
     return decorated
+
+
+def _employe_island():
+    """Return the island assigned to the current employe account, or None for admin/secretaire."""
+    if getattr(current_user, 'role', None) == 'employe' and current_user.employee:
+        return current_user.employee.island or None
+    return None
+
+
+def _vq():
+    """Base Vehicle.query filtered to the current employe's island when applicable."""
+    island = _employe_island()
+    q = Vehicle.query
+    if island:
+        q = q.filter(Vehicle.owner_island == island)
+    return q
+
+
+def _lpr_q():
+    """LicensePrintRequest query filtered by employe island via DriverLicense.holder_island."""
+    from app.models import DriverLicense
+    island = _employe_island()
+    q = LicensePrintRequest.query.join(DriverLicense, LicensePrintRequest.license_id == DriverLicense.id)
+    if island:
+        q = q.filter(DriverLicense.holder_island == island)
+    return q
+
+
+def _ins_q():
+    """Insurance query filtered to the current employe's island when applicable."""
+    island = _employe_island()
+    q = Insurance.query
+    if island:
+        q = q.filter(Insurance.island == island)
+    return q
 
 
 @smart_tech_bp.route('/login', methods=['GET', 'POST'])
@@ -246,16 +281,16 @@ def dashboard():
     now = now_comoros()
 
     # ── Vehicle QR code stats ──────────────────────────────────────────────────
-    total_vehicles = Vehicle.query.count()
+    total_vehicles = _vq().count()
 
     # QR actif: qr_code_expiry dans le futur
-    qr_active = Vehicle.query.filter(
+    qr_active = _vq().filter(
         Vehicle.qr_code_expiry.isnot(None),
         Vehicle.qr_code_expiry > now
     ).count()
 
     # QR inactif: qr_code_expiry expiré (avaient un QR mais il a expiré)
-    qr_inactive = Vehicle.query.filter(
+    qr_inactive = _vq().filter(
         Vehicle.qr_code_expiry.isnot(None),
         Vehicle.qr_code_expiry <= now
     ).count()
@@ -272,7 +307,7 @@ def dashboard():
     from app.timezone_utils import ensure_comoros
 
     all_vehicles = (
-        Vehicle.query
+        _vq()
         .order_by(
             Vehicle.qr_code_generated_at.desc().nullslast(),
             Vehicle.created_at.desc()
@@ -439,17 +474,25 @@ def api_stats():
     from sqlalchemy import func
 
     now = now_comoros()
-    total = Vehicle.query.count()
-    active = Vehicle.query.filter(
+    total = _vq().count()
+    active = _vq().filter(
         Vehicle.qr_code_expiry.isnot(None),
         Vehicle.qr_code_expiry > now
     ).count()
-    inactive = Vehicle.query.filter(
+    inactive = _vq().filter(
         Vehicle.qr_code_expiry.isnot(None),
         Vehicle.qr_code_expiry <= now
     ).count()
-    never = Vehicle.query.filter(Vehicle.qr_code_expiry.is_(None)).count()
-    revenue = db.session.query(func.sum(QRCodePayment.amount)).filter_by(status='paid').scalar() or 0.0
+    never = _vq().filter(Vehicle.qr_code_expiry.is_(None)).count()
+    island = _employe_island()
+    if island:
+        island_vehicle_ids = [v.id for v in _vq().with_entities(Vehicle.id).all()]
+        revenue = db.session.query(func.sum(QRCodePayment.amount)).filter(
+            QRCodePayment.status == 'paid',
+            QRCodePayment.vehicle_id.in_(island_vehicle_ids)
+        ).scalar() or 0.0
+    else:
+        revenue = db.session.query(func.sum(QRCodePayment.amount)).filter_by(status='paid').scalar() or 0.0
 
     return jsonify({
         'total_vehicles': total,
@@ -469,7 +512,7 @@ def _vehicles_query_filtered(search, type_filter):
     from app.models import VehicleHistory
     _now = now_comoros()
 
-    query = Vehicle.query
+    query = _vq()
     if search:
         term  = f'%{search}%'
         query = query.filter(
@@ -687,12 +730,42 @@ def api_vehicle_history(vehicle_id):
     })
 
 
+@smart_tech_bp.route('/api/pending-qr-vehicles')
+@smart_tech_required
+def api_pending_qr_vehicles():
+    """Return vehicles awaiting SmartTech QR activation approval."""
+    vehicles = (
+        _vq()
+        .filter_by(qr_pending_approval=True)
+        .order_by(Vehicle.created_at.desc())
+        .all()
+    )
+    rows = []
+    for v in vehicles:
+        cg = getattr(v, 'carte_grise', None)
+        rows.append({
+            'id': v.id,
+            'license_plate': v.license_plate or '',
+            'owner_name': v.owner_name or '',
+            'owner_island': v.owner_island or '',
+            'vehicle_type': v.vehicle_type or '',
+            'make': v.make or '',
+            'model': v.model or '',
+            'year': v.year or '',
+            'created_by': v.created_by or '',
+            'created_at': v.created_at.strftime('%d/%m/%Y %H:%M') if v.created_at else '',
+            'carrosserie': cg.carrosserie if cg and cg.carrosserie else '',
+            'places_assises': cg.places_assises if cg and cg.places_assises else '',
+        })
+    return jsonify({'vehicles': rows, 'count': len(rows)})
+
+
 @smart_tech_bp.route('/api/last-update')
 @smart_tech_required
 def api_last_update():
     """Lightweight change-detection endpoint — returns a key string only."""
     from sqlalchemy import func
-    result = db.session.query(
+    result = _vq().with_entities(
         func.max(Vehicle.updated_at).label('last_update'),
         func.count(Vehicle.id).label('total')
     ).one()
@@ -707,12 +780,12 @@ def api_qr_table():
     from app.timezone_utils import now_comoros, ensure_comoros
 
     now = now_comoros()
-    total    = Vehicle.query.count()
-    active   = Vehicle.query.filter(Vehicle.qr_code_expiry.isnot(None), Vehicle.qr_code_expiry > now).count()
-    inactive = Vehicle.query.filter(Vehicle.qr_code_expiry.isnot(None), Vehicle.qr_code_expiry <= now).count()
+    total    = _vq().count()
+    active   = _vq().filter(Vehicle.qr_code_expiry.isnot(None), Vehicle.qr_code_expiry > now).count()
+    inactive = _vq().filter(Vehicle.qr_code_expiry.isnot(None), Vehicle.qr_code_expiry <= now).count()
 
     all_vehicles = (
-        Vehicle.query
+        _vq()
         .order_by(
             Vehicle.qr_code_generated_at.desc().nullslast(),
             Vehicle.created_at.desc()
@@ -724,7 +797,10 @@ def api_qr_table():
 
     recorded_payments = {
         p.vehicle_id: p
-        for p in QRCodePayment.query.filter_by(status='paid').all()
+        for p in QRCodePayment.query.filter(
+            QRCodePayment.status == 'paid',
+            QRCodePayment.vehicle_id.in_(vehicle_ids) if vehicle_ids else db.false()
+        ).all()
     }
 
     from app.models import VehicleHistory
@@ -1426,7 +1502,7 @@ def _generate_pdf(r):
 
     # ── Header ──
     story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph('Smart Technology', title_style))
+    story.append(Paragraph('Smart Development', title_style))
     story.append(Paragraph('Rapport — ' + _period_label(r['period_type'], r['period_value']), sub_style))
     from app.timezone_utils import now_comoros
     story.append(Spacer(1, 0.2*cm))
@@ -1610,7 +1686,7 @@ def _generate_pdf(r):
 
     story.append(Spacer(1, 1*cm))
     story.append(HRFlowable(width=W, thickness=0.5, color=colors.HexColor('#ccc')))
-    story.append(Paragraph('Smart Technology — Rapport généré automatiquement', small))
+    story.append(Paragraph('Smart Development — Rapport généré automatiquement', small))
 
     doc.build(story)
     return buf.getvalue()
@@ -1618,7 +1694,7 @@ def _generate_pdf(r):
 
 # ── Island Statistics ────────────────────────────────────────────────────────
 
-ISLANDS = ['Grande Comores', 'Anjouan', 'Moheli']
+ISLANDS = ['Grande Comore', 'Anjouan', 'Moheli']
 
 
 def _island_stats(year=None):
@@ -1750,7 +1826,7 @@ def licences_page():
 def api_licences_last_update():
     """Lightweight change-detection key for print requests."""
     from sqlalchemy import func
-    result = db.session.query(
+    result = _lpr_q().with_entities(
         func.max(LicensePrintRequest.requested_at).label('last_req'),
         func.max(LicensePrintRequest.printed_at).label('last_print'),
         func.count(LicensePrintRequest.id).label('total'),
@@ -1764,8 +1840,8 @@ def api_licences_last_update():
 @smart_tech_required
 def api_licences_requests():
     """All pending print requests, newest first."""
-    reqs = (LicensePrintRequest.query
-            .filter_by(status='pending')
+    reqs = (_lpr_q()
+            .filter(LicensePrintRequest.status == 'pending')
             .order_by(LicensePrintRequest.requested_at.asc())
             .all())
     return jsonify([r.to_dict() for r in reqs])
@@ -1806,17 +1882,17 @@ def api_licences_requests_stats():
     today = now.date()
     first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    pending_count   = LicensePrintRequest.query.filter_by(status='pending').count()
-    printed_today   = LicensePrintRequest.query.filter(
+    pending_count   = _lpr_q().filter(LicensePrintRequest.status == 'pending').count()
+    printed_today   = _lpr_q().filter(
         LicensePrintRequest.status == 'printed',
         LicensePrintRequest.printed_at >= datetime.combine(today, datetime.min.time())
     ).count()
-    printed_month   = LicensePrintRequest.query.filter(
+    printed_month   = _lpr_q().filter(
         LicensePrintRequest.status == 'printed',
         LicensePrintRequest.printed_at >= first_of_month
     ).count()
-    printed_total   = LicensePrintRequest.query.filter_by(status='printed').count()
-    cancelled_total = LicensePrintRequest.query.filter_by(status='cancelled').count()
+    printed_total   = _lpr_q().filter(LicensePrintRequest.status == 'printed').count()
+    cancelled_total = _lpr_q().filter(LicensePrintRequest.status == 'cancelled').count()
 
     return jsonify({
         'pending_count':   pending_count,
@@ -1832,7 +1908,7 @@ def api_licences_requests_stats():
 def api_licences_requests_history():
     """All printed requests, newest first. Supports ?from=dd/mm/yyyy&to=dd/mm/yyyy."""
     from datetime import datetime
-    q = LicensePrintRequest.query.filter_by(status='printed')
+    q = _lpr_q().filter(LicensePrintRequest.status == 'printed')
     date_from = request.args.get('from')
     date_to   = request.args.get('to')
     if date_from:
@@ -1862,7 +1938,10 @@ def api_licences_list():
     type_filter  = request.args.get('type_filter', '').strip()
     status_filter = request.args.get('status_filter', '').strip()
 
+    island = _employe_island()
     query = DriverLicense.query
+    if island:
+        query = query.filter(DriverLicense.holder_island == island)
     if search:
         term  = f'%{search}%'
         query = query.filter(
@@ -2267,7 +2346,7 @@ def assurance_page():
 @smart_tech_bp.route('/api/assurance/companies', methods=['GET'])
 @smart_tech_required
 def api_assurance_companies():
-    companies = Insurance.query.order_by(Insurance.company_name).all()
+    companies = _ins_q().order_by(Insurance.company_name).all()
     return jsonify([c.to_dict() for c in companies])
 
 
@@ -2327,7 +2406,15 @@ def api_assurance_company_delete(ins_id):
 @smart_tech_bp.route('/api/assurance/accounts', methods=['GET'])
 @smart_tech_required
 def api_assurance_accounts():
-    accounts = InsuranceAccount.query.order_by(InsuranceAccount.created_at.desc()).all()
+    island = _employe_island()
+    if island:
+        accounts = (InsuranceAccount.query
+                    .join(Insurance, InsuranceAccount.insurance_id == Insurance.id)
+                    .filter(Insurance.island == island)
+                    .order_by(InsuranceAccount.created_at.desc())
+                    .all())
+    else:
+        accounts = InsuranceAccount.query.order_by(InsuranceAccount.created_at.desc()).all()
     return jsonify([a.to_dict() for a in accounts])
 
 
@@ -2419,7 +2506,7 @@ def api_assurance_movements():
     # 'all' → since/until remain None
 
     commission_rate = int(SmartTechSetting.get('insurance_commission', 0))
-    companies = Insurance.query.order_by(Insurance.company_name).all()
+    companies = _ins_q().order_by(Insurance.company_name).all()
     result = []
 
     for ins in companies:
@@ -2503,3 +2590,85 @@ def api_commission_received_toggle():
     ts = now_comoros().strftime('%Y-%m-%dT%H:%M:%S')
     SmartTechSetting.set(key, f'{ts}|{name}')
     return jsonify({'confirmed': True, 'confirmed_at': ts, 'confirmed_by': name})
+
+
+@smart_tech_bp.route('/rapport-journalier')
+@smart_tech_required
+def rapport_journalier_page():
+    from app.timezone_utils import now_comoros
+    today = now_comoros().date()
+    return render_template(
+        'smart_tech_rapport_journalier.html',
+        today=today.isoformat(),
+    )
+
+
+@smart_tech_bp.route('/api/rapport-journalier')
+@smart_tech_required
+def api_rapport_journalier():
+    from app.timezone_utils import now_comoros
+    from datetime import date as date_type, datetime, timedelta
+    from sqlalchemy import func
+
+    day_str = request.args.get('date', '')
+    try:
+        day = date_type.fromisoformat(day_str)
+    except (ValueError, TypeError):
+        day = now_comoros().date()
+
+    day_start = datetime(day.year, day.month, day.day, 0, 0, 0)
+    day_end   = datetime(day.year, day.month, day.day, 23, 59, 59)
+
+    q = QRCodePayment.query.filter(
+        QRCodePayment.status == 'paid',
+        QRCodePayment.paid_at >= day_start,
+        QRCodePayment.paid_at <= day_end,
+    )
+
+    emp_island = _employe_island()
+    if emp_island:
+        # employe: always restricted to their own island
+        island_vehicle_ids = [v.id for v in Vehicle.query.filter_by(owner_island=emp_island).all()]
+        q = q.filter(QRCodePayment.vehicle_id.in_(island_vehicle_ids))
+    else:
+        # admin/secretaire: optional island filter from query param
+        requested_island = request.args.get('island', '').strip()
+        if requested_island:
+            island_vehicle_ids = [v.id for v in Vehicle.query.filter_by(owner_island=requested_island).all()]
+            q = q.filter(QRCodePayment.vehicle_id.in_(island_vehicle_ids))
+
+    payments = q.order_by(QRCodePayment.paid_at.asc()).all()
+
+    activations = [p for p in payments if p.payment_type == 'activation']
+    renewals    = [p for p in payments if p.payment_type == 'renewal']
+    total_amount = sum(p.amount for p in payments)
+
+    act_price = float(SmartTechSetting.get('qr_activation_price', 5000))
+    ren_price = float(SmartTechSetting.get('qr_renewal_price', 3000))
+
+    rows = []
+    for p in payments:
+        v = p.vehicle
+        rows.append({
+            'id':            p.id,
+            'vehicle_id':    p.vehicle_id,
+            'license_plate': v.license_plate if v else '—',
+            'owner_name':    v.owner_name if v else '—',
+            'owner_island':  v.owner_island if v else '—',
+            'payment_type':  p.payment_type,
+            'amount':        float(p.amount),
+            'paid_at':       p.paid_at.strftime('%H:%M') if p.paid_at else '—',
+            'recorded_by':   p.recorded_by or '—',
+        })
+
+    return jsonify({
+        'date':            day.strftime('%d/%m/%Y'),
+        'date_iso':        day.isoformat(),
+        'nb_total':        len(payments),
+        'nb_activations':  len(activations),
+        'nb_renewals':     len(renewals),
+        'total_amount':    total_amount,
+        'act_price':       act_price,
+        'ren_price':       ren_price,
+        'rows':            rows,
+    })

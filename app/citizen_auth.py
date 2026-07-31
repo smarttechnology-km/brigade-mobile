@@ -562,10 +562,13 @@ def get_current_user():
         
         vehicle = Vehicle.query.get(vehicle_id)
         print(f"   Found vehicle: {vehicle}")
-        
+
         if not vehicle:
             print(f"⚠️  Vehicle not found for id: {vehicle_id}")
             return jsonify({'error': 'Vehicle not found'}), 404
+
+        if vehicle.qr_pending_approval:
+            return jsonify({'error': 'Ce véhicule est en attente de validation. Veuillez réessayer plus tard.'}), 403
         
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
         
@@ -888,7 +891,9 @@ def get_my_vehicles():
             vehicle = owner.vehicle
             if not vehicle:
                 continue
-            
+            if vehicle.qr_pending_approval:
+                continue
+
             # Count unpaid fines for this vehicle
             fines_count = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).count()
             
@@ -974,8 +979,11 @@ def switch_vehicle():
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
 
+        if vehicle.qr_pending_approval:
+            return jsonify({'error': 'Ce véhicule est en attente de validation. Il ne peut pas être sélectionné pour l\'instant.'}), 403
+
         if vehicle.status == 'inactive':
-            return jsonify({'error': 'Ce véhicule est inactif. Vous pouvez le voir, mais vous ne pouvez pas l’activer.'}), 403
+            return jsonify({'error': "Ce véhicule est inactif. Vous pouvez le voir, mais vous ne pouvez pas l'activer."}), 403
 
         owner.last_login = datetime.utcnow()
         if device_id:

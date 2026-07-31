@@ -247,7 +247,7 @@ def lookup():
     if not vehicle:
         vehicle = Vehicle.query.filter_by(license_plate=q_normalized).first()
 
-    if not vehicle:
+    if not vehicle or vehicle.qr_pending_approval:
         return jsonify({'fines': [], 'vehicle': None})
 
     # Return unpaid fines only
@@ -885,7 +885,7 @@ def last_receipt_by_plate():
     
     # Find vehicle by exact plate only — no partial search
     vehicle = Vehicle.query.filter_by(license_plate=plate.upper().strip()).first()
-    if not vehicle:
+    if not vehicle or vehicle.qr_pending_approval:
         return jsonify({'error': 'Immatriculation introuvable. Veuillez entrer l\'immatriculation complète.'}), 404
 
     from sqlalchemy import or_, and_
@@ -983,7 +983,7 @@ def receipts_by_date():
     
     # Find vehicle by exact plate only — no partial search
     vehicle = Vehicle.query.filter_by(license_plate=plate.upper().strip()).first()
-    if not vehicle:
+    if not vehicle or vehicle.qr_pending_approval:
         return jsonify({'error': 'Immatriculation introuvable. Veuillez entrer l\'immatriculation complète.'}), 404
 
     from sqlalchemy import or_, and_

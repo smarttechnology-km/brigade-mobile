@@ -80,7 +80,7 @@ class Vehicle(db.Model):
     license_plate = db.Column(db.String(20), unique=True, nullable=False)
     owner_name = db.Column(db.String(100), nullable=False)
     owner_phone = db.Column(db.String(15))
-    owner_island = db.Column(db.String(50))  # Grande Comores, Anjouan, Moheli
+    owner_island = db.Column(db.String(50))  # Grande Comore, Anjouan, Moheli
     vehicle_type = db.Column(db.String(50), nullable=False)  # voiture, moto, camion, etc.
     fuel_type = db.Column(db.String(50))  # Essence, Gazoil, Electric, autre
     usage_type = db.Column(db.String(50), default='Personnelle')  # Personnelle, Taxi, Transport public, other
@@ -113,6 +113,7 @@ class Vehicle(db.Model):
     vignette_last_paid_total_amount = db.Column(db.Float, nullable=False, default=0.0)
     qr_code_generated_at = db.Column(db.DateTime, nullable=True)  # When QR code was generated or renewed
     qr_code_expiry = db.Column(db.DateTime, nullable=True)  # When QR code expires (1 year after generation)
+    qr_pending_approval = db.Column(db.Boolean, nullable=False, default=False)  # True until SmartTech validates QR creation
     fiscal_class = db.Column(db.String(10))  # A, B, C, D
     cv_class = db.Column(db.String(20))  # 0-5 CV, 6-9 CV, 10-12 CV, 12 CV et +
     work_zone = db.Column(db.String(100))  # Zone de travail for Taxi / Transport public
@@ -199,6 +200,7 @@ class Vehicle(db.Model):
             'vignette_last_paid_total_amount': float(self.vignette_last_paid_total_amount or 0),
             'qr_code_generated_at': format_date(self.qr_code_generated_at),
             'qr_code_expiry': format_date(self.qr_code_expiry),
+            'qr_pending_approval': bool(self.qr_pending_approval),
             'track_token': self.track_token,
             'registration_date': format_date(self.registration_date),
             'last_inspection_date': format_date(self.last_inspection_date),
@@ -436,7 +438,7 @@ class Insurance(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_name = db.Column(db.String(150), nullable=False, unique=True)
     phone = db.Column(db.String(30), nullable=True)
-    island = db.Column(db.String(50), nullable=True)  # Grande Comores, Anjouan, Moheli
+    island = db.Column(db.String(50), nullable=True)  # Grande Comore, Anjouan, Moheli
     address = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
@@ -506,7 +508,7 @@ class InsuranceAccount(db.Model, UserMixin):
 
 
 class QRCodePayment(db.Model):
-    """Tracks QR code activation and renewal payments managed by Smart Technology."""
+    """Tracks QR code activation and renewal payments managed by Smart Development."""
     __tablename__ = 'qr_code_payments'
     id = db.Column(db.Integer, primary_key=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
@@ -539,7 +541,7 @@ class QRCodePayment(db.Model):
 
 
 class SmartTechAccount(db.Model, UserMixin):
-    """Smart Technology agency account — independent finance dashboard login."""
+    """Smart Development agency account — independent finance dashboard login."""
     __tablename__ = 'smart_tech_accounts'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -634,7 +636,7 @@ class Phone(db.Model):
     color = db.Column(db.String(100), nullable=True)
     brand = db.Column(db.String(100), nullable=False)
     model = db.Column(db.String(100), nullable=False)
-    island = db.Column(db.String(50), nullable=True)  # Grande Comores, Anjouan, Moheli
+    island = db.Column(db.String(50), nullable=True)  # Grande Comore, Anjouan, Moheli
     status = db.Column(db.String(30), nullable=False, default='active')  # 'active' or 'inactive'
     qr_code_data = db.Column(db.String(255), nullable=True)  # Dynamic QR code data (changes daily)
     qr_code_generated_at = db.Column(db.DateTime, nullable=True)  # When QR code was last generated
@@ -886,7 +888,7 @@ class VignetteSetting(db.Model):
 
 
 class Subscription(db.Model):
-    """Smart Technology recurring cost subscriptions."""
+    """Smart Development recurring cost subscriptions."""
     __tablename__ = 'st_subscriptions'
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -1020,7 +1022,7 @@ class Subscription(db.Model):
 
 
 class Employee(db.Model):
-    """Smart Technology employee registry."""
+    """Smart Development employee registry."""
     __tablename__ = 'st_employees'
 
     id         = db.Column(db.Integer, primary_key=True)
@@ -1041,7 +1043,7 @@ class Employee(db.Model):
         'Directeur', 'Responsable technique', 'Technicien',
         'Commercial', 'Comptable', 'Secrétaire', 'Agent de terrain', 'Autre',
     ]
-    ISLANDS = ['Grande Comores', 'Anjouan', 'Moheli']
+    ISLANDS = ['Grande Comore', 'Anjouan', 'Moheli']
 
     @property
     def full_name(self):
@@ -1072,7 +1074,7 @@ class Employee(db.Model):
 
 
 class Expense(db.Model):
-    """Smart Technology one-off expenses (purchases, travel, training, etc.)."""
+    """Smart Development one-off expenses (purchases, travel, training, etc.)."""
     __tablename__ = 'st_expenses'
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -1112,7 +1114,7 @@ class Expense(db.Model):
 
 
 class SmartTechSetting(db.Model):
-    """Key-value config store for Smart Technology parameters."""
+    """Key-value config store for Smart Development parameters."""
     __tablename__ = 'st_settings'
 
     id         = db.Column(db.Integer, primary_key=True)
@@ -1507,7 +1509,7 @@ class Alert(db.Model):
         'travaux_planifies':     'Travaux planifiés',
         'autre':                 'Autre',
     }
-    ISLANDS = ['Grande Comores', 'Anjouan', 'Moheli']
+    ISLANDS = ['Grande Comore', 'Anjouan', 'Moheli']
     NATIONAL = 'National'  # special island value: visible on all three islands
     ISLAND_OPTIONS = ISLANDS + [NATIONAL]
     VEHICLE_LINK_TYPES = ('accident', 'recherche_vehicule')  # alert types that link to vehicles in the database
@@ -1759,6 +1761,7 @@ class CarteGrise(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), unique=True, nullable=False)
 
+    civilite               = db.Column(db.String(10))
     carrosserie            = db.Column(db.String(100))
     places_assises         = db.Column(db.String(20))
     poids_total_autorise   = db.Column(db.String(50))
@@ -1767,6 +1770,7 @@ class CarteGrise(db.Model):
     profession_proprietaire = db.Column(db.String(150))
     observation            = db.Column(db.Text)
     date_emission          = db.Column(db.Date)
+    prix                   = db.Column(db.Float)
 
     # Workflow: brouillon → en_attente → signee
     status                     = db.Column(db.String(30), default='brouillon', nullable=False)
@@ -1785,6 +1789,7 @@ class CarteGrise(db.Model):
         return {
             'id': self.id,
             'vehicle_id': self.vehicle_id,
+            'civilite': self.civilite or '',
             'carrosserie': self.carrosserie or '',
             'places_assises': self.places_assises or '',
             'poids_total_autorise': self.poids_total_autorise or '',
@@ -1793,6 +1798,7 @@ class CarteGrise(db.Model):
             'profession_proprietaire': self.profession_proprietaire or '',
             'observation': self.observation or '',
             'date_emission': self.date_emission.strftime('%Y-%m-%d') if self.date_emission else '',
+            'prix': self.prix if self.prix is not None else '',
             'status': self.status or 'brouillon',
             'signature_requested_at': self.signature_requested_at.strftime('%d/%m/%Y %H:%M') if self.signature_requested_at else '',
             'signature_requested_by': self.signature_requested_by or '',
@@ -1809,7 +1815,7 @@ class CarteGrise(db.Model):
 class CarteGriseSetting(db.Model):
     __tablename__ = 'carte_grise_setting'
     id                    = db.Column(db.Integer, primary_key=True)
-    island                = db.Column(db.String(50), nullable=False, default='Grande Comores')
+    island                = db.Column(db.String(50), nullable=False, default='Grande Comore')
     directeur_nom         = db.Column(db.String(200))
     signature_filename    = db.Column(db.String(255))
     duree_validite        = db.Column(db.Integer, default=90)
@@ -1821,7 +1827,7 @@ class CarteGriseSetting(db.Model):
         return _cloud_url(self.signature_filename, 'signatures') or ''
 
     @classmethod
-    def get(cls, island='Grande Comores'):
+    def get(cls, island='Grande Comore'):
         obj = cls.query.filter_by(island=island).first()
         if obj is None:
             obj = cls(island=island, duree_validite=90)
