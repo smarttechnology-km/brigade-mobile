@@ -127,7 +127,7 @@ def register():
             vin=vin
         ).first()
         
-        if not vehicle:
+        if not vehicle or vehicle.qr_pending_approval:
             return jsonify({'error': 'Vehicle not found. Please verify your license plate and VIN.'}), 404
 
         if not _is_vehicle_active(vehicle):
@@ -227,20 +227,27 @@ def login():
         
         print(f"📱 Looking up VehicleOwner for phone: {phone}")
         
-        # Find the most recently used verified VehicleOwner for this phone.
-        # If the phone is linked to multiple vehicles, default to the most recent one.
+        # Find the most recently used verified VehicleOwner for this phone,
+        # excluding vehicles pending QR approval.
         owner = (
             VehicleOwner.query
-            .filter_by(phone=phone, is_verified=True)
+            .join(Vehicle, VehicleOwner.vehicle_id == Vehicle.id)
+            .filter(
+                VehicleOwner.phone == phone,
+                VehicleOwner.is_verified == True,
+                Vehicle.qr_pending_approval == False,
+            )
             .order_by(VehicleOwner.last_login.desc(), VehicleOwner.verified_at.desc(), VehicleOwner.id.desc())
             .first()
         )
-        
+
         if not owner:
             print(f"⚠️  Login failed: No verified account found for {phone}")
             return jsonify({'error': 'No account found with this phone number'}), 404
 
         vehicle = owner.vehicle
+        if not vehicle:
+            return jsonify({'error': 'No account found with this phone number'}), 404
         if not _is_vehicle_active(vehicle):
             return jsonify({'error': 'Ce véhicule est inactif. Son activation est requise avant la connexion.'}), 403
         
