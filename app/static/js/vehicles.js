@@ -723,18 +723,27 @@ function openVehicleModal(vehicle) {
     const cgSection        = document.getElementById('cg-extra-section');
     const cgPendingBadge   = document.getElementById('cg-pending-badge');
     const cgPendingAlert   = document.getElementById('cg-pending-alert');
+    const _fieldVignette   = document.getElementById('field-vignette-expiry');
+    const _fieldEmission   = document.getElementById('field-cg-date-emission');
+    const _sectionAssurance = document.getElementById('section-assurance');
     if(vehicle) {
         modalTitle.innerHTML = '<i class="fas fa-edit me-2"></i><span>Éditer le véhicule</span>';
         if(genBtn) genBtn.style.display = 'none';
         if(cgSection)      cgSection.classList.remove('d-none');
         if(cgPendingBadge) cgPendingBadge.style.display = 'none';
         if(cgPendingAlert) cgPendingAlert.style.display = 'none';
+        if(_fieldVignette)    _fieldVignette.style.display = '';
+        if(_fieldEmission)    _fieldEmission.style.display = '';
+        if(_sectionAssurance) _sectionAssurance.style.display = '';
     } else {
         modalTitle.innerHTML = '<i class="fas fa-car me-2"></i><span>Ajouter un véhicule</span>';
         if(genBtn) genBtn.style.display = '';
         if(cgSection)      cgSection.classList.remove('d-none');
         if(cgPendingBadge) cgPendingBadge.style.display = '';
         if(cgPendingAlert) cgPendingAlert.style.display = '';
+        if(_fieldVignette)    _fieldVignette.style.display = 'none';
+        if(_fieldEmission)    _fieldEmission.style.display = 'none';
+        if(_sectionAssurance) _sectionAssurance.style.display = 'none';
     }
     
     // ensure type controls are in known default state
@@ -1100,7 +1109,6 @@ function saveVehicle() {
             if (newId) saveCgData(newId);
             safeHideModal();
             loadVehicles();
-            alert('Véhicule ajouté avec succès !\n\nLe QR Code sera généré après validation par le système SmartTech.');
         }).catch(err => {
             alert(err.message || 'Erreur lors de la création');
         });
