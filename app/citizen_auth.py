@@ -134,8 +134,8 @@ def register():
             return jsonify({'error': 'Ce véhicule est inactif. Son activation est requise avant l\'enregistrement.'}), 403
 
         stored_vehicle_phone = _normalize_phone(vehicle.owner_phone)
-        if stored_vehicle_phone and stored_vehicle_phone != normalized_phone:
-            return jsonify({'error': 'The phone number does not match the vehicle record.'}), 403
+        if not stored_vehicle_phone or stored_vehicle_phone != normalized_phone:
+            return jsonify({'error': 'Vehicle not found. Please verify your license plate, VIN and phone number.'}), 404
         
         # Check if vehicle owner already exists
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
@@ -820,11 +820,10 @@ def confirm_delete_account_otp():
             otp_data['attempts'] += 1
             return jsonify({'error': 'Invalid OTP'}), 401
 
-        # Clear the phone from ALL vehicles linked to this number and delete all owner rows.
+        # Delete all owner rows for this phone but leave vehicle.owner_phone intact
+        # so the user can re-register with the same number later.
         all_owners = VehicleOwner.query.filter_by(phone=phone).all()
         for o in all_owners:
-            if o.vehicle:
-                o.vehicle.owner_phone = None
             db.session.delete(o)
         db.session.commit()
 
