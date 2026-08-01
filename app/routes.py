@@ -34,6 +34,60 @@ vehicle_bp = Blueprint('vehicles', __name__, url_prefix='/api/vehicles')
 logo_path = os.path.join(os.path.dirname(__file__), 'static', 'img', 'logo.png')
 
 # Helper function: Calculate vignette expiry date (March 31st)
+def _make_qr_with_plate(data, plate_text, box_size=10, border=2):
+    """Generate a QR code image with the license plate text overlaid in the center."""
+    from PIL import Image, ImageDraw, ImageFont
+    import qrcode as _qrcode
+
+    qr = _qrcode.QRCode(
+        error_correction=_qrcode.constants.ERROR_CORRECT_H,
+        box_size=box_size,
+        border=border,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
+
+    draw = ImageDraw.Draw(qr_img)
+    w, h = qr_img.size
+    font_size = max(16, int(h * 0.10))
+
+    font = None
+    for fp in [
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    ]:
+        try:
+            font = ImageFont.truetype(fp, size=font_size)
+            break
+        except Exception:
+            pass
+    if font is None:
+        try:
+            font = ImageFont.load_default(size=font_size)
+        except Exception:
+            font = ImageFont.load_default()
+
+    bbox = draw.textbbox((0, 0), plate_text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    pad = int(h * 0.03)
+
+    rx1 = (w - tw) // 2 - pad
+    ry1 = (h - th) // 2 - pad
+    rx2 = (w + tw) // 2 + pad
+    ry2 = (h + th) // 2 + pad
+    draw.rectangle([rx1, ry1, rx2, ry2], fill='white')
+    draw.text(
+        ((w - tw) // 2 - bbox[0], (h - th) // 2 - bbox[1]),
+        plate_text, fill='black', font=font,
+    )
+    return qr_img
+
+
 def get_vignette_expiry_date(reference_date=None):
     """
     Calculate vignette expiry date: March 31st of the current or next year.
@@ -2509,14 +2563,8 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         from reportlab.lib.enums import TA_CENTER
 
 
-        # Générer QR code
-        track_url = vehicle.license_plate
-        qr = qrcode.QRCode(box_size=6, border=2)
-        qr.add_data(track_url)
-        qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-
-        # Sauvegarder QR code dans un buffer
+        # Générer QR code avec numéro d'immatriculation intégré
+        qr_img = _make_qr_with_plate(vehicle.license_plate, vehicle.license_plate)
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
@@ -2535,7 +2583,6 @@ def get_vehicle_qrcode_pdf(vehicle_id):
             fontSize=7, textColor=colors.HexColor('#555555'),
             alignment=TA_CENTER, fontName='Helvetica-Oblique', leading=9,
         )
-
         qr_big = RLImage(qr_buf, width=8.0*cm, height=8.0*cm)
         qr_band = Table([[qr_big]], colWidths=[9.2*cm], rowHeights=[8.28*cm])
         qr_band.setStyle(TableStyle([
@@ -3753,14 +3800,8 @@ def public_track_qrcode_pdf(token):
         from reportlab.lib.enums import TA_CENTER
 
 
-        # Générer QR code
-        track_url = vehicle.license_plate
-        qr = qrcode.QRCode(box_size=6, border=2)
-        qr.add_data(track_url)
-        qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-
-        # Sauvegarder QR code dans un buffer
+        # Générer QR code avec numéro d'immatriculation intégré
+        qr_img = _make_qr_with_plate(vehicle.license_plate, vehicle.license_plate)
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
@@ -3816,8 +3857,6 @@ def public_track_qrcode_pdf(token):
             alignment=TA_CENTER, fontName='Helvetica-Oblique', leading=9,
         )
 
-        # Zone utile = 10cm - 0.4cm (top) - 0.35cm (bottom) = 9.25cm
-        # QR 8.0cm + padding 4+2pt (~0.21cm) + footer ~0.46cm = ~8.67cm → OK
         qr_big = RLImage(qr_buf, width=8.0*cm, height=8.0*cm)
         qr_band = Table([[qr_big]], colWidths=[9.2*cm], rowHeights=[8.28*cm])
         qr_band.setStyle(TableStyle([
