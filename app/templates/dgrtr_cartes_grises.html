@@ -145,9 +145,9 @@
   <!-- Status tabs -->
   <div class="mb-3" style="border-bottom:2px solid #e5e7eb;">
     <div class="d-flex gap-1 align-items-center flex-wrap">
-      <button class="cg-status-tab active" data-val="" onclick="setCgTab(this,'')">
-        <i class="fas fa-list me-1"></i>Tous
-        <span class="cg-tab-badge" id="badge-all"></span>
+      <button class="cg-status-tab active" data-val="brouillon" onclick="setCgTab(this,'brouillon')">
+        <i class="fas fa-edit me-1"></i>Brouillon
+        <span class="cg-tab-badge badge-draft" id="badge-draft"></span>
       </button>
       <button class="cg-status-tab" data-val="en_attente" onclick="setCgTab(this,'en_attente')">
         <i class="fas fa-clock me-1"></i>En attente
@@ -170,8 +170,7 @@
     </div>
     <select id="filter-status" style="display:none;" onchange="doSearch()">
       <option value=""></option>
-      <option value="none">À compléter</option>
-      <option value="brouillon">Brouillon</option>
+      <option value="brouillon" selected>Brouillon</option>
       <option value="en_attente">En attente</option>
       <option value="signee">Signée</option>
     </select>
@@ -402,17 +401,17 @@ function setCgTab(btn, val) {
 }
 
 function _updateCgTabBadges() {
-  const counts = { all: 0, en_attente: 0, signee: 0 };
+  const counts = { brouillon: 0, en_attente: 0, signee: 0 };
   _allVehicles.forEach(v => {
-    counts.all++;
-    const s = v.carte_grise ? (v.carte_grise.status || 'brouillon') : 'none';
+    const s = v.carte_grise ? (v.carte_grise.status || 'brouillon') : 'brouillon';
+    if (s === 'brouillon')  counts.brouillon++;
     if (s === 'en_attente') counts.en_attente++;
     if (s === 'signee')     counts.signee++;
   });
-  const ba = document.getElementById('badge-all');
+  const bd = document.getElementById('badge-draft');
   const bp = document.getElementById('badge-pending');
   const bs = document.getElementById('badge-signed');
-  if (ba) ba.textContent = counts.all || '';
+  if (bd) bd.textContent = counts.brouillon || '';
   if (bp) bp.textContent = counts.en_attente || '';
   if (bs) bs.textContent = counts.signee || '';
 }
@@ -674,9 +673,15 @@ async function doSearch() {
   }
   if (filterStatus) {
     filtered = filtered.filter(v => {
-      const s = v.carte_grise ? (v.carte_grise.status || 'brouillon') : 'none';
+      const s = v.carte_grise ? (v.carte_grise.status || 'brouillon') : 'brouillon';
       return s === filterStatus;
     });
+  }
+  if (filterStatus === 'signee') {
+    const toIso = s => s ? s.replace(/^(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1') : '';
+    filtered = [...filtered].sort((a, b) =>
+      toIso(b.carte_grise?.signed_at || '').localeCompare(toIso(a.carte_grise?.signed_at || ''))
+    );
   }
   renderTable(filtered);
 }
@@ -905,6 +910,39 @@ function showToast(msg) {
   document.body.appendChild(t); setTimeout(() => t.remove(), 3500);
 }
 
+function showNotifToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'position-fixed top-0 end-0 p-3'; t.style.zIndex = 9999;
+  t.innerHTML = `<div class="toast show align-items-center border-0" style="background:#1d6fa4;color:#fff;min-width:280px;"><div class="d-flex"><div class="toast-body"><i class="fas fa-bell me-2"></i>${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.p-3').remove()"></button></div></div>`;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 6000);
+}
+
+function startSSE() {
+  let es;
+  function connect() {
+    es = new EventSource('/api/dgrtr/cartes-grises/stream');
+    es.onmessage = function(e) {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'new_request') {
+          loadPending();
+          loadDrStats();
+          showNotifToast('Nouvelle demande de signature reçue');
+        } else if (data.type === 'signed') {
+          loadAllVehicles();
+          if (USER_ROLE !== 'judiciaire') { loadPending(); loadDrStats(); }
+          showNotifToast('Une carte grise vient d\'être signée');
+        }
+      } catch(_) {}
+    };
+    es.onerror = function() {
+      es.close();
+      setTimeout(connect, 5000);
+    };
+  }
+  connect();
+}
+
 async function loadPending() {
   if (USER_ROLE === 'judiciaire') return;
   try {
@@ -960,6 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPending();
     if (USER_DGRTR_TYPE === 'directeur_regional') loadDrStats();
   }
+  startSSE();
 });
 </script>
 

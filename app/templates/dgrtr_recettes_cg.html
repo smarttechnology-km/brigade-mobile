@@ -26,26 +26,29 @@
   </div>
 
   <!-- Filtres -->
-  <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body py-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-auto">
-          <label class="form-label fw-semibold mb-1" style="font-size:13px;">Du</label>
-          <input type="date" class="form-control form-control-sm" id="f-date-from">
-        </div>
-        <div class="col-auto">
-          <label class="form-label fw-semibold mb-1" style="font-size:13px;">Au</label>
-          <input type="date" class="form-control form-control-sm" id="f-date-to">
-        </div>
-        <div class="col-auto">
-          <button class="btn btn-primary btn-sm" onclick="loadData()">
-            <i class="fas fa-search me-1"></i>Filtrer
-          </button>
-          <button class="btn btn-outline-secondary btn-sm ms-1" onclick="resetFilter()">
-            <i class="fas fa-times me-1"></i>Réinitialiser
-          </button>
-        </div>
-      </div>
+  <div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
+    <!-- Mode Jour -->
+    <button id="btn-mode-jour" class="btn btn-primary btn-sm" onclick="setMode('jour')">
+      <i class="fas fa-calendar-day me-1"></i>Jour
+    </button>
+    <!-- Mode plage -->
+    <button id="btn-mode-plage" class="btn btn-outline-secondary btn-sm" onclick="setMode('plage')">
+      <i class="fas fa-calendar-alt me-1"></i>Du…au
+    </button>
+
+    <!-- Jour : champ date unique -->
+    <div id="zone-jour" style="display:flex;align-items:center;gap:.5rem;">
+      <input type="date" class="form-control form-control-sm" id="f-jour" style="width:160px;" oninput="loadData()">
+    </div>
+
+    <!-- Plage : deux champs -->
+    <div id="zone-plage" style="display:none;align-items:center;gap:.5rem;">
+      <input type="date" class="form-control form-control-sm" id="f-date-from" style="width:150px;">
+      <span class="text-muted fw-semibold">→</span>
+      <input type="date" class="form-control form-control-sm" id="f-date-to" style="width:150px;">
+      <button class="btn btn-primary btn-sm" onclick="loadData()">
+        <i class="fas fa-search me-1"></i>Filtrer
+      </button>
     </div>
   </div>
 
@@ -115,9 +118,32 @@ function fmtTotal(n) {
   return Number(n).toLocaleString('fr-FR') + ' FC';
 }
 
+let _mode = 'jour';
+
+function setMode(mode) {
+  _mode = mode;
+  document.getElementById('btn-mode-jour').className  = mode === 'jour'  ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btn-mode-plage').className = mode === 'plage' ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('zone-jour').style.cssText  = mode === 'jour'  ? 'display:flex!important;align-items:center;gap:.5rem;' : 'display:none!important;';
+  document.getElementById('zone-plage').style.cssText = mode === 'plage' ? 'display:flex!important;align-items:center;gap:.5rem;' : 'display:none!important;';
+  if (mode === 'plage') {
+    const today = new Date().toISOString().split('T')[0];
+    if (!document.getElementById('f-date-from').value) document.getElementById('f-date-from').value = today;
+    if (!document.getElementById('f-date-to').value)   document.getElementById('f-date-to').value   = today;
+  }
+  loadData();
+}
+
 async function loadData() {
-  const from = document.getElementById('f-date-from').value;
-  const to   = document.getElementById('f-date-to').value;
+  let from, to;
+  if (_mode === 'jour') {
+    const d = document.getElementById('f-jour').value;
+    from = d; to = d;
+  } else {
+    from = document.getElementById('f-date-from').value;
+    to   = document.getElementById('f-date-to').value;
+  }
+
   let url = '/api/dgrtr/recettes-cg';
   const params = [];
   if (from) params.push('date_from=' + from);
@@ -154,12 +180,11 @@ async function loadData() {
   }
 }
 
-function resetFilter() {
-  document.getElementById('f-date-from').value = '';
-  document.getElementById('f-date-to').value   = '';
-  loadData();
-}
-
+// Init : mode Jour, date = aujourd'hui
+(function() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f-jour').value = today;
+})();
 loadData();
 </script>
 
