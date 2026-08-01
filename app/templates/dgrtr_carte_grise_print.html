@@ -512,7 +512,7 @@
 
       <div class="sig-block">
         <div class="sig-date">
-          Moroni, le&nbsp;{% if cg and cg.date_emission %}{{ cg.date_emission.strftime('%d/%m/%Y') }}{% else %}___/___/______{% endif %}
+          {% if vehicle.owner_island == 'Anjouan' %}Mutsamudu{% elif vehicle.owner_island == 'Moheli' %}Fomboni{% else %}Moroni{% endif %}, le&nbsp;{% if cg and cg.date_emission %}{{ cg.date_emission.strftime('%d/%m/%Y') }}{% else %}___/___/______{% endif %}
         </div>
         <div style="font-size:15px; margin-bottom:8px; font-weight:600;">Le Directeur Régional</div>
         {% if cg_settings.signature_url %}
@@ -581,7 +581,7 @@
   <div class="receipt-sig">
     <div class="receipt-sig-block">
       <div class="rs-title">
-        Moroni, le {% if cg and cg.date_emission %}{{ cg.date_emission.strftime('%d/%m/%Y') }}{% else %}___/___/______{% endif %}
+        {% if vehicle.owner_island == 'Anjouan' %}Mutsamudu{% elif vehicle.owner_island == 'Moheli' %}Fomboni{% else %}Moroni{% endif %}, le {% if cg and cg.date_emission %}{{ cg.date_emission.strftime('%d/%m/%Y') }}{% else %}___/___/______{% endif %}
       </div>
       <div style="font-size:14px; margin-bottom:6px; font-weight:600;">Le Directeur Régional</div>
       {% if cg_settings.signature_url %}
