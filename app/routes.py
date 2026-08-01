@@ -7267,12 +7267,14 @@ def dgrtr_recettes_cg_api():
     q = apply_island_filter(q, Vehicle.owner_island)
     if date_from:
         try:
-            q = q.filter(CarteGrise.signed_at >= date.fromisoformat(date_from))
+            from datetime import datetime
+            q = q.filter(CarteGrise.signed_at >= datetime.combine(date.fromisoformat(date_from), datetime.min.time()))
         except ValueError:
             pass
     if date_to:
         try:
-            q = q.filter(CarteGrise.signed_at <= date.fromisoformat(date_to))
+            from datetime import datetime, timedelta
+            q = q.filter(CarteGrise.signed_at < datetime.combine(date.fromisoformat(date_to) + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
 
@@ -7299,6 +7301,67 @@ def dgrtr_recettes_cg_api():
         'total_montant': total_montant,
         'rows': rows,
     })
+
+
+@main_bp.route('/api/dgrtr/cartes-grises/stream')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_cg_stream():
+    """SSE stream: pushes events when a new en_attente or signee carte grise appears."""
+    _require_cg_access()
+    from flask import Response, stream_with_context
+    from app.models import CarteGrise, Vehicle
+    import time, json as _json
+
+    user_country = getattr(current_user, 'country', None) if current_user.role != 'administrateur' else None
+
+    def _q_base(status):
+        q = CarteGrise.query.filter_by(status=status).join(Vehicle)
+        if user_country:
+            q = q.filter(Vehicle.owner_island == user_country)
+        return q
+
+    def _newest_pending_id():
+        latest = _q_base('en_attente').order_by(CarteGrise.signature_requested_at.desc()).first()
+        return latest.id if latest else 0
+
+    def _signed_count():
+        return _q_base('signee').count()
+
+    def generate():
+        last_pending_id = _newest_pending_id()
+        last_signed_count = _signed_count()
+        yield 'data: ' + _json.dumps({'type': 'connected'}) + '\n\n'
+        while True:
+            time.sleep(3)
+            try:
+                db.session.expire_all()
+                events = []
+
+                current_pending_id = _newest_pending_id()
+                if current_pending_id != last_pending_id:
+                    count = _q_base('en_attente').count()
+                    events.append(_json.dumps({'type': 'new_request', 'count': count}))
+                    last_pending_id = current_pending_id
+
+                current_signed_count = _signed_count()
+                if current_signed_count != last_signed_count:
+                    events.append(_json.dumps({'type': 'signed', 'count': current_signed_count}))
+                    last_signed_count = current_signed_count
+
+                if events:
+                    for ev in events:
+                        yield 'data: ' + ev + '\n\n'
+                else:
+                    yield 'data: {"type":"ping"}\n\n'
+            except GeneratorExit:
+                break
+            except Exception:
+                yield 'data: {"type":"ping"}\n\n'
+
+    resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
+    resp.headers['Cache-Control'] = 'no-cache'
+    resp.headers['X-Accel-Buffering'] = 'no'
+    return resp
 
 
 @main_bp.route('/api/dgrtr/cartes-grises/pending')
