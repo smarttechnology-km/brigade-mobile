@@ -820,9 +820,12 @@ def confirm_delete_account_otp():
             otp_data['attempts'] += 1
             return jsonify({'error': 'Invalid OTP'}), 401
 
-        # Clear the link between the phone and the vehicle, then delete the owner row.
-        vehicle.owner_phone = None
-        db.session.delete(owner)
+        # Clear the phone from ALL vehicles linked to this number and delete all owner rows.
+        all_owners = VehicleOwner.query.filter_by(phone=phone).all()
+        for o in all_owners:
+            if o.vehicle:
+                o.vehicle.owner_phone = None
+            db.session.delete(o)
         db.session.commit()
 
         del _otp_store[phone]
