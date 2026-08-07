@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Cartes Grises - Mobile Money{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+      <h2><i class="fas fa-file-alt me-2"></i>Cartes Grises — Paiements en attente</h2>
+      <p class="text-muted mb-0">Demandes de carte grise envoyées par les judiciaires, en attente de confirmation de paiement.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+        <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
+          <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+        </a>
+        <span class="badge bg-warning text-dark align-self-center" id="cg-count">0 demande(s)</span>
+        {% if cg_price %}
+        <span class="badge bg-info align-self-center fw-normal" style="font-size:0.72rem;">Prix: {{ cg_price|int }} KMF</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" id="cg-search" class="form-control" placeholder="Rechercher par immatriculation, propriétaire ou île...">
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="cg-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Immatriculation</th>
+              <th>Propriétaire</th>
+              <th>Île</th>
+              <th>Prix</th>
+              <th>Demandé le</th>
+              <th>Statut</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="cg-tbody">
+            <tr><td colspan="8" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation modal -->
+<div class="modal fade" id="cgConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-check-circle me-2 text-success"></i>Confirmer le paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Confirmer la réception du paiement pour la carte grise du véhicule :</p>
+        <div class="alert alert-light border fw-semibold" id="cg-confirm-details">—</div>
+        <p class="text-muted small mb-0">Après confirmation, la demande passera en <strong>En attente</strong> pour être signée par le Directeur Régional.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="cg-confirm-btn">
+          <i class="fas fa-check me-1"></i>Confirmer le paiement
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _cgList = [];
+let _pendingCgId = null;
+
+async function loadCarteGrises() {
+  try {
+    const res = await fetch('/api/mobile-money/cartes-grises', { credentials: 'include' });
+    _cgList = await res.json();
+    renderCgTable(_cgList);
+    document.getElementById('cg-count').textContent = _cgList.length + ' demande(s)';
+  } catch (e) {
+    document.getElementById('cg-tbody').innerHTML =
+      '<tr><td colspan="8" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+  }
+}
+
+function renderCgTable(rows) {
+  const tbody = document.getElementById('cg-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5"><i class="fas fa-check-circle me-2 text-success"></i>Aucune demande en attente de paiement.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((cg, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td><strong>${cg.license_plate || '—'}</strong></td>
+      <td>${cg.owner_name || '—'}</td>
+      <td>${cg.owner_island || '—'}</td>
+      <td>${cg.prix ? Number(cg.prix).toLocaleString() + ' KMF' : '<span class="text-muted">—</span>'}</td>
+      <td>${cg.signature_requested_at || '—'}</td>
+      <td><span class="badge bg-warning text-dark">En attente de paiement</span></td>
+      <td>
+        <button class="btn btn-sm btn-success" onclick="openConfirmModal(${cg.id}, '${(cg.license_plate||'').replace(/'/g,"\\'")}', '${(cg.owner_name||'').replace(/'/g,"\\'")}')">
+          <i class="fas fa-check me-1"></i>Confirmer paiement
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openConfirmModal(id, plate, owner) {
+  _pendingCgId = id;
+  document.getElementById('cg-confirm-details').textContent = plate + (owner ? ' — ' + owner : '');
+  new bootstrap.Modal(document.getElementById('cgConfirmModal')).show();
+}
+
+document.getElementById('cg-confirm-btn').addEventListener('click', async function () {
+  if (!_pendingCgId) return;
+  this.disabled = true;
+  this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Traitement...';
+  try {
+    const res = await fetch(`/api/mobile-money/cartes-grises/${_pendingCgId}/confirm-payment`, {
+      method: 'POST', credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    bootstrap.Modal.getInstance(document.getElementById('cgConfirmModal')).hide();
+    loadCarteGrises();
+  } catch (e) {
+    alert(e.message || 'Erreur lors de la confirmation.');
+  } finally {
+    this.disabled = false;
+    this.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer le paiement';
+    _pendingCgId = null;
+  }
+});
+
+document.getElementById('cg-search').addEventListener('input', function () {
+  const q = this.value.toLowerCase();
+  renderCgTable(q ? _cgList.filter(cg =>
+    (cg.license_plate || '').toLowerCase().includes(q) ||
+    (cg.owner_name || '').toLowerCase().includes(q) ||
+    (cg.owner_island || '').toLowerCase().includes(q)
+  ) : _cgList);
+});
+
+document.addEventListener('DOMContentLoaded', loadCarteGrises);
+
+// Auto-refresh on tab focus
+document.addEventListener('visibilitychange', function () { if (!document.hidden) loadCarteGrises(); });
+</script>
+{% endblock %}

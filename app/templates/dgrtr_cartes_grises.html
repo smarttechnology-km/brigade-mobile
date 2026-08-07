@@ -31,8 +31,10 @@
   background: #e5e7eb; color: #374151;
 }
 .cg-tab-badge:empty { display: none; }
+.badge-pending-pay-tab { background: #fef3c7; color: #d97706; }
 .badge-pending-tab { background: #dbeafe; color: #1d4ed8; }
 .badge-signed-tab  { background: #dcfce7; color: #15803d; }
+.badge-awaiting-pay { background:#fef3c7; color:#d97706; }
 </style>
 
 <div class="container-fluid py-4 px-4">
@@ -149,8 +151,12 @@
         <i class="fas fa-edit me-1"></i>Brouillon
         <span class="cg-tab-badge badge-draft" id="badge-draft"></span>
       </button>
+      <button class="cg-status-tab" data-val="en_attente_paiement" onclick="setCgTab(this,'en_attente_paiement')">
+        <i class="fas fa-mobile-alt me-1"></i>En attente de paiement
+        <span class="cg-tab-badge badge-pending-pay-tab" id="badge-pay"></span>
+      </button>
       <button class="cg-status-tab" data-val="en_attente" onclick="setCgTab(this,'en_attente')">
-        <i class="fas fa-clock me-1"></i>En attente
+        <i class="fas fa-clock me-1"></i>En attente de signature
         <span class="cg-tab-badge badge-pending-tab" id="badge-pending"></span>
       </button>
       <button class="cg-status-tab" data-val="signee" onclick="setCgTab(this,'signee')">
@@ -171,7 +177,8 @@
     <select id="filter-status" style="display:none;" onchange="doSearch()">
       <option value=""></option>
       <option value="brouillon" selected>Brouillon</option>
-      <option value="en_attente">En attente</option>
+      <option value="en_attente_paiement">En attente de paiement</option>
+      <option value="en_attente">En attente de signature</option>
       <option value="signee">Signée</option>
     </select>
     <span id="result-count" class="text-muted" style="font-size:13px;"></span>
@@ -401,19 +408,22 @@ function setCgTab(btn, val) {
 }
 
 function _updateCgTabBadges() {
-  const counts = { brouillon: 0, en_attente: 0, signee: 0 };
+  const counts = { brouillon: 0, en_attente_paiement: 0, en_attente: 0, signee: 0 };
   _allVehicles.forEach(v => {
     const s = v.carte_grise ? (v.carte_grise.status || 'brouillon') : 'brouillon';
-    if (s === 'brouillon')  counts.brouillon++;
-    if (s === 'en_attente') counts.en_attente++;
-    if (s === 'signee')     counts.signee++;
+    if (s === 'brouillon')           counts.brouillon++;
+    if (s === 'en_attente_paiement') counts.en_attente_paiement++;
+    if (s === 'en_attente')          counts.en_attente++;
+    if (s === 'signee')              counts.signee++;
   });
-  const bd = document.getElementById('badge-draft');
-  const bp = document.getElementById('badge-pending');
-  const bs = document.getElementById('badge-signed');
-  if (bd) bd.textContent = counts.brouillon || '';
-  if (bp) bp.textContent = counts.en_attente || '';
-  if (bs) bs.textContent = counts.signee || '';
+  const bd  = document.getElementById('badge-draft');
+  const bpp = document.getElementById('badge-pay');
+  const bp  = document.getElementById('badge-pending');
+  const bs  = document.getElementById('badge-signed');
+  if (bd)  bd.textContent  = counts.brouillon || '';
+  if (bpp) bpp.textContent = counts.en_attente_paiement || '';
+  if (bp)  bp.textContent  = counts.en_attente || '';
+  if (bs)  bs.textContent  = counts.signee || '';
 }
 /* ── Signature preview helpers ── */
 function renderCgSigPreview(url) {
@@ -606,8 +616,9 @@ function debounceSearch() {
 function statusBadge(cg) {
   if (!cg) return `<span class="badge-cg badge-empty"><i class="fas fa-exclamation-triangle"></i> À compléter</span>`;
   const s = cg.status || 'brouillon';
-  if (s === 'signee')     return `<span class="badge-cg badge-signed"><i class="fas fa-check-circle"></i> Signée</span>`;
-  if (s === 'en_attente') return `<span class="badge-cg badge-pending"><i class="fas fa-clock"></i> En attente</span>`;
+  if (s === 'signee')              return `<span class="badge-cg badge-signed"><i class="fas fa-check-circle"></i> Signée</span>`;
+  if (s === 'en_attente')          return `<span class="badge-cg badge-pending"><i class="fas fa-clock"></i> En attente de signature</span>`;
+  if (s === 'en_attente_paiement') return `<span class="badge-cg badge-awaiting-pay"><i class="fas fa-mobile-alt"></i> En attente de paiement</span>`;
   return `<span class="badge-cg badge-draft"><i class="fas fa-edit"></i> Brouillon</span>`;
 }
 
@@ -616,7 +627,7 @@ function rowActions(v) {
   const status = cg ? (cg.status || 'brouillon') : null;
   const vj = JSON.stringify(v).replace(/"/g,'&quot;');
   let btns = '';
-  if (status !== 'en_attente' && status !== 'signee') {
+  if (status !== 'en_attente' && status !== 'en_attente_paiement' && status !== 'signee') {
     btns += `<button class="btn btn-sm btn-outline-primary" onclick="openCG(${vj})">
       <i class="fas fa-edit me-1"></i>${v.has_carte_grise ? 'Modifier' : 'Saisir'}
     </button>`;
@@ -715,10 +726,10 @@ async function _quickRequestSig(vehicleId) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erreur');
     const v = _allVehicles.find(x => x.id === vehicleId);
-    if (v && v.carte_grise) v.carte_grise.status = 'en_attente';
+    if (v && v.carte_grise) v.carte_grise.status = 'en_attente_paiement';
     _updateCgTabBadges();
     doSearch();
-    showToast('Demande de signature envoyée au Directeur Régional.');
+    showToast('Demande envoyée — en attente de confirmation du paiement mobile money.');
   } catch(e) { alert('Erreur : ' + e.message); }
 }
 
@@ -780,9 +791,16 @@ function openCG(v, apercu = false) {
   document.getElementById('cg-date-emission').value = cg.date_emission || '';
   document.getElementById('cg-prix').value          = cg.prix !== undefined && cg.prix !== '' ? cg.prix : '';
 
-  // Judiciaire : Envoyer pour signature si carte saisie et pas encore signée
+  // Verrouiller le montant une fois le paiement confirmé par mobile money
+  const prixInput = document.getElementById('cg-prix');
+  const prixLocked = (status === 'en_attente' || status === 'signee');
+  prixInput.readOnly = prixLocked;
+  prixInput.classList.toggle('bg-light', prixLocked);
+  prixInput.title = prixLocked ? 'Montant verrouillé — paiement déjà confirmé' : '';
+
+  // Judiciaire : Envoyer pour signature si carte saisie, pas encore envoyée ni signée
   document.getElementById('btn-request-sig').classList.toggle('d-none',
-    !(USER_ROLE === 'judiciaire' && v.has_carte_grise && status !== 'signee'));
+    !(USER_ROLE === 'judiciaire' && v.has_carte_grise && status !== 'signee' && status !== 'en_attente' && status !== 'en_attente_paiement'));
 
   // DGRTR/admin : Valider & Signer si en attente
   document.getElementById('btn-sign-cg').classList.toggle('d-none',
@@ -877,11 +895,11 @@ async function requestSignature() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erreur');
     const v = _allVehicles.find(x => x.id === _currentVehicleId);
-    if (v && v.carte_grise) v.carte_grise.status = 'en_attente';
+    if (v && v.carte_grise) v.carte_grise.status = 'en_attente_paiement';
     bootstrap.Modal.getInstance(document.getElementById('cgModal')).hide();
     _updateCgTabBadges();
     doSearch();
-    showToast('Demande de signature envoyée au Directeur Régional.');
+    showToast('Demande envoyée — en attente de confirmation du paiement mobile money.');
   } catch(e) { alert('Erreur : ' + e.message); }
 }
 
@@ -925,9 +943,13 @@ function startSSE() {
       try {
         const data = JSON.parse(e.data);
         if (data.type === 'new_request') {
-          loadPending();
-          loadDrStats();
-          showNotifToast('Nouvelle demande de signature reçue');
+          if (USER_ROLE === 'judiciaire') {
+            loadAllVehicles();
+          } else {
+            loadPending();
+            loadDrStats();
+            showNotifToast('Nouvelle demande de signature reçue');
+          }
         } else if (data.type === 'signed') {
           loadAllVehicles();
           if (USER_ROLE !== 'judiciaire') { loadPending(); loadDrStats(); }

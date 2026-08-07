@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Mobile Money{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1 class="mb-1"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
+      <p class="text-muted mb-0" id="mm-date-label"></p>
+    </div>
+  </div>
+
+  <!-- ── À traiter ── -->
+  <div class="row mb-2">
+    <div class="col-12">
+      <h6 class="text-muted font-weight-bold text-uppercase" style="font-size:11px;letter-spacing:.07em;">À traiter</h6>
+    </div>
+  </div>
+  <div class="row mb-4">
+    <div class="col-md-6 mb-3">
+      <div class="card h-100" style="border-left:4px solid #dc3545;">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <h6 class="text-muted font-weight-bold">Véhicules avec amendes impayées</h6>
+              <h2 id="stat-unpaid-vehicles" class="mb-1">—</h2>
+              <p class="text-muted small mb-3">Total dû : <span id="stat-unpaid-total">—</span></p>
+              <a href="/mobile-money-amendes" class="btn btn-danger btn-sm">
+                <i class="fas fa-gavel me-1"></i>Traiter les paiements
+              </a>
+            </div>
+            <div class="text-danger" style="font-size:2.5rem; opacity:.25;">
+              <i class="fas fa-gavel"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 mb-3">
+      <div class="card h-100" style="border-left:4px solid #fd7e14;">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <h6 class="text-muted font-weight-bold">Cartes grises en attente de paiement</h6>
+              <h2 id="stat-cg-pending" class="mb-1">—</h2>
+              <p class="text-muted small mb-3">Confirmations mobile money à effectuer</p>
+              <a href="/mobile-money-cartes-grises" class="btn btn-warning btn-sm text-white">
+                <i class="fas fa-file-alt me-1"></i>Confirmer les paiements
+              </a>
+            </div>
+            <div class="text-warning" style="font-size:2.5rem; opacity:.25;">
+              <i class="fas fa-file-alt"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Recettes du jour ── -->
+  <div class="row mb-2">
+    <div class="col-12">
+      <h6 class="text-muted font-weight-bold text-uppercase" style="font-size:11px;letter-spacing:.07em;">Recettes du jour</h6>
+    </div>
+  </div>
+  <div class="row mb-4">
+    <div class="col-md-3 mb-3">
+      <div class="card h-100" style="border-left:4px solid #28a745;">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <h6 class="text-muted font-weight-bold">Amendes payées</h6>
+              <h2 id="stat-fines-today" class="mb-0">—</h2>
+              <small class="text-muted" id="stat-fines-today-total">—</small>
+            </div>
+            <div class="text-success" style="font-size:2rem; opacity:.25;">
+              <i class="fas fa-check-circle"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+      <div class="card h-100" style="border-left:4px solid #0d6efd;">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <h6 class="text-muted font-weight-bold">Vignettes payées</h6>
+              <h2 id="stat-vignettes-today" class="mb-0">—</h2>
+              <small class="text-muted" id="stat-vignettes-today-total">—</small>
+            </div>
+            <div class="text-primary" style="font-size:2rem; opacity:.25;">
+              <i class="fas fa-ticket-alt"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+      <div class="card h-100" style="border-left:4px solid #6f42c1;">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <h6 class="text-muted font-weight-bold">Cartes grises confirmées</h6>
+              <h2 id="stat-cg-today" class="mb-0">—</h2>
+              <small class="text-muted" id="stat-cg-today-total">—</small>
+            </div>
+            <div style="font-size:2rem; opacity:.2; color:#6f42c1;">
+              <i class="fas fa-file-alt"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+      <div class="card h-100 bg-primary text-white">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <h6 class="font-weight-bold" style="color:rgba(255,255,255,.75);">Total encaissé</h6>
+              <h2 id="stat-today-total" class="mb-0">—</h2>
+              <small style="color:rgba(255,255,255,.6);">KMF aujourd'hui</small>
+            </div>
+            <div style="font-size:2rem; opacity:.3;">
+              <i class="fas fa-coins"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Accès rapide ── -->
+  <div class="row mb-2">
+    <div class="col-12">
+      <h6 class="text-muted font-weight-bold text-uppercase" style="font-size:11px;letter-spacing:.07em;">Accès rapide</h6>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-3 mb-3">
+      <a href="/mobile-money-amendes" class="card text-decoration-none" style="transition:box-shadow .15s;">
+        <div class="card-body d-flex align-items-center gap-3">
+          <i class="fas fa-gavel text-danger" style="font-size:1.4rem; width:30px;"></i>
+          <div>
+            <div class="fw-semibold text-dark">Paiement Amendes</div>
+            <small class="text-muted">Confirmer les paiements</small>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="col-md-3 mb-3">
+      <a href="/mobile-money-vignettes" class="card text-decoration-none">
+        <div class="card-body d-flex align-items-center gap-3">
+          <i class="fas fa-ticket-alt text-success" style="font-size:1.4rem; width:30px;"></i>
+          <div>
+            <div class="fw-semibold text-dark">Paiement Vignettes</div>
+            <small class="text-muted">Vignette + pénalités</small>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="col-md-3 mb-3">
+      <a href="/mobile-money-cartes-grises" class="card text-decoration-none">
+        <div class="card-body d-flex align-items-center gap-3">
+          <i class="fas fa-file-alt text-warning" style="font-size:1.4rem; width:30px;"></i>
+          <div>
+            <div class="fw-semibold text-dark">Cartes Grises</div>
+            <small class="text-muted">Confirmer les paiements</small>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="col-md-3 mb-3">
+      <a href="/mobile-money-archive" class="card text-decoration-none">
+        <div class="card-body d-flex align-items-center gap-3">
+          <i class="fas fa-archive text-secondary" style="font-size:1.4rem; width:30px;"></i>
+          <div>
+            <div class="fw-semibold text-dark">Archive Paiements</div>
+            <small class="text-muted">Historique complet</small>
+          </div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const _fmt = n => n != null ? Number(n).toLocaleString('fr-KM') + ' KMF' : '—';
+const _set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+async function loadMmStats() {
+  try {
+    const res = await fetch('/api/mobile-money/stats', { credentials: 'include' });
+    const d = await res.json();
+    _set('stat-unpaid-vehicles',     d.unpaid_vehicles ?? '—');
+    _set('stat-unpaid-total',        _fmt(d.unpaid_total));
+    _set('stat-cg-pending',          d.cg_pending ?? '—');
+    _set('stat-fines-today',         d.fines_paid_today ?? '—');
+    _set('stat-fines-today-total',   _fmt(d.fines_paid_today_total));
+    _set('stat-vignettes-today',     d.vignettes_today ?? '—');
+    _set('stat-vignettes-today-total', _fmt(d.vignettes_today_total));
+    _set('stat-cg-today',            d.cg_today ?? '—');
+    _set('stat-cg-today-total',      _fmt(d.cg_today_total));
+    _set('stat-today-total',         d.today_total != null ? Number(d.today_total).toLocaleString('fr-KM') : '—');
+  } catch(e) { console.error(e); }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const opts = { weekday:'long', day:'numeric', month:'long', year:'numeric' };
+  _set('mm-date-label', new Date().toLocaleDateString('fr-FR', opts));
+  loadMmStats();
+  setInterval(loadMmStats, 30000);
+});
+</script>
+{% endblock %}

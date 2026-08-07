@@ -165,10 +165,8 @@
             <a class="nav-link text-white {% if request.path == '/dgrtr-dossiers-complets' %}active{% endif %}" href="/dgrtr-dossiers-complets"><i class="fas fa-check-circle me-2"></i> Dossiers Complétés</a>
             <a class="nav-link text-white {% if request.path == '/licenses' %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr-statistiques' %}active{% endif %}" href="/dgrtr-statistiques"><i class="fas fa-chart-bar me-2"></i> Statistiques</a>
-            {% if current_user.dgrtr_type == 'directeur_technique' %}
-            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/parametres-cg') %}active{% endif %}" href="/dgrtr/parametres-cg"><i class="fas fa-cog me-2"></i> Paramètres CG</a>
-            {% endif %}
             {% if current_user.dgrtr_type == 'directeur_general' %}
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/parametres-cg') %}active{% endif %}" href="/dgrtr/parametres-cg"><i class="fas fa-cog me-2"></i> Paramètres CG</a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/comptes') %}active{% endif %}" href="/dgrtr/comptes"><i class="fas fa-users-cog me-2"></i> Gestion des comptes</a>
             {% endif %}
             {% endif %}
@@ -183,9 +181,10 @@
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'mobile_money_agent') %}
-            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-dashboard') %}active{% endif %}" href="/mobile-money-dashboard"><i class="fas fa-wallet me-2"></i> Dashboard Money</a>
+            <a class="nav-link text-white {% if request.path == '/mobile-money-dashboard' %}active{% endif %}" href="/mobile-money-dashboard"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a>
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-amendes') %}active{% endif %}" href="/mobile-money-amendes"><i class="fas fa-gavel me-2"></i> Paiement Amendes</a>
             <a class="nav-link text-white {% if request.path.startswith('/mobile-money-vignettes') %}active{% endif %}" href="/mobile-money-vignettes"><i class="fas fa-ticket-alt me-2"></i> Paiement Vignettes</a>
-            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-qr-renewal') %}active{% endif %}" href="/mobile-money-qr-renewal"><i class="fas fa-qrcode me-2"></i> Renouvellement QR</a>
+            <a class="nav-link text-white {% if request.path.startswith('/mobile-money-cartes-grises') %}active{% endif %}" href="/mobile-money-cartes-grises"><i class="fas fa-file-alt me-2"></i> Cartes Grises</a>
             <a class="nav-link text-white {% if request.path.startswith('/mobile-money-archive') %}active{% endif %}" href="/mobile-money-archive"><i class="fas fa-archive me-2"></i> Archive Paiements</a>
             {% endif %}
 

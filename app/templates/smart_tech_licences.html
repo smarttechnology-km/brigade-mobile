@@ -137,7 +137,7 @@
         .btn-print-card:hover { background: rgba(0,212,255,0.22); border-color: var(--st-cyan); color: var(--st-cyan); }
 
         /* ── Stat cards ── */
-        .st-stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .st-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
         .st-stat-card {
             background: var(--st-surface); border: 1px solid var(--st-border);
             border-radius: 14px; padding: 1.1rem 1.3rem;
@@ -270,6 +270,56 @@
         .mob-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.55);
             z-index: 99; opacity: 0; transition: opacity .25s; pointer-events: none; }
         .mob-overlay.active { opacity: 1; pointer-events: all; }
+
+        /* ── Rapport modal — theme-aware classes ── */
+        .rm-content { background: var(--st-surface); border: 1px solid var(--st-border); border-radius: 16px; }
+        .rm-header { border-bottom: 1px solid var(--st-border); padding: 1rem 1.4rem; }
+        .rm-title { font-weight: 700; font-size: 1rem; color: #fff; }
+        .rm-sub { font-size: .75rem; color: rgba(255,255,255,0.45); margin-top: 2px; }
+        .rm-body { padding: 1.2rem 1.4rem; }
+        .rm-label { font-size: .83rem; color: rgba(255,255,255,0.55); }
+        .rm-gen-btn { background: linear-gradient(135deg,rgba(0,212,255,0.18),rgba(0,128,255,0.14)); border: 1px solid rgba(0,212,255,0.3); color: var(--st-cyan); border-radius: 8px; padding: .38rem .9rem; font-size: .82rem; font-weight: 600; cursor: pointer; transition: background .18s; }
+        .rm-gen-btn:hover { background: linear-gradient(135deg,rgba(0,212,255,0.28),rgba(0,128,255,0.22)); }
+        .rm-print-btn { display: none; align-items: center; gap: .4rem; background: linear-gradient(135deg,rgba(63,185,80,0.18),rgba(30,120,50,0.14)); border: 1px solid rgba(63,185,80,0.35); color: var(--st-green); border-radius: 8px; padding: .38rem .9rem; font-size: .82rem; font-weight: 600; cursor: pointer; transition: background .18s; }
+        .rm-print-btn:hover { background: linear-gradient(135deg,rgba(63,185,80,0.28),rgba(30,120,50,0.22)); }
+        .rm-stat { flex: 1; min-width: 130px; border-radius: 12px; padding: .8rem 1rem; }
+        .rm-stat-label { font-size: .69rem; text-transform: uppercase; letter-spacing: .5px; color: rgba(255,255,255,0.45); margin-bottom: .3rem; }
+        .rm-stat-cyan { background: rgba(0,212,255,0.06); border: 1px solid rgba(0,212,255,0.15); }
+        .rm-stat-blue { background: rgba(88,166,255,0.06); border: 1px solid rgba(88,166,255,0.15); }
+        .rm-stat-yellow { background: rgba(240,180,41,0.06); border: 1px solid rgba(240,180,41,0.15); }
+        .rm-stat-green { background: rgba(63,185,80,0.06); border: 1px solid rgba(63,185,80,0.15); }
+        .rm-table-wrap { background: rgba(255,255,255,0.02); border: 1px solid var(--st-border); border-radius: 12px; overflow: hidden; }
+        .rm-table-hd { display: flex; align-items: center; justify-content: space-between; padding: .65rem 1rem; border-bottom: 1px solid var(--st-border); }
+        .rm-table-title { font-size: .83rem; font-weight: 600; color: #fff; }
+        .rm-table-count { font-size: .73rem; color: rgba(255,255,255,0.4); }
+        .rm-empty { text-align: center; padding: 2.5rem; color: rgba(255,255,255,0.3); font-size: .84rem; }
+        /* Light mode overrides */
+        html[data-theme="light"] .rm-content { background: #fff; border-color: rgba(0,0,0,0.1); box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+        html[data-theme="light"] .rm-header { border-bottom-color: rgba(0,0,0,0.08); }
+        html[data-theme="light"] .rm-title { color: #1a1a2e; }
+        html[data-theme="light"] .rm-sub { color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .rm-label { color: rgba(0,0,0,0.55); }
+        html[data-theme="light"] .rm-stat-label { color: rgba(0,0,0,0.5); }
+        html[data-theme="light"] .rm-stat-cyan { background: rgba(0,149,179,0.07); border-color: rgba(0,149,179,0.2); }
+        html[data-theme="light"] .rm-stat-blue { background: rgba(0,80,200,0.07); border-color: rgba(0,80,200,0.18); }
+        html[data-theme="light"] .rm-stat-yellow { background: rgba(180,120,0,0.07); border-color: rgba(180,120,0,0.18); }
+        html[data-theme="light"] .rm-stat-green { background: rgba(20,130,50,0.07); border-color: rgba(20,130,50,0.18); }
+        html[data-theme="light"] .rm-table-wrap { background: #f8fafc; border-color: rgba(0,0,0,0.08); }
+        html[data-theme="light"] .rm-table-hd { border-bottom-color: rgba(0,0,0,0.08); }
+        html[data-theme="light"] .rm-table-title { color: #1a1a2e; }
+        html[data-theme="light"] .rm-table-count { color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .rm-empty { color: rgba(0,0,0,0.35); }
+        html[data-theme="light"] #rapport-sub { color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] #rapport-count { color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .rm-gen-btn { background: rgba(0,149,179,0.1); border-color: rgba(0,149,179,0.35); color: #0095b3; }
+        html[data-theme="light"] .rm-gen-btn:hover { background: rgba(0,149,179,0.18); }
+        html[data-theme="light"] .rm-print-btn { background: rgba(20,130,50,0.1); border-color: rgba(20,130,50,0.35); color: #157a35; }
+        html[data-theme="light"] .rm-print-btn:hover { background: rgba(20,130,50,0.18); }
+        /* Close button: white in dark mode, dark in light mode */
+        html[data-theme="dark"] #rapportModal .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+        html[data-theme="light"] #rapportModal .btn-close { filter: none; }
+        /* The print-rapport-doc div is never shown on screen — only printed via window.open */
+        #print-rapport-doc { display: none !important; }
     </style>
     <script>(function(){ const t = localStorage.getItem('st_theme') || 'dark'; document.documentElement.setAttribute('data-theme', t); })();</script>
 </head>
@@ -332,11 +382,6 @@
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
         </a>
         {% endif %}
-        {% if current_user.role in ['admin', 'secretaire', 'employe'] %}
-        <a href="{{ url_for('smart_tech.rapport_journalier_page') }}" class="st-nav-item">
-            <span class="st-nav-icon"><i class="fas fa-calendar-day"></i></span>Rapport Journalier
-        </a>
-        {% endif %}
         {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
@@ -370,6 +415,11 @@
                 <i class="fas fa-sun" id="theme-icon"></i>
             </button>
             <div id="live-badge" style="display:none;font-size:0.75rem;padding:0.25rem 0.75rem;border-radius:20px;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);color:var(--st-green);white-space:nowrap;">● En direct</div>
+            {% if current_user.role == 'admin' %}
+            <button onclick="openRapportModal()" style="display:inline-flex;align-items:center;gap:.45rem;background:linear-gradient(135deg,rgba(63,185,80,0.15),rgba(30,120,50,0.1));border:1px solid rgba(63,185,80,0.35);color:var(--st-green);border-radius:8px;padding:.35rem .85rem;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .18s;white-space:nowrap;" onmouseover="this.style.background='linear-gradient(135deg,rgba(63,185,80,0.28),rgba(30,120,50,0.2))'" onmouseout="this.style.background='linear-gradient(135deg,rgba(63,185,80,0.15),rgba(30,120,50,0.1))'">
+                <i class="fas fa-file-alt"></i>Rapport mensuel
+            </button>
+            {% endif %}
             <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
                 <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
                 {{ current_user.full_name or current_user.username }}
@@ -400,11 +450,6 @@
             <div class="st-stat-value" style="color:var(--st-blue);" id="stat-total">—</div>
             <div class="st-stat-label">Total imprimées</div>
         </div>
-        <div class="st-stat-card">
-            <div class="st-stat-icon" style="color:var(--st-red);"><i class="fas fa-times-circle"></i></div>
-            <div class="st-stat-value" style="color:var(--st-red);" id="stat-cancelled">—</div>
-            <div class="st-stat-label">Annulées</div>
-        </div>
     </div>
     {% endif %}
 
@@ -422,11 +467,11 @@
         </div>
     </div>
 
-    <!-- ── Section 2 : Historique des cartes imprimées (admin + employe) ── -->
+    <!-- ── Section 2 : Historique des cartes imprimées validées (admin + employe) ── -->
     {% if current_user.role in ['admin', 'employe'] %}
     <div class="st-section">
         <div class="st-section-header">
-            <span class="st-section-title"><i class="fas fa-history me-2" style="color:var(--st-green);"></i>Historique des cartes imprimées</span>
+            <span class="st-section-title"><i class="fas fa-history me-2" style="color:var(--st-green);"></i>Historique des cartes imprimées validées</span>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
                 <div class="hist-search-wrap">
                     <i class="fas fa-search hist-search-icon"></i>
@@ -506,12 +551,10 @@
                             </div>
                         </div>
                         <div class="request-actions">
-                            <a href="/smart-tech/licences/${r.license_id}/card" target="_blank" class="btn-open-card"
-                               onclick="onOpenCard(${r.id})">
-                                <i class="fas fa-print"></i> Ouvrir & Imprimer
+                            <a href="/smart-tech/licences/${r.license_id}/preview" target="_blank" class="btn-open-card">
+                                <i class="fas fa-eye"></i> Voir le permis
                             </a>
-                            <button class="btn-validate" id="btn-val-${r.id}" onclick="validateRequest(${r.id})"
-                                    style="${getOpenedCards().includes(r.id) ? '' : 'display:none;'}">
+                            <button class="btn-validate" id="btn-val-${r.id}" onclick="validateRequest(${r.id})">
                                 <i class="fas fa-check"></i> Valider
                             </button>
                             <button class="btn-cancel-req" title="Annuler la demande" onclick="cancelRequest(${r.id})">
@@ -525,24 +568,6 @@
                 document.getElementById('requests-grid').innerHTML =
                     '<div class="requests-empty"><i class="fas fa-exclamation-triangle me-2"></i>Erreur de chargement.</div>';
             });
-    };
-
-    function getOpenedCards() {
-        try { return JSON.parse(localStorage.getItem('st_opened_cards') || '[]'); } catch { return []; }
-    }
-    function markCardOpened(reqId) {
-        const opened = getOpenedCards();
-        if (!opened.includes(reqId)) { opened.push(reqId); localStorage.setItem('st_opened_cards', JSON.stringify(opened)); }
-    }
-    function clearOpenedCard(reqId) {
-        const opened = getOpenedCards().filter(id => id !== reqId);
-        localStorage.setItem('st_opened_cards', JSON.stringify(opened));
-    }
-
-    window.onOpenCard = function (reqId) {
-        markCardOpened(reqId);
-        const btn = document.getElementById('btn-val-' + reqId);
-        if (btn) btn.style.display = '';
     };
 
     window.validateRequest = function (reqId) {
@@ -559,7 +584,7 @@
                         card.style.opacity = '0';
                         card.style.transform = 'scale(0.95)';
                         setTimeout(() => {
-                            card.remove(); updateReqCount(); clearOpenedCard(reqId);
+                            card.remove(); updateReqCount();
                             {% if current_user.role in ['admin', 'employe'] %}loadStats(); loadHistory();{% endif %}
                         }, 320);
                     }
@@ -582,7 +607,7 @@
                         card.style.transition = 'opacity 0.3s';
                         card.style.opacity = '0';
                         setTimeout(() => {
-                            card.remove(); updateReqCount(); clearOpenedCard(reqId);
+                            card.remove(); updateReqCount();
                             {% if current_user.role == 'admin' %}loadStats();{% endif %}
                         }, 300);
                     }
@@ -608,16 +633,15 @@
             .then(d => {
                 if (!d) return;
                 document.getElementById('stat-pending').textContent   = d.pending_count;
-                document.getElementById('stat-today').textContent     = d.printed_today;
-                document.getElementById('stat-month').textContent     = d.printed_month;
-                document.getElementById('stat-total').textContent     = d.printed_total;
-                document.getElementById('stat-cancelled').textContent = d.cancelled_total;
+                document.getElementById('stat-today').textContent = d.printed_today;
+                document.getElementById('stat-month').textContent = d.printed_month;
+                document.getElementById('stat-total').textContent = d.printed_total;
             })
             .catch(() => {});
     }
 
     /* ══════════════════════════════════════════
-       SECTION 2 — Historique des cartes imprimées
+       SECTION 2 — Historique des cartes imprimées validées
     ══════════════════════════════════════════ */
     function toInputDate(d) {
         const y  = d.getFullYear();
@@ -646,7 +670,7 @@
     function renderHistTable(reqs) {
         const body = document.getElementById('hist-body');
         if (!reqs.length) {
-            body.innerHTML = '<div class="hist-empty"><i class="fas fa-inbox me-2"></i>Aucune carte imprimée sur cette période.</div>';
+            body.innerHTML = '<div class="hist-empty"><i class="fas fa-inbox me-2"></i>Aucune carte validée sur cette période.</div>';
             return;
         }
         body.innerHTML = `<div class="table-responsive">
@@ -657,22 +681,27 @@
                 <th>Titulaire</th>
                 <th>Demandé par</th>
                 <th>Date demande</th>
-                <th>Imprimé par</th>
-                <th>Date impression</th>
+                <th>Validé par SmartDev</th>
+                <th>Date validation</th>
+                <th>Statut</th>
             </tr></thead>
             <tbody>${reqs.map(r => {
                 const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
                 const photo = (r.photo_url || r.photo_filename)
                     ? `<img src="${r.photo_url || '/uploads/license_photos/' + esc(r.photo_filename)}" style="width:36px;height:44px;object-fit:cover;border-radius:5px;border:1px solid rgba(255,255,255,0.12);" alt="">`
                     : `<div style="width:36px;height:44px;border-radius:5px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:1.1rem;"><i class="fas fa-user"></i></div>`;
+                const statusBadge = r.status === 'printed'
+                    ? `<span style="font-size:0.72rem;background:rgba(16,185,129,0.2);color:#10b981;padding:2px 8px;border-radius:12px;"><i class="fas fa-print me-1"></i>Imprimé</span>`
+                    : `<span style="font-size:0.72rem;background:rgba(59,130,246,0.2);color:#3b82f6;padding:2px 8px;border-radius:12px;"><i class="fas fa-check me-1"></i>Validé</span>`;
                 return `<tr>
                     <td>${photo}</td>
                     <td><span class="hist-num">${esc(r.license_number)}</span></td>
                     <td style="font-weight:600;">${fullName}</td>
                     <td><span style="font-size:0.75rem;opacity:.65;">${esc(r.requested_by)}</span></td>
                     <td style="font-size:0.75rem;opacity:.55;white-space:nowrap;">${esc(r.requested_at)}</td>
-                    <td><span class="hist-badge"><i class="fas fa-check"></i>${esc(r.printed_by)}</span></td>
-                    <td style="font-size:0.78rem;white-space:nowrap;">${esc(r.printed_at)}</td>
+                    <td><span class="hist-badge"><i class="fas fa-check"></i>${esc(r.smarttech_validated_by)}</span></td>
+                    <td style="font-size:0.78rem;white-space:nowrap;">${esc(r.smarttech_validated_at)}</td>
+                    <td>${statusBadge}</td>
                 </tr>`;
             }).join('')}</tbody>
         </table></div>`;
@@ -684,9 +713,9 @@
         renderHistTable(_histData.filter(r => {
             const fullName = ((r.holder_firstname || '') + ' ' + r.holder_name).toLowerCase();
             return fullName.includes(q)
-                || (r.license_number || '').toLowerCase().includes(q)
-                || (r.requested_by  || '').toLowerCase().includes(q)
-                || (r.printed_by    || '').toLowerCase().includes(q);
+                || (r.license_number          || '').toLowerCase().includes(q)
+                || (r.requested_by            || '').toLowerCase().includes(q)
+                || (r.smarttech_validated_by  || '').toLowerCase().includes(q);
         }));
     };
 
@@ -761,7 +790,7 @@
             .then(function(d) {
                 if (!d) return;
                 updateNavBadge(d.pending_count);
-                var key = d.pending_count + '|' + d.printed_total + '|' + d.cancelled_total;
+                var key = d.pending_count + '|' + d.printed_total;
                 if (_licLastKey === null) { _licLastKey = key; return; }
                 if (key !== _licLastKey) {
                     _licLastKey = key;
@@ -794,6 +823,291 @@
     window.closeSidebar = () => { document.querySelector('.st-sidebar').classList.remove('mob-open'); document.getElementById('mob-overlay').classList.remove('active'); };
     document.querySelectorAll('.st-nav-item').forEach(a => a.addEventListener('click', closeSidebar));
 })();
+
+/* ══════════════════════════════════════════
+   RAPPORT MENSUEL PERMIS
+══════════════════════════════════════════ */
+window.openRapportModal = function() {
+    const today = new Date();
+    const m = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+    document.getElementById('rapport-input-month').value = m;
+    // reset
+    document.getElementById('rapport-stats').style.display = 'none';
+    document.getElementById('rapport-islands-section').style.display = 'none';
+    document.getElementById('rapport-table-section').style.display = 'none';
+    document.getElementById('rapport-empty').style.display = 'none';
+    document.getElementById('rapport-btn-print').style.display = 'none';
+    const modal = new bootstrap.Modal(document.getElementById('rapportModal'));
+    modal.show();
+    loadRapport();
+};
+
+function fmtNumR(n) { return Number(n).toLocaleString('fr-FR'); }
+function fmtNowR() {
+    const now = new Date();
+    return now.toLocaleDateString('fr-FR') + ' à ' + now.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+}
+
+window.loadRapport = async function() {
+    const month = document.getElementById('rapport-input-month').value;
+    if (!month) return;
+    document.getElementById('rapport-stats').style.display = 'none';
+    document.getElementById('rapport-islands-section').style.display = 'none';
+    document.getElementById('rapport-table-section').style.display = 'none';
+    document.getElementById('rapport-empty').style.display = 'none';
+    document.getElementById('rapport-btn-print').style.display = 'none';
+    document.getElementById('rapport-sub').textContent = 'Chargement…';
+
+    const res = await fetch('/smart-tech/api/rapport-mensuel-licences?month=' + month, {credentials: 'same-origin'});
+    if (!res.ok) { alert('Erreur de chargement.'); return; }
+    const d = await res.json();
+
+    document.getElementById('rapport-sub').textContent = 'Permis validés — ' + d.month;
+    document.getElementById('rs-total').textContent      = d.nb_total;
+    document.getElementById('rs-permanent').textContent  = d.nb_permanent;
+    document.getElementById('rs-temporaire').textContent = d.nb_temporaire;
+    document.getElementById('rs-amount').textContent     = fmtNumR(d.total_amount) + ' FC';
+    document.getElementById('rapport-stats').style.display = 'flex';
+
+    if (!d.rows.length) {
+        document.getElementById('rapport-empty').style.display = 'block';
+        return;
+    }
+
+    document.getElementById('rapport-tbody').innerHTML = d.rows.map(r => {
+        const fullName = (r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name;
+        const typePill = r.type_permis === 'permanent'
+            ? `<span style="font-size:.7rem;background:rgba(88,166,255,0.13);color:#58a6ff;border:1px solid rgba(88,166,255,0.28);padding:.2em .6em;border-radius:12px;">Permanent</span>`
+            : `<span style="font-size:.7rem;background:rgba(240,180,41,0.13);color:#f0b429;border:1px solid rgba(240,180,41,0.28);padding:.2em .6em;border-radius:12px;">Temporaire</span>`;
+        const statusPill = r.status === 'printed'
+            ? `<span style="font-size:.7rem;background:rgba(63,185,80,0.13);color:#3fb950;border:1px solid rgba(63,185,80,0.28);padding:.2em .6em;border-radius:12px;">Imprimé</span>`
+            : `<span style="font-size:.7rem;background:rgba(0,212,255,0.13);color:#00d4ff;border:1px solid rgba(0,212,255,0.28);padding:.2em .6em;border-radius:12px;">Validé</span>`;
+        return `<tr>
+            <td style="font-size:.77rem;font-weight:600;">${r.license_number}</td>
+            <td>${fullName}</td>
+            <td>${typePill}</td>
+            <td style="font-size:.77rem;opacity:.6;">${r.categories || '—'}</td>
+            <td style="font-size:.77rem;opacity:.6;">${r.smarttech_validated_by}</td>
+            <td style="font-size:.74rem;opacity:.55;white-space:nowrap;">${r.smarttech_validated_at}</td>
+            <td>${statusPill}</td>
+            <td style="text-align:right;font-weight:600;">${fmtNumR(r.unit_price)}</td>
+        </tr>`;
+    }).join('');
+    document.getElementById('rapport-count').textContent = d.nb_total + ' permis';
+    document.getElementById('rapport-table-section').style.display = 'block';
+
+    // Island breakdown in modal
+    const islandColors = {'Grande Comore':'#00d4ff','Anjouan':'#3fb950','Moheli':'#f0b429'};
+    document.getElementById('rapport-islands').innerHTML = (d.islands_breakdown || []).map(i =>
+        `<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem .8rem;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);gap:.5rem;">
+            <span style="font-size:.8rem;font-weight:600;color:${islandColors[i.island]||'#e6edf3'};">${i.island}</span>
+            <span style="font-size:.85rem;font-weight:700;color:#e6edf3;">${i.count} <span style="font-size:.72rem;font-weight:400;opacity:.55;">permis</span></span>
+            <span style="font-size:.8rem;color:var(--st-green);font-weight:600;">${fmtNumR(i.amount)} FC</span>
+        </div>`
+    ).join('');
+    document.getElementById('rapport-islands-section').style.display = 'block';
+
+    // Populate print document
+    document.getElementById('pd-month').textContent         = d.month;
+    document.getElementById('pd-generated').textContent     = fmtNowR();
+    document.getElementById('pd-nb-permanent').textContent  = d.nb_permanent + ' permis';
+    document.getElementById('pd-nb-temporaire').textContent = d.nb_temporaire + ' permis';
+    document.getElementById('pd-unit-price').textContent    = fmtNumR(d.unit_price) + ' FC / permis';
+    document.getElementById('pd-total').textContent         = fmtNumR(d.total_amount) + ' FC';
+    document.getElementById('pd-islands-tbody').innerHTML = (d.islands_breakdown || []).map(i =>
+        `<tr><td>${i.island}</td><td style="text-align:center;">${i.count}</td><td style="text-align:right;">${fmtNumR(i.amount)}</td></tr>`
+    ).join('');
+    document.getElementById('pd-tbody').innerHTML = d.rows.map(r => {
+        const fullName = (r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name;
+        return `<tr>
+            <td>${r.license_number}</td>
+            <td>${fullName}</td>
+            <td>${r.holder_island || '—'}</td>
+            <td>${r.type_permis === 'permanent' ? 'Permanent' : 'Temporaire'}</td>
+            <td>${r.categories || '—'}</td>
+            <td>${r.smarttech_validated_by}</td>
+            <td>${r.smarttech_validated_at}</td>
+            <td style="text-align:right;">${fmtNumR(r.unit_price)}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('rapport-btn-print').style.display = 'inline-flex';
+};
+
+window.printRapport = function() {
+    const content = document.getElementById('print-rapport-doc').innerHTML;
+    const win = window.open('', '_blank', 'width=950,height=750');
+    win.document.write(`<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8">
+<title>Rapport Mensuel Permis</title>
+<style>
+  *{box-sizing:border-box;}
+  body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:14mm 16mm;background:#fff;color:#000;font-size:11pt;}
+  .pd-header{text-align:center;margin-bottom:8mm;}
+  .pd-org{font-size:14pt;font-weight:800;letter-spacing:.5px;margin-bottom:2px;}
+  .pd-sub{font-size:9.5pt;color:#555;margin-bottom:6mm;}
+  .pd-title{font-size:13pt;font-weight:700;border-top:2px solid #000;border-bottom:2px solid #000;padding:4px 0;margin:0 0 6mm;text-align:center;}
+  .pd-meta{display:flex;justify-content:space-between;font-size:9.5pt;margin-bottom:5mm;}
+  .pd-table{width:100%;border-collapse:collapse;margin-bottom:6mm;}
+  .pd-table th{border:1px solid #aaa;padding:5px 8px;font-size:9pt;background:#eee;text-align:left;}
+  .pd-table td{border:1px solid #aaa;padding:5px 8px;font-size:9pt;}
+  .pd-totals{font-size:10.5pt;margin-bottom:8mm;}
+  .pd-totals-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #ddd;}
+  .pd-totals-row.grand{font-weight:800;font-size:12pt;border-bottom:2px solid #000;border-top:2px solid #000;padding:5px 0;margin-top:3px;}
+  .pd-signatures{margin-top:10mm;display:grid;grid-template-columns:1fr 1fr;gap:10mm;}
+  .pd-sig-box{border:1px solid #aaa;border-radius:4px;padding:8px 10px;min-height:32mm;}
+  .pd-sig-label{font-size:8.5pt;font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4mm;border-bottom:1px solid #ccc;padding-bottom:4px;}
+  .pd-sig-line{border-bottom:1px solid #888;margin-top:18mm;}
+  .pd-footer-note{margin-top:8mm;font-size:8pt;color:#666;text-align:center;border-top:1px solid #ddd;padding-top:4mm;}
+  @media print{@page{margin:12mm 14mm;}}
+</style>
+</head><body>
+${content}
+<script>window.onload=function(){window.print();window.close();};<\/script>
+</body></html>`);
+    win.document.close();
+};
 </script>
+
+<!-- ── Rapport Mensuel Modal ── -->
+<div class="modal fade" id="rapportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content rm-content">
+            <div class="modal-header rm-header">
+                <div>
+                    <div class="rm-title"><i class="fas fa-file-alt me-2" style="color:var(--st-green);"></i>Rapport Mensuel Permis Validés</div>
+                    <div class="rm-sub" id="rapport-sub">—</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" style="filter:var(--bs-btn-close-filter,none);"></button>
+            </div>
+            <div class="modal-body rm-body">
+                <!-- Controls -->
+                <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:1.2rem;">
+                    <label class="rm-label">Mois :</label>
+                    <input type="month" id="rapport-input-month" class="hist-date-input" onchange="loadRapport()" style="border-radius:8px;padding:.38rem .65rem;">
+                    <button onclick="loadRapport()" class="rm-gen-btn">
+                        <i class="fas fa-sync-alt me-1"></i>Générer
+                    </button>
+                    <button id="rapport-btn-print" onclick="printRapport()" class="rm-print-btn">
+                        <i class="fas fa-print"></i>Imprimer
+                    </button>
+                </div>
+                <!-- Stats -->
+                <div id="rapport-stats" style="display:none;gap:.75rem;flex-wrap:wrap;margin-bottom:1.2rem;">
+                    <div class="rm-stat rm-stat-cyan">
+                        <div class="rm-stat-label">Total validés</div>
+                        <div style="font-size:1.35rem;font-weight:700;color:var(--st-cyan);" id="rs-total">0</div>
+                    </div>
+                    <div class="rm-stat rm-stat-blue">
+                        <div class="rm-stat-label">Permanents</div>
+                        <div style="font-size:1.35rem;font-weight:700;color:var(--st-blue);" id="rs-permanent">0</div>
+                    </div>
+                    <div class="rm-stat rm-stat-yellow">
+                        <div class="rm-stat-label">Temporaires</div>
+                        <div style="font-size:1.35rem;font-weight:700;color:var(--st-yellow);" id="rs-temporaire">0</div>
+                    </div>
+                    <div class="rm-stat rm-stat-green">
+                        <div class="rm-stat-label">Montant total</div>
+                        <div style="font-size:1.1rem;font-weight:700;color:var(--st-green);" id="rs-amount">—</div>
+                    </div>
+                </div>
+                <!-- Island breakdown -->
+                <div id="rapport-islands-section" style="display:none;margin-bottom:1.2rem;">
+                    <div style="font-size:.78rem;font-weight:600;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.5rem;"><i class="fas fa-map-marked-alt me-1"></i>Répartition par île</div>
+                    <div id="rapport-islands" style="display:flex;flex-direction:column;gap:.4rem;"></div>
+                </div>
+                <!-- Table -->
+                <div id="rapport-table-section" style="display:none;" class="rm-table-wrap">
+                    <div class="rm-table-hd">
+                        <span class="rm-table-title"><i class="fas fa-list me-2" style="color:var(--st-cyan);"></i>Détail</span>
+                        <span class="rm-table-count" id="rapport-count"></span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="hist-table">
+                            <thead><tr>
+                                <th>N° Permis</th>
+                                <th>Titulaire</th>
+                                <th>Type</th>
+                                <th>Catégories</th>
+                                <th>Validé par</th>
+                                <th>Date validation</th>
+                                <th>Statut</th>
+                                <th style="text-align:right;">Montant (FC)</th>
+                            </tr></thead>
+                            <tbody id="rapport-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- Empty -->
+                <div id="rapport-empty" class="rm-empty" style="display:none;">
+                    <i class="fas fa-id-card fa-2x" style="opacity:.3;display:block;margin-bottom:.75rem;"></i>
+                    Aucun permis validé ce mois-là.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Print document (hidden on screen, visible on print) ── -->
+<div id="print-rapport-doc" style="display:none;">
+    <div class="pd-header">
+        <div class="pd-org">SMART DEVELOPMENT</div>
+        <div class="pd-sub">Système de Gestion des Permis Biométriques — SIGVA</div>
+        <div class="pd-title">RAPPORT MENSUEL DES PERMIS VALIDÉS</div>
+    </div>
+    <div class="pd-meta">
+        <span><strong>Mois :</strong> <span id="pd-month">—</span></span>
+        <span><strong>Généré le :</strong> <span id="pd-generated">—</span></span>
+    </div>
+    <!-- Répartition par île -->
+    <div style="font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3mm;">Répartition par île</div>
+    <table class="pd-table" style="margin-bottom:6mm;">
+        <thead><tr>
+            <th style="width:50%;">Île</th>
+            <th style="width:25%;text-align:center;">Nb permis</th>
+            <th style="width:25%;text-align:right;">Montant (FC)</th>
+        </tr></thead>
+        <tbody id="pd-islands-tbody"></tbody>
+    </table>
+    <!-- Détail -->
+    <div style="font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3mm;">Détail des permis</div>
+    <table class="pd-table">
+        <thead><tr>
+            <th style="width:13%;">N° Permis</th>
+            <th style="width:22%;">Titulaire</th>
+            <th style="width:10%;">Île</th>
+            <th style="width:10%;">Type</th>
+            <th style="width:9%;">Catégories</th>
+            <th style="width:14%;">Validé par</th>
+            <th style="width:12%;">Date validation</th>
+            <th style="width:10%;text-align:right;">Montant (FC)</th>
+        </tr></thead>
+        <tbody id="pd-tbody"></tbody>
+    </table>
+    <div class="pd-totals">
+        <div class="pd-totals-row"><span>Permis permanents</span><span id="pd-nb-permanent">—</span></div>
+        <div class="pd-totals-row"><span>Permis temporaires</span><span id="pd-nb-temporaire">—</span></div>
+        <div class="pd-totals-row"><span>Prix unitaire</span><span id="pd-unit-price">—</span></div>
+        <div class="pd-totals-row grand"><span>TOTAL À PERCEVOIR</span><span id="pd-total">—</span></div>
+    </div>
+    <div class="pd-signatures">
+        <div class="pd-sig-box">
+            <div class="pd-sig-label">Responsable Smart Development</div>
+            <div style="font-size:9pt;margin-bottom:2mm;">Nom &amp; Prénom :</div>
+            <div class="pd-sig-line"></div>
+            <div style="font-size:8pt;margin-top:3mm;">Signature &amp; Cachet</div>
+        </div>
+        <div class="pd-sig-box">
+            <div class="pd-sig-label">Autorité de contrôle</div>
+            <div style="font-size:9pt;margin-bottom:2mm;">Nom &amp; Prénom :</div>
+            <div class="pd-sig-line"></div>
+            <div style="font-size:8pt;margin-top:3mm;">Signature &amp; Cachet</div>
+        </div>
+    </div>
+    <div class="pd-footer-note">
+        Ce document atteste des permis biométriques validés par Smart Development pour le mois indiqué et du montant correspondant dû.
+    </div>
+</div>
 </body>
 </html>

@@ -47,18 +47,29 @@
 
   <!-- Stats -->
   <div class="row mb-4 g-3">
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
       <div class="card h-100">
         <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
           <div>
-            <div class="text-muted small">En attente</div>
+            <div class="text-muted small">En attente de validation</div>
             <h3 class="mb-0 fw-bold text-warning" id="stat-pending">—</h3>
           </div>
-          <i class="fas fa-clock text-warning" style="font-size:1.6rem;opacity:.7;"></i>
+          <i class="fas fa-hourglass-half text-warning" style="font-size:1.6rem;opacity:.7;"></i>
         </div>
       </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
+      <div class="card h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
+          <div>
+            <div class="text-muted small">En attente d'impression</div>
+            <h3 class="mb-0 fw-bold text-info" id="stat-validated">—</h3>
+          </div>
+          <i class="fas fa-print text-info" style="font-size:1.6rem;opacity:.7;"></i>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4">
       <div class="card h-100">
         <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
           <div>
@@ -66,28 +77,6 @@
             <h3 class="mb-0 fw-bold text-success" id="stat-printed">—</h3>
           </div>
           <i class="fas fa-check-circle text-success" style="font-size:1.6rem;opacity:.7;"></i>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
-          <div>
-            <div class="text-muted small">Annulées</div>
-            <h3 class="mb-0 fw-bold text-danger" id="stat-cancelled">—</h3>
-          </div>
-          <i class="fas fa-times-circle text-danger" style="font-size:1.6rem;opacity:.7;"></i>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center justify-content-between">
-          <div>
-            <div class="text-muted small">Total</div>
-            <h3 class="mb-0 fw-bold" id="stat-total">—</h3>
-          </div>
-          <i class="fas fa-list text-secondary" style="font-size:1.6rem;opacity:.7;"></i>
         </div>
       </div>
     </div>
@@ -100,9 +89,17 @@
         <li class="nav-item" role="presentation">
           <button class="nav-link active d-flex align-items-center gap-2 py-3" id="tab-pending-btn"
             data-bs-toggle="tab" data-bs-target="#tab-pending" type="button" role="tab">
-            <i class="fas fa-clock text-warning"></i>
-            En attente d'impression
+            <i class="fas fa-hourglass-half text-warning"></i>
+            En attente de validation
             <span class="badge bg-warning text-dark" id="badge-pending">0</span>
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link d-flex align-items-center gap-2 py-3" id="tab-validated-btn"
+            data-bs-toggle="tab" data-bs-target="#tab-validated" type="button" role="tab">
+            <i class="fas fa-print text-info"></i>
+            En attente d'impression
+            <span class="badge bg-info" id="badge-validated">0</span>
           </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -113,26 +110,18 @@
             <span class="badge bg-success" id="badge-printed">0</span>
           </button>
         </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link d-flex align-items-center gap-2 py-3" id="tab-cancelled-btn"
-            data-bs-toggle="tab" data-bs-target="#tab-cancelled" type="button" role="tab">
-            <i class="fas fa-times-circle text-danger"></i>
-            Demandes annulées
-            <span class="badge bg-danger" id="badge-cancelled">0</span>
-          </button>
-        </li>
       </ul>
     </div>
     <div class="tab-content" id="req-tabs-content">
 
-      <!-- En attente -->
+      <!-- En attente de validation -->
       <div class="tab-pane show active" id="tab-pending" role="tabpanel">
         <div id="pending-loading" class="text-center py-4 text-muted">
           <div class="spinner-border spinner-border-sm me-2" role="status"></div>Chargement…
         </div>
         <div id="pending-empty" class="text-center py-5 text-muted d-none">
           <i class="fas fa-check-circle fa-2x mb-2 d-block text-success opacity-50"></i>
-          Aucune demande en attente
+          Aucune demande en attente de validation
         </div>
         <div class="table-responsive">
           <table class="table table-hover mb-0 d-none" id="pending-table">
@@ -143,10 +132,35 @@
                 <th>Demandé par</th>
                 <th>Date demande</th>
                 <th>Notes</th>
-                <th></th>
               </tr>
             </thead>
             <tbody id="pending-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- En attente d'impression -->
+      <div class="tab-pane" id="tab-validated" role="tabpanel">
+        <div id="validated-loading" class="text-center py-4 text-muted">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Chargement…
+        </div>
+        <div id="validated-empty" class="text-center py-5 text-muted d-none">
+          <i class="fas fa-inbox fa-2x mb-2 d-block opacity-50"></i>
+          Aucune demande en attente d'impression
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 d-none" id="validated-table">
+            <thead class="table-light">
+              <tr>
+                <th>Permis</th>
+                <th>Titulaire</th>
+                <th>Demandé par</th>
+                <th>Date demande</th>
+                <th>Validé par SmartDev</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="validated-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -177,31 +191,6 @@
         </div>
       </div>
 
-      <!-- Annulées -->
-      <div class="tab-pane" id="tab-cancelled" role="tabpanel">
-        <div id="cancelled-loading" class="text-center py-4 text-muted">
-          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Chargement…
-        </div>
-        <div id="cancelled-empty" class="text-center py-5 text-muted d-none">
-          <i class="fas fa-inbox fa-2x mb-2 d-block opacity-50"></i>
-          Aucune demande annulée
-        </div>
-        <div class="table-responsive">
-          <table class="table table-hover mb-0 d-none" id="cancelled-table">
-            <thead class="table-light">
-              <tr>
-                <th>Permis</th>
-                <th>Titulaire</th>
-                <th>Demandé par</th>
-                <th>Date demande</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody id="cancelled-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-
     </div>
   </div>
 
@@ -224,10 +213,21 @@ function renderPendingRow(r) {
     <td><span class="badge bg-secondary">${r.requested_by || '—'}</span></td>
     <td class="text-nowrap text-muted">${r.requested_at || '—'}</td>
     <td class="text-muted small">${r.notes || '—'}</td>
+  </tr>`;
+}
+
+function renderValidatedRow(r) {
+  return `<tr>
+    <td><span class="fw-semibold">${r.license_number || '—'}</span></td>
+    <td>${r.holder_firstname || ''} ${r.holder_name || ''}</td>
+    <td><span class="badge bg-secondary">${r.requested_by || '—'}</span></td>
+    <td class="text-nowrap text-muted">${r.requested_at || '—'}</td>
+    <td><span class="badge bg-info text-dark">${r.smarttech_validated_by || '—'}</span></td>
     <td class="text-end">
-      <button class="btn btn-sm btn-outline-danger" onclick="cancelRequest(${r.id})" title="Annuler">
-        <i class="fas fa-times"></i>
-      </button>
+      <a href="/licenses/${r.license_id}/print-card" target="_blank"
+         class="btn btn-sm btn-outline-primary" title="Imprimer la carte biométrique">
+        <i class="fas fa-id-card me-1"></i>Imprimer
+      </a>
     </td>
   </tr>`;
 }
@@ -240,16 +240,6 @@ function renderPrintedRow(r) {
     <td class="text-nowrap text-muted">${r.requested_at || '—'}</td>
     <td><span class="badge bg-success">${r.printed_by || '—'}</span></td>
     <td class="text-nowrap text-muted">${r.printed_at || '—'}</td>
-  </tr>`;
-}
-
-function renderCancelledRow(r) {
-  return `<tr class="text-muted">
-    <td class="fw-semibold">${r.license_number || '—'}</td>
-    <td>${r.holder_firstname || ''} ${r.holder_name || ''}</td>
-    <td><span class="badge bg-secondary">${r.requested_by || '—'}</span></td>
-    <td class="text-nowrap">${r.requested_at || '—'}</td>
-    <td class="small">${r.notes || '—'}</td>
   </tr>`;
 }
 
@@ -271,28 +261,25 @@ function setSection(prefix, rows, renderFn) {
 
 function render(data) {
   const pending   = data.filter(r => r.status === 'pending');
+  const validated = data.filter(r => r.status === 'validated');
   const printed   = data.filter(r => r.status === 'printed');
-  const cancelled = data.filter(r => r.status === 'cancelled');
 
   document.getElementById('stat-pending').textContent    = pending.length;
+  document.getElementById('stat-validated').textContent  = validated.length;
   document.getElementById('stat-printed').textContent    = printed.length;
-  document.getElementById('stat-cancelled').textContent  = cancelled.length;
-  document.getElementById('stat-total').textContent      = data.length;
   document.getElementById('badge-pending').textContent   = pending.length;
+  document.getElementById('badge-validated').textContent = validated.length;
   document.getElementById('badge-printed').textContent   = printed.length;
-  document.getElementById('badge-cancelled').textContent = cancelled.length;
 
   setSection('pending',   pending,   renderPendingRow);
+  setSection('validated', validated, renderValidatedRow);
   setSection('printed',   printed,   renderPrintedRow);
-  setSection('cancelled', cancelled, renderCancelledRow);
 }
 
 function applyFilter() {
   const from = document.getElementById('date-from').value;
   const to   = document.getElementById('date-to').value;
-
   if (!from && !to) { render(allData); return; }
-
   const filtered = allData.filter(r => {
     const key = extractDateKey(r.requested_at);
     if (!key) return false;
@@ -320,7 +307,7 @@ function resetToLastMonth() {
 }
 
 function loadAll() {
-  ['pending','printed','cancelled'].forEach(p => {
+  ['pending', 'validated', 'printed'].forEach(p => {
     document.getElementById(p + '-loading').classList.remove('d-none');
     document.getElementById(p + '-empty').classList.add('d-none');
     document.getElementById(p + '-table').classList.add('d-none');
@@ -328,24 +315,13 @@ function loadAll() {
 
   fetch('/api/licenses/print-requests', {credentials: 'same-origin'})
     .then(r => r.ok ? r.json() : [])
-    .then(data => {
-      allData = data;
-      applyFilter();
-    })
+    .then(data => { allData = data; applyFilter(); })
     .catch(() => {
       document.getElementById('pending-loading').innerHTML =
         '<div class="text-danger py-3 text-center">Erreur de chargement</div>';
+      document.getElementById('validated-loading').innerHTML = '';
       document.getElementById('printed-loading').innerHTML = '';
-      document.getElementById('cancelled-loading').innerHTML = '';
     });
-}
-
-function cancelRequest(id) {
-  if (!confirm('Annuler cette demande d\'impression ?')) return;
-  fetch(`/api/licenses/print-requests/${id}`, {
-    method: 'DELETE',
-    credentials: 'same-origin'
-  }).then(r => r.ok ? loadAll() : alert('Erreur lors de l\'annulation'));
 }
 
 (function init() {
@@ -355,6 +331,9 @@ function cancelRequest(id) {
   document.getElementById('date-from').value = toInputDate(monthAgo);
   document.getElementById('date-to').value   = toInputDate(today);
   loadAll();
+
+  document.addEventListener('visibilitychange', function() { if (!document.hidden) loadAll(); });
+  window.addEventListener('focus', loadAll);
 })();
 </script>
 {% endblock %}

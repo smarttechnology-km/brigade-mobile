@@ -46,7 +46,7 @@
           {% if vehicle.qr_pending_approval %}
           <div class="alert alert-warning py-2 mb-0 d-flex align-items-center gap-2" style="font-size:0.88rem;">
             <i class="fas fa-clock"></i>
-            <span>QR Code en attente de validation SmartTech</span>
+            <span>QR Code en attente de validation SmartDev</span>
           </div>
           {% else %}
           <div class="d-flex gap-2 align-items-center mb-0">
@@ -162,7 +162,7 @@
                 <div>
                   <small class="text-muted d-block">Code QR de suivi</small>
                   {% if vehicle.qr_pending_approval %}
-                    <span class="badge bg-warning text-dark">En attente SmartTech</span>
+                    <span class="badge bg-warning text-dark">En attente SmartDev</span>
                   {% elif vehicle.qr_code_expiry %}
                     <strong>Expire le : {{ vehicle.qr_code_expiry.strftime('%d/%m/%Y') }}</strong>
                     {% set days_qr = (vehicle.qr_code_expiry - now()).days %}

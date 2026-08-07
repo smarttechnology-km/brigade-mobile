@@ -371,14 +371,22 @@
       .card-separator { page-break-before: always; margin-top: 30px; }
       .card-back { box-shadow: none; }
     }
+    {% if smarttech_preview or readonly %}
+    /* View-only mode — printing blocked */
+    .toolbar { display: none !important; }
+    @media print { html { display: none !important; } }
+    {% endif %}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/dom-to-image-more@2.10.1/dist/dom-to-image-more.min.js"></script>
+  {% if smarttech_preview or readonly %}
+  <script>window.print = function () {};</script>
+  {% endif %}
 </head>
 <body>
 
 <div class="toolbar">
   <button class="btn btn-back" onclick="history.back()">← Retour</button>
-  <button class="btn btn-print" onclick="window.print()">
+  <button class="btn btn-print" onclick="doPrint()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="6 9 6 2 18 2 18 9"/>
       <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
@@ -661,6 +669,17 @@ function downloadImages() {
     btn.disabled = false;
     btn.textContent = 'Erreur';
     console.error(e);
+  });
+}
+</script>
+<script>
+function doPrint() {
+  // Notify backend that the card was printed, then trigger browser print
+  fetch('/api/licenses/{{ lic.id }}/mark-printed', {
+    method: 'POST',
+    credentials: 'same-origin',
+  }).finally(() => {
+    window.print();
   });
 }
 </script>

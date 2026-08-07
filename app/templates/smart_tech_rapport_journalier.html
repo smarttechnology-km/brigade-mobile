@@ -116,6 +116,8 @@
         html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
         html[data-theme="light"] .label-muted{color:rgba(0,0,0,0.5);}
         html[data-theme="light"] #table-count{color:rgba(0,0,0,0.45);}
+        .btn-back-nav{display:inline-flex;align-items:center;gap:.45rem;background:linear-gradient(135deg,rgba(0,212,255,0.15),rgba(0,128,255,0.1));border:1px solid rgba(0,212,255,0.3);color:var(--st-cyan);border-radius:8px;padding:.35rem .85rem;font-size:.8rem;font-weight:600;text-decoration:none;white-space:nowrap;transition:background .18s;}
+        .btn-back-nav:hover{background:linear-gradient(135deg,rgba(0,212,255,0.28),rgba(0,128,255,0.2));}
 
         /* ── Print document (hidden on screen, visible on print) ── */
         .print-doc { display: none; }
@@ -167,7 +169,7 @@
             <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
         </a>
         {% if current_user.role in ['admin', 'employe'] %}
-        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
+        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item active">
             <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
         </a>
         {% endif %}
@@ -176,7 +178,7 @@
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
         {% endif %}
-        {% if current_user.role in ['admin', 'employe'] %}
+{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
             <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
@@ -203,11 +205,6 @@
         {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
-        </a>
-        {% endif %}
-        {% if current_user.role in ['admin', 'secretaire', 'employe'] %}
-        <a href="{{ url_for('smart_tech.rapport_journalier_page') }}" class="st-nav-item active">
-            <span class="st-nav-icon"><i class="fas fa-calendar-day"></i></span>Rapport Journalier
         </a>
         {% endif %}
         {% if current_user.role in ['admin', 'secretaire'] %}
@@ -240,6 +237,9 @@
         <div class="d-flex align-items-center gap-3">
             <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
             <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
+            <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="btn-back-nav">
+                <i class="fas fa-arrow-left"></i>Gestion des Véhicules
+            </a>
             <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
                 <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
                 {{ current_user.full_name or current_user.username }}
