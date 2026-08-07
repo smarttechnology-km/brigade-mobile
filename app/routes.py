@@ -1074,8 +1074,61 @@ def insurance_sigva_receipt(month):
 @main_bp.route('/mobile-money-dashboard')
 @roles_required('mobile_money_agent')
 def mobile_money_dashboard():
-    """Dashboard for mobile money agents to confirm payments manually."""
+    """Overview/aperçu dashboard for mobile money agents."""
+    return render_template('mobile_money_apercu.html')
+
+
+@main_bp.route('/mobile-money-amendes')
+@roles_required('mobile_money_agent')
+def mobile_money_amendes_page():
+    """Fine payment confirmation page for mobile money agents."""
     return render_template('mobile_money_dashboard.html')
+
+
+@main_bp.route('/api/mobile-money/stats')
+@roles_required('mobile_money_agent')
+def api_mm_stats():
+    """Quick stats for the mobile money dashboard."""
+    from app.models import Fine, Vehicle, CarteGrise
+
+    unpaid_fines = Fine.query.filter_by(paid=False).all()
+    unpaid_vehicles = len({f.vehicle_id for f in unpaid_fines if f.vehicle_id})
+    unpaid_total = sum(float(f.amount or 0) for f in unpaid_fines)
+
+    cg_pending = CarteGrise.query.filter_by(status='en_attente_paiement').count()
+
+    today_start = now_comoros().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    fines_today = Fine.query.filter(Fine.paid == True, Fine.paid_at >= today_start).all()
+    fines_today_total = sum(float(f.amount or 0) for f in fines_today)
+
+    vignettes_today = Vehicle.query.filter(
+        Vehicle.vignette_last_paid_at >= today_start
+    ).all()
+    vignettes_today_total = sum(
+        float(getattr(v, 'vignette_last_paid_total_amount', 0) or 0) for v in vignettes_today
+    )
+
+    cg_confirmed_today = CarteGrise.query.filter(
+        CarteGrise.status.in_(['en_attente', 'signee']),
+        CarteGrise.updated_at >= today_start,
+    ).all()
+    cg_today_total = sum(float(c.prix or 0) for c in cg_confirmed_today)
+
+    today_total = round(fines_today_total + vignettes_today_total + cg_today_total, 2)
+
+    return jsonify({
+        'unpaid_vehicles': unpaid_vehicles,
+        'unpaid_total': round(unpaid_total, 2),
+        'cg_pending': cg_pending,
+        'fines_paid_today': len(fines_today),
+        'fines_paid_today_total': round(fines_today_total, 2),
+        'vignettes_today': len(vignettes_today),
+        'vignettes_today_total': round(vignettes_today_total, 2),
+        'cg_today': len(cg_confirmed_today),
+        'cg_today_total': round(cg_today_total, 2),
+        'today_total': today_total,
+    })
 
 
 @main_bp.route('/mobile-money-vignettes')
@@ -1092,6 +1145,47 @@ def mobile_money_qr_renewal_page():
     from app.models import SmartTechSetting
     renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
     return render_template('mobile_money_qr_renewal.html', renewal_price=renewal_price)
+
+
+@main_bp.route('/mobile-money-cartes-grises')
+@roles_required('mobile_money_agent')
+def mobile_money_cartes_grises_page():
+    from app.models import SmartTechSetting
+    cg_price = float(SmartTechSetting.get('carte_grise_price', 0) or 0)
+    return render_template('mobile_money_cartes_grises.html', cg_price=cg_price)
+
+
+@main_bp.route('/api/mobile-money/cartes-grises', methods=['GET'])
+@roles_required('mobile_money_agent')
+def api_mm_cartes_grises_list():
+    from app.models import CarteGrise, Vehicle
+    cgs = (CarteGrise.query
+           .filter(CarteGrise.status == 'en_attente_paiement')
+           .join(Vehicle)
+           .order_by(CarteGrise.signature_requested_at.desc())
+           .all())
+    result = []
+    for cg in cgs:
+        v = cg.vehicle
+        d = cg.to_dict()
+        d['owner_name']  = v.owner_name or ''
+        d['owner_phone'] = v.owner_phone or ''
+        d['owner_island'] = v.owner_island or ''
+        d['license_plate'] = v.license_plate or ''
+        result.append(d)
+    return jsonify(result)
+
+
+@main_bp.route('/api/mobile-money/cartes-grises/<int:cg_id>/confirm-payment', methods=['POST'])
+@roles_required('mobile_money_agent')
+def api_mm_cg_confirm_payment(cg_id):
+    from app.models import CarteGrise
+    cg = CarteGrise.query.get_or_404(cg_id)
+    if cg.status != 'en_attente_paiement':
+        return jsonify({'error': 'Statut invalide pour cette action'}), 400
+    cg.status = 'en_attente'
+    db.session.commit()
+    return jsonify({'success': True, 'carte_grise': cg.to_dict()})
 
 
 @main_bp.route('/mobile-money-archive')
@@ -1379,6 +1473,8 @@ def license_print_card(license_id):
     from app.models import DriverLicense, LicenseSetting
     from dateutil.relativedelta import relativedelta
     lic = DriverLicense.query.get_or_404(license_id)
+    if not lic.smarttech_print_validated:
+        abort(403)
     settings = LicenseSetting.get()
     computed_expiry = None
     if not lic.expiry_date and lic.issue_date:
@@ -1389,9 +1485,10 @@ def license_print_card(license_id):
     main_expiry = lic.expiry_date or computed_expiry
     computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     category_details = parse_category_details(lic)
+    readonly = request.args.get('readonly') == '1'
     return render_template('license_card.html', lic=lic, settings=settings, now_comoros=now_comoros,
                            computed_expiry=computed_expiry, category_details=category_details,
-                           computed_cat_expiries=computed_cat_expiries)
+                           computed_cat_expiries=computed_cat_expiries, readonly=readonly)
 
 
 @main_bp.route('/licenses/print-requests')
@@ -2520,7 +2617,7 @@ def get_vehicle_qrcode(vehicle_id):
     check_island_access(vehicle.owner_island)
 
     if vehicle.qr_pending_approval:
-        return jsonify({'error': 'QR Code en attente de validation SmartTech.'}), 403
+        return jsonify({'error': 'QR Code en attente de validation SmartDev.'}), 403
 
     # Initialize QR code expiry if not already set
     if not vehicle.qr_code_expiry:
@@ -2549,7 +2646,7 @@ def get_vehicle_qrcode_pdf(vehicle_id):
     check_island_access(vehicle.owner_island)
 
     if vehicle.qr_pending_approval:
-        return jsonify({'error': 'QR Code en attente de validation SmartTech.'}), 403
+        return jsonify({'error': 'QR Code en attente de validation SmartDev.'}), 403
 
     if not REPORTLAB_AVAILABLE:
         return jsonify({'error': 'PDF generation not available'}), 500
@@ -5129,7 +5226,7 @@ def request_vignette_payment(vehicle_id):
     vehicle = Vehicle.query.get_or_404(vehicle_id)
 
     if vehicle.qr_pending_approval:
-        return jsonify({'error': 'Ce véhicule est en attente de validation SmartTech. Aucune vignette ne peut être ajoutée pour l\'instant.'}), 403
+        return jsonify({'error': 'Ce véhicule est en attente de validation SmartDev. Aucune vignette ne peut être ajoutée pour l\'instant.'}), 403
 
     # Validation: VIN is required to add a vignette
     if not vehicle.vin or not str(vehicle.vin).strip():
@@ -5741,53 +5838,36 @@ def get_mobile_money_archive():
         vignette_penalties += penalty_amount
         vignette_included_fines += fines_amount
 
-    # QR code renewals archive — mobile agents OR citizen app (recorded_by not a system user)
-    from app.models import QRCodePayment
-    qr_filters = [
-        QRCodePayment.payment_type == 'renewal',
-        QRCodePayment.status == 'paid',
-        QRCodePayment.paid_at.isnot(None),
+    # Cartes grises payées via mobile money (statut en_attente ou signee)
+    from app.models import CarteGrise
+    cg_filters = [
+        CarteGrise.status.in_(['en_attente', 'signee']),
+        CarteGrise.signature_requested_at.isnot(None),
     ]
     if start_date:
-        qr_filters.append(QRCodePayment.paid_at >= start_date)
+        cg_filters.append(CarteGrise.signature_requested_at >= start_date)
     if end_date:
-        qr_filters.append(QRCodePayment.paid_at <= end_date)
-    if other_system_usernames:
-        qr_filters.append(db.or_(
-            QRCodePayment.recorded_by.in_(mobile_agent_usernames),
-            QRCodePayment.recorded_by.notin_(other_system_usernames),
-        ))
-    else:
-        qr_filters.append(QRCodePayment.recorded_by.isnot(None))
-    qr_query = QRCodePayment.query.filter(*qr_filters)
+        cg_filters.append(CarteGrise.signature_requested_at <= end_date)
+    cg_query = CarteGrise.query.filter(*cg_filters).join(Vehicle)
     if user_country:
-        qr_query = qr_query.join(Vehicle, QRCodePayment.vehicle_id == Vehicle.id)\
-                           .filter(Vehicle.owner_island == user_country)
+        cg_query = cg_query.filter(Vehicle.owner_island == user_country)
 
-    qr_archive = []
-    qr_total = 0.0
-    for p in qr_query.order_by(QRCodePayment.paid_at.desc()).all():
-        v = p.vehicle
-        raw = p.recorded_by or '-'
-        # Format display: citizen payments may have old raw format (phone/name/HuriMoney)
-        if raw.startswith('App Citoyen /'):
-            recorded_by_display = raw
-        elif raw in mobile_agent_usernames:
-            recorded_by_display = raw
-        else:
-            # Old citizen record without prefix — add it
-            recorded_by_display = f'App Citoyen / {raw}'
-        qr_archive.append({
-            'id': p.id,
+    cg_archive = []
+    cg_total = 0.0
+    for cg in cg_query.order_by(CarteGrise.signature_requested_at.desc()).all():
+        v = cg.vehicle
+        amount = float(cg.prix or 0.0)
+        cg_archive.append({
+            'id': cg.id,
             'license_plate': v.license_plate if v else '-',
             'owner_name': v.owner_name if v else '-',
             'owner_island': v.owner_island if v else '-',
-            'amount': float(p.amount or 0.0),
-            'paid_at': p.paid_at.isoformat() if p.paid_at else None,
-            'recorded_by': recorded_by_display,
-            'new_expiry': v.qr_code_expiry.strftime('%d/%m/%Y') if v and v.qr_code_expiry else '-',
+            'amount': amount,
+            'paid_at': cg.signature_requested_at.isoformat() if cg.signature_requested_at else None,
+            'status': cg.status,
+            'signed_at': cg.signed_at.strftime('%d/%m/%Y %H:%M') if cg.signed_at else None,
         })
-        qr_total += float(p.amount or 0.0)
+        cg_total += amount
 
     return jsonify({
         'start_date': start_date.isoformat() if start_date else None,
@@ -5799,13 +5879,13 @@ def get_mobile_money_archive():
             'vignette_total': round(vignette_total, 2),
             'vignette_penalties_total': round(vignette_penalties, 2),
             'vignette_included_fines_total': round(vignette_included_fines, 2),
-            'qr_renewals_count': len(qr_archive),
-            'qr_renewals_total': round(qr_total, 2),
-            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines + qr_total, 2),
+            'cg_count': len(cg_archive),
+            'cg_total': round(cg_total, 2),
+            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines + cg_total, 2),
         },
         'direct_paid_fines': direct_paid_fines,
         'vignette_archive': vignette_archive,
-        'qr_archive': qr_archive,
+        'cg_archive': cg_archive,
     })
 
 
@@ -6702,7 +6782,12 @@ def get_payment_settings():
     return jsonify(setting.to_dict())
 
 
-_PAYMENT_PHONE_FIELD_LABELS = {'fine_phone': 'Amendes', 'vignette_phone': 'Vignette'}
+_PAYMENT_PHONE_FIELD_LABELS = {
+    'fine_phone': 'Amendes',
+    'vignette_phone': 'Vignette',
+    'carte_grise_phone': 'Carte grise',
+    'permis_phone': 'Permis de conduire',
+}
 
 
 @vehicle_bp.route('/payment-settings', methods=['PUT'])
@@ -6723,16 +6808,12 @@ def update_payment_settings():
     setting = HuriDestinationSetting.get()
     username = current_user.username if current_user.is_authenticated else None
 
-    if 'fine_phone' in data:
-        field = 'fine_phone'
-        new_value = (data.get('fine_phone') or '').strip() or None
-        current_value = setting.fine_phone
-    elif 'vignette_phone' in data:
-        field = 'vignette_phone'
-        new_value = (data.get('vignette_phone') or '').strip() or None
-        current_value = setting.vignette_phone
-    else:
+    known_fields = ('fine_phone', 'vignette_phone', 'carte_grise_phone', 'permis_phone')
+    field = next((f for f in known_fields if f in data), None)
+    if not field:
         return jsonify({'error': 'Aucun champ à modifier.'}), 400
+    new_value = (data.get(field) or '').strip() or None
+    current_value = getattr(setting, field)
 
     if new_value == current_value:
         return jsonify({'message': 'Aucun changement.', **setting.to_dict()})
@@ -6821,7 +6902,7 @@ def confirm_payment_settings_change():
 def get_payment_settings_history():
     from app.models import HuriDestinationPhoneHistory
     field = request.args.get('field', '').strip()
-    if field not in ('fine_phone', 'vignette_phone', 'qr_renewal_phone'):
+    if field not in ('fine_phone', 'vignette_phone', 'qr_renewal_phone', 'carte_grise_phone', 'permis_phone'):
         return jsonify({'error': 'Champ invalide'}), 400
     entries = (HuriDestinationPhoneHistory.query
                .filter_by(field=field)
@@ -7045,7 +7126,7 @@ def dgrtr_carte_grise_print(vehicle_id):
 @main_bp.route('/dgrtr/parametres-cg')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_parametres_cg():
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_general':
         abort(403)
     return render_template('dgrtr_parametres_cg.html')
 
@@ -7145,9 +7226,9 @@ def dgrtr_cg_request_signature(vehicle_id):
     cg = vehicle.carte_grise
     if not cg:
         return jsonify({'error': 'Carte grise non trouvée'}), 404
-    if cg.status == 'signee':
-        return jsonify({'error': 'Déjà signée'}), 400
-    cg.status = 'en_attente'
+    if cg.status in ('signee', 'en_attente_paiement', 'en_attente'):
+        return jsonify({'error': 'Demande déjà envoyée'}), 400
+    cg.status = 'en_attente_paiement'
     cg.signature_requested_at = now_comoros()
     cg.signature_requested_by = current_user.username
     db.session.commit()
@@ -7320,15 +7401,14 @@ def dgrtr_cg_stream():
             q = q.filter(Vehicle.owner_island == user_country)
         return q
 
-    def _newest_pending_id():
-        latest = _q_base('en_attente').order_by(CarteGrise.signature_requested_at.desc()).first()
-        return latest.id if latest else 0
+    def _en_attente_count():
+        return _q_base('en_attente').count()
 
     def _signed_count():
         return _q_base('signee').count()
 
     def generate():
-        last_pending_id = _newest_pending_id()
+        last_en_attente_count = _en_attente_count()
         last_signed_count = _signed_count()
         yield 'data: ' + _json.dumps({'type': 'connected'}) + '\n\n'
         while True:
@@ -7337,11 +7417,10 @@ def dgrtr_cg_stream():
                 db.session.expire_all()
                 events = []
 
-                current_pending_id = _newest_pending_id()
-                if current_pending_id != last_pending_id:
-                    count = _q_base('en_attente').count()
-                    events.append(_json.dumps({'type': 'new_request', 'count': count}))
-                    last_pending_id = current_pending_id
+                current_en_attente_count = _en_attente_count()
+                if current_en_attente_count != last_en_attente_count:
+                    events.append(_json.dumps({'type': 'new_request', 'count': current_en_attente_count}))
+                    last_en_attente_count = current_en_attente_count
 
                 current_signed_count = _signed_count()
                 if current_signed_count != last_signed_count:
@@ -7388,10 +7467,10 @@ def dgrtr_cg_pending():
 
 
 def _require_cg_settings_access():
-    """Allow DR, DT, judiciaire, and admin to manage cartes grises settings."""
+    """Allow directeur_general (all islands) and directeur_regional (own island only)."""
     if current_user.role == 'dgrtr':
         dt = getattr(current_user, 'dgrtr_type', None)
-        if dt not in ('directeur_regional', 'directeur_technique'):
+        if dt not in ('directeur_general', 'directeur_regional'):
             abort(403)
 
 
@@ -7406,6 +7485,10 @@ def dgrtr_cg_settings():
     island = request.args.get('island') or (request.get_json() or {}).get('island') or 'Grande Comore'
     if island not in ISLANDS:
         return jsonify({'error': 'Île invalide'}), 400
+    # Directeur régional can only manage their own island
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional':
+        if island != (current_user.country or ''):
+            return jsonify({'error': 'Accès refusé — île non autorisée'}), 403
     s = CarteGriseSetting.get(island)
     if request.method == 'GET':
         return jsonify({

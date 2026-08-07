@@ -1191,6 +1191,10 @@ class DriverLicense(db.Model):
     # identity across that person's vehicles), so it can show on their dashboard.
     registered_phone = db.Column(db.String(20), nullable=True, unique=True, index=True)
     registered_at = db.Column(db.DateTime, nullable=True)
+    # SmartTech must validate before the biometric card print button is enabled for admins.
+    smarttech_print_validated = db.Column(db.Boolean, nullable=False, default=False)
+    smarttech_validated_at = db.Column(db.DateTime, nullable=True)
+    smarttech_validated_by = db.Column(db.String(100), nullable=True)
 
     @property
     def photo_url(self):
@@ -1236,6 +1240,9 @@ class DriverLicense(db.Model):
             'is_expired': self.is_expired,
             'registered_phone': self.registered_phone or '',
             'registered_at': self.registered_at.strftime('%d/%m/%Y %H:%M') if self.registered_at else '',
+            'smarttech_print_validated': bool(self.smarttech_print_validated),
+            'smarttech_validated_at': self.smarttech_validated_at.strftime('%d/%m/%Y %H:%M') if self.smarttech_validated_at else '',
+            'smarttech_validated_by': self.smarttech_validated_by or '',
         }
 
 
@@ -1272,6 +1279,8 @@ class LicensePrintRequest(db.Model):
             'printed_at':   self.printed_at.strftime('%d/%m/%Y %H:%M') if self.printed_at else '',
             'unit_price':   self.unit_price or 0,
             'notes':        self.notes or '',
+            'smarttech_validated_by': (lic.smarttech_validated_by or '') if lic else '',
+            'smarttech_validated_at': (lic.smarttech_validated_at.strftime('%d/%m/%Y %H:%M') if lic.smarttech_validated_at else '') if lic else '',
         }
 
 
@@ -1406,6 +1415,12 @@ class HuriDestinationSetting(db.Model):
     qr_renewal_phone  = db.Column(db.String(20), nullable=True)
     qr_renewal_phone_updated_at = db.Column(db.DateTime, nullable=True)
     qr_renewal_phone_updated_by = db.Column(db.String(80), nullable=True)
+    carte_grise_phone = db.Column(db.String(20), nullable=True)
+    carte_grise_phone_updated_at = db.Column(db.DateTime, nullable=True)
+    carte_grise_phone_updated_by = db.Column(db.String(80), nullable=True)
+    permis_phone      = db.Column(db.String(20), nullable=True)
+    permis_phone_updated_at = db.Column(db.DateTime, nullable=True)
+    permis_phone_updated_by = db.Column(db.String(80), nullable=True)
 
     @staticmethod
     def get():
@@ -1421,6 +1436,8 @@ class HuriDestinationSetting(db.Model):
             'fine': self.fine_phone,
             'vignette': self.vignette_phone,
             'qr_renewal': self.qr_renewal_phone,
+            'carte_grise': self.carte_grise_phone,
+            'permis': self.permis_phone,
         }.get(payment_type)
 
     def to_dict(self):
@@ -1436,6 +1453,12 @@ class HuriDestinationSetting(db.Model):
             'qr_renewal_phone': self.qr_renewal_phone or '',
             'qr_renewal_phone_updated_at': fmt(self.qr_renewal_phone_updated_at),
             'qr_renewal_phone_updated_by': self.qr_renewal_phone_updated_by,
+            'carte_grise_phone': self.carte_grise_phone or '',
+            'carte_grise_phone_updated_at': fmt(self.carte_grise_phone_updated_at),
+            'carte_grise_phone_updated_by': self.carte_grise_phone_updated_by,
+            'permis_phone': self.permis_phone or '',
+            'permis_phone_updated_at': fmt(self.permis_phone_updated_at),
+            'permis_phone_updated_by': self.permis_phone_updated_by,
         }
 
 
@@ -1834,3 +1857,48 @@ class CarteGriseSetting(db.Model):
             db.session.add(obj)
             db.session.commit()
         return obj
+
+
+class PlateSettings(db.Model):
+    __tablename__ = 'plate_settings'
+    id                    = db.Column(db.Integer, primary_key=True)
+    island                = db.Column(db.String(50), nullable=False, unique=True)
+    principal_letter      = db.Column(db.String(1), nullable=False, default='A')
+    current_second_letter = db.Column(db.String(1), nullable=False, default='A')
+    current_number        = db.Column(db.Integer, nullable=False, default=1)
+    enabled               = db.Column(db.Boolean, nullable=False, default=False)
+
+    LETTERS       = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+    ISLAND_SUFFIX = {'Grande Comore': '73', 'Anjouan': '72', 'Moheli': '71'}
+
+    @classmethod
+    def get(cls, island):
+        obj = cls.query.filter_by(island=island).first()
+        if obj is None:
+            obj = cls(island=island)
+            db.session.add(obj)
+            db.session.commit()
+        return obj
+
+    def current_plate(self):
+        suffix = self.ISLAND_SUFFIX.get(self.island, '73')
+        return f"{self.current_number:03d}{self.principal_letter}{self.current_second_letter}{suffix}"
+
+    def advance(self):
+        if self.current_number < 999:
+            self.current_number += 1
+        else:
+            self.current_number = 1
+            idx = self.LETTERS.find(self.current_second_letter)
+            self.current_second_letter = self.LETTERS[idx + 1] if idx < len(self.LETTERS) - 1 else self.LETTERS[0]
+
+    def to_dict(self):
+        return {
+            'island':                self.island,
+            'principal_letter':      self.principal_letter,
+            'current_second_letter': self.current_second_letter,
+            'current_number':        self.current_number,
+            'enabled':               self.enabled,
+            'suffix':                self.ISLAND_SUFFIX.get(self.island, '73'),
+            'next_plate':            self.current_plate() if self.enabled else None,
+        }

@@ -540,6 +540,103 @@ def api_check_plate():
     return jsonify({"exists": exists, "plate": plate})
 
 
+_PLATE_ISLANDS = ('Grande Comore', 'Anjouan', 'Moheli')
+
+
+def _check_plate_settings_access():
+    u = get_current_user()
+    if not u:
+        return False
+    if u.role == 'administrateur':
+        return True
+    if u.role == 'dgrtr' and getattr(u, 'dgrtr_type', None) == 'directeur_regional':
+        return True
+    return False
+
+
+def _dr_island():
+    """Return the island for a directeur_regional, None for admin."""
+    u = get_current_user()
+    if u and u.role == 'dgrtr' and getattr(u, 'dgrtr_type', None) == 'directeur_regional':
+        return getattr(u, 'country', None) or None
+    return None
+
+
+@api_bp.route('/vehicles/plate-settings', methods=['GET'])
+@jwt_required(optional=True)
+def api_plate_settings_get():
+    if not _check_plate_settings_access():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import PlateSettings
+    dr_island = _dr_island()
+    islands = [dr_island] if dr_island else list(_PLATE_ISLANDS)
+    return jsonify({island: PlateSettings.get(island).to_dict() for island in islands})
+
+
+@api_bp.route('/vehicles/plate-settings/<path:island>', methods=['PUT'])
+@jwt_required(optional=True)
+def api_plate_settings_update(island):
+    if not _check_plate_settings_access():
+        return jsonify({'error': 'Accès refusé'}), 403
+    if island not in _PLATE_ISLANDS:
+        return jsonify({'error': 'Île invalide'}), 400
+    dr_island = _dr_island()
+    if dr_island and island != dr_island:
+        return jsonify({'error': 'Accès refusé pour cette île'}), 403
+    from app.models import PlateSettings
+    s = PlateSettings.get(island)
+    data = request.get_json() or {}
+    if 'enabled' in data:
+        s.enabled = bool(data['enabled'])
+    if 'principal_letter' in data:
+        l = (data['principal_letter'] or '').upper().strip()
+        if l and l in PlateSettings.LETTERS:
+            s.principal_letter = l
+    if 'current_second_letter' in data:
+        l = (data['current_second_letter'] or '').upper().strip()
+        if l and l in PlateSettings.LETTERS:
+            s.current_second_letter = l
+    if 'current_number' in data:
+        try:
+            n = int(data['current_number'])
+            if 1 <= n <= 999:
+                s.current_number = n
+        except (ValueError, TypeError):
+            pass
+    db.session.commit()
+    return jsonify({'success': True, 'settings': s.to_dict()})
+
+
+@api_bp.route('/vehicles/next-plate', methods=['GET'])
+@jwt_required(optional=True)
+def api_vehicles_next_plate():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Forbidden'}), 403
+    island = request.args.get('island', '').strip()
+    if not island:
+        return jsonify({'plate': None})
+    from app.models import PlateSettings
+    s = PlateSettings.get(island)
+    if not s.enabled:
+        return jsonify({'plate': None, 'enabled': False})
+    suffix = PlateSettings.ISLAND_SUFFIX.get(island, '73')
+    letters = PlateSettings.LETTERS
+    num = s.current_number
+    l2 = s.current_second_letter
+    for _ in range(999 * len(letters)):
+        plate = f"{num:03d}{s.principal_letter}{l2}{suffix}"
+        if not Vehicle.query.filter_by(license_plate=plate).first():
+            return jsonify({'plate': plate, 'enabled': True})
+        if num < 999:
+            num += 1
+        else:
+            num = 1
+            idx = letters.find(l2)
+            l2 = letters[idx + 1] if idx < len(letters) - 1 else letters[0]
+    return jsonify({'plate': None, 'enabled': True, 'exhausted': True})
+
+
 @api_bp.route('/vehicles/search', methods=['GET'])
 @jwt_required(optional=True)
 def api_vehicles_search():
@@ -694,6 +791,18 @@ def api_vehicles_create():
 
     db.session.add(vehicle)
     db.session.commit()
+
+    # Advance plate settings counter when the saved plate matches the sequential pattern
+    _owner_island = data.get('owner_island', '')
+    if _owner_island:
+        import re as _re
+        from app.models import PlateSettings as _PS
+        _ps = _PS.query.filter_by(island=_owner_island, enabled=True).first()
+        if _ps:
+            _suffix = _PS.ISLAND_SUFFIX.get(_owner_island, '')
+            if _suffix and _re.match(r'^\d{3}[A-Z][A-Z]' + _re.escape(_suffix) + r'$', license_plate):
+                _ps.advance()
+                db.session.commit()
 
     # Always create (or update) a CarteGrise record for admin-created vehicles
     from app.models import CarteGrise
@@ -3600,6 +3709,15 @@ def api_licenses_create():
             except ValueError:
                 pass
     db.session.add(lic)
+    db.session.flush()
+    from app.models import SmartTechSetting
+    pr = LicensePrintRequest(
+        license_id   = lic.id,
+        requested_by = current_user.username,
+        status       = 'pending',
+        unit_price   = float(SmartTechSetting.get('license_print_price', 0)),
+    )
+    db.session.add(pr)
     db.session.commit()
     return jsonify(lic.to_dict()), 201
 
@@ -3611,7 +3729,13 @@ def api_licenses_get(license_id):
     err = check_island_access(lic.holder_island)
     if err:
         return err
-    return jsonify(lic.to_dict())
+    d = lic.to_dict()
+    latest_req = (LicensePrintRequest.query
+                  .filter_by(license_id=lic.id)
+                  .order_by(LicensePrintRequest.requested_at.desc())
+                  .first())
+    d['print_status'] = latest_req.status if latest_req else None
+    return jsonify(d)
 
 
 @api_bp.route('/licenses/scan-by-number', methods=['GET'])
@@ -3979,6 +4103,24 @@ def api_license_print_request_cancel(req_id):
         return jsonify({'error': 'Accès refusé'}), 403
     req = LicensePrintRequest.query.get_or_404(req_id)
     req.status = 'cancelled'
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/licenses/<int:license_id>/mark-printed', methods=['POST'])
+@login_required
+def api_license_mark_printed(license_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = LicensePrintRequest.query.filter_by(
+        license_id=license_id, status='validated'
+    ).order_by(LicensePrintRequest.requested_at.desc()).first()
+    if not req:
+        return jsonify({'ok': True})  # already printed or no request
+    from app.timezone_utils import now_comoros
+    req.status     = 'printed'
+    req.printed_by = current_user.username
+    req.printed_at = now_comoros()
     db.session.commit()
     return jsonify({'ok': True})
 
@@ -4803,6 +4945,15 @@ def validate_dossier_step6(dossier_id):
     )
     db.session.add(lic)
     db.session.flush()
+
+    from app.models import SmartTechSetting
+    pr = LicensePrintRequest(
+        license_id   = lic.id,
+        requested_by = current_user.username,
+        status       = 'pending',
+        unit_price   = float(SmartTechSetting.get('license_print_price', 0)),
+    )
+    db.session.add(pr)
 
     d.license_id          = lic.id
     d.step6_validated_at  = now_comoros()

@@ -357,6 +357,12 @@ def create_app():
                                 'vignette_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN vignette_phone_updated_by VARCHAR(80)",
                                 'qr_renewal_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN qr_renewal_phone_updated_at DATETIME",
                                 'qr_renewal_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN qr_renewal_phone_updated_by VARCHAR(80)",
+                                'carte_grise_phone': "ALTER TABLE huri_destination_settings ADD COLUMN carte_grise_phone VARCHAR(20)",
+                                'carte_grise_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN carte_grise_phone_updated_at DATETIME",
+                                'carte_grise_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN carte_grise_phone_updated_by VARCHAR(80)",
+                                'permis_phone': "ALTER TABLE huri_destination_settings ADD COLUMN permis_phone VARCHAR(20)",
+                                'permis_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN permis_phone_updated_at DATETIME",
+                                'permis_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN permis_phone_updated_by VARCHAR(80)",
                             }
                             for column_name, alter_sql in huri_dest_column_definitions.items():
                                 if column_name not in huri_dest_columns:
@@ -493,9 +499,12 @@ def create_app():
                         'lieu_naissance':        "ALTER TABLE driver_licenses ADD COLUMN lieu_naissance VARCHAR(150)",
                         'centre_immatriculation':"ALTER TABLE driver_licenses ADD COLUMN centre_immatriculation VARCHAR(150)",
                         'type_permis':           "ALTER TABLE driver_licenses ADD COLUMN type_permis VARCHAR(20) NOT NULL DEFAULT 'permanent'",
-                        'registered_phone':      "ALTER TABLE driver_licenses ADD COLUMN registered_phone VARCHAR(20)",
-                        'registered_at':         "ALTER TABLE driver_licenses ADD COLUMN registered_at DATETIME",
-                        'category_details':      "ALTER TABLE driver_licenses ADD COLUMN category_details TEXT",
+                        'registered_phone':           "ALTER TABLE driver_licenses ADD COLUMN registered_phone VARCHAR(20)",
+                        'registered_at':              "ALTER TABLE driver_licenses ADD COLUMN registered_at DATETIME",
+                        'category_details':           "ALTER TABLE driver_licenses ADD COLUMN category_details TEXT",
+                        'smarttech_print_validated':  "ALTER TABLE driver_licenses ADD COLUMN smarttech_print_validated BOOLEAN NOT NULL DEFAULT 0",
+                        'smarttech_validated_at':     "ALTER TABLE driver_licenses ADD COLUMN smarttech_validated_at DATETIME",
+                        'smarttech_validated_by':     "ALTER TABLE driver_licenses ADD COLUMN smarttech_validated_by VARCHAR(100)",
                     }
                     for col, sql in dl_col_defs.items():
                         if col not in dl_cols:

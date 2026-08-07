@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response, abort
 from flask_login import login_user, logout_user, login_required, current_user
 from functools import wraps
 from app.models import SmartTechAccount, QRCodePayment, Vehicle, Subscription, Expense, Employee, SmartTechSetting, LicensePrintRequest, Insurance, InsuranceAccount, VehicleInsuranceAssignment, HuriDestinationSetting
@@ -1854,10 +1854,14 @@ def api_licences_request_validate(req_id):
     req = LicensePrintRequest.query.get_or_404(req_id)
     if req.status != 'pending':
         return jsonify({'error': 'Cette demande n\'est plus en attente.'}), 409
-    req.status     = 'printed'
-    req.printed_by = current_user.username
-    req.printed_at = now_comoros()
+    req.status     = 'validated'
     req.unit_price = float(SmartTechSetting.get('license_print_price', 0))
+    # Unlock the biometric card print button for admins
+    lic = req.license
+    if lic and not lic.smarttech_print_validated:
+        lic.smarttech_print_validated = True
+        lic.smarttech_validated_at    = now_comoros()
+        lic.smarttech_validated_by    = current_user.username
     db.session.commit()
     return jsonify({'ok': True, 'request': req.to_dict()})
 
@@ -1906,24 +1910,24 @@ def api_licences_requests_stats():
 @smart_tech_bp.route('/api/licences/requests/history')
 @smart_tech_required
 def api_licences_requests_history():
-    """All printed requests, newest first. Supports ?from=dd/mm/yyyy&to=dd/mm/yyyy."""
-    from datetime import datetime
-    q = _lpr_q().filter(LicensePrintRequest.status == 'printed')
+    """All validated (+ printed) requests, newest first. Supports ?from=dd/mm/yyyy&to=dd/mm/yyyy."""
+    from datetime import datetime, timedelta
+    from app.models import DriverLicense
+    q = _lpr_q().filter(LicensePrintRequest.status.in_(['validated', 'printed']))
     date_from = request.args.get('from')
     date_to   = request.args.get('to')
     if date_from:
         try:
-            q = q.filter(LicensePrintRequest.printed_at >= datetime.strptime(date_from, '%d/%m/%Y'))
+            q = q.filter(DriverLicense.smarttech_validated_at >= datetime.strptime(date_from, '%d/%m/%Y'))
         except ValueError:
             pass
     if date_to:
         try:
-            from datetime import timedelta
             end = datetime.strptime(date_to, '%d/%m/%Y') + timedelta(days=1)
-            q = q.filter(LicensePrintRequest.printed_at < end)
+            q = q.filter(DriverLicense.smarttech_validated_at < end)
         except ValueError:
             pass
-    reqs = q.order_by(LicensePrintRequest.printed_at.desc()).all()
+    reqs = q.order_by(DriverLicense.smarttech_validated_at.desc()).all()
     return jsonify([r.to_dict() for r in reqs])
 
 
@@ -1970,18 +1974,16 @@ def api_licences_list():
     })
 
 
-@smart_tech_bp.route('/licences/<int:license_id>/card')
-@smart_tech_required
-def licences_card(license_id):
+def _render_license_card(license_id, smarttech_preview=False):
     import io, base64, qrcode as _qrcode
     from app.models import DriverLicense, LicenseSetting
-    from app.timezone_utils import now_comoros as _nc, now_comoros
-    from app.routes import parse_category_details
+    from app.timezone_utils import now_comoros
+    from app.routes import parse_category_details, compute_category_expiries
+    from dateutil.relativedelta import relativedelta
 
     lic      = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
 
-    # Generate QR inline — avoids the /licenses/<id>/qrcode route which requires police auth
     qr = _qrcode.QRCode(box_size=6, border=2)
     qr.add_data(lic.license_number)
     qr.make(fit=True)
@@ -1991,9 +1993,6 @@ def licences_card(license_id):
     qr_data_uri = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
 
     category_details = parse_category_details(lic)
-
-    from dateutil.relativedelta import relativedelta
-    from app.routes import compute_category_expiries
     computed_expiry = None
     if not lic.expiry_date and lic.issue_date:
         if lic.type_permis == 'temporaire':
@@ -2007,7 +2006,21 @@ def licences_card(license_id):
                            computed_expiry=computed_expiry, qr_data_uri=qr_data_uri,
                            category_details=category_details,
                            computed_cat_expiries=computed_cat_expiries,
-                           now_comoros=now_comoros)
+                           now_comoros=now_comoros,
+                           smarttech_preview=smarttech_preview)
+
+
+@smart_tech_bp.route('/licences/<int:license_id>/card')
+@smart_tech_required
+def licences_card(license_id):
+    return _render_license_card(license_id)
+
+
+@smart_tech_bp.route('/licences/<int:license_id>/preview')
+@smart_tech_required
+def licences_card_preview(license_id):
+    """View-only biometric card for SmartTech — printing blocked."""
+    return _render_license_card(license_id, smarttech_preview=True)
 
 
 # ── Employés ──────────────────────────────────────────────────────────────────
@@ -2671,4 +2684,79 @@ def api_rapport_journalier():
         'act_price':       act_price,
         'ren_price':       ren_price,
         'rows':            rows,
+    })
+
+
+@smart_tech_bp.route('/api/rapport-mensuel-licences')
+@smart_tech_required
+def api_rapport_mensuel_licences():
+    if current_user.role != 'admin':
+        abort(403)
+    from datetime import datetime
+    from app.models import DriverLicense
+
+    month_str = request.args.get('month', '')
+    try:
+        month_date = datetime.strptime(month_str, '%Y-%m')
+    except (ValueError, TypeError):
+        from app.timezone_utils import now_comoros
+        today = now_comoros().date()
+        month_date = datetime(today.year, today.month, 1)
+
+    month_start = datetime(month_date.year, month_date.month, 1)
+    if month_date.month == 12:
+        month_end = datetime(month_date.year + 1, 1, 1)
+    else:
+        month_end = datetime(month_date.year, month_date.month + 1, 1)
+
+    unit_price = float(SmartTechSetting.get('license_print_price', 0))
+
+    q = (_lpr_q()
+         .filter(LicensePrintRequest.status.in_(['validated', 'printed']))
+         .filter(DriverLicense.smarttech_validated_at >= month_start)
+         .filter(DriverLicense.smarttech_validated_at < month_end))
+
+    reqs = q.order_by(DriverLicense.smarttech_validated_at.asc()).all()
+
+    ISLANDS = ['Grande Comore', 'Anjouan', 'Moheli']
+
+    rows = []
+    for r in reqs:
+        lic = r.license
+        rows.append({
+            'license_number':         lic.license_number   if lic else '',
+            'holder_name':            lic.holder_name      if lic else '',
+            'holder_firstname':       lic.holder_firstname if lic else '',
+            'holder_island':          lic.holder_island    if lic else '',
+            'type_permis':            lic.type_permis      if lic else '',
+            'categories':             lic.categories       if lic else '',
+            'smarttech_validated_by': lic.smarttech_validated_by or '' if lic else '',
+            'smarttech_validated_at': lic.smarttech_validated_at.strftime('%d/%m/%Y %H:%M') if lic and lic.smarttech_validated_at else '',
+            'status':                 r.status,
+            'unit_price':             unit_price,
+        })
+
+    islands_breakdown = []
+    for island in ISLANDS:
+        count = sum(1 for r in rows if r['holder_island'] == island)
+        islands_breakdown.append({
+            'island': island,
+            'count':  count,
+            'amount': count * unit_price,
+        })
+
+    months_fr = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+    month_label = months_fr[month_date.month - 1] + ' ' + str(month_date.year)
+
+    return jsonify({
+        'month':             month_label,
+        'month_iso':         month_date.strftime('%Y-%m'),
+        'nb_total':          len(rows),
+        'nb_temporaire':     sum(1 for r in rows if r['type_permis'] == 'temporaire'),
+        'nb_permanent':      sum(1 for r in rows if r['type_permis'] == 'permanent'),
+        'unit_price':        unit_price,
+        'total_amount':      len(rows) * unit_price,
+        'islands_breakdown': islands_breakdown,
+        'rows':              rows,
     })
