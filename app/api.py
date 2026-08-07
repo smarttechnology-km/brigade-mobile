@@ -272,6 +272,62 @@ def api_track(token):
     return jsonify({"vehicle": vehicle_dict, "fines": fines})
 
 
+@api_bp.route('/mobile/sync', methods=['GET'])
+@jwt_required()
+def mobile_sync():
+    """Bulk sync endpoint for offline mode. Returns vehicles + unpaid fines for the officer's island."""
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur']:
+        return jsonify({'error': 'Forbidden'}), 403
+
+    updated_since_str = request.args.get('updated_since')
+    updated_since = None
+    if updated_since_str:
+        try:
+            updated_since = datetime.fromisoformat(updated_since_str.replace('Z', '+00:00'))
+        except Exception:
+            pass
+
+    query = Vehicle.query.filter(Vehicle.qr_pending_approval != True)
+    if user.role == 'policier' and user.country:
+        query = query.filter(Vehicle.owner_island == user.country)
+
+    if updated_since:
+        # Include vehicles updated recently OR vehicles that have new fines since last sync
+        new_fine_vehicle_ids = db.session.query(Fine.vehicle_id).filter(
+            Fine.issued_at >= updated_since
+        ).distinct()
+        query = query.filter(
+            db.or_(
+                Vehicle.updated_at >= updated_since,
+                Vehicle.id.in_(new_fine_vehicle_ids)
+            )
+        )
+
+    vehicles = query.limit(10000).all()
+
+    result = []
+    for v in vehicles:
+        d = v.to_dict()
+        unpaid_fines = (Fine.query
+                        .filter_by(vehicle_id=v.id, paid=False)
+                        .order_by(Fine.issued_at.desc())
+                        .limit(20).all())
+        d['fines'] = [f.to_dict() for f in unpaid_fines]
+        result.append(d)
+
+    return jsonify({
+        'sync_at': now_comoros().isoformat(),
+        'count': len(result),
+        'vehicles': result,
+    })
+
+
 @api_bp.route('/fine-types/list', methods=['GET'])
 @jwt_required()
 def api_fine_types_list():
