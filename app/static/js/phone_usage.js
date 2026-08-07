@@ -385,7 +385,7 @@ function viewUserFromUsage(userId) {
             _initOfficerFilters();
             document.getElementById('officer-fines-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
             document.getElementById('officer-reductions-body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
-            document.getElementById('officer-scans-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+            document.getElementById('officer-scans-body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
 
             const modal = new bootstrap.Modal(document.getElementById('viewUserModal'));
             modal.show();
@@ -530,21 +530,41 @@ function _docBadge(ok, expiry) {
     return `<span class="badge bg-secondary"><i class="fas fa-question me-1"></i>Inconnu</span>`;
 }
 
+function _finesBadge(unpaid) {
+    if (!unpaid || unpaid.length === 0) {
+        return `<span class="badge bg-success"><i class="fas fa-check me-1"></i>Aucune</span>`;
+    }
+    const total = unpaid.reduce((sum, f) => sum + f.amount, 0);
+    const tip = unpaid.map(f => `${f.issued_at} — ${f.reason} (${Number(f.amount).toLocaleString('fr-FR')} KMF)`).join('&#10;');
+    return `<span class="badge bg-danger" title="${tip}" style="cursor:help;">
+        <i class="fas fa-exclamation-triangle me-1"></i>${unpaid.length} amende${unpaid.length > 1 ? 's' : ''} — ${Number(total).toLocaleString('fr-FR')} KMF
+    </span>`;
+}
+
 function renderScansTable(scans) {
     const tbody = document.getElementById('officer-scans-body');
     if (scans.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Aucun scan pour cette période.</td></tr>';
-    } else {
-        tbody.innerHTML = scans.map(s =>
-            `<tr>
-                <td style="white-space:nowrap;">${escapeHtml(s.scanned_at)}</td>
-                <td><strong>${escapeHtml(s.plate)}</strong></td>
-                <td>${escapeHtml(s.owner || '—')}</td>
-                <td class="text-center">${_docBadge(s.insurance_ok, s.insurance_expiry)}</td>
-                <td class="text-center">${_docBadge(s.vignette_ok, s.vignette_expiry)}</td>
-            </tr>`
-        ).join('');
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Aucun scan pour cette période.</td></tr>';
+        return;
     }
+    // Sort: vehicles with unpaid fines first
+    const sorted = scans.slice().sort((a, b) => {
+        const aHas = (a.unpaid_fines && a.unpaid_fines.length > 0) ? 0 : 1;
+        const bHas = (b.unpaid_fines && b.unpaid_fines.length > 0) ? 0 : 1;
+        return aHas - bHas;
+    });
+    tbody.innerHTML = sorted.map(s => {
+        const hasUnpaid = s.unpaid_fines && s.unpaid_fines.length > 0;
+        const rowClass = hasUnpaid ? ' class="table-danger"' : '';
+        return `<tr${rowClass}>
+            <td style="white-space:nowrap;">${escapeHtml(s.scanned_at)}</td>
+            <td><strong>${escapeHtml(s.plate)}</strong></td>
+            <td>${escapeHtml(s.owner || '—')}</td>
+            <td class="text-center">${_docBadge(s.insurance_ok, s.insurance_expiry)}</td>
+            <td class="text-center">${_docBadge(s.vignette_ok, s.vignette_expiry)}</td>
+            <td class="text-center">${_finesBadge(s.unpaid_fines)}</td>
+        </tr>`;
+    }).join('');
 }
 
 function renderOfficerHistory(data) {
