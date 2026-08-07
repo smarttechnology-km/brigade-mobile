@@ -246,6 +246,11 @@
               <i class="fas fa-minus-circle me-1"></i>Historique Réductions de points
             </button>
           </li>
+          <li class="nav-item">
+            <button class="nav-link" id="tab-scans-btn" onclick="switchOfficerTab('scans')">
+              <i class="fas fa-qrcode me-1"></i>Véhicules scannés
+            </button>
+          </li>
         </ul>
 
         <!-- Tab: Informations personnelles -->
@@ -353,6 +358,30 @@
               </thead>
               <tbody id="officer-reductions-body">
                 <tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <!-- Tab: Véhicules scannés -->
+        <div id="officer-tab-scans" class="p-4" style="display:none;">
+          <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+            <label class="text-muted fw-semibold mb-0"><small><i class="fas fa-calendar-alt me-1"></i>De</small></label>
+            <input type="date" id="scans-date-from" class="form-control form-control-sm" style="width:150px;" onchange="applyScansFilter()">
+            <label class="text-muted fw-semibold mb-0"><small>À</small></label>
+            <input type="date" id="scans-date-to" class="form-control form-control-sm" style="width:150px;" onchange="applyScansFilter()">
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearScansFilter()" title="Tout afficher"><i class="fas fa-times me-1"></i>Tout</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead class="table-light">
+                <tr>
+                  <th>Date</th>
+                  <th>Immatriculation</th>
+                  <th>Propriétaire</th>
+                </tr>
+              </thead>
+              <tbody id="officer-scans-body">
+                <tr><td colspan="3" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
               </tbody>
             </table>
           </div>
