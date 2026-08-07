@@ -372,6 +372,56 @@ def mobile_sync_licenses():
     })
 
 
+@api_bp.route('/mobile/vehicle-scans', methods=['POST'])
+@jwt_required()
+def mobile_vehicle_scans_upload():
+    """Batch-upload vehicle scans recorded by a mobile officer (online or offline)."""
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur']:
+        return jsonify({'error': 'Forbidden'}), 403
+
+    data = request.get_json() or {}
+    scans = data.get('scans', [])
+
+    recorded = 0
+    for scan in scans[:500]:
+        track_token  = (scan.get('track_token') or '').strip()
+        license_plate = (scan.get('license_plate') or '').strip()
+        scanned_at_str = scan.get('scanned_at', '')
+
+        vehicle = None
+        if track_token:
+            vehicle = Vehicle.query.filter_by(track_token=track_token).first()
+        if not vehicle and license_plate:
+            vehicle = Vehicle.query.filter(
+                db.func.upper(Vehicle.license_plate) == license_plate.upper()
+            ).first()
+        if not vehicle:
+            continue
+
+        try:
+            scanned_at = datetime.fromisoformat(scanned_at_str.replace('Z', '+00:00'))
+        except Exception:
+            scanned_at = now_comoros()
+
+        entry = VehicleHistory(
+            vehicle_id=vehicle.id,
+            action='Scan mobile',
+            officer=user.username,
+            notes=None,
+        )
+        entry.created_at = scanned_at
+        db.session.add(entry)
+        recorded += 1
+
+    db.session.commit()
+    return jsonify({'recorded': recorded})
+
+
 @api_bp.route('/fine-types/list', methods=['GET'])
 @jwt_required()
 def api_fine_types_list():
@@ -2032,7 +2082,21 @@ def api_officer_history(user_id):
             'created_at':      r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else '—',
         })
 
-    return jsonify({'fines': fines_data, 'reductions': reductions_data})
+    scans = (VehicleHistory.query
+             .filter_by(action='Scan mobile', officer=user.username)
+             .order_by(VehicleHistory.created_at.desc())
+             .limit(500).all())
+    scans_data = []
+    for s in scans:
+        v = s.vehicle
+        scans_data.append({
+            'id':         s.id,
+            'plate':      v.license_plate if v else '—',
+            'owner':      v.owner_name if v else '—',
+            'scanned_at': s.created_at.strftime('%d/%m/%Y %H:%M') if s.created_at else '—',
+        })
+
+    return jsonify({'fines': fines_data, 'reductions': reductions_data, 'scans': scans_data})
 
 
 @api_bp.route('/phone/<int:phone_id>/usage-history', methods=['GET'])
