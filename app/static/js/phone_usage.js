@@ -385,6 +385,7 @@ function viewUserFromUsage(userId) {
             _initOfficerFilters();
             document.getElementById('officer-fines-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
             document.getElementById('officer-reductions-body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+            document.getElementById('officer-scans-body').innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
 
             const modal = new bootstrap.Modal(document.getElementById('viewUserModal'));
             modal.show();
@@ -405,7 +406,7 @@ function viewUserFromUsage(userId) {
 }
 
 function switchOfficerTab(tab) {
-    ['info', 'fines', 'reductions'].forEach(function(t) {
+    ['info', 'fines', 'reductions', 'scans'].forEach(function(t) {
         document.getElementById('officer-tab-' + t).style.display = tab === t ? '' : 'none';
         document.getElementById('tab-' + t + '-btn').classList.toggle('active', tab === t);
     });
@@ -414,6 +415,7 @@ function switchOfficerTab(tab) {
 // Full data cache for client-side filtering
 var _officerFines = [];
 var _officerReductions = [];
+var _officerScans = [];
 
 function _todayStr() {
     const d = new Date();
@@ -426,6 +428,8 @@ function _initOfficerFilters() {
     document.getElementById('fines-date-to').value        = today;
     document.getElementById('reductions-date-from').value = today;
     document.getElementById('reductions-date-to').value   = today;
+    document.getElementById('scans-date-from').value      = today;
+    document.getElementById('scans-date-to').value        = today;
 }
 
 // Parse "DD/MM/YYYY HH:MM" → "YYYY-MM-DD" for comparison
@@ -470,6 +474,18 @@ window.clearReductionsFilter = function() {
     renderReductionsTable(_officerReductions);
 };
 
+window.applyScansFilter = function() {
+    const from = document.getElementById('scans-date-from').value;
+    const to   = document.getElementById('scans-date-to').value;
+    renderScansTable(_filterByDate(_officerScans, 'scanned_at', from, to));
+};
+
+window.clearScansFilter = function() {
+    document.getElementById('scans-date-from').value = '';
+    document.getElementById('scans-date-to').value   = '';
+    renderScansTable(_officerScans);
+};
+
 function renderFinesTable(fines) {
     if (fines.length === 0) {
         document.getElementById('officer-fines-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Aucune amende pour cette période.</td></tr>';
@@ -503,14 +519,31 @@ function renderReductionsTable(reductions) {
     }
 }
 
+function renderScansTable(scans) {
+    const tbody = document.getElementById('officer-scans-body');
+    if (scans.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Aucun scan pour cette période.</td></tr>';
+    } else {
+        tbody.innerHTML = scans.map(s =>
+            `<tr>
+                <td style="white-space:nowrap;">${escapeHtml(s.scanned_at)}</td>
+                <td><strong>${escapeHtml(s.plate)}</strong></td>
+                <td>${escapeHtml(s.owner || '—')}</td>
+            </tr>`
+        ).join('');
+    }
+}
+
 function renderOfficerHistory(data) {
     _officerFines      = data.fines      || [];
     _officerReductions = data.reductions || [];
+    _officerScans      = data.scans      || [];
 
     // Apply today filter by default
     const today = _todayStr();
     renderFinesTable(_filterByDate(_officerFines,      'issued_at',  today, today));
     renderReductionsTable(_filterByDate(_officerReductions, 'created_at', today, today));
+    renderScansTable(_filterByDate(_officerScans, 'scanned_at', today, today));
 }
 
 // === GESTION EMPRUNT MANUEL ===
