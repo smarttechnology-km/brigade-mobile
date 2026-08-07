@@ -2087,13 +2087,20 @@ def api_officer_history(user_id):
              .order_by(VehicleHistory.created_at.desc())
              .limit(500).all())
     scans_data = []
+    today = now_comoros().date()
     for s in scans:
         v = s.vehicle
+        insurance_ok = bool(v and v.insurance_expiry and v.insurance_expiry.date() >= today)
+        vignette_ok  = bool(v and v.vignette_expiry  and v.vignette_expiry.date()  >= today)
         scans_data.append({
-            'id':         s.id,
-            'plate':      v.license_plate if v else '—',
-            'owner':      v.owner_name if v else '—',
-            'scanned_at': s.created_at.strftime('%d/%m/%Y %H:%M') if s.created_at else '—',
+            'id':            s.id,
+            'plate':         v.license_plate if v else '—',
+            'owner':         v.owner_name if v else '—',
+            'scanned_at':    s.created_at.strftime('%d/%m/%Y %H:%M') if s.created_at else '—',
+            'insurance_ok':  insurance_ok,
+            'vignette_ok':   vignette_ok,
+            'insurance_expiry': v.insurance_expiry.strftime('%d/%m/%Y') if v and v.insurance_expiry else None,
+            'vignette_expiry':  v.vignette_expiry.strftime('%d/%m/%Y')  if v and v.vignette_expiry  else None,
         })
 
     return jsonify({'fines': fines_data, 'reductions': reductions_data, 'scans': scans_data})
