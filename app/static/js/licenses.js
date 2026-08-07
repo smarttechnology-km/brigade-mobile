@@ -106,7 +106,7 @@
                             : `<button class="btn btn-sm btn-outline-secondary" title="Réservé à l'administrateur" disabled><i class="fas fa-lock"></i></button>`)
                         : `<button class="btn btn-sm btn-outline-danger" title="Réduire les points" onclick="openReductionModal(${l.id}, '${esc(l.license_number)}', ${l.points ?? 0})"><i class="fas fa-minus-circle"></i></button>`
                     }
-                    <button class="btn btn-sm btn-outline-danger" title="Supprimer" onclick="deleteLicense(${l.id}, '${esc(l.license_number)}')"><i class="fas fa-trash"></i></button>
+                    ${l.print_status !== 'printed' ? `<button class="btn btn-sm btn-outline-danger" title="Supprimer" onclick="deleteLicense(${l.id}, '${esc(l.license_number)}')"><i class="fas fa-trash"></i></button>` : ''}
                 </td>
             </tr>
         `).join('');
@@ -984,9 +984,9 @@
         }
     };
 
-    window.printLicenseCard = function () {
+    window.viewLicenseCard = function () {
         if (!_currentLicense) return;
-        window.open(`/licenses/${_currentLicense.id}/print-card`, '_blank');
+        window.open(`/licenses/${_currentLicense.id}/print-card?readonly=1`, '_blank');
     };
 
     window.renewLicense = function () {
@@ -1019,67 +1019,6 @@
         });
     };
 
-    function syncPrintButton(licId, isPermanent) {
-        const btn   = document.getElementById('btn-demander-impression');
-        const badge = document.getElementById('badge-carte-imprimee');
-        if (!btn) return;
-        if (!isPermanent) {
-            btn.style.display = 'none';
-            if (badge) badge.style.display = 'none';
-            return;
-        }
-        btn.style.display = '';
-        fetch(`/api/licenses/${licId}/print-requests`, { credentials: 'same-origin' })
-            .then(r => r.ok ? r.json() : [])
-            .then(requests => {
-                const hasPending     = requests.some(r => r.status === 'pending');
-                const latestPrinted  = !hasPending && requests.length > 0 && requests[0].status === 'printed';
-                if (badge) badge.style.display = latestPrinted ? '' : 'none';
-                if (hasPending) {
-                    btn.disabled  = true;
-                    btn.className = 'btn btn-outline-success';
-                    btn.innerHTML = '<i class="fas fa-check me-1"></i>Demande envoyée';
-                } else {
-                    btn.disabled  = false;
-                    btn.className = 'btn btn-outline-warning';
-                    btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Demander impression';
-                }
-            })
-            .catch(() => {
-                if (badge) badge.style.display = 'none';
-                btn.disabled  = false;
-                btn.className = 'btn btn-outline-warning';
-                btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Demander impression';
-            });
-    }
-
-    window.demanderImpression = function () {
-        if (!_currentLicense) return;
-        const btn = document.getElementById('btn-demander-impression');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Envoi…';
-        fetch(`/api/licenses/${_currentLicense.id}/print-request`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({}),
-        })
-        .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
-        .then(({ ok, data }) => {
-            if (ok) {
-                syncPrintButton(_currentLicense.id, _currentLicense.type_permis === 'permanent');
-                loadLicenses(false);
-            } else {
-                alert(data.error || 'Erreur lors de la demande.');
-                syncPrintButton(_currentLicense.id, _currentLicense.type_permis === 'permanent');
-            }
-        })
-        .catch(() => {
-            alert('Erreur réseau.');
-            syncPrintButton(_currentLicense.id, _currentLicense.type_permis === 'permanent');
-        });
-    };
-
     window.viewLicense = function (id) {
         // Reset to details tab and wire up history tab
         const detailsTab = document.querySelector('[data-bs-target="#view-tab-details"]');
@@ -1094,13 +1033,12 @@
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(l => {
                 _currentLicense = l;
-                const btnCarte = document.getElementById('btn-carte-digitale');
-                if (btnCarte) btnCarte.style.display = '';
-                syncPrintButton(l.id, l.type_permis === 'permanent' && !l.is_expired);
                 const btnImprimer = document.getElementById('btn-imprimer');
                 if (btnImprimer) btnImprimer.style.display = l.is_expired ? 'none' : '';
                 const btnRenouveler = document.getElementById('btn-renouveler');
                 if (btnRenouveler) btnRenouveler.style.display = l.is_expired ? '' : 'none';
+                const btnVoirCarte = document.getElementById('btn-voir-carte');
+                if (btnVoirCarte) btnVoirCarte.style.display = l.print_status === 'printed' ? '' : 'none';
                 const catList = l.categories ? l.categories.split(',').map(c => c.trim()).filter(Boolean) : [];
                 const catDetailsMap = l.category_details || {};
                 const cats = catList.length

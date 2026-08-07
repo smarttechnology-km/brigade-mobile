@@ -1,4 +1,4 @@
-let archiveDataCache = { direct_paid_fines: [], vignette_archive: [], qr_archive: [], totals: {} };
+let archiveDataCache = { direct_paid_fines: [], vignette_archive: [], cg_archive: [], totals: {} };
 
 function applyPeriod(period) {
     const startInput = document.getElementById('archive-start-date');
@@ -80,10 +80,10 @@ function loadArchiveData() {
     const url = '/api/vehicles/mobile-money-archive?' + query.toString();
     const fineBody = document.getElementById('archive-fines-tbody');
     const vignetteBody = document.getElementById('archive-vignettes-tbody');
-    const qrBody = document.getElementById('archive-qr-tbody');
+    const cgBody = document.getElementById('archive-cg-tbody');
     if (fineBody) fineBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>';
     if (vignetteBody) vignetteBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>';
-    if (qrBody) qrBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>';
+    if (cgBody) cgBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>';
 
     fetch(url, { credentials: 'same-origin' })
         .then(function (r) {
@@ -91,7 +91,7 @@ function loadArchiveData() {
             return r.json();
         })
         .then(function (data) {
-            archiveDataCache = data || { direct_paid_fines: [], vignette_archive: [], qr_archive: [], totals: {} };
+            archiveDataCache = data || { direct_paid_fines: [], vignette_archive: [], cg_archive: [], totals: {} };
             renderArchiveTables();
             updateSummaryCards();
         })
@@ -99,7 +99,7 @@ function loadArchiveData() {
             console.error('Archive load error:', err);
             if (fineBody) fineBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
             if (vignetteBody) vignetteBody.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
-            if (qrBody) qrBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
+            if (cgBody) cgBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
         });
 }
 
@@ -107,7 +107,7 @@ function renderArchiveTables() {
     const search = (document.getElementById('archive-search').value || '').toLowerCase().trim();
     const fineBody = document.getElementById('archive-fines-tbody');
     const vignetteBody = document.getElementById('archive-vignettes-tbody');
-    const qrBody = document.getElementById('archive-qr-tbody');
+    const cgBody = document.getElementById('archive-cg-tbody');
 
     const fines = (archiveDataCache.direct_paid_fines || []).filter(function (item) {
         if (!search) return true;
@@ -121,9 +121,9 @@ function renderArchiveTables() {
             .some(function (field) { return String(field || '').toLowerCase().includes(search); });
     });
 
-    const qrs = (archiveDataCache.qr_archive || []).filter(function (item) {
+    const cgs = (archiveDataCache.cg_archive || []).filter(function (item) {
         if (!search) return true;
-        return [item.license_plate, item.owner_name, item.owner_island, item.recorded_by]
+        return [item.license_plate, item.owner_name, item.owner_island]
             .some(function (field) { return String(field || '').toLowerCase().includes(search); });
     });
 
@@ -166,20 +166,18 @@ function renderArchiveTables() {
         }
     }
 
-    if (qrBody) {
-        if (!qrs.length) {
-            qrBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Aucun renouvellement QR trouvé</td></tr>';
+    if (cgBody) {
+        if (!cgs.length) {
+            cgBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Aucune carte grise trouvée</td></tr>';
         } else {
-            qrBody.innerHTML = qrs.map(function (item, idx) {
+            cgBody.innerHTML = cgs.map(function (item, idx) {
                 return '<tr>' +
                     '<td>' + (idx + 1) + '</td>' +
                     '<td><strong>' + escapeHtml(item.license_plate || '-') + '</strong></td>' +
                     '<td>' + escapeHtml(item.owner_name || '-') + '</td>' +
                     '<td>' + escapeHtml(item.owner_island || '-') + '</td>' +
                     '<td>' + formatDate(item.paid_at) + '</td>' +
-                    '<td><span class="badge bg-success">' + escapeHtml(item.new_expiry || '-') + '</span></td>' +
                     '<td class="text-end fw-semibold text-primary">' + formatKMF(item.amount) + '</td>' +
-                    '<td>' + escapeHtml(item.recorded_by || '-') + '</td>' +
                     '</tr>';
             }).join('');
         }
@@ -192,8 +190,8 @@ function updateSummaryCards() {
     document.getElementById('archive-direct-total').textContent = formatKMF(totals.direct_fines_total);
     document.getElementById('archive-vignette-count').textContent = totals.vignettes_count || 0;
     document.getElementById('archive-vignette-total').textContent = formatKMF(totals.vignette_total);
-    document.getElementById('archive-qr-count').textContent = totals.qr_renewals_count || 0;
-    document.getElementById('archive-qr-total').textContent = formatKMF(totals.qr_renewals_total);
+    document.getElementById('archive-cg-count').textContent = totals.cg_count || 0;
+    document.getElementById('archive-cg-total').textContent = formatKMF(totals.cg_total);
     document.getElementById('archive-penalty-total').textContent = formatKMF(totals.vignette_penalties_total);
     document.getElementById('archive-included-fines-total').textContent = formatKMF(totals.vignette_included_fines_total);
 }

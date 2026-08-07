@@ -388,6 +388,30 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Duplicate plate notice
+    const plateInput = document.getElementById('license_plate');
+    const plateDupNotice = document.getElementById('plate-duplicate-notice');
+    if (plateInput && plateDupNotice) {
+        let _plateCheckTimer = null;
+        function checkPlateDuplicate() {
+            const val = plateInput.value.trim();
+            if (!val) { plateDupNotice.classList.add('d-none'); return; }
+            fetch('/api/vehicles/check-plate?plate=' + encodeURIComponent(val), { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (d && d.exists) plateDupNotice.classList.remove('d-none');
+                    else plateDupNotice.classList.add('d-none');
+                })
+                .catch(() => plateDupNotice.classList.add('d-none'));
+        }
+        plateInput.addEventListener('blur', checkPlateDuplicate);
+        plateInput.addEventListener('input', function() {
+            clearTimeout(_plateCheckTimer);
+            plateDupNotice.classList.add('d-none');
+            _plateCheckTimer = setTimeout(checkPlateDuplicate, 600);
+        });
+    }
+
     // Auto-fill / notify owner name from phone lookup
     const phoneInput = document.getElementById('owner_phone');
     if (phoneInput) {
@@ -708,8 +732,13 @@ function openVehicleModal(vehicle) {
     // Reset form FIRST
     document.getElementById('vehicle-form').reset();
     document.getElementById('vehicle-id').value = '';
+    _autoFilledPlate = null;
+    _plateAutoLocked = false;
+    _setPlateAutoLocked(false);
     const _hint = document.getElementById('owner-name-hint');
     if (_hint) _hint.classList.add('d-none');
+    const _plateDup = document.getElementById('plate-duplicate-notice');
+    if (_plateDup) _plateDup.classList.add('d-none');
     const _vinHint = document.getElementById('vin-plate-hint');
     if (_vinHint) _vinHint.classList.add('d-none');
     const _finesSection = document.getElementById('vehicle-fines-section');
@@ -744,6 +773,20 @@ function openVehicleModal(vehicle) {
         if(_fieldVignette)    _fieldVignette.style.display = 'none';
         if(_fieldEmission)    _fieldEmission.style.display = 'none';
         if(_sectionAssurance) _sectionAssurance.style.display = 'none';
+
+        // Pre-select island and suggest plate for directeur_regional (or any user with a fixed country)
+        var _preIsland = window.currentUserCountry || '';
+        if (_preIsland) {
+            var _islandSel = document.getElementById('owner_island');
+            if (_islandSel) _islandSel.value = _preIsland;
+        }
+        // Suggest plate based on pre-selected island (runs after DOM update)
+        setTimeout(function() {
+            var _island = (document.getElementById('owner_island') || {}).value || '';
+            if (_island && typeof window._suggestPlateForIsland === 'function') {
+                window._suggestPlateForIsland(_island);
+            }
+        }, 0);
     }
     
     // ensure type controls are in known default state
@@ -1323,5 +1366,231 @@ function statusLabel(s){ if(s==='active') return 'Actif'; if(s==='inactive') ret
                     });
             }, 400);
         });
+    });
+})();
+
+// ── Plate Settings ────────────────────────────────────────────────
+
+var _plateSettings = {};
+
+var _ISLAND_KEY_MAP = {
+    'gc': 'Grande Comore',
+    'an': 'Anjouan',
+    'mo': 'Moheli'
+};
+
+function _updatePlatePreview(key) {
+    var island = _ISLAND_KEY_MAP[key];
+    var suffix = {'Grande Comore':'73','Anjouan':'72','Moheli':'71'}[island] || '';
+    var num = parseInt(document.getElementById('ps-number-' + key)?.value || 1);
+    var l1 = document.getElementById('ps-letter1-' + key)?.value || 'A';
+    var l2 = document.getElementById('ps-letter2-' + key)?.value || 'A';
+    var el = document.querySelector('.ps-preview-' + key);
+    if (!el) return;
+    var enabled = document.getElementById('ps-enabled-' + key)?.checked;
+    if (!enabled) { el.textContent = '—'; return; }
+    el.textContent = String(num).padStart(3,'0') + l1 + l2 + suffix;
+}
+
+function _loadPlateSettingsIntoModal(data) {
+    Object.keys(_ISLAND_KEY_MAP).forEach(function(key) {
+        var island = _ISLAND_KEY_MAP[key];
+        var s = data[island];
+        if (!s) return;
+        var enabledEl  = document.getElementById('ps-enabled-' + key);
+        var numberEl   = document.getElementById('ps-number-' + key);
+        var letter1El  = document.getElementById('ps-letter1-' + key);
+        var letter2El  = document.getElementById('ps-letter2-' + key);
+        if (enabledEl)  enabledEl.checked = !!s.enabled;
+        if (numberEl)   numberEl.value = s.current_number || 1;
+        if (letter1El)  letter1El.value = s.principal_letter || 'A';
+        if (letter2El)  letter2El.value = s.current_second_letter || 'A';
+        _updatePlatePreview(key);
+
+        // wire live preview
+        [numberEl, letter1El, letter2El, enabledEl].forEach(function(el) {
+            if (el && !el._platePreviewWired) {
+                el._platePreviewWired = true;
+                el.addEventListener('change', function() { _updatePlatePreview(key); });
+                el.addEventListener('input',  function() { _updatePlatePreview(key); });
+            }
+        });
+    });
+}
+
+window.savePlateSettings = function(key, island) {
+    var enabledEl = document.getElementById('ps-enabled-' + key);
+    var numberEl  = document.getElementById('ps-number-' + key);
+    var l1El      = document.getElementById('ps-letter1-' + key);
+    var l2El      = document.getElementById('ps-letter2-' + key);
+    var msgEl     = document.getElementById('ps-save-msg');
+
+    var payload = {
+        enabled:               enabledEl?.checked || false,
+        current_number:        parseInt(numberEl?.value || 1),
+        principal_letter:      (l1El?.value || 'A').toUpperCase(),
+        current_second_letter: (l2El?.value || 'A').toUpperCase(),
+    };
+
+    fetch('/api/vehicles/plate-settings/' + encodeURIComponent(island), {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.success) {
+            if (d.settings) _plateSettings[island] = d.settings;
+            _updatePlatePreview(key);
+            if (msgEl) {
+                msgEl.className = 'alert alert-success mt-3';
+                msgEl.textContent = 'Paramètres enregistrés pour ' + island + '.';
+                setTimeout(function() { msgEl.className = 'alert d-none mt-3'; }, 3000);
+            }
+        } else {
+            if (msgEl) {
+                msgEl.className = 'alert alert-danger mt-3';
+                msgEl.textContent = d.error || 'Erreur lors de la sauvegarde.';
+            }
+        }
+    })
+    .catch(function() {
+        if (msgEl) {
+            msgEl.className = 'alert alert-danger mt-3';
+            msgEl.textContent = 'Erreur réseau.';
+        }
+    });
+};
+
+// Load settings when the modal opens; hide tabs the current user can't manage
+(function() {
+    var modalEl = document.getElementById('plateSettingsModal');
+    if (!modalEl) return;
+
+    var _ISLAND_BY_KEY = {'gc':'Grande Comore','an':'Anjouan','mo':'Moheli'};
+
+    function _restrictTabs() {
+        var isDR = window.currentUserDgrtrType === 'directeur_regional';
+        if (!isDR) return; // admin sees all tabs
+        var userIsland = window.currentUserCountry || '';
+        Object.keys(_ISLAND_BY_KEY).forEach(function(key) {
+            var tabBtn  = document.getElementById('ps-' + key + '-tab');
+            var tabPane = document.getElementById('ps-' + key);
+            if (!tabBtn) return;
+            if (_ISLAND_BY_KEY[key] === userIsland) {
+                tabBtn.classList.add('active');
+                if (tabPane) { tabPane.classList.add('show', 'active'); }
+            } else {
+                tabBtn.style.display = 'none';
+                if (tabPane) { tabPane.classList.remove('show', 'active'); }
+            }
+        });
+    }
+
+    modalEl.addEventListener('show.bs.modal', function() {
+        _restrictTabs();
+        fetch('/api/vehicles/plate-settings', { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (!data) return;
+                _plateSettings = data;
+                _loadPlateSettingsIntoModal(data);
+            })
+            .catch(function() {});
+    });
+})();
+
+// Auto-fill plate when island is selected in add-vehicle modal
+var _autoFilledPlate = null;
+var _plateAutoLocked = false;
+
+function _setPlateAutoLocked(locked) {
+    _plateAutoLocked = locked;
+    var plateInput = document.getElementById('license_plate');
+    var btn        = document.getElementById('btn-gen-plate');
+    var icon       = document.getElementById('btn-gen-plate-icon');
+    if (!plateInput || !btn) return;
+    if (locked) {
+        plateInput.setAttribute('readonly', 'readonly');
+        plateInput.style.backgroundColor = '';
+        btn.title = 'Modifier l\'immatriculation';
+        btn.classList.remove('btn-outline-secondary', 'btn-outline-warning');
+        btn.classList.add('btn-outline-warning');
+        if (icon) { icon.className = 'fas fa-lock'; }
+    } else {
+        plateInput.removeAttribute('readonly');
+        if (_autoFilledPlate) {
+            // suggest restore button
+            btn.title = 'Restaurer la suggestion automatique';
+            btn.classList.remove('btn-outline-secondary', 'btn-outline-warning');
+            btn.classList.add('btn-outline-secondary');
+            if (icon) { icon.className = 'fas fa-redo'; }
+        } else {
+            // no suggestion active — random generator
+            btn.title = 'Générer une immatriculation unique';
+            btn.classList.remove('btn-outline-secondary', 'btn-outline-warning');
+            btn.classList.add('btn-outline-secondary');
+            if (icon) { icon.className = 'fas fa-magic'; }
+        }
+    }
+}
+
+window.handleGenPlateBtn = function() {
+    if (_plateAutoLocked) {
+        // Unlock so user can edit manually
+        _setPlateAutoLocked(false);
+        var plateInput = document.getElementById('license_plate');
+        if (plateInput) plateInput.focus();
+    } else if (_autoFilledPlate) {
+        // Restore the suggestion and re-lock
+        var plateInput = document.getElementById('license_plate');
+        if (plateInput) plateInput.value = _autoFilledPlate;
+        _setPlateAutoLocked(true);
+        var notice = document.getElementById('plate-duplicate-notice');
+        if (notice) notice.classList.add('d-none');
+    } else {
+        // No suggestion active — behave as random generator
+        generateLicensePlate();
+    }
+};
+
+window._suggestPlateForIsland = function(island) {
+    if (!island) return;
+    fetch('/api/vehicles/next-plate?island=' + encodeURIComponent(island), { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) {
+            var plateInput = document.getElementById('license_plate');
+            var vid = document.getElementById('vehicle-id');
+            if (!plateInput || (vid && vid.value)) return; // skip for edit mode
+            if (d && d.plate) {
+                if (!plateInput.value || plateInput.value === _autoFilledPlate) {
+                    plateInput.value = d.plate;
+                    _autoFilledPlate = d.plate;
+                    _setPlateAutoLocked(true);
+                    var notice = document.getElementById('plate-duplicate-notice');
+                    if (notice) notice.classList.add('d-none');
+                }
+            } else {
+                // Auto mode off or no plate available — unlock
+                _autoFilledPlate = null;
+                _setPlateAutoLocked(false);
+            }
+        })
+        .catch(function() {});
+};
+
+(function() {
+    var islandSel = document.getElementById('owner_island');
+    if (!islandSel) return;
+    islandSel.addEventListener('change', function() {
+        var vid = document.getElementById('vehicle-id');
+        if (vid && vid.value) return; // don't interfere with edit mode
+        // Reset lock state when island changes
+        _autoFilledPlate = null;
+        _setPlateAutoLocked(false);
+        var plateInput = document.getElementById('license_plate');
+        if (plateInput) plateInput.value = '';
+        window._suggestPlateForIsland(this.value);
     });
 })();
