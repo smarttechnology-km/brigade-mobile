@@ -2094,12 +2094,15 @@ def api_officer_history(user_id):
         vignette_ok  = bool(v and v.vignette_expiry  and v.vignette_expiry.date()  >= today)
         unpaid_fines = []
         if v:
-            for f in Fine.query.filter_by(vehicle_id=v.id, paid=False).all():
-                unpaid_fines.append({
-                    'reason': f.reason,
-                    'amount': float(f.amount),
-                    'issued_at': f.issued_at.strftime('%d/%m/%Y') if f.issued_at else '—',
-                })
+            try:
+                for f in Fine.query.filter_by(vehicle_id=v.id, paid=False).all():
+                    unpaid_fines.append({
+                        'reason': f.reason or '',
+                        'amount': float(f.amount or 0),
+                        'issued_at': f.issued_at.strftime('%d/%m/%Y') if f.issued_at else '—',
+                    })
+            except Exception:
+                pass
         scans_data.append({
             'id':            s.id,
             'plate':         v.license_plate if v else '—',
