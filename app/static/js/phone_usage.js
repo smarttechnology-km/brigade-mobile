@@ -385,7 +385,7 @@ function viewUserFromUsage(userId) {
             _initOfficerFilters();
             document.getElementById('officer-fines-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
             document.getElementById('officer-reductions-body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
-            document.getElementById('officer-scans-body').innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+            document.getElementById('officer-scans-body').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
 
             const modal = new bootstrap.Modal(document.getElementById('viewUserModal'));
             modal.show();
@@ -519,16 +519,29 @@ function renderReductionsTable(reductions) {
     }
 }
 
+function _docBadge(ok, expiry) {
+    if (ok) {
+        const tip = expiry ? ` title="Expire le ${expiry}"` : '';
+        return `<span class="badge bg-success"${tip}><i class="fas fa-check me-1"></i>À jour</span>`;
+    }
+    if (expiry) {
+        return `<span class="badge bg-danger" title="Expiré le ${expiry}"><i class="fas fa-times me-1"></i>Expiré</span>`;
+    }
+    return `<span class="badge bg-secondary"><i class="fas fa-question me-1"></i>Inconnu</span>`;
+}
+
 function renderScansTable(scans) {
     const tbody = document.getElementById('officer-scans-body');
     if (scans.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Aucun scan pour cette période.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Aucun scan pour cette période.</td></tr>';
     } else {
         tbody.innerHTML = scans.map(s =>
             `<tr>
                 <td style="white-space:nowrap;">${escapeHtml(s.scanned_at)}</td>
                 <td><strong>${escapeHtml(s.plate)}</strong></td>
                 <td>${escapeHtml(s.owner || '—')}</td>
+                <td class="text-center">${_docBadge(s.insurance_ok, s.insurance_expiry)}</td>
+                <td class="text-center">${_docBadge(s.vignette_ok, s.vignette_expiry)}</td>
             </tr>`
         ).join('');
     }
