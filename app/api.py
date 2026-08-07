@@ -2092,6 +2092,14 @@ def api_officer_history(user_id):
         v = s.vehicle
         insurance_ok = bool(v and v.insurance_expiry and v.insurance_expiry.date() >= today)
         vignette_ok  = bool(v and v.vignette_expiry  and v.vignette_expiry.date()  >= today)
+        unpaid_fines = []
+        if v:
+            for f in Fine.query.filter_by(vehicle_id=v.id, paid=False).all():
+                unpaid_fines.append({
+                    'reason': f.reason,
+                    'amount': float(f.amount),
+                    'issued_at': f.issued_at.strftime('%d/%m/%Y') if f.issued_at else '—',
+                })
         scans_data.append({
             'id':            s.id,
             'plate':         v.license_plate if v else '—',
@@ -2101,6 +2109,7 @@ def api_officer_history(user_id):
             'vignette_ok':   vignette_ok,
             'insurance_expiry': v.insurance_expiry.strftime('%d/%m/%Y') if v and v.insurance_expiry else None,
             'vignette_expiry':  v.vignette_expiry.strftime('%d/%m/%Y')  if v and v.vignette_expiry  else None,
+            'unpaid_fines':  unpaid_fines,
         })
 
     return jsonify({'fines': fines_data, 'reductions': reductions_data, 'scans': scans_data})
