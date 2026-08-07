@@ -328,6 +328,50 @@ def mobile_sync():
     })
 
 
+@api_bp.route('/mobile/sync-licenses', methods=['GET'])
+@jwt_required()
+def mobile_sync_licenses():
+    """Bulk sync of driver licenses for offline read mode (no photos synced)."""
+    validation_error = validate_jwt_session()
+    if validation_error:
+        return validation_error
+
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur']:
+        return jsonify({'error': 'Forbidden'}), 403
+
+    updated_since_str = request.args.get('updated_since')
+    updated_since = None
+    if updated_since_str:
+        try:
+            updated_since = datetime.fromisoformat(updated_since_str.replace('Z', '+00:00'))
+        except Exception:
+            pass
+
+    query = DriverLicense.query
+    if user.role == 'policier' and user.country:
+        query = query.filter(DriverLicense.holder_island == user.country)
+    if updated_since:
+        query = query.filter(DriverLicense.updated_at >= updated_since)
+
+    licenses = query.limit(20000).all()
+
+    result = []
+    for lic in licenses:
+        d = lic.to_dict()
+        # Strip photo data — not available offline (Cloudinary URLs require internet)
+        d['photo_url'] = ''
+        d['photo_filename'] = ''
+        result.append(d)
+
+    return jsonify({
+        'sync_at': now_comoros().isoformat(),
+        'count': len(result),
+        'licenses': result,
+    })
+
+
 @api_bp.route('/fine-types/list', methods=['GET'])
 @jwt_required()
 def api_fine_types_list():
