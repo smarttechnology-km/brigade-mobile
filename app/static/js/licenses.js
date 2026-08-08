@@ -181,6 +181,7 @@
         });
         document.getElementById('f-holder_island').value = '';
         document.getElementById('f-sexe').value = '';
+        document.getElementById('f-blood_group').value = '';
         document.getElementById('f-status').value = 'actif';
         document.getElementById('f-points').value = '12';
         document.getElementById('f-type_permis').value = 'permanent';
@@ -204,6 +205,7 @@
         document.getElementById('f-holder_address').value = l.holder_address || '';
         document.getElementById('f-nationalite').value          = l.nationalite || '';
         document.getElementById('f-sexe').value                 = l.sexe || '';
+        document.getElementById('f-blood_group').value          = l.blood_group || '';
         document.getElementById('f-points').value               = l.points ?? 12;
         document.getElementById('f-lieu_naissance').value        = l.lieu_naissance || '';
         document.getElementById('f-centre_immatriculation').value= l.centre_immatriculation || '';
@@ -271,6 +273,17 @@
 
     window.onCategoryToggle = function (cat) {
         const cb = document.getElementById(`cat-${cat}`);
+        // M and P are mutually exclusive
+        if (cb && cb.checked) {
+            const opposite = cat === 'M' ? 'P' : (cat === 'P' ? 'M' : null);
+            if (opposite) {
+                const oppCb = document.getElementById(`cat-${opposite}`);
+                if (oppCb && oppCb.checked) {
+                    oppCb.checked = false;
+                    onCategoryToggle(opposite);
+                }
+            }
+        }
         const detailsDiv = document.getElementById(`cat-details-${cat}`);
         if (!detailsDiv) return;
         detailsDiv.style.display = cb && cb.checked ? '' : 'none';
@@ -915,6 +928,7 @@
             holder_address: document.getElementById('f-holder_address').value.trim(),
             nationalite:           document.getElementById('f-nationalite').value.trim(),
             sexe:                  document.getElementById('f-sexe').value,
+            blood_group:           document.getElementById('f-blood_group').value,
             lieu_naissance:        document.getElementById('f-lieu_naissance').value.trim(),
             centre_immatriculation:document.getElementById('f-centre_immatriculation').value.trim(),
             type_permis:           document.getElementById('f-type_permis').value,
@@ -1086,6 +1100,7 @@
                         <div class="col-md-4"><div class="text-muted mb-1">Date de naissance</div><strong>${fmtDate(l.date_of_birth)}</strong></div>
                         <div class="col-md-4"><div class="text-muted mb-1">Lieu de naissance</div><strong>${esc(l.lieu_naissance || '—')}</strong></div>
                         <div class="col-md-4"><div class="text-muted mb-1">Sexe</div><strong>${l.sexe === 'masculin' ? 'Masculin' : l.sexe === 'feminin' ? 'Féminin' : '—'}</strong></div>
+                        <div class="col-md-4"><div class="text-muted mb-1">Groupe sanguin</div><strong>${esc(l.blood_group || '—')}</strong></div>
                         <div class="col-md-4"><div class="text-muted mb-1">Nationalité</div><strong>${esc(l.nationalite || '—')}</strong></div>
                         <div class="col-md-4">
                             <div class="text-muted mb-1">Points</div>
