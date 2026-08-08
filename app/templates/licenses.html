@@ -245,6 +245,20 @@
             </select>
           </div>
           <div class="col-md-4">
+            <label class="form-label">Groupe sanguin</label>
+            <select id="f-blood_group" class="form-select">
+              <option value="">— Sélectionner —</option>
+              <option value="A+">A+</option>
+              <option value="A-">A−</option>
+              <option value="B+">B+</option>
+              <option value="B-">B−</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB−</option>
+              <option value="O+">O+</option>
+              <option value="O-">O−</option>
+            </select>
+          </div>
+          <div class="col-md-4">
             <label class="form-label">Nationalité</label>
             <input type="text" id="f-nationalite" class="form-control" placeholder="Ex : Comorien">
           </div>
@@ -299,11 +313,11 @@
           <div class="col-12">
             <label class="form-label">Catégories</label>
             <div class="d-flex flex-column gap-2 mt-1" id="categories-checkboxes">
-              {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'P'] %}
+              {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'M', 'P'] %}
               <div class="border rounded p-2">
                 <div class="form-check">
                   <input class="form-check-input cat-checkbox" type="checkbox" id="cat-{{ cat }}" value="{{ cat }}" onchange="onCategoryToggle('{{ cat }}')">
-                  <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}{% if cat == 'P' %} <span class="text-muted fw-normal">(Professionnelle)</span>{% endif %}</label>
+                  <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}{% if cat == 'P' %} <span class="text-muted fw-normal">(Professionnelle)</span>{% elif cat == 'M' %} <span class="text-muted fw-normal">(Militaire)</span>{% endif %}</label>
                 </div>
                 <div class="row g-2 mt-1 cat-details" id="cat-details-{{ cat }}" style="display:none;">
                   <div class="col-sm-4">
@@ -552,7 +566,7 @@
                   <tr><th>Catégorie</th><th>Validité</th><th style="width:160px;">Durée</th></tr>
                 </thead>
                 <tbody>
-                  {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'P'] %}
+                  {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'M', 'P'] %}
                   <tr>
                     <td class="fw-semibold">{{ cat }}</td>
                     <td>

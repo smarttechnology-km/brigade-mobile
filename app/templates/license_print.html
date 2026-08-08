@@ -7,7 +7,7 @@
   <style>
     html { color-scheme: light; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Arial', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; padding: 32px 16px; }
+    body { font-family: 'Arial', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; padding: 32px 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
     /* ── Toolbar ── */
     .toolbar { max-width: 780px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
@@ -21,7 +21,8 @@
     /* ── Header band ── */
     .doc-header { background: linear-gradient(135deg, #1a3a6c 0%, #1a56db 100%); color: #fff; padding: 22px 28px; display: flex; align-items: center; justify-content: space-between; }
     .doc-header-left { display: flex; align-items: center; gap: 14px; }
-    .doc-header-flag { font-size: 28px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.3)); }
+    .doc-header-flag-wrap { display: inline-flex; isolation: isolate; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+    .doc-header-flag { width: 62px; height: 42px; object-fit: cover; display: block; mix-blend-mode: screen; }
     .doc-header-text h1 { font-size: 16px; font-weight: 700; letter-spacing: .03em; }
     .doc-header-text p { font-size: 11px; opacity: .8; margin-top: 2px; letter-spacing: .08em; text-transform: uppercase; }
     .doc-header-stars { display: flex; align-items: center; gap: 10px; font-size: 18px; }
@@ -142,7 +143,7 @@
   <!-- Header -->
   <div class="doc-header">
     <div class="doc-header-left">
-      <span class="doc-header-flag">🇰🇲</span>
+      <span class="doc-header-flag-wrap"><img class="doc-header-flag" src="/static/img/logo_comores_flag.png" alt="Drapeau Comores"></span>
       <div class="doc-header-text">
         <h1>UNION DES COMORES</h1>
         <p>Permis de Conduire</p>
@@ -201,6 +202,7 @@
         <div class="field"><span class="field-label">Date de naissance</span><span class="field-value">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span></div>
         <div class="field"><span class="field-label">Lieu de naissance</span><span class="field-value">{{ lic.lieu_naissance or '—' }}</span></div>
         <div class="field"><span class="field-label">Sexe</span><span class="field-value">{{ 'Masculin' if lic.sexe == 'masculin' else ('Féminin' if lic.sexe == 'feminin' else '—') }}</span></div>
+        <div class="field"><span class="field-label">Groupe sanguin</span><span class="field-value">{{ lic.blood_group or '—' }}</span></div>
         <div class="field"><span class="field-label">Nationalité</span><span class="field-value">{{ lic.nationalite or '—' }}</span></div>
         <div class="field"><span class="field-label">Adresse</span><span class="field-value">{{ lic.holder_address or '—' }}</span></div>
       </div>
@@ -216,6 +218,10 @@
         <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ display_expiry.strftime('%d/%m/%Y') if display_expiry else '—' }}</span></div>
         {% endif %}
         <div class="field"><span class="field-label">Centre d'immatriculation</span><span class="field-value">{{ lic.centre_immatriculation or '—' }}</span></div>
+        {% set cats_list = lic.categories.split(',') | map('trim') | list if lic.categories else [] %}
+        {% if 'M' in cats_list or 'P' in cats_list %}
+        <div class="field"><span class="field-label">Type</span><span class="field-value">{{ 'Militaire' if 'M' in cats_list else 'Professionnel' }}</span></div>
+        {% endif %}
         {% if lic.notes %}
         <div class="field"><span class="field-label">Notes</span><span class="field-value">{{ lic.notes }}</span></div>
         {% endif %}

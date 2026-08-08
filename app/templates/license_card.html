@@ -55,7 +55,8 @@
       background: linear-gradient(90deg, #b45309 0%, #fbbf24 35%, #fde68a 50%, #fbbf24 65%, #b45309 100%);
     }
     .card-header-left { display: flex; align-items: center; gap: 10px; }
-    .card-flag { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.3)); }
+    .card-flag-wrap { display: inline-flex; isolation: isolate; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+    .card-flag { width: 54px; height: 36px; object-fit: cover; display: block; mix-blend-mode: screen; }
     .card-title-block { display: flex; flex-direction: column; gap: 1px; }
     .card-title  { font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
     .card-country{ font-size: 10.5px; color: #fbbf24; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
@@ -411,7 +412,7 @@
   <!-- Header pleine largeur -->
   <div class="card-header">
     <div class="card-header-left">
-      <span class="card-flag">🇰🇲</span>
+      <span class="card-flag-wrap"><img class="card-flag" src="/static/img/logo_comores_flag.png" alt="Drapeau Comores"></span>
       <div class="card-title-block">
         <span class="card-title">UNION DES COMORES</span>
         <span class="card-country">Permis de Conduire</span>
@@ -456,7 +457,11 @@
         </div>
         <div class="id-row">
           <span class="id-lbl">Naissance</span>
-          <span class="id-val">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span>
+          <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span>
+          <div class="id-pair-right">
+            <span class="id-lbl">Sang</span>
+            <span class="id-val">{{ lic.blood_group or '—' }}</span>
+          </div>
         </div>
         <div class="id-row">
           <span class="id-lbl">Lieu de naissance</span>
