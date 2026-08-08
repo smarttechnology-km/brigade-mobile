@@ -660,14 +660,15 @@ function downloadImages() {
   var opts = { scale: scale, bgcolor: '#ffffff', style: { margin: '0' } };
 
   var front = document.querySelector('.card');
-  var back  = document.querySelector('.card-back');
+  var back  = document.querySelector('.card-back-mil');
+  var backOpts = { scale: scale, style: { margin: '0' } };
 
   domtoimage.toPng(front, opts).then(function(url1) {
     var a1 = document.createElement('a');
     a1.download = 'permis_mil_' + licNum + '_recto.png';
     a1.href = url1;
     a1.click();
-    return domtoimage.toPng(back, opts);
+    return domtoimage.toPng(back, backOpts);
   }).then(function(url2) {
     var a2 = document.createElement('a');
     a2.download = 'permis_mil_' + licNum + '_verso.png';
