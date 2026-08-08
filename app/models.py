@@ -1176,6 +1176,7 @@ class DriverLicense(db.Model):
     date_of_birth = db.Column(db.Date)
     lieu_naissance = db.Column(db.String(150))
     centre_immatriculation = db.Column(db.String(150))
+    blood_group = db.Column(db.String(10), nullable=True)  # 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'
     type_permis = db.Column(db.String(20), nullable=False, default='permanent')  # 'permanent' | 'temporaire'
     categories = db.Column(db.String(100))  # comma-separated: "A,B,C"
     category_details = db.Column(db.Text, nullable=True)  # JSON: {"A": {"identifiant": "...", "date": "YYYY-MM-DD"}, ...}
@@ -1221,6 +1222,7 @@ class DriverLicense(db.Model):
             'holder_address': self.holder_address or '',
             'nationalite': self.nationalite or '',
             'sexe': self.sexe or '',
+            'blood_group': self.blood_group or '',
             'points': self.points if self.points is not None else 12,
             'date_of_birth': self.date_of_birth.strftime('%Y-%m-%d') if self.date_of_birth else '',
             'lieu_naissance': self.lieu_naissance or '',

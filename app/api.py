@@ -3873,6 +3873,7 @@ def api_licenses_create():
         holder_address        = (data.get('holder_address') or '').strip() or None,
         nationalite           = (data.get('nationalite') or '').strip() or None,
         sexe                  = data.get('sexe') or None,
+        blood_group           = (data.get('blood_group') or '').strip() or None,
         points                = LicenseSetting.get().initial_points,
         lieu_naissance        = (data.get('lieu_naissance') or '').strip() or None,
         centre_immatriculation= (data.get('centre_immatriculation') or '').strip() or None,
@@ -4088,7 +4089,7 @@ def api_licenses_update(license_id):
         except (ValueError, TypeError):
             pass
     for field in ['holder_name', 'holder_firstname', 'holder_phone', 'holder_island', 'holder_address',
-                  'nationalite', 'sexe', 'lieu_naissance', 'centre_immatriculation', 'type_permis', 'categories', 'status', 'notes']:
+                  'nationalite', 'sexe', 'blood_group', 'lieu_naissance', 'centre_immatriculation', 'type_permis', 'categories', 'status', 'notes']:
         if field in data:
             setattr(lic, field, (data[field] or '').strip() or None)
     if 'category_details' in data:

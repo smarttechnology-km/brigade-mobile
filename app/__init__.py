@@ -505,6 +505,7 @@ def create_app():
                         'smarttech_print_validated':  "ALTER TABLE driver_licenses ADD COLUMN smarttech_print_validated BOOLEAN NOT NULL DEFAULT 0",
                         'smarttech_validated_at':     "ALTER TABLE driver_licenses ADD COLUMN smarttech_validated_at DATETIME",
                         'smarttech_validated_by':     "ALTER TABLE driver_licenses ADD COLUMN smarttech_validated_by VARCHAR(100)",
+                        'blood_group':                "ALTER TABLE driver_licenses ADD COLUMN blood_group VARCHAR(10)",
                     }
                     for col, sql in dl_col_defs.items():
                         if col not in dl_cols:

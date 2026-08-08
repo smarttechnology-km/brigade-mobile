@@ -1473,7 +1473,7 @@ def license_print_card(license_id):
     from app.models import DriverLicense, LicenseSetting
     from dateutil.relativedelta import relativedelta
     lic = DriverLicense.query.get_or_404(license_id)
-    if not lic.smarttech_print_validated:
+    if not lic.smarttech_print_validated and current_user.role != 'administrateur':
         abort(403)
     settings = LicenseSetting.get()
     computed_expiry = None
@@ -1486,7 +1486,9 @@ def license_print_card(license_id):
     computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     category_details = parse_category_details(lic)
     readonly = request.args.get('readonly') == '1'
-    return render_template('license_card.html', lic=lic, settings=settings, now_comoros=now_comoros,
+    holder_cats = [c.strip() for c in (lic.categories or '').split(',') if c.strip()]
+    template = 'license_card_militaire.html' if 'M' in holder_cats else 'license_card.html'
+    return render_template(template, lic=lic, settings=settings, now_comoros=now_comoros,
                            computed_expiry=computed_expiry, category_details=category_details,
                            computed_cat_expiries=computed_cat_expiries, readonly=readonly)
 
