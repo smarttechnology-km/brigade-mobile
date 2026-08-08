@@ -77,15 +77,15 @@ class Vehicle(db.Model):
     __tablename__ = 'vehicles'
     
     id = db.Column(db.Integer, primary_key=True)
-    license_plate = db.Column(db.String(20), unique=True, nullable=False)
+    license_plate = db.Column(db.String(20), unique=True, nullable=False, index=True)
     owner_name = db.Column(db.String(100), nullable=False)
     owner_phone = db.Column(db.String(15))
-    owner_island = db.Column(db.String(50))  # Grande Comore, Anjouan, Moheli
+    owner_island = db.Column(db.String(50), index=True)  # Grande Comore, Anjouan, Moheli
     vehicle_type = db.Column(db.String(50), nullable=False)  # voiture, moto, camion, etc.
     fuel_type = db.Column(db.String(50))  # Essence, Gazoil, Electric, autre
     usage_type = db.Column(db.String(50), default='Personnelle')  # Personnelle, Taxi, Transport public, other
     color = db.Column(db.String(50))
-    status = db.Column(db.String(20), default='active')  # active, inactive, suspended
+    status = db.Column(db.String(20), default='active', index=True)  # active, inactive, suspended
     make = db.Column(db.String(50))
     model = db.Column(db.String(50))
     year = db.Column(db.String(10))
@@ -1254,7 +1254,7 @@ class LicensePrintRequest(db.Model):
     license_id   = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False)
     requested_by = db.Column(db.String(100), nullable=False)
     requested_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
-    status       = db.Column(db.String(20), nullable=False, default='pending')  # pending | printed | cancelled
+    status       = db.Column(db.String(20), nullable=False, default='pending', index=True)  # pending | printed | cancelled
     printed_by   = db.Column(db.String(100))
     printed_at   = db.Column(db.DateTime)
     unit_price   = db.Column(db.Float, nullable=False, default=0)
