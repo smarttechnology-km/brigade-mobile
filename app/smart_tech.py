@@ -79,12 +79,17 @@ def _vq():
 
 
 def _lpr_q():
-    """LicensePrintRequest query filtered by employe island via DriverLicense.holder_island."""
+    """LicensePrintRequest query filtered by employe island via DriverLicense.holder_island.
+    Military licenses (category contains 'M') are always visible regardless of island."""
     from app.models import DriverLicense
+    from sqlalchemy import or_
     island = _employe_island()
     q = LicensePrintRequest.query.join(DriverLicense, LicensePrintRequest.license_id == DriverLicense.id)
     if island:
-        q = q.filter(DriverLicense.holder_island == island)
+        q = q.filter(or_(
+            DriverLicense.holder_island == island,
+            DriverLicense.categories.like('%M%'),
+        ))
     return q
 
 
@@ -2002,7 +2007,10 @@ def _render_license_card(license_id, smarttech_preview=False):
     main_expiry = lic.expiry_date or computed_expiry
     computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
 
-    return render_template('license_card.html', lic=lic, settings=settings,
+    holder_cats = [c.strip() for c in (lic.categories or '').split(',') if c.strip()]
+    template = 'license_card_militaire.html' if 'M' in holder_cats else 'license_card.html'
+
+    return render_template(template, lic=lic, settings=settings,
                            computed_expiry=computed_expiry, qr_data_uri=qr_data_uri,
                            category_details=category_details,
                            computed_cat_expiries=computed_cat_expiries,
