@@ -3797,12 +3797,13 @@ def api_licenses_last_update():
 @api_bp.route('/licenses', methods=['GET'])
 @login_required
 def api_licenses_list():
-    search   = request.args.get('q', '').strip()
-    status_f = request.args.get('status', '').strip()
-    type_f   = request.args.get('type', '').strip()
-    country  = request.args.get('country', '').strip()
-    page     = request.args.get('page', 1, type=int)
-    per_page = 50
+    search    = request.args.get('q', '').strip()
+    status_f  = request.args.get('status', '').strip()
+    type_f    = request.args.get('type', '').strip()
+    country   = request.args.get('country', '').strip()
+    print_f   = request.args.get('print_status', '').strip()
+    page      = request.args.get('page', 1, type=int)
+    per_page  = 50
 
     query = apply_island_filter(DriverLicense.query, DriverLicense.holder_island, force_country=country)
     if search:
@@ -3819,6 +3820,45 @@ def api_licenses_list():
         query = query.filter(DriverLicense.status == status_f)
     if type_f:
         query = query.filter(DriverLicense.type_permis == type_f)
+    if print_f in ('pending', 'validated'):
+        from sqlalchemy import exists as sa_exists
+        query = query.filter(
+            sa_exists().where(
+                db.and_(
+                    LicensePrintRequest.license_id == DriverLicense.id,
+                    LicensePrintRequest.status == print_f,
+                )
+            )
+        )
+    elif print_f == 'printed':
+        from sqlalchemy import exists as sa_exists
+        # Validé ou imprimé, et aucune demande en attente actuellement
+        query = query.filter(
+            sa_exists().where(
+                db.and_(
+                    LicensePrintRequest.license_id == DriverLicense.id,
+                    LicensePrintRequest.status.in_(['printed', 'validated']),
+                )
+            )
+        ).filter(
+            ~sa_exists().where(
+                db.and_(
+                    LicensePrintRequest.license_id == DriverLicense.id,
+                    LicensePrintRequest.status == 'pending',
+                )
+            )
+        )
+    elif print_f == 'never_printed':
+        from sqlalchemy import exists as sa_exists
+        # Jamais validé ni imprimé
+        query = query.filter(
+            ~sa_exists().where(
+                db.and_(
+                    LicensePrintRequest.license_id == DriverLicense.id,
+                    LicensePrintRequest.status.in_(['printed', 'validated']),
+                )
+            )
+        )
 
     total   = query.count()
     items   = query.order_by(DriverLicense.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
@@ -3914,11 +3954,17 @@ def api_licenses_get(license_id):
     if err:
         return err
     d = lic.to_dict()
-    latest_req = (LicensePrintRequest.query
-                  .filter_by(license_id=lic.id)
-                  .order_by(LicensePrintRequest.requested_at.desc())
-                  .first())
-    d['print_status'] = latest_req.status if latest_req else None
+    reqs = (LicensePrintRequest.query
+            .filter_by(license_id=lic.id)
+            .order_by(LicensePrintRequest.requested_at.desc())
+            .all())
+    statuses = {r.status for r in reqs}
+    if 'pending' in statuses:
+        d['print_status'] = 'pending'
+    elif statuses & {'printed', 'validated'}:
+        d['print_status'] = 'printed'
+    else:
+        d['print_status'] = None
     return jsonify(d)
 
 
@@ -4077,6 +4123,35 @@ def api_licenses_update(license_id):
         return err
     data = request.get_json() or {}
 
+    # Snapshot avant modification pour détecter les changements réels
+    def _norm_str(v):
+        return (v or '').strip() or None
+    def _norm_date(v):
+        return v.isoformat() if v else None
+
+    before = {
+        'license_number':        lic.license_number,
+        'holder_name':           lic.holder_name,
+        'holder_firstname':      lic.holder_firstname,
+        'holder_phone':          lic.holder_phone,
+        'holder_island':         lic.holder_island,
+        'holder_address':        lic.holder_address,
+        'nationalite':           lic.nationalite,
+        'sexe':                  lic.sexe,
+        'blood_group':           lic.blood_group,
+        'lieu_naissance':        lic.lieu_naissance,
+        'centre_immatriculation':lic.centre_immatriculation,
+        'type_permis':           lic.type_permis,
+        'categories':            lic.categories,
+        'status':                lic.status,
+        'notes':                 lic.notes,
+        'points':                lic.points,
+        'category_details':      lic.category_details,
+        'date_of_birth':         _norm_date(lic.date_of_birth),
+        'issue_date':            _norm_date(lic.issue_date),
+        'expiry_date':           _norm_date(lic.expiry_date),
+    }
+
     num = (data.get('license_number') or '').strip().upper()
     if num and num != lic.license_number:
         if DriverLicense.query.filter(DriverLicense.license_number == num, DriverLicense.id != lic.id).first():
@@ -4107,6 +4182,48 @@ def api_licenses_update(license_id):
                     pass
             else:
                 setattr(lic, field, None)
+
+    # Vérifie s'il y a eu un vrai changement
+    after = {
+        'license_number':        lic.license_number,
+        'holder_name':           lic.holder_name,
+        'holder_firstname':      lic.holder_firstname,
+        'holder_phone':          lic.holder_phone,
+        'holder_island':         lic.holder_island,
+        'holder_address':        lic.holder_address,
+        'nationalite':           lic.nationalite,
+        'sexe':                  lic.sexe,
+        'blood_group':           lic.blood_group,
+        'lieu_naissance':        lic.lieu_naissance,
+        'centre_immatriculation':lic.centre_immatriculation,
+        'type_permis':           lic.type_permis,
+        'categories':            lic.categories,
+        'status':                lic.status,
+        'notes':                 lic.notes,
+        'points':                lic.points,
+        'category_details':      lic.category_details,
+        'date_of_birth':         _norm_date(lic.date_of_birth),
+        'issue_date':            _norm_date(lic.issue_date),
+        'expiry_date':           _norm_date(lic.expiry_date),
+    }
+    has_changes = (before != after)
+
+    if has_changes:
+        # Réinitialise la validation SmartTech
+        lic.smarttech_print_validated = False
+        lic.smarttech_validated_at    = None
+        lic.smarttech_validated_by    = None
+
+        # Crée une demande d'impression si aucune n'est déjà en attente
+        existing_pending = LicensePrintRequest.query.filter_by(
+            license_id=lic.id, status='pending'
+        ).first()
+        if not existing_pending:
+            db.session.add(LicensePrintRequest(
+                license_id=lic.id,
+                requested_by=current_user.username,
+                notes='Demande automatique après modification du permis',
+            ))
 
     db.session.commit()
     return jsonify(lic.to_dict())
