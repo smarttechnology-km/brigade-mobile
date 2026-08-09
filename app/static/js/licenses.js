@@ -5,6 +5,7 @@
     let searchTimer;
     let _lastKey = null;
     let _settings  = { initial_points: 12, temp_validity_months: 12 };
+    let _activeTab = '';  // '' | 'pending' | 'printed'
 
     const searchInput  = document.getElementById('search-input');
     const statusFilter = document.getElementById('status-filter');
@@ -47,12 +48,30 @@
             .map(c => `<span class="badge bg-info text-dark me-1">${esc(c)}</span>`).join('');
     }
 
+    /* ── Tabs ── */
+    window.switchTab = function(tab) {
+        _activeTab = tab;
+        currentPage = 1;
+        ['', 'pending', 'printed'].forEach(t => {
+            const key = t === '' ? 'all' : t;
+            const btn = document.getElementById('tab-' + key + '-btn');
+            if (btn) btn.classList.toggle('active', t === tab);
+        });
+        const card = document.getElementById('table-card');
+        if (card) {
+            card.style.borderTop = tab === 'pending' ? '3px solid #ffc107'
+                                 : tab === 'printed' ? '3px solid #198754'
+                                 : '';
+        }
+        loadLicenses(true);
+    };
+
     /* ── Load table ── */
     function buildUrl() {
         const q      = encodeURIComponent(searchInput.value.trim());
         const status = encodeURIComponent(statusFilter.value);
         const type   = encodeURIComponent(typeFilter.value);
-        return `/api/licenses?page=${currentPage}&q=${q}&status=${status}&type=${type}`;
+        return `/api/licenses?page=${currentPage}&q=${q}&status=${status}&type=${type}&print_status=${encodeURIComponent(_activeTab)}`;
     }
 
     function loadLicenses(resetPage) {
@@ -144,20 +163,21 @@
             .then(d => {
                 if (!d) return;
                 if (_lastKey === null) { _lastKey = d.key; return; }
-                if (d.key !== _lastKey) { _lastKey = d.key; loadLicenses(false); loadStats(); }
+                if (d.key !== _lastKey) { _lastKey = d.key; loadLicenses(false); loadStats(); loadTabCounts(); }
             }).catch(() => {});
     }
     setInterval(checkUpdates, 5000);
     setInterval(loadStats, 30000);
+    setInterval(loadTabCounts, 15000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdates(); });
 
     /* ── Filters ── */
     searchInput?.addEventListener('input', () => {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => loadLicenses(true), 400);
+        searchTimer = setTimeout(() => { loadLicenses(true); loadTabCounts(); }, 400);
     });
-    statusFilter?.addEventListener('change', () => loadLicenses(true));
-    typeFilter?.addEventListener('change',   () => loadLicenses(true));
+    statusFilter?.addEventListener('change', () => { loadLicenses(true); loadTabCounts(); });
+    typeFilter?.addEventListener('change',   () => { loadLicenses(true); loadTabCounts(); });
 
     /* ── Photo preview ── */
     window.previewPhoto = function (input) {
@@ -778,6 +798,7 @@
             _settings = d;
             loadLicenses(false);
             loadStats();
+            loadTabCounts();
             bootstrap.Modal.getInstance(document.getElementById('settingsModal'))?.hide();
         } catch (e) {
             alert(e.message);
@@ -857,6 +878,7 @@
             bootstrap.Modal.getInstance(document.getElementById('reductionModal'))?.hide();
             loadLicenses(false);
             loadStats();
+            loadTabCounts();
         } catch (e) {
             alert(e.message);
         } finally {
@@ -898,6 +920,8 @@
         document.getElementById('modal-title').innerHTML = '<i class="fas fa-plus me-2"></i>Ajouter un permis';
         document.getElementById('save-btn').innerHTML    = '<i class="fas fa-save me-1"></i>Enregistrer';
         document.getElementById('points-wrap').style.display = 'none';
+        const btnDem = document.getElementById('btn-demander-impression');
+        if (btnDem) btnDem.style.display = 'none';
         new bootstrap.Modal(document.getElementById('licenseModal')).show();
     };
 
@@ -910,9 +934,51 @@
                 populateForm(l);
                 document.getElementById('modal-title').innerHTML = '<i class="fas fa-edit me-2"></i>Modifier le permis';
                 document.getElementById('save-btn').innerHTML    = '<i class="fas fa-save me-1"></i>Enregistrer les modifications';
+                // Afficher "Demander l'impression" seulement si le permis est dans "Permis imprimés"
+                // = a une demande printed/validated ET pas de pending en cours
+                const btnDem = document.getElementById('btn-demander-impression');
+                if (btnDem) {
+                    const isPrinted   = ['printed', 'validated'].includes(l.print_status);
+                    const hasPending  = l.print_status === 'pending';
+                    btnDem.style.display = (isPrinted && !hasPending) ? '' : 'none';
+                    btnDem.dataset.licenseId = l.id;
+                }
                 new bootstrap.Modal(document.getElementById('licenseModal')).show();
             })
             .catch(() => alert('Impossible de charger le permis.'));
+    };
+
+    /* ── Demander impression manuelle depuis le modal ── */
+    window.demanderImpression = function () {
+        const btn = document.getElementById('btn-demander-impression');
+        const id  = btn && btn.dataset.licenseId;
+        if (!id) return;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Envoi…';
+        fetch(`/api/licenses/${id}/print-request`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes: 'Demande manuelle depuis le modal' }),
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok || d.request) {
+                btn.style.display = 'none';
+                bootstrap.Modal.getInstance(document.getElementById('licenseModal'))?.hide();
+                loadLicenses(false);
+                loadTabCounts();
+            } else {
+                alert(d.error || 'Erreur lors de la demande.');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Demander l\'impression';
+            }
+        })
+        .catch(() => {
+            alert('Erreur réseau.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Demander l\'impression';
+        });
     };
 
     /* ── Save (Create / Update) ── */
@@ -977,6 +1043,7 @@
             bootstrap.Modal.getInstance(document.getElementById('licenseModal'))?.hide();
             loadLicenses(false);
             loadStats();
+            loadTabCounts();
         } catch (err) {
             alert(err.message || 'Erreur lors de l\'enregistrement.');
         } finally {
@@ -1042,6 +1109,10 @@
             loadPointHistory(id);
             this.removeEventListener('shown.bs.tab', onHistoryShown);
         });
+
+        // Stocker l'id pour l'onglet impression
+        const printBtn = document.getElementById('view-tab-print-btn');
+        if (printBtn) printBtn.dataset.licenseId = id;
 
         fetch(`/api/licenses/${id}`, { credentials: 'same-origin' })
             .then(r => r.ok ? r.json() : Promise.reject())
@@ -1180,6 +1251,43 @@
             });
     }
 
+    /* ── Historique d'impression ── */
+    window.loadPrintHistory = function () {
+        const btn   = document.getElementById('view-tab-print-btn');
+        const licId = btn && btn.dataset.licenseId;
+        const tbody = document.getElementById('view-print-tbody');
+        if (!licId || !tbody) return;
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+
+        fetch(`/api/licenses/${licId}/print-requests`, { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(rows => {
+                if (!rows.length) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Aucun historique d\'impression.</td></tr>';
+                    return;
+                }
+                const statusBadge = s => {
+                    if (s === 'printed')   return '<span class="badge bg-success">Imprimé</span>';
+                    if (s === 'validated') return '<span class="badge bg-info text-dark">Validé</span>';
+                    if (s === 'pending')   return '<span class="badge bg-warning text-dark">En attente</span>';
+                    if (s === 'cancelled') return '<span class="badge bg-secondary">Annulé</span>';
+                    return `<span class="badge bg-secondary">${esc(s)}</span>`;
+                };
+                tbody.innerHTML = rows.map(r => `
+                    <tr>
+                        <td class="text-muted small">${esc(r.requested_at || '—')}</td>
+                        <td>${esc(r.requested_by || '—')}</td>
+                        <td>${r.smarttech_validated_by ? `<span class="badge bg-info text-dark">${esc(r.smarttech_validated_by)}</span>` : '<span class="text-muted">—</span>'}</td>
+                        <td class="text-muted small">${esc(r.printed_at || '—')}</td>
+                        <td>${esc(r.printed_by || '—')}</td>
+                        <td>${statusBadge(r.status)}</td>
+                    </tr>`).join('');
+            })
+            .catch(() => {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Erreur de chargement.</td></tr>';
+            });
+    };
+
     /* ── Réclamation ── */
     window.openReclamationModal = function (historyId, licId, reasonLabel, pointsDeducted, createdAt) {
         document.getElementById('reclamation-history-id').value = historyId;
@@ -1226,6 +1334,7 @@
             loadPointHistory(licId);
             loadLicenses(false);
             loadStats();
+            loadTabCounts();
         } catch (e) {
             alert('Erreur réseau.');
         } finally {
@@ -1242,6 +1351,23 @@
     };
 
     /* ── Stats ── */
+    function loadTabCounts() {
+        const q      = encodeURIComponent(searchInput.value.trim());
+        const status = encodeURIComponent(statusFilter.value);
+        const type   = encodeURIComponent(typeFilter.value);
+        const base   = `&q=${q}&status=${status}&type=${type}&page=1`;
+        [['', 'all'], ['pending', 'pending'], ['printed', 'printed']].forEach(([ps, key]) => {
+            fetch(`/api/licenses?print_status=${encodeURIComponent(ps)}${base}`, { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (!d) return;
+                    const el = document.getElementById('tab-count-' + key);
+                    if (el) el.textContent = d.total;
+                })
+                .catch(() => {});
+        });
+    }
+
     function loadStats() {
         fetch('/api/licenses/stats', { credentials: 'same-origin' })
             .then(r => {
@@ -1265,8 +1391,8 @@
 
     /* ── Init ── */
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { loadSettings(); loadReasons(); loadLicenses(true); loadStats(); });
+        document.addEventListener('DOMContentLoaded', () => { loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts(); });
     } else {
-        loadSettings(); loadReasons(); loadLicenses(true); loadStats();
+        loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts();
     }
 })();
