@@ -132,6 +132,7 @@
                 <th>Demandé par</th>
                 <th>Date demande</th>
                 <th>Notes</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="pending-tbody"></tbody>
@@ -207,13 +208,42 @@ function extractDateKey(dtStr) {
 }
 
 function renderPendingRow(r) {
-  return `<tr>
+  return `<tr id="pending-row-${r.id}">
     <td><span class="fw-semibold">${r.license_number || '—'}</span></td>
     <td>${r.holder_firstname || ''} ${r.holder_name || ''}</td>
     <td><span class="badge bg-secondary">${r.requested_by || '—'}</span></td>
     <td class="text-nowrap text-muted">${r.requested_at || '—'}</td>
     <td class="text-muted small">${r.notes || '—'}</td>
+    <td class="text-end">
+      <button class="btn btn-sm btn-outline-danger" onclick="cancelPrintRequest(${r.id})" title="Annuler la demande">
+        <i class="fas fa-times me-1"></i>Annuler
+      </button>
+    </td>
   </tr>`;
+}
+
+function cancelPrintRequest(reqId) {
+  if (!confirm('Annuler cette demande d\'impression ?')) return;
+  fetch('/api/licenses/print-requests/' + reqId, { method: 'DELETE', credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        const row = document.getElementById('pending-row-' + reqId);
+        if (row) row.remove();
+        // Met à jour le compteur
+        const tbody = document.getElementById('pending-tbody');
+        const count = tbody ? tbody.querySelectorAll('tr').length : 0;
+        document.getElementById('stat-pending').textContent  = count;
+        document.getElementById('badge-pending').textContent = count;
+        if (count === 0) {
+          document.getElementById('pending-empty').classList.remove('d-none');
+          document.getElementById('pending-table').classList.add('d-none');
+        }
+      } else {
+        alert(d.error || 'Erreur lors de l\'annulation.');
+      }
+    })
+    .catch(() => alert('Erreur réseau.'));
 }
 
 function renderValidatedRow(r) {
