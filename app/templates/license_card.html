@@ -260,11 +260,10 @@
     .holder-cats-lbl { font-size: 9px; font-weight: 700; color: #14306e; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
     .holder-cats-list { display: flex; flex-wrap: wrap; gap: 5px; }
     .holder-cat-pill {
-      background: linear-gradient(160deg, #2348a3, #14306e);
+      background: #14306e;
       color: #fff;
       border-radius: 6px; padding: 3px 11px;
       font-size: 13px; font-weight: 800;
-      box-shadow: 0 1px 3px rgba(20,48,110,.4);
     }
     .holder-cats-none { font-size: 10px; color: #94a3b8; font-style: italic; }
 
@@ -304,7 +303,7 @@
       font-size: 10.5px; font-weight: 800; text-align: center;
       line-height: 1.4; border: 1.5px solid;
     }
-    .cat-badge-owned { background: linear-gradient(160deg, #2348a3, #14306e); color: #fff; border-color: #14306e; }
+    .cat-badge-owned { background: #14306e; color: #fff; border-color: #14306e; }
     .cat-badge-other { background: transparent; color: #94a3b8; border-color: #e2e8f0; }
     .cat-icon-table { font-size: 12px; color: #14306e; margin-left: 5px; }
     .cat-tr-other .cat-icon-table { color: #cbd5e1; }
@@ -337,8 +336,7 @@
     .card-pro .cat,
     .card-pro .holder-cat-pill,
     .card-pro .cat-badge-owned {
-      background: linear-gradient(160deg, #9c1f3f, #6b1029);
-      box-shadow: 0 1px 3px rgba(107,16,41,.4);
+      background: #7a1530;
     }
     .card-pro .cat-badge-owned { border-color: #6b1029; }
     .card-pro .cat-icon-table { color: #7a1530; }
@@ -387,6 +385,7 @@
 
 <div class="toolbar">
   <button class="btn btn-back" onclick="history.back()">← Retour</button>
+  {% if photo_b64 %}
   <button class="btn btn-print" onclick="doPrint()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="6 9 6 2 18 2 18 9"/>
@@ -402,6 +401,9 @@
     </svg>
     Télécharger en images
   </button>
+  {% else %}
+  <span style="font-size:13px;color:#b45309;font-weight:600;padding:9px 4px;">⚠ Aucune photo — impression désactivée</span>
+  {% endif %}
 </div>
 
 {% set holder_cats = lic.categories.split(',') | map('trim') | list if lic.categories else [] %}

@@ -441,6 +441,7 @@
 
 <div class="toolbar">
   <button class="btn btn-back" onclick="history.back()">← Retour</button>
+  {% if photo_b64 %}
   <button class="btn btn-print" onclick="doPrint()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="6 9 6 2 18 2 18 9"/>
@@ -456,6 +457,9 @@
     </svg>
     Télécharger en images
   </button>
+  {% else %}
+  <span style="font-size:13px;color:#c9a227;font-weight:600;padding:9px 4px;">⚠ Aucune photo — impression désactivée</span>
+  {% endif %}
 </div>
 
 {% set holder_cats = lic.categories.split(',') | map('trim') | list if lic.categories else [] %}
