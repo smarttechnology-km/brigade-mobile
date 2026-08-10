@@ -993,7 +993,7 @@ function submitStep1() {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('newDossierModal')).hide();
     loadDossiers();
     if (!isEdit && data.dossier_number) {
-      showDossierNumberAlert(data.dossier_number);
+      showDossierNumberAlert(data.dossier_number, payload.telephone);
     } else if (isEdit) {
       showToast('Étape 1 mise à jour', 'success');
     }
@@ -1347,7 +1347,7 @@ function submitStep2() {
     } else {
       bootstrap.Modal.getOrCreateInstance(document.getElementById('step2Modal')).hide();
       loadDossiers();
-      showToast('Étape 2 enregistrée — ' + ((data.prenom || '') + ' ' + (data.nom || '')).trim(), 'success');
+      showToast('Étape 3 enregistrée — ' + ((data.prenom || '') + ' ' + (data.nom || '')).trim(), 'success');
     }
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
@@ -1423,7 +1423,7 @@ function submitStep3() {
     } else {
       bootstrap.Modal.getOrCreateInstance(document.getElementById('step3Modal')).hide();
       loadDossiers();
-      showToast('Étape 3 enregistrée — photo ajoutée', 'success');
+      showToast('Étape 2 enregistrée — photo ajoutée', 'success');
     }
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
@@ -1765,15 +1765,24 @@ function docRow(label, checked) {
 }
 
 // ── Numéro de dossier affiché après enregistrement ──
-function showDossierNumberAlert(num) {
+function showDossierNumberAlert(num, telephone) {
   var el = document.createElement('div');
   el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+  var telHtml = telephone
+    ? `<div style="margin-bottom:20px;">
+         <div style="font-size:15px;color:#374151;font-weight:600;margin-bottom:6px;">Inscrivez ce numéro de téléphone dans le dossier physique du candidat :</div>
+         <div style="font-size:2rem;font-weight:900;color:#0f766e;letter-spacing:.06em;font-family:monospace;background:#f0fdfa;border:2px solid #99f6e4;border-radius:10px;padding:10px 24px;">${telephone}</div>
+       </div>`
+    : '';
   el.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:40px 48px;text-align:center;max-width:420px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,.3);">
+    <div style="background:#fff;border-radius:16px;padding:40px 48px;text-align:center;max-width:440px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,.3);">
       <div style="color:#16a34a;font-size:3rem;margin-bottom:12px;"><i class="fas fa-check-circle"></i></div>
       <div style="font-size:15px;color:#374151;margin-bottom:8px;">Dossier enregistré — Étape 1 validée</div>
-      <div style="font-size:13px;color:#6b7280;margin-bottom:24px;">Inscrivez ce numéro sur le chemisier cartonné du candidat :</div>
-      <div style="font-size:2.2rem;font-weight:900;color:#1d4ed8;letter-spacing:.08em;font-family:monospace;background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:12px 24px;margin-bottom:28px;">${num}</div>
+<div style="font-size:2.2rem;font-weight:900;color:#1d4ed8;letter-spacing:.08em;font-family:monospace;background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:12px 24px;margin-bottom:20px;">${num}</div>
+      ${telHtml}
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:13px;color:#92400e;">
+        <i class="fas fa-exclamation-triangle me-1"></i>N'oubliez pas d'inscrire le numéro de téléphone du candidat dans son dossier physique.
+      </div>
       <button onclick="this.closest('div[style*=fixed]').remove()" style="background:#1d4ed8;color:#fff;border:none;border-radius:8px;padding:10px 32px;font-size:15px;font-weight:600;cursor:pointer;">
         <i class="fas fa-check me-2"></i>Compris
       </button>
