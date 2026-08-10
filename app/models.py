@@ -1871,7 +1871,7 @@ class PlateSettings(db.Model):
     enabled               = db.Column(db.Boolean, nullable=False, default=False)
 
     LETTERS       = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
-    ISLAND_SUFFIX = {'Grande Comore': '73', 'Anjouan': '72', 'Moheli': '71'}
+    ISLAND_SUFFIX = {'Grande Comore': '73', 'Anjouan': '71', 'Moheli': '72'}
 
     @classmethod
     def get(cls, island):
