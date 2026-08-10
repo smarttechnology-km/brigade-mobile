@@ -525,7 +525,7 @@
     <div class="footer-signature">
       <div class="sig-title">Directeur Général</div>
       {% if settings.directeur_signature_filename %}
-        <img class="sig-mark" src="{{ settings.directeur_signature_url }}" alt="Signature">
+        <img class="sig-mark" src="{{ signature_b64 or settings.directeur_signature_url }}" alt="Signature">
       {% else %}
         <svg class="sig-mark" viewBox="0 0 100 26" xmlns="http://www.w3.org/2000/svg">
           <path d="M4,18 C10,6 14,24 20,14 C25,6 28,20 34,11 C40,3 44,22 51,12 C57,4 60,19 67,9 C72,3 76,16 82,10 C86,6 90,12 95,8"
