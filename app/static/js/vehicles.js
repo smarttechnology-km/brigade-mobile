@@ -1381,7 +1381,7 @@ var _ISLAND_KEY_MAP = {
 
 function _updatePlatePreview(key) {
     var island = _ISLAND_KEY_MAP[key];
-    var suffix = {'Grande Comore':'73','Anjouan':'72','Moheli':'71'}[island] || '';
+    var suffix = {'Grande Comore':'73','Anjouan':'71','Moheli':'72'}[island] || '';
     var num = parseInt(document.getElementById('ps-number-' + key)?.value || 1);
     var l1 = document.getElementById('ps-letter1-' + key)?.value || 'A';
     var l2 = document.getElementById('ps-letter2-' + key)?.value || 'A';
