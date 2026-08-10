@@ -664,9 +664,7 @@ function downloadImages() {
   var front = document.querySelector('.card');
   var back  = document.querySelector('.card-back-mil');
 
-  // Normalize scale so the output is always 560*3=1680px wide
-  // regardless of browser zoom level
-  var CSS_W = 560, CSS_H = 340;
+  var CSS_W = 560;
   var actualW = front.getBoundingClientRect().width || CSS_W;
   var scale = (CSS_W * 3) / actualW;
 
@@ -678,7 +676,19 @@ function downloadImages() {
     });
   }
 
-  capture(front, '#ffffff')
+  function waitForImages(el) {
+    var imgs = Array.from(el.querySelectorAll('img'));
+    return Promise.all(imgs.map(function(img) {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(function(resolve) {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+    }));
+  }
+
+  Promise.all([waitForImages(front), waitForImages(back)])
+    .then(function() { return capture(front, '#ffffff'); })
     .then(function(url1) {
       var a1 = document.createElement('a');
       a1.download = 'permis_mil_' + licNum + '_recto.png';
