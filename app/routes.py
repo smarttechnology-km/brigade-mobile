@@ -1467,6 +1467,32 @@ def license_insurance_view(license_number):
                            computed_cat_expiries=computed_cat_expiries)
 
 
+def _photo_to_b64(photo_url):
+    """Convert a photo URL (Cloudinary or local /uploads/...) to a base64 data URI."""
+    if not photo_url:
+        return None
+    try:
+        import base64 as _b64
+        if photo_url.startswith('https://'):
+            import urllib.request
+            with urllib.request.urlopen(photo_url, timeout=8) as resp:
+                data = resp.read()
+                mime = resp.headers.get_content_type() or 'image/jpeg'
+        else:
+            # Local file: strip leading slash and resolve under UPLOAD_FOLDER
+            rel = photo_url.lstrip('/')  # e.g. "uploads/license_photos/file.jpg"
+            local_path = os.path.join(current_app.config['UPLOAD_FOLDER'],
+                                      *rel.split('/')[1:])  # skip "uploads/"
+            with open(local_path, 'rb') as f:
+                data = f.read()
+            ext = os.path.splitext(local_path)[1].lower()
+            mime = {'jpg': 'image/jpeg', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                    '.png': 'image/png', '.webp': 'image/webp'}.get(ext, 'image/jpeg')
+        return f"data:{mime};base64,{_b64.b64encode(data).decode()}"
+    except Exception:
+        return None
+
+
 @main_bp.route('/licenses/<int:license_id>/print-card')
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def license_print_card(license_id):
@@ -1488,9 +1514,11 @@ def license_print_card(license_id):
     readonly = request.args.get('readonly') == '1'
     holder_cats = [c.strip() for c in (lic.categories or '').split(',') if c.strip()]
     template = 'license_card_militaire.html' if 'M' in holder_cats else 'license_card.html'
+    photo_b64 = _photo_to_b64(lic.photo_url)
     return render_template(template, lic=lic, settings=settings, now_comoros=now_comoros,
                            computed_expiry=computed_expiry, category_details=category_details,
-                           computed_cat_expiries=computed_cat_expiries, readonly=readonly)
+                           computed_cat_expiries=computed_cat_expiries, readonly=readonly,
+                           photo_b64=photo_b64)
 
 
 @main_bp.route('/licenses/print-requests')
