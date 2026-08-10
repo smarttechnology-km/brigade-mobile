@@ -477,7 +477,9 @@
   <div class="card-body">
 
     <div class="photo-col">
-      {% if lic.photo_filename %}
+      {% if photo_b64 %}
+        <img src="{{ photo_b64 }}" alt="Photo">
+      {% elif lic.photo_url %}
         <img src="{{ lic.photo_url }}" alt="Photo">
       {% else %}
         <div class="no-photo">👤</div>
@@ -656,54 +658,33 @@ function downloadImages() {
   btn.disabled = true;
   btn.textContent = 'Génération…';
   var licNum = '{{ lic.license_number }}';
-  var scale = 3;
-  var W = 560, H = 340;
 
   var front = document.querySelector('.card');
   var back  = document.querySelector('.card-back-mil');
 
-  // Pre-convert all <img> to base64 data URIs to fix CORS/timing issues
-  function inlineImages(el) {
-    var imgs = Array.from(el.querySelectorAll('img[src]'));
-    return Promise.all(imgs.map(function(img) {
-      if (!img.src || img.src.startsWith('data:')) return Promise.resolve();
-      return fetch(img.src, { credentials: 'same-origin' })
-        .then(function(r) { return r.blob(); })
-        .then(function(blob) {
-          return new Promise(function(resolve) {
-            var fr = new FileReader();
-            fr.onload = function() { img.src = fr.result; resolve(); };
-            fr.onerror = resolve;
-            fr.readAsDataURL(blob);
-          });
-        })
-        .catch(function() {}); // keep going even if one image fails
-    }));
+  // Normalize scale so the output is always 560*3=1680px wide
+  // regardless of browser zoom level
+  var CSS_W = 560, CSS_H = 340;
+  var actualW = front.getBoundingClientRect().width || CSS_W;
+  var scale = (CSS_W * 3) / actualW;
+
+  function capture(el, bg) {
+    return domtoimage.toPng(el, {
+      scale: scale,
+      bgcolor: bg || null,
+      style: { margin: '0' }
+    });
   }
 
-  Promise.all([inlineImages(front), inlineImages(back)])
-    .then(function() {
-      // width/height fixe les dimensions CSS réelles (ignore le zoom navigateur)
-      return domtoimage.toPng(front, {
-        scale: scale, bgcolor: '#ffffff',
-        width: W, height: H,
-        style: { margin: '0' }
-      });
-    })
+  capture(front, '#ffffff')
     .then(function(url1) {
       var a1 = document.createElement('a');
       a1.download = 'permis_mil_' + licNum + '_recto.png';
       a1.href = url1;
       a1.click();
-      return new Promise(function(r) { setTimeout(r, 400); });
+      return new Promise(function(r) { setTimeout(r, 300); });
     })
-    .then(function() {
-      return domtoimage.toPng(back, {
-        scale: scale,
-        width: W, height: H,
-        style: { margin: '0' }
-      });
-    })
+    .then(function() { return capture(back, null); })
     .then(function(url2) {
       var a2 = document.createElement('a');
       a2.download = 'permis_mil_' + licNum + '_verso.png';
