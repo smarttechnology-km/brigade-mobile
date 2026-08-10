@@ -679,15 +679,13 @@ function downloadImages() {
   function waitForImages(el) {
     var imgs = Array.from(el.querySelectorAll('img'));
     return Promise.all(imgs.map(function(img) {
+      if (typeof img.decode === 'function') return img.decode().catch(function() {});
       if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise(function(resolve) {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
+      return new Promise(function(resolve) { img.onload = resolve; img.onerror = resolve; });
     }));
   }
 
-  Promise.all([waitForImages(front), waitForImages(back)])
+  Promise.all([waitForImages(front), waitForImages(back), document.fonts.ready])
     .then(function() { return capture(front, '#ffffff'); })
     .then(function(url1) {
       var a1 = document.createElement('a');
