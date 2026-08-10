@@ -662,7 +662,7 @@
       <div class="modal-body">
         <p class="text-muted small mb-3">
           Configurez la numérotation des immatriculations par île. Format : <strong>3 chiffres + lettre principale + lettre secondaire + code île</strong>
-          <br>Exemple : <strong>001AB73</strong> (Grande Comore), <strong>001AB72</strong> (Anjouan), <strong>001AB71</strong> (Mohéli)
+          <br>Exemple : <strong>001AB73</strong> (Grande Comore), <strong>001AB71</strong> (Anjouan), <strong>001AB72</strong> (Mohéli)
         </p>
 
         <!-- Island tabs -->
@@ -671,15 +671,15 @@
             <button class="nav-link active" id="ps-gc-tab" data-bs-toggle="pill" data-bs-target="#ps-gc" type="button">🏝️ Grande Comore <span class="badge bg-secondary ms-1">73</span></button>
           </li>
           <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ps-an-tab" data-bs-toggle="pill" data-bs-target="#ps-an" type="button">🏝️ Anjouan <span class="badge bg-secondary ms-1">72</span></button>
+            <button class="nav-link" id="ps-an-tab" data-bs-toggle="pill" data-bs-target="#ps-an" type="button">🏝️ Anjouan <span class="badge bg-secondary ms-1">71</span></button>
           </li>
           <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ps-mo-tab" data-bs-toggle="pill" data-bs-target="#ps-mo" type="button">🏝️ Mohéli <span class="badge bg-secondary ms-1">71</span></button>
+            <button class="nav-link" id="ps-mo-tab" data-bs-toggle="pill" data-bs-target="#ps-mo" type="button">🏝️ Mohéli <span class="badge bg-secondary ms-1">72</span></button>
           </li>
         </ul>
 
         <div class="tab-content" id="plateIslandTabContent">
-          {% for island_key, island_label, island_suffix in [('gc','Grande Comore','73'),('an','Anjouan','72'),('mo','Moheli','71')] %}
+          {% for island_key, island_label, island_suffix in [('gc','Grande Comore','73'),('an','Anjouan','71'),('mo','Moheli','72')] %}
           <div class="tab-pane fade {% if island_key == 'gc' %}show active{% endif %}" id="ps-{{ island_key }}">
             <div class="card border-0 bg-body-tertiary rounded-3 p-3">
               <!-- Enable toggle -->
