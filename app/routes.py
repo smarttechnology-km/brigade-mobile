@@ -1515,10 +1515,11 @@ def license_print_card(license_id):
     holder_cats = [c.strip() for c in (lic.categories or '').split(',') if c.strip()]
     template = 'license_card_militaire.html' if 'M' in holder_cats else 'license_card.html'
     photo_b64 = _photo_to_b64(lic.photo_url)
+    signature_b64 = _photo_to_b64(settings.directeur_signature_url)
     return render_template(template, lic=lic, settings=settings, now_comoros=now_comoros,
                            computed_expiry=computed_expiry, category_details=category_details,
                            computed_cat_expiries=computed_cat_expiries, readonly=readonly,
-                           photo_b64=photo_b64)
+                           photo_b64=photo_b64, signature_b64=signature_b64)
 
 
 @main_bp.route('/licenses/print-requests')
