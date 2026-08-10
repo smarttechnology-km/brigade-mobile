@@ -657,30 +657,66 @@ function downloadImages() {
   btn.textContent = 'Génération…';
   var licNum = '{{ lic.license_number }}';
   var scale = 3;
-  var opts = { scale: scale, bgcolor: '#ffffff', style: { margin: '0' } };
+  var W = 560, H = 340;
 
   var front = document.querySelector('.card');
   var back  = document.querySelector('.card-back-mil');
-  var backOpts = { scale: scale, style: { margin: '0' } };
 
-  domtoimage.toPng(front, opts).then(function(url1) {
-    var a1 = document.createElement('a');
-    a1.download = 'permis_mil_' + licNum + '_recto.png';
-    a1.href = url1;
-    a1.click();
-    return domtoimage.toPng(back, backOpts);
-  }).then(function(url2) {
-    var a2 = document.createElement('a');
-    a2.download = 'permis_mil_' + licNum + '_verso.png';
-    a2.href = url2;
-    a2.click();
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Télécharger en images';
-  }).catch(function(e) {
-    btn.disabled = false;
-    btn.textContent = 'Erreur';
-    console.error(e);
-  });
+  // Pre-convert all <img> to base64 data URIs to fix CORS/timing issues
+  function inlineImages(el) {
+    var imgs = Array.from(el.querySelectorAll('img[src]'));
+    return Promise.all(imgs.map(function(img) {
+      if (!img.src || img.src.startsWith('data:')) return Promise.resolve();
+      return fetch(img.src, { credentials: 'same-origin' })
+        .then(function(r) { return r.blob(); })
+        .then(function(blob) {
+          return new Promise(function(resolve) {
+            var fr = new FileReader();
+            fr.onload = function() { img.src = fr.result; resolve(); };
+            fr.onerror = resolve;
+            fr.readAsDataURL(blob);
+          });
+        })
+        .catch(function() {}); // keep going even if one image fails
+    }));
+  }
+
+  Promise.all([inlineImages(front), inlineImages(back)])
+    .then(function() {
+      // width/height fixe les dimensions CSS réelles (ignore le zoom navigateur)
+      return domtoimage.toPng(front, {
+        scale: scale, bgcolor: '#ffffff',
+        width: W, height: H,
+        style: { margin: '0' }
+      });
+    })
+    .then(function(url1) {
+      var a1 = document.createElement('a');
+      a1.download = 'permis_mil_' + licNum + '_recto.png';
+      a1.href = url1;
+      a1.click();
+      return new Promise(function(r) { setTimeout(r, 400); });
+    })
+    .then(function() {
+      return domtoimage.toPng(back, {
+        scale: scale,
+        width: W, height: H,
+        style: { margin: '0' }
+      });
+    })
+    .then(function(url2) {
+      var a2 = document.createElement('a');
+      a2.download = 'permis_mil_' + licNum + '_verso.png';
+      a2.href = url2;
+      a2.click();
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Télécharger en images';
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.textContent = 'Erreur';
+      console.error(e);
+    });
 }
 </script>
 <script>
