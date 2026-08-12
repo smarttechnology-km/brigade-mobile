@@ -42,7 +42,7 @@
       background:
         radial-gradient(ellipse 420px 120px at 12% -30%, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 60%),
         linear-gradient(90deg, #0a1638 0%, #14306e 45%, #1d4ed8 100%);
-      height: 52px; padding: 0 18px;
+      height: 64px; padding: 0 20px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
       position: relative;
@@ -54,23 +54,23 @@
       position: absolute; left: 0; right: 0; bottom: -3px; height: 3px;
       background: linear-gradient(90deg, #b45309 0%, #fbbf24 35%, #fde68a 50%, #fbbf24 65%, #b45309 100%);
     }
-    .card-header-left { display: flex; align-items: center; gap: 10px; }
+    .card-header-left { display: flex; align-items: center; gap: 12px; }
     .card-flag-wrap { display: inline-flex; isolation: isolate; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-    .card-flag { width: 54px; height: 36px; object-fit: cover; display: block; mix-blend-mode: screen; }
-    .card-title-block { display: flex; flex-direction: column; gap: 1px; }
-    .card-title  { font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
-    .card-country{ font-size: 10.5px; color: #fbbf24; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .card-flag { width: 66px; height: 44px; object-fit: cover; display: block; mix-blend-mode: screen; }
+    .card-title-block { display: flex; flex-direction: column; gap: 2px; }
+    .card-title  { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+    .card-country{ font-size: 12px; color: #fbbf24; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
     .card-stars {
-      display: flex; flex-direction: row; gap: 11px;
+      display: flex; flex-direction: row; gap: 13px;
       align-items: center; justify-content: center;
     }
     .card-stars span {
-      font-size: 16px; line-height: 1;
+      font-size: 20px; line-height: 1;
       filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
     }
     .card-arabic {
-      font-size: 13px; font-weight: 700; color: rgba(255,255,255,.88);
-      text-align: right; line-height: 1.45;
+      font-size: 15px; font-weight: 700; color: rgba(255,255,255,.88);
+      text-align: right; line-height: 1.5;
       font-family: 'Arial', sans-serif;
     }
 
@@ -79,19 +79,19 @@
 
     /* Photo column — vert du drapeau */
     .photo-col {
-      width: 128px; flex-shrink: 0;
+      width: 148px; flex-shrink: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       padding: 12px 10px; gap: 9px;
       background:
         radial-gradient(ellipse 140px 90px at 50% 0%, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 70%),
-        linear-gradient(170deg, #1e7a44 0%, #0f4c28 100%);
+        linear-gradient(170deg, #1d4ed8 0%, #0a1638 100%);
       position: relative;
     }
     .photo-col::after {
       content: '';
       position: absolute; top: 0; right: 0; bottom: 0; width: 3px;
       background: linear-gradient(180deg, #fbbf24, #f5e50b 50%, #fbbf24);
-      opacity: .6;
+      opacity: .7;
     }
     .photo-col-num {
       width: 100%; box-sizing: border-box;
@@ -109,7 +109,7 @@
     }
     .photo-col img,
     .photo-col .no-photo {
-      width: 106px; height: 130px; border-radius: 7px;
+      width: 124px; height: 152px; border-radius: 7px;
       object-fit: cover;
       border: 2.5px solid #fbbf24;
       box-shadow: 0 6px 18px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.5);
@@ -117,6 +117,15 @@
     .photo-col .no-photo {
       background: rgba(255,255,255,.1); display: flex;
       align-items: center; justify-content: center; font-size: 2.8rem;
+    }
+    .photo-type-badge {
+      font-size: 9px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase;
+      color: #fff;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 4px;
+      padding: 2px 8px;
+      white-space: nowrap;
     }
 
     /* Info column */
@@ -147,12 +156,12 @@
     .identity-col { display: flex; flex-direction: column; flex: 1; justify-content: space-between; }
     .id-row {
       display: flex; align-items: baseline; gap: 8px;
-      padding: 2px 0;
+      padding: 1px 0;
       border-bottom: 1px dotted rgba(15,23,42,.1);
     }
     .id-row:last-child { border-bottom: none; }
-    .id-lbl { font-size: 8.5px; text-transform: uppercase; letter-spacing: .06em; color: #7c8aa3; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
-    .id-val { font-size: 10px; font-weight: 700; color: #0f172a; line-height: 1.25; text-transform: uppercase; }
+    .id-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #7c8aa3; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
+    .id-val { font-size: 12px; font-weight: 700; color: #0f172a; line-height: 1.25; text-transform: uppercase; }
     .id-pair-right { display: flex; align-items: baseline; gap: 8px; margin-left: 26px; flex-shrink: 0; }
     .id-pair-right .id-lbl { width: 52px; }
     .id-val.holder-name { font-weight: 800; text-transform: uppercase; color: #0a1638; letter-spacing: .02em; }
@@ -174,9 +183,9 @@
 
     /* Footer */
     .card-footer {
-      background: linear-gradient(180deg, #f8fafc 0%, #eef2f8 100%);
-      border-top: 1px solid #dbe3ef;
-      padding: 0 16px 3px;
+      background: linear-gradient(180deg, #eff5ff 0%, #e3edfb 100%);
+      border-top: 1px solid #c7d8f5;
+      padding: 4px 16px 4px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
       overflow: visible;
@@ -188,8 +197,8 @@
       background: linear-gradient(90deg, transparent, #fbbf24 30%, #fbbf24 70%, transparent);
     }
     .footer-left { display: flex; flex-direction: column; gap: 1px; }
-    .footer-main { font-size: 10.5px; font-weight: 800; color: #14306e; letter-spacing: .01em; }
-    .footer-sub  { font-size: 9px; color: #8896ab; }
+    .footer-main { font-size: 10px; font-weight: 800; color: #14306e; letter-spacing: .01em; }
+    .footer-sub  { font-size: 8.5px; color: #8896ab; }
 
     /* Signature */
     .footer-signature { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; padding: 0 12px; width: 116px; }
@@ -204,7 +213,8 @@
     }
 
     /* QR */
-    .qr-wrap img { width: 56px; height: 56px; display: block; border-radius: 3px; mix-blend-mode: multiply; }
+    .qr-wrap { margin-top: -58px; }
+    .qr-wrap img { width: 80px; height: 80px; display: block; border-radius: 3px; mix-blend-mode: multiply; }
 
     /* ── Back of card ── */
     .card-separator {
@@ -243,11 +253,11 @@
       background: linear-gradient(90deg, #b45309 0%, #fbbf24 35%, #fde68a 50%, #fbbf24 65%, #b45309 100%);
     }
     .back-header-left { display: flex; flex-direction: column; gap: 1px; }
-    .back-header-title { font-size: 11px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
-    .back-header-sub   { font-size: 9.5px; color: rgba(255,255,255,.62); }
+    .back-header-title { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+    .back-header-sub   { font-size: 11px; color: #fbbf24; }
     .back-header-right { text-align: right; }
-    .back-header-num   { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; color: #fbbf24; letter-spacing: .1em; }
-    .back-header-holder{ font-size: 9px; color: rgba(255,255,255,.58); margin-top: 1px; }
+    .back-header-num   { font-family: 'Courier New', monospace; font-size: 20px; font-weight: 700; color: #fbbf24; letter-spacing: .1em; }
+    .back-header-holder{ font-size: 11px; color: rgba(255,255,255,.58); margin-top: 1px; }
 
     /* Holder's categories highlight strip */
     .holder-cats-strip {
@@ -277,12 +287,22 @@
       background-repeat: repeat;
     }
     .back-body-grid { display: flex; gap: 12px; height: 100%; }
-    .cat-legend { flex-shrink: 0; width: 152px; padding-top: 4px; display: flex; flex-direction: column; align-items: center; }
+    .cat-legend { flex-shrink: 0; width: 152px; padding: 0 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     .cat-desc-list { display: flex; flex-direction: column; gap: 8px; }
     .cat-desc-spacer { height: 4px; flex-shrink: 0; }
     .cat-desc-item { display: flex; align-items: flex-start; gap: 4px; }
     .cat-desc-code { font-size: 7px; font-weight: 800; color: #14306e; flex-shrink: 0; width: 14px; padding-top: 1px; }
     .cat-desc-text { font-size: 6.5px; color: #475569; line-height: 1.3; }
+    .back-sig-block { display: flex; flex-direction: column; align-items: center; width: 100%; padding: 6px 0 8px; border-bottom: 1px dotted #dbe3ef; }
+    .back-sig-title { font-size: 10px; color: #0f172a; text-transform: uppercase; letter-spacing: .02em; text-align: center; line-height: 1.4; margin-bottom: 2px; }
+    .back-sig-mark { width: 120px; height: 30px; object-fit: contain; margin: 2px 0; }
+    .back-sig-name { font-size: 11px; font-weight: 800; color: #14306e; white-space: nowrap; text-align: center; border-top: 1px solid #b9c2d4; padding-top: 3px; width: 100%; }
+    .back-dates-block { display: flex; flex-direction: row; gap: 10px; width: 100%; padding-top: 10px; justify-content: center; }
+    .back-date-item { display: flex; flex-direction: column; gap: 1px; flex: 1; align-items: center; text-align: center; }
+    .back-date-lbl { font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; }
+    .back-date-val { font-size: 10px; font-weight: 800; color: #0f172a; }
+    .back-date-val.exp-ok  { color: #15803d; }
+    .back-date-val.exp-bad { color: #dc2626; }
     .cat-table { flex: 1; min-width: 0; border-collapse: collapse; table-layout: fixed; }
     .cat-table thead th {
       font-size: 8px; text-transform: uppercase; letter-spacing: .05em;
@@ -298,14 +318,14 @@
     .cat-table tbody tr:last-child td { border-bottom: none; }
     .cat-table tbody tr.cat-tr-other td { color: #aab3c0; }
     .cat-badge {
-      flex-shrink: 0; min-width: 24px; display: inline-block;
-      border-radius: 4px; padding: 0px 4px;
-      font-size: 10.5px; font-weight: 800; text-align: center;
+      flex-shrink: 0; min-width: 20px; display: inline-block;
+      border-radius: 4px; padding: 0px 3px;
+      font-size: 10px; font-weight: 800; text-align: center;
       line-height: 1.4; border: 1.5px solid;
     }
     .cat-badge-owned { background: #14306e; color: #fff; border-color: #14306e; }
     .cat-badge-other { background: transparent; color: #94a3b8; border-color: #e2e8f0; }
-    .cat-icon-table { font-size: 12px; color: #14306e; margin-left: 5px; }
+    .cat-icon-table { font-size: 12px; color: #14306e; margin-left: 4px; }
     .cat-tr-other .cat-icon-table { color: #cbd5e1; }
     .cat-cell-id { font-weight: 700; text-align: center; }
     .cat-cell-date { color: #64748b; text-align: center; }
@@ -313,7 +333,7 @@
 
     /* Back footer */
     .back-footer {
-      background: #f8fafc; border-top: 1px solid #e2e8f0;
+      background: linear-gradient(180deg, #eff5ff 0%, #e3edfb 100%); border-top: 1px solid #c7d8f5;
       padding: 6px 18px;
       display: flex; justify-content: space-between; align-items: center;
       flex-shrink: 0;
@@ -433,6 +453,9 @@
   <div class="card-body">
 
     <div class="photo-col">
+      {% if 'P' in holder_cats or 'M' in holder_cats %}
+        <div class="photo-type-badge">{{ 'Militaire' if 'M' in holder_cats else 'Professionnel' }}</div>
+      {% endif %}
       {% if photo_b64 %}
         <img src="{{ photo_b64 }}" alt="Photo">
       {% elif lic.photo_url %}
@@ -460,7 +483,7 @@
           <span class="id-val">{{ lic.holder_name }}</span>
         </div>
         <div class="id-row">
-          <span class="id-lbl">Naissance</span>
+          <span class="id-lbl">Date Naissance</span>
           <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span>
           <div class="id-pair-right">
             <span class="id-lbl">Sang</span>
@@ -480,37 +503,9 @@
           <span class="id-val">{{ lic.holder_address or '—' }}</span>
         </div>
         <div class="id-row">
-          <span class="id-lbl">Délivré le</span>
-          <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
-          <div class="id-pair-right">
-            <span class="id-lbl">Expire le</span>
-            <span class="id-val">{{ (lic.expiry_date or computed_expiry).strftime('%d/%m/%Y') if (lic.expiry_date or computed_expiry) else '—' }}</span>
-          </div>
-        </div>
-        <div class="id-row">
           <span class="id-lbl">Centre de</span>
           <span class="id-val">{{ lic.centre_immatriculation.replace('Centre de ', '') if lic.centre_immatriculation else '—' }}</span>
         </div>
-        {% if lic.categories %}
-        {% set display_cats = (lic.categories.split(',') | map('trim') | reject('equalto', 'P') | list) if is_pro else (lic.categories.split(',') | map('trim') | list) %}
-        <div class="id-row">
-          <span class="id-lbl">Catégories</span>
-          <div class="cats"{% if is_pro %} style="width:115px; flex-shrink:0;"{% endif %}>
-            {% for cat in display_cats %}
-              <span class="cat">{{ cat }}</span>
-            {% endfor %}
-            {% if is_pro and not display_cats %}
-              <span class="id-val" style="font-weight:400; color:#94a3b8;">—</span>
-            {% endif %}
-          </div>
-          {% if is_pro %}
-          <div class="id-pair-right">
-            <span class="id-lbl">Type</span>
-            <span class="id-val cat-pro-value" style="font-size:8.5px; letter-spacing:0;">Professionnel</span>
-          </div>
-          {% endif %}
-        </div>
-        {% endif %}
       </div>
     </div>
 
@@ -521,18 +516,6 @@
     <div class="footer-left">
       <div class="footer-main">DIRECTION GENERALE DES ROUTES ET TRANSPORTS ROUTIERS</div>
       <div class="footer-sub">DÉLIVRÉ PAR LE CHEF DU CENTRE D'IMMATRICULATION</div>
-    </div>
-    <div class="footer-signature">
-      <div class="sig-title">Directeur Général</div>
-      {% if settings.directeur_signature_filename %}
-        <img class="sig-mark" src="{{ signature_b64 or settings.directeur_signature_url }}" alt="Signature">
-      {% else %}
-        <svg class="sig-mark" viewBox="0 0 100 26" xmlns="http://www.w3.org/2000/svg">
-          <path d="M4,18 C10,6 14,24 20,14 C25,6 28,20 34,11 C40,3 44,22 51,12 C57,4 60,19 67,9 C72,3 76,16 82,10 C86,6 90,12 95,8"
-                stroke="#14306e" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      {% endif %}
-      <div class="sig-name">{{ settings.directeur_general_name or '' }}</div>
     </div>
     <div class="qr-wrap">
       {% if qr_data_uri is defined and qr_data_uri %}
@@ -556,7 +539,6 @@
     </div>
     <div class="back-header-right">
       <div class="back-header-num">{{ lic.license_number }}</div>
-      <div class="back-header-holder">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
     </div>
   </div>
 
@@ -564,8 +546,9 @@
   <div class="holder-cats-strip">
     <span class="holder-cats-lbl">Catégories du titulaire :</span>
     <div class="holder-cats-list">
-      {% if holder_cats %}
-        {% for cat in holder_cats %}
+      {% set _visible_cats = holder_cats | reject('equalto', 'P') | reject('equalto', 'M') | list %}
+      {% if _visible_cats %}
+        {% for cat in _visible_cats %}
           <span class="holder-cat-pill">{{ cat }}</span>
         {% endfor %}
       {% else %}
@@ -588,16 +571,29 @@
     ] %}
     <div class="back-body-grid">
       <div class="cat-legend">
-        <div class="cat-desc-list">
-          <div class="cat-desc-spacer"></div>
-          <div class="cat-desc-item"><span class="cat-desc-code">A</span><span class="cat-desc-text">Motocyclette avec ou sans side-car à moteur de plus de 123 cm³</span></div>
-          <div class="cat-desc-item"><span class="cat-desc-code">A1</span><span class="cat-desc-text">Vélomoteur et véhicule à moteur de cylindrée 50 cm³ sans excéder 123 cm³</span></div>
-          <div class="cat-desc-item"><span class="cat-desc-code">A2</span><span class="cat-desc-text">Cyclomoteurs et véhicules à moteur dont la cylindrée ne dépasse pas 50 cm³</span></div>
-          <div class="cat-desc-item"><span class="cat-desc-code">B</span><span class="cat-desc-text">Véhicule de moins de 10 places et d'un poids total autorisé en charge n'excédant pas 3 500 kg</span></div>
-          <div class="cat-desc-item"><span class="cat-desc-code">C</span><span class="cat-desc-text">Véhicules affectés au transport de marchandises ou matériel de plus de 3 500 kg PTAC</span></div>
-          <div class="cat-desc-item"><span class="cat-desc-code">D</span><span class="cat-desc-text">Véhicules affectés au transport de personnes comportant plus de 9 places assises</span></div>
-          <div class="cat-desc-item"><span class="cat-desc-code">E</span><span class="cat-desc-text">Véhicules des catégories B, C, D ou F attelés d'une remorque de plus de 750 kg PTAC</span></div>
-          <div class="cat-desc-item"><span class="cat-desc-code">F</span><span class="cat-desc-text">Véhicules des catégories A, A1, A2 ou B spécialement aménagés</span></div>
+        <div class="back-sig-block">
+          <div class="back-sig-title">Signature et sceau de l'autorité<br>LE DIRECTEUR GENERAL DES ROUTES ET DES TRANSPORT ROUTIERS</div>
+          {% if settings.directeur_signature_filename %}
+            <img class="back-sig-mark" src="{{ signature_b64 or settings.directeur_signature_url }}" alt="Signature">
+          {% else %}
+            <svg class="back-sig-mark" viewBox="0 0 100 26" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4,18 C10,6 14,24 20,14 C25,6 28,20 34,11 C40,3 44,22 51,12 C57,4 60,19 67,9 C72,3 76,16 82,10 C86,6 90,12 95,8"
+                    stroke="#14306e" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          {% endif %}
+          <div class="back-sig-name">{{ settings.directeur_general_name or '' }}</div>
+        </div>
+        {% set _back_expiry = lic.expiry_date or computed_expiry %}
+        {% set _back_exp = _back_expiry and _back_expiry < now_comoros().date() %}
+        <div class="back-dates-block">
+          <div class="back-date-item">
+            <span class="back-date-lbl">Délivré le</span>
+            <span class="back-date-val">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
+          </div>
+          <div class="back-date-item">
+            <span class="back-date-lbl">Expire le</span>
+            <span class="back-date-val {{ 'exp-bad' if _back_exp else 'exp-ok' }}">{{ _back_expiry.strftime('%d/%m/%Y') if _back_expiry else '—' }}</span>
+          </div>
         </div>
       </div>
       <table class="cat-table">

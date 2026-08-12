@@ -2,6 +2,10 @@
 
 {% block title %}Licences — Permis de Conduire{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
 
@@ -215,7 +219,10 @@
               <span id="photo-preview-icon" class="text-muted" style="font-size:2rem;"><i class="fas fa-user-circle"></i></span>
             </div>
             <input type="file" id="f-photo" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="previewPhoto(this)">
-            <div class="text-muted text-center" style="font-size:0.7rem;margin-top:4px;">Photo</div>
+            <div class="d-flex gap-1 mt-1 justify-content-center">
+              <div class="text-muted text-center" style="font-size:0.7rem;">Photo</div>
+              <button type="button" id="btn-recadrer" onclick="openCropperOnExisting()" title="Recadrer la photo" style="display:none;border:none;background:none;padding:0;font-size:0.7rem;color:#0d6efd;cursor:pointer;"><i class="fas fa-crop-alt"></i></button>
+            </div>
           </div>
           <div class="col">
             <div class="row g-2">
@@ -820,9 +827,40 @@
   </div>
 </div>
 
+<!-- ── Modal recadrage photo ── -->
+<div class="modal fade" id="cropperModal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-crop-alt me-2"></i>Recadrer la photo</h5>
+        <button type="button" class="btn-close" onclick="cancelCrop()"></button>
+      </div>
+      <div class="modal-body" style="background:#1a1a1a;padding:16px;text-align:center;">
+        <div style="max-height:480px;overflow:hidden;">
+          <img id="cropper-image" style="max-width:100%;display:block;">
+        </div>
+        <div class="d-flex gap-2 mt-3 justify-content-center flex-wrap">
+          <button class="btn btn-sm btn-outline-light" onclick="cropperZoom(0.1)" title="Zoom avant"><i class="fas fa-search-plus"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperZoom(-0.1)" title="Zoom arrière"><i class="fas fa-search-minus"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperRotate(-90)" title="Rotation gauche"><i class="fas fa-undo"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperRotate(90)" title="Rotation droite"><i class="fas fa-redo"></i></button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="cropperReset()"><i class="fas fa-sync-alt me-1"></i>Réinitialiser</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="cancelCrop()">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="confirmCrop()">
+          <i class="fas fa-check me-1"></i>Confirmer le recadrage
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 window.CURRENT_USER_ROLE = {{ current_user.role | tojson }};
 window.CURRENT_USER_DGRTR_TYPE = {{ (current_user.dgrtr_type or '') | tojson }};
 </script>
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <script src="/static/js/licenses.js"></script>
 {% endblock %}
