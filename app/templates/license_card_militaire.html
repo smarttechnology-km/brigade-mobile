@@ -42,7 +42,7 @@
       background:
         radial-gradient(ellipse 420px 120px at 12% -30%, rgba(255,255,255,.14) 0%, rgba(255,255,255,0) 60%),
         linear-gradient(90deg, #0b2410 0%, #1a5c35 50%, #2d7a47 100%);
-      height: 52px; padding: 0 16px;
+      height: 64px; padding: 0 20px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
       position: relative;
@@ -54,20 +54,20 @@
       position: absolute; left: 0; right: 0; bottom: -3px; height: 3px;
       background: linear-gradient(90deg, #7a5c00 0%, #c9a227 35%, #f0d060 50%, #c9a227 65%, #7a5c00 100%);
     }
-    .card-header-left { display: flex; align-items: center; gap: 10px; }
+    .card-header-left { display: flex; align-items: center; gap: 12px; }
     .header-logo {
-      width: 36px; height: 36px; object-fit: contain;
+      width: 46px; height: 46px; object-fit: contain;
       filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)) brightness(1.05);
     }
-    .card-title-block { display: flex; flex-direction: column; gap: 1px; }
-    .card-title  { font-size: 11px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
-    .card-subtitle { font-size: 9.5px; color: #c9a227; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .card-title-block { display: flex; flex-direction: column; gap: 2px; }
+    .card-title  { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+    .card-subtitle { font-size: 12px; color: #c9a227; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
     .card-right-block { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
     .card-flag-wrap { display: inline-flex; isolation: isolate; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-    .card-flag { width: 54px; height: 36px; object-fit: cover; display: block; mix-blend-mode: screen; }
+    .card-flag { width: 66px; height: 44px; object-fit: cover; display: block; mix-blend-mode: screen; }
     .card-arabic {
-      font-size: 11px; font-weight: 700; color: rgba(255,255,255,.82);
-      text-align: right; line-height: 1.35;
+      font-size: 15px; font-weight: 700; color: rgba(255,255,255,.82);
+      text-align: right; line-height: 1.5;
     }
 
     /* Body */
@@ -75,7 +75,7 @@
 
     /* Photo column */
     .photo-col {
-      width: 128px; flex-shrink: 0;
+      width: 148px; flex-shrink: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       padding: 12px 10px; gap: 9px;
       background:
@@ -105,7 +105,7 @@
     }
     .photo-col img,
     .photo-col .no-photo {
-      width: 106px; height: 130px; border-radius: 7px;
+      width: 124px; height: 152px; border-radius: 7px;
       object-fit: cover;
       border: 2.5px solid #c9a227;
       box-shadow: 0 6px 18px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.4);
@@ -113,6 +113,15 @@
     .photo-col .no-photo {
       background: rgba(255,255,255,.1); display: flex;
       align-items: center; justify-content: center; font-size: 2.8rem;
+    }
+    .photo-type-badge {
+      font-size: 9px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase;
+      color: #0b2410;
+      background: #c9a227;
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 4px;
+      padding: 2px 8px;
+      white-space: nowrap;
     }
 
     /* Info column */
@@ -144,12 +153,12 @@
     .identity-col { display: flex; flex-direction: column; flex: 1; justify-content: space-between; }
     .id-row {
       display: flex; align-items: baseline; gap: 8px;
-      padding: 2px 0;
+      padding: 1px 0;
       border-bottom: 1px dotted rgba(15,40,15,.1);
     }
     .id-row:last-child { border-bottom: none; }
-    .id-lbl { font-size: 8.5px; text-transform: uppercase; letter-spacing: .06em; color: #5a7a62; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
-    .id-val { font-size: 10px; font-weight: 700; color: #0f1f0f; line-height: 1.25; text-transform: uppercase; }
+    .id-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #5a7a62; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
+    .id-val { font-size: 12px; font-weight: 700; color: #0f1f0f; line-height: 1.25; text-transform: uppercase; }
     .id-pair-right { display: flex; align-items: baseline; gap: 8px; margin-left: 26px; flex-shrink: 0; }
     .id-pair-right .id-lbl { width: 52px; }
     .id-val.holder-name { font-weight: 800; text-transform: uppercase; color: #0b2410; letter-spacing: .02em; }
@@ -186,13 +195,13 @@
       background: linear-gradient(90deg, transparent, #c9a227 30%, #c9a227 70%, transparent);
     }
     .footer-left { display: flex; flex-direction: column; gap: 1px; }
-    .footer-main { font-size: 10.5px; font-weight: 800; color: #1a5c35; letter-spacing: .01em; }
-    .footer-sub  { font-size: 9px; color: #6a8a72; }
-    .footer-signature { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; padding: 0 12px; width: 116px; }
-    .sig-title { font-size: 6.8px; color: #6a8a72; text-transform: uppercase; letter-spacing: .03em; text-align: center; line-height: 1.25; }
-    .sig-mark { width: 108px; height: 28px; margin: 1px 0; object-fit: contain; }
-    .sig-name { font-size: 9px; font-weight: 800; color: #1a5c35; white-space: nowrap; text-align: center; border-top: 1px solid #a8c4a8; padding-top: 2px; width: 100%; }
-    .qr-wrap img { width: 56px; height: 56px; display: block; border-radius: 3px; mix-blend-mode: multiply; }
+    .card-footer {
+      padding: 4px 16px 4px;
+    }
+    .footer-main { font-size: 10px; font-weight: 800; color: #1a5c35; letter-spacing: .01em; }
+    .footer-sub  { font-size: 8.5px; color: #6a8a72; }
+    .qr-wrap { margin-top: -58px; }
+    .qr-wrap img { width: 80px; height: 80px; display: block; border-radius: 3px; mix-blend-mode: multiply; }
 
     /* ── Back ── */
     .card-separator {
@@ -341,10 +350,10 @@
     .mil-topbar-center { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; }
     .mil-topbar-stars { display: flex; flex-direction: row; gap: 7px; align-items: center; }
     .mil-topbar-stars span { font-size: 14px; line-height: 1; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
-    .mil-topbar-label { font-size: 8px; font-weight: 800; color: rgba(201,162,39,.85); letter-spacing: .12em; text-transform: uppercase; line-height: 1.4; }
+    .mil-topbar-label { font-size: 12px; font-weight: 800; color: rgba(201,162,39,.85); letter-spacing: .12em; text-transform: uppercase; line-height: 1.4; }
     .mil-topbar-right { text-align: right; }
-    .mil-topbar-num { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700; color: #c9a227; letter-spacing: .1em; }
-    .mil-topbar-name { font-size: 7.5px; color: rgba(255,255,255,.42); margin-top: 1px; letter-spacing: .04em; }
+    .mil-topbar-num { font-family: 'Courier New', monospace; font-size: 18px; font-weight: 700; color: #c9a227; letter-spacing: .1em; }
+    .mil-topbar-stars span { font-size: 20px; line-height: 1; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
 
     /* Main body */
     .mil-oath-body { flex: 1; display: flex; overflow: hidden; }
@@ -366,7 +375,7 @@
       background: linear-gradient(180deg, transparent, rgba(201,162,39,.5) 25%, rgba(201,162,39,.5) 75%, transparent);
     }
     .mil-oath-emblem {
-      width: 132px; height: 132px; object-fit: contain; position: relative; z-index: 1;
+      width: 160px; height: 160px; object-fit: contain; position: relative; z-index: 1;
       filter: drop-shadow(0 0 18px rgba(201,162,39,.22)) drop-shadow(0 4px 8px rgba(0,0,0,.5));
     }
 
@@ -379,9 +388,9 @@
       display: flex; align-items: center; gap: 8px;
     }
     .mil-oath-eyebrow-line { flex: 1; height: 1px; background: linear-gradient(90deg, rgba(201,162,39,.5), transparent); }
-    .mil-oath-eyebrow-text { font-size: 8px; font-weight: 800; letter-spacing: .22em; color: rgba(201,162,39,.8); text-transform: uppercase; white-space: nowrap; }
+    .mil-oath-eyebrow-text { font-size: 11px; font-weight: 800; letter-spacing: .22em; color: rgba(201,162,39,.8); text-transform: uppercase; white-space: nowrap; }
     .mil-oath-quote {
-      font-size: 9.5px; color: rgba(255,255,255,.75); line-height: 1.7;
+      font-size: 12px; color: rgba(255,255,255,.75); line-height: 1.7;
       font-style: italic;
       padding: 7px 0 7px 11px;
       border-left: 2px solid rgba(201,162,39,.45);
@@ -395,7 +404,7 @@
     .mil-oath-sep-line { flex: 1; height: 1px; background: rgba(201,162,39,.2); }
     .mil-oath-sep-diamond { width: 5px; height: 5px; background: #c9a227; transform: rotate(45deg); opacity: .6; flex-shrink: 0; }
     .mil-oath-motto {
-      font-size: 11.5px; font-weight: 900; color: rgba(255,255,255,.88);
+      font-size: 14px; font-weight: 900; color: rgba(255,255,255,.88);
       letter-spacing: .28em; text-transform: uppercase; text-align: center;
       text-shadow: 0 0 24px rgba(201,162,39,.2);
     }
@@ -412,13 +421,13 @@
       display: flex; align-items: center; gap: 10px;
       flex-shrink: 0;
     }
-    .mil-cats-label { font-size: 7px; font-weight: 800; color: rgba(201,162,39,.65); text-transform: uppercase; letter-spacing: .12em; white-space: nowrap; }
-    .mil-cats-divider { width: 1px; height: 18px; background: rgba(201,162,39,.25); flex-shrink: 0; }
+    .mil-cats-label { font-size: 10px; font-weight: 800; color: rgba(201,162,39,.65); text-transform: uppercase; letter-spacing: .12em; white-space: nowrap; }
+    .mil-cats-divider { width: 1px; height: 22px; background: rgba(201,162,39,.25); flex-shrink: 0; }
     .mil-cats-row { display: flex; gap: 5px; flex: 1; align-items: center; }
-    .mil-cat-pill { border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 800; line-height: 1.4; }
+    .mil-cat-pill { border-radius: 4px; padding: 2px 8px; font-size: 13px; font-weight: 800; line-height: 1.4; }
     .mil-cat-pill.owned { background: #c9a227; color: #060e09; }
     .mil-cat-pill.other { background: rgba(255,255,255,.05); color: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.07); }
-    .mil-warn { font-size: 7px; color: rgba(255,100,100,.65); font-weight: 600; text-align: right; line-height: 1.35; }
+    .mil-warn { font-size: 9px; color: rgba(255,100,100,.65); font-weight: 600; text-align: right; line-height: 1.35; }
 
     @media print {
       body { background: #fff; padding: 0; justify-content: flex-start; padding-top: 20px; }
@@ -468,17 +477,18 @@
 <div class="card">
 
   <div class="card-header">
-    <img class="header-logo" src="/static/img/logo_police.png" alt="Logo Armée">
+    <span class="card-flag-wrap"><img class="card-flag" src="/static/img/logo_comores_flag.png" alt="Drapeau Comores"></span>
     <div class="card-title-block" style="flex:1; text-align:center;">
       <span class="card-title">Armée Nationale de Développement</span>
       <span class="card-subtitle">Permis de Conduire Militaire</span>
     </div>
-    <span class="card-flag-wrap"><img class="card-flag" src="/static/img/logo_comores_flag.png" alt="Drapeau Comores"></span>
+    <img class="header-logo" src="/static/img/logo_police.png" alt="Logo Armée">
   </div>
 
   <div class="card-body">
 
     <div class="photo-col">
+      <div class="photo-type-badge">Militaire</div>
       {% if photo_b64 %}
         <img src="{{ photo_b64 }}" alt="Photo">
       {% elif lic.photo_url %}
@@ -506,7 +516,7 @@
           <span class="id-val">{{ lic.holder_name }}</span>
         </div>
         <div class="id-row">
-          <span class="id-lbl">Naissance</span>
+          <span class="id-lbl">Date Naissance</span>
           <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span>
           <div class="id-pair-right">
             <span class="id-lbl">Sang</span>
@@ -526,35 +536,9 @@
           <span class="id-val">{{ lic.holder_address or '—' }}</span>
         </div>
         <div class="id-row">
-          <span class="id-lbl">Délivré le</span>
-          <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
-          <div class="id-pair-right">
-            <span class="id-lbl">Expire le</span>
-            <span class="id-val">{{ (lic.expiry_date or computed_expiry).strftime('%d/%m/%Y') if (lic.expiry_date or computed_expiry) else '—' }}</span>
-          </div>
-        </div>
-        <div class="id-row">
           <span class="id-lbl">Centre de</span>
           <span class="id-val">{{ lic.centre_immatriculation.replace('Centre de ', '') if lic.centre_immatriculation else '—' }}</span>
         </div>
-        {% if lic.categories %}
-        {% set display_cats = lic.categories.split(',') | map('trim') | reject('equalto', 'M') | list %}
-        <div class="id-row">
-          <span class="id-lbl">Catégories</span>
-          <div class="cats" style="width:115px; flex-shrink:0;">
-            {% for cat in display_cats %}
-              <span class="cat">{{ cat }}</span>
-            {% endfor %}
-            {% if not display_cats %}
-              <span class="id-val" style="font-weight:400; color:#94a3b8;">—</span>
-            {% endif %}
-          </div>
-          <div class="id-pair-right">
-            <span class="id-lbl">Type</span>
-            <span class="id-val" style="font-size:8.5px; letter-spacing:0; color:#9a7a18;">Militaire</span>
-          </div>
-        </div>
-        {% endif %}
       </div>
     </div>
 
@@ -564,18 +548,6 @@
     <div class="footer-left">
       <div class="footer-main">ÉTAT-MAJOR DES ARMÉES — UNION DES COMORES</div>
       <div class="footer-sub">DÉLIVRÉ PAR LE CHEF DU CENTRE D'IMMATRICULATION</div>
-    </div>
-    <div class="footer-signature">
-      <div class="sig-title">Directeur Général</div>
-      {% if settings.directeur_signature_filename %}
-        <img class="sig-mark" src="{{ signature_b64 or settings.directeur_signature_url }}" alt="Signature">
-      {% else %}
-        <svg class="sig-mark" viewBox="0 0 100 26" xmlns="http://www.w3.org/2000/svg">
-          <path d="M4,18 C10,6 14,24 20,14 C25,6 28,20 34,11 C40,3 44,22 51,12 C57,4 60,19 67,9 C72,3 76,16 82,10 C86,6 90,12 95,8"
-                stroke="#1a5c35" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      {% endif %}
-      <div class="sig-name">{{ settings.directeur_general_name or '' }}</div>
     </div>
     <div class="qr-wrap">
       {% if qr_data_uri is defined and qr_data_uri %}
@@ -609,7 +581,6 @@
     </div>
     <div class="mil-topbar-right">
       <div class="mil-topbar-num">{{ lic.license_number }}</div>
-      <div class="mil-topbar-name">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
     </div>
   </div>
 
