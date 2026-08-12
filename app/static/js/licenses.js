@@ -942,6 +942,8 @@
                     const hasPending  = l.print_status === 'pending';
                     btnDem.style.display = (isPrinted && !hasPending) ? '' : 'none';
                     btnDem.dataset.licenseId = l.id;
+                    btnDem.disabled = false;
+                    btnDem.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Demander l\'impression';
                 }
                 new bootstrap.Modal(document.getElementById('licenseModal')).show();
             })
