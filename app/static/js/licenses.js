@@ -180,16 +180,87 @@
     typeFilter?.addEventListener('change',   () => { loadLicenses(true); loadTabCounts(); });
 
     /* ── Photo preview ── */
+    let _cropper = null;
+    window._photoCroppedBlob = null;
+
     window.previewPhoto = function (input) {
         const file = input.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = e => {
-            document.getElementById('photo-preview-img').src = e.target.result;
-            document.getElementById('photo-preview-img').style.display = '';
-            document.getElementById('photo-preview-icon').style.display = 'none';
+            const img = document.getElementById('cropper-image');
+            img.src = e.target.result;
+            if (_cropper) { _cropper.destroy(); _cropper = null; }
+            const modal = new bootstrap.Modal(document.getElementById('cropperModal'));
+            const el = document.getElementById('cropperModal');
+            el.addEventListener('shown.bs.modal', function init() {
+                el.removeEventListener('shown.bs.modal', init);
+                _cropper = new Cropper(img, {
+                    aspectRatio: 3 / 4,
+                    viewMode: 1,
+                    dragMode: 'move',
+                    autoCropArea: 0.9,
+                    guides: true,
+                    center: true,
+                    highlight: false,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: false,
+                });
+            });
+            modal.show();
         };
         reader.readAsDataURL(file);
+    };
+
+    window.openCropperOnExisting = function () {
+        const img = document.getElementById('photo-preview-img');
+        if (!img || !img.src || img.style.display === 'none') return;
+        const cropImg = document.getElementById('cropper-image');
+        cropImg.src = img.src;
+        if (_cropper) { _cropper.destroy(); _cropper = null; }
+        const modal = new bootstrap.Modal(document.getElementById('cropperModal'));
+        const el = document.getElementById('cropperModal');
+        el.addEventListener('shown.bs.modal', function init() {
+            el.removeEventListener('shown.bs.modal', init);
+            _cropper = new Cropper(cropImg, {
+                aspectRatio: 3 / 4,
+                viewMode: 1,
+                dragMode: 'move',
+                autoCropArea: 0.9,
+                guides: true,
+                center: true,
+                highlight: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false,
+            });
+        });
+        modal.show();
+    };
+
+    window.cropperZoom   = r  => _cropper?.zoom(r);
+    window.cropperRotate = d  => _cropper?.rotate(d);
+    window.cropperReset  = () => _cropper?.reset();
+
+    window.cancelCrop = function () {
+        bootstrap.Modal.getInstance(document.getElementById('cropperModal'))?.hide();
+        document.getElementById('f-photo').value = '';
+    };
+
+    window.confirmCrop = function () {
+        if (!_cropper) return;
+        _cropper.getCroppedCanvas({ width: 600, height: 800, imageSmoothingQuality: 'high' })
+            .toBlob(blob => {
+                window._photoCroppedBlob = blob;
+                const url = URL.createObjectURL(blob);
+                document.getElementById('photo-preview-img').src = url;
+                document.getElementById('photo-preview-img').style.display = '';
+                document.getElementById('photo-preview-icon').style.display = 'none';
+                const btnR = document.getElementById('btn-recadrer');
+                if (btnR) btnR.style.display = '';
+                bootstrap.Modal.getInstance(document.getElementById('cropperModal'))?.hide();
+            }, 'image/jpeg', 0.95);
     };
 
     /* ── Form helpers ── */
@@ -207,9 +278,12 @@
         document.getElementById('f-type_permis').value = 'permanent';
         onTypePermisChange();
         document.getElementById('f-photo').value = '';
+        window._photoCroppedBlob = null;
         document.getElementById('photo-preview-img').src = '';
         document.getElementById('photo-preview-img').style.display = 'none';
         document.getElementById('photo-preview-icon').style.display = '';
+        const btnR = document.getElementById('btn-recadrer');
+        if (btnR) btnR.style.display = 'none';
         document.querySelectorAll('.cat-checkbox').forEach(cb => cb.checked = false);
         document.querySelectorAll('.cat-details').forEach(d => d.style.display = 'none');
         document.querySelectorAll('.cat-identifiant, .cat-date, .cat-expiration').forEach(i => i.value = '');
@@ -270,6 +344,8 @@
             img.src = l.photo_url || `/uploads/license_photos/${l.photo_filename}`;
             img.style.display = '';
             document.getElementById('photo-preview-icon').style.display = 'none';
+            const btnR = document.getElementById('btn-recadrer');
+            if (btnR) btnR.style.display = '';
         }
     }
 
@@ -1031,10 +1107,10 @@
             if (!r.ok) throw new Error(data.error || 'Erreur');
 
             const licId = data.id || id;
-            const photoFile = document.getElementById('f-photo').files[0];
+            const photoFile = window._photoCroppedBlob || document.getElementById('f-photo').files[0];
             if (photoFile && licId) {
                 const fd = new FormData();
-                fd.append('photo', photoFile);
+                fd.append('photo', photoFile, 'photo.jpg');
                 await fetch(`/api/licenses/${licId}/photo`, {
                     method: 'POST',
                     credentials: 'same-origin',
