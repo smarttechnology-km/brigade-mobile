@@ -820,6 +820,9 @@
   </div>
 </div>
 
-<script>window.CURRENT_USER_ROLE = {{ current_user.role | tojson }};</script>
+<script>
+window.CURRENT_USER_ROLE = {{ current_user.role | tojson }};
+window.CURRENT_USER_DGRTR_TYPE = {{ (current_user.dgrtr_type or '') | tojson }};
+</script>
 <script src="/static/js/licenses.js"></script>
 {% endblock %}
