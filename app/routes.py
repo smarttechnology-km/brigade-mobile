@@ -1499,7 +1499,8 @@ def license_print_card(license_id):
     from app.models import DriverLicense, LicenseSetting
     from dateutil.relativedelta import relativedelta
     lic = DriverLicense.query.get_or_404(license_id)
-    if not lic.smarttech_print_validated and current_user.role != 'administrateur':
+    is_directeur = current_user.role == 'dgrtr' and current_user.dgrtr_type in ('directeur_general', 'directeur_technique')
+    if not lic.smarttech_print_validated and current_user.role != 'administrateur' and not is_directeur:
         abort(403)
     settings = LicenseSetting.get()
     computed_expiry = None
