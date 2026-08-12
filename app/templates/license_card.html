@@ -376,7 +376,7 @@
     @media print { html { display: none !important; } }
     {% endif %}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dom-to-image-more@2.10.1/dist/dom-to-image-more.min.js"></script>
   {% if smarttech_preview or readonly %}
   <script>window.print = function () {};</script>
   {% endif %}
@@ -658,14 +658,10 @@ function downloadImages() {
   var back  = document.querySelector('.card-back');
 
   function capture(el, bg) {
-    return html2canvas(el, {
-      scale: 4,
-      backgroundColor: bg || null,
-      useCORS: true,
-      allowTaint: false,
-      logging: false,
-    }).then(function(canvas) {
-      return canvas.toDataURL('image/png');
+    return domtoimage.toPng(el, {
+      scale: 5,
+      bgcolor: bg || null,
+      style: { margin: '0' },
     });
   }
 
