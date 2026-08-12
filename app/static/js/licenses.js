@@ -1123,7 +1123,10 @@
                 const btnRenouveler = document.getElementById('btn-renouveler');
                 if (btnRenouveler) btnRenouveler.style.display = l.is_expired ? '' : 'none';
                 const btnVoirCarte = document.getElementById('btn-voir-carte');
-                if (btnVoirCarte) btnVoirCarte.style.display = l.print_status === 'printed' ? '' : 'none';
+                if (btnVoirCarte) {
+                    const isDirecteur = ['directeur_general', 'directeur_technique'].includes(window.CURRENT_USER_DGRTR_TYPE || '');
+                    btnVoirCarte.style.display = (l.print_status === 'printed' || isDirecteur) ? '' : 'none';
+                }
                 const catList = l.categories ? l.categories.split(',').map(c => c.trim()).filter(Boolean) : [];
                 const catDetailsMap = l.category_details || {};
                 const cats = catList.length
