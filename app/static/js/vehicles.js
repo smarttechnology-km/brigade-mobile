@@ -438,6 +438,19 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (nameInput && !nameInput.value.trim()) {
                             nameInput.value = data.owner_name;
                         }
+                        // Auto-fill island without triggering the change event (to avoid clearing the plate)
+                        const islandEl = document.getElementById('owner_island');
+                        if (islandEl && !islandEl.value && data.owner_island) {
+                            islandEl.value = data.owner_island;
+                        }
+                        const addressEl = document.getElementById('owner_address');
+                        if (addressEl && !addressEl.value.trim() && data.owner_address) {
+                            addressEl.value = data.owner_address;
+                        }
+                        const profEl = document.getElementById('cg_profession_proprietaire');
+                        if (profEl && !profEl.value.trim() && data.profession) {
+                            profEl.value = data.profession;
+                        }
                         if (hint && hintText) {
                             hintText.textContent = 'Numéro associé à : ' + data.owner_name;
                             hint.classList.remove('d-none');
@@ -1586,11 +1599,12 @@ window._suggestPlateForIsland = function(island) {
     islandSel.addEventListener('change', function() {
         var vid = document.getElementById('vehicle-id');
         if (vid && vid.value) return; // don't interfere with edit mode
-        // Reset lock state when island changes
+        var plateInput = document.getElementById('license_plate');
+        var wasLocked = _plateAutoLocked;
         _autoFilledPlate = null;
         _setPlateAutoLocked(false);
-        var plateInput = document.getElementById('license_plate');
-        if (plateInput) plateInput.value = '';
+        // Only clear the plate if it was auto-filled (locked), not manually typed by the user
+        if (plateInput && wasLocked) plateInput.value = '';
         window._suggestPlateForIsland(this.value);
     });
 })();
