@@ -667,13 +667,20 @@ def api_lookup_phone():
     phone = request.args.get('phone', '').strip()
     if not phone:
         return jsonify({"found": False})
+    from app.models import VehicleOwner, CarteGrise
     vehicle = Vehicle.query.filter_by(owner_phone=phone).order_by(Vehicle.created_at.desc()).first()
     if vehicle and vehicle.owner_name:
-        return jsonify({"found": True, "owner_name": vehicle.owner_name})
-    from app.models import VehicleOwner
+        cg = CarteGrise.query.filter_by(vehicle_id=vehicle.id).first()
+        return jsonify({
+            "found": True,
+            "owner_name": vehicle.owner_name,
+            "owner_island": vehicle.owner_island or '',
+            "owner_address": vehicle.owner_address or '',
+            "profession": cg.profession_proprietaire if cg else '',
+        })
     vo = VehicleOwner.query.filter_by(phone=phone).order_by(VehicleOwner.created_at.desc()).first()
     if vo and vo.owner_name:
-        return jsonify({"found": True, "owner_name": vo.owner_name})
+        return jsonify({"found": True, "owner_name": vo.owner_name, "owner_island": '', "owner_address": '', "profession": ''})
     return jsonify({"found": False})
 
 
