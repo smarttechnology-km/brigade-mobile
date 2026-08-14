@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Ajouter un permis — DGRTR{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+{% endblock %}
+
 {% block content %}
 <style>
 .form-card { background:#fff; border-radius:12px; padding:28px 32px; box-shadow:0 1px 6px rgba(0,0,0,.08); }
@@ -30,7 +34,10 @@
           <span id="photo-preview-icon" class="text-muted" style="font-size:2rem;"><i class="fas fa-user-circle"></i></span>
         </div>
         <input type="file" id="f-photo" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="previewPhoto(this)">
-        <div class="text-muted text-center" style="font-size:0.7rem;margin-top:4px;">Photo</div>
+        <div class="text-center" style="font-size:0.7rem;margin-top:4px;">
+          <span class="text-muted">Photo</span>
+          <button type="button" id="btn-recadrer" onclick="openCropperOnExisting()" title="Recadrer la photo" style="display:none;border:none;background:none;padding:0;font-size:0.7rem;color:#0d6efd;cursor:pointer;margin-left:4px;"><i class="fas fa-crop-alt"></i></button>
+        </div>
       </div>
       <div class="col">
         <div class="row g-2">
@@ -38,7 +45,7 @@
             <label class="form-label fw-semibold">Numéro de permis <span class="text-danger">*</span></label>
             <input type="text" id="f-license_number" class="form-control text-uppercase" placeholder="Ex : PC-2024-00123" required>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label class="form-label fw-semibold">Statut</label>
             <select id="f-status" class="form-select">
               <option value="actif">Actif</option>
@@ -47,13 +54,17 @@
               <option value="expire">Expiré</option>
             </select>
           </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Prénom</label>
-            <input type="text" id="f-holder_firstname" class="form-control" placeholder="Ex : Ahmed">
+          <div class="col-md-2">
+            <label class="form-label fw-semibold">Points</label>
+            <input type="number" id="f-points" class="form-control" min="0" max="20" value="12">
           </div>
           <div class="col-md-6">
             <label class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
-            <input type="text" id="f-holder_name" class="form-control text-uppercase" placeholder="Ex : IBRAHIM" required>
+            <input type="text" id="f-holder_firstname" class="form-control text-uppercase" placeholder="Ex : IBRAHIM" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Prénom</label>
+            <input type="text" id="f-holder_name" class="form-control" placeholder="Ex : Ahmed">
           </div>
         </div>
       </div>
@@ -78,6 +89,20 @@
           <option value="">— Sélectionner —</option>
           <option value="masculin">Masculin</option>
           <option value="feminin">Féminin</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Groupe sanguin</label>
+        <select id="f-blood_group" class="form-select">
+          <option value="">— Sélectionner —</option>
+          <option value="A+">A+</option>
+          <option value="A-">A−</option>
+          <option value="B+">B+</option>
+          <option value="B-">B−</option>
+          <option value="AB+">AB+</option>
+          <option value="AB-">AB−</option>
+          <option value="O+">O+</option>
+          <option value="O-">O−</option>
         </select>
       </div>
       <div class="col-md-4">
@@ -135,11 +160,11 @@
       <div class="col-12">
         <label class="form-label">Catégories</label>
         <div class="d-flex flex-column gap-2 mt-1" id="categories-checkboxes">
-          {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'P'] %}
+          {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'M', 'P'] %}
           <div class="border rounded p-2">
             <div class="form-check">
               <input class="form-check-input cat-checkbox" type="checkbox" id="cat-{{ cat }}" value="{{ cat }}" onchange="onCategoryToggle('{{ cat }}')">
-              <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}{% if cat == 'P' %} <span class="text-muted fw-normal">(Professionnelle)</span>{% endif %}</label>
+              <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}{% if cat == 'P' %} <span class="text-muted fw-normal">(Professionnelle)</span>{% elif cat == 'M' %} <span class="text-muted fw-normal">(Militaire)</span>{% endif %}</label>
             </div>
             <div class="row g-2 mt-1 cat-details" id="cat-details-{{ cat }}" style="display:none;">
               <div class="col-sm-4">
@@ -181,8 +206,40 @@
 
 </div>
 
+<!-- ── Modal recadrage photo ── -->
+<div class="modal fade" id="cropperModal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-crop-alt me-2"></i>Recadrer la photo</h5>
+        <button type="button" class="btn-close" onclick="cancelCrop()"></button>
+      </div>
+      <div class="modal-body" style="background:#1a1a1a;padding:16px;text-align:center;">
+        <div style="max-height:480px;overflow:hidden;">
+          <img id="cropper-image" style="max-width:100%;display:block;">
+        </div>
+        <div class="d-flex gap-2 mt-3 justify-content-center flex-wrap">
+          <button class="btn btn-sm btn-outline-light" onclick="cropperZoom(0.1)" title="Zoom avant"><i class="fas fa-search-plus"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperZoom(-0.1)" title="Zoom arrière"><i class="fas fa-search-minus"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperRotate(-90)" title="Rotation gauche"><i class="fas fa-undo"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperRotate(90)" title="Rotation droite"><i class="fas fa-redo"></i></button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="cropperReset()"><i class="fas fa-sync-alt me-1"></i>Réinitialiser</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="cancelCrop()">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="confirmCrop()">
+          <i class="fas fa-check me-1"></i>Confirmer le recadrage
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 var _settings = { temp_validity_months: 12, permanent_validity_years: 10, category_validity: {} };
+var _cropper = null;
+window._photoCroppedBlob = null;
 
 document.addEventListener('DOMContentLoaded', function () {
   fetch('/api/licenses/settings', { credentials: 'same-origin' })
@@ -197,13 +254,68 @@ document.addEventListener('DOMContentLoaded', function () {
 function previewPhoto(input) {
   var file = input.files[0];
   if (!file) return;
+  window._photoCroppedBlob = null;
   var reader = new FileReader();
   reader.onload = function(e) {
-    document.getElementById('photo-preview-img').src = e.target.result;
-    document.getElementById('photo-preview-img').style.display = '';
-    document.getElementById('photo-preview-icon').style.display = 'none';
+    var img = document.getElementById('cropper-image');
+    img.src = e.target.result;
+    if (_cropper) { _cropper.destroy(); _cropper = null; }
+    var modal = new bootstrap.Modal(document.getElementById('cropperModal'));
+    var el = document.getElementById('cropperModal');
+    el.addEventListener('shown.bs.modal', function init() {
+      el.removeEventListener('shown.bs.modal', init);
+      _cropper = new Cropper(img, {
+        aspectRatio: 3 / 4, viewMode: 1, dragMode: 'move',
+        autoCropArea: 0.9, guides: true, center: true, highlight: false,
+        cropBoxMovable: true, cropBoxResizable: true, toggleDragModeOnDblclick: false,
+      });
+    });
+    modal.show();
   };
   reader.readAsDataURL(file);
+}
+
+function openCropperOnExisting() {
+  var img = document.getElementById('photo-preview-img');
+  if (!img || !img.src || img.style.display === 'none') return;
+  var cropImg = document.getElementById('cropper-image');
+  cropImg.src = img.src;
+  if (_cropper) { _cropper.destroy(); _cropper = null; }
+  var modal = new bootstrap.Modal(document.getElementById('cropperModal'));
+  var el = document.getElementById('cropperModal');
+  el.addEventListener('shown.bs.modal', function init() {
+    el.removeEventListener('shown.bs.modal', init);
+    _cropper = new Cropper(cropImg, {
+      aspectRatio: 3 / 4, viewMode: 1, dragMode: 'move',
+      autoCropArea: 0.9, guides: true, center: true, highlight: false,
+      cropBoxMovable: true, cropBoxResizable: true, toggleDragModeOnDblclick: false,
+    });
+  });
+  modal.show();
+}
+
+function cropperZoom(r)  { if (_cropper) _cropper.zoom(r); }
+function cropperRotate(d){ if (_cropper) _cropper.rotate(d); }
+function cropperReset()  { if (_cropper) _cropper.reset(); }
+
+function cancelCrop() {
+  bootstrap.Modal.getInstance(document.getElementById('cropperModal'))?.hide();
+  if (!window._photoCroppedBlob) document.getElementById('f-photo').value = '';
+}
+
+function confirmCrop() {
+  if (!_cropper) return;
+  _cropper.getCroppedCanvas({ width: 600, height: 800, imageSmoothingQuality: 'high' })
+    .toBlob(function(blob) {
+      window._photoCroppedBlob = blob;
+      var url = URL.createObjectURL(blob);
+      document.getElementById('photo-preview-img').src = url;
+      document.getElementById('photo-preview-img').style.display = '';
+      document.getElementById('photo-preview-icon').style.display = 'none';
+      var btnR = document.getElementById('btn-recadrer');
+      if (btnR) btnR.style.display = '';
+      bootstrap.Modal.getInstance(document.getElementById('cropperModal'))?.hide();
+    }, 'image/jpeg', 0.95);
 }
 
 function autoFillExpiry() {
@@ -314,6 +426,8 @@ async function saveLicenseDgrtr() {
     category_details:      getCategoryDetails(),
     status:                document.getElementById('f-status').value,
     notes:                 document.getElementById('f-notes').value.trim(),
+    points:                parseInt(document.getElementById('f-points').value) || 12,
+    blood_group:           document.getElementById('f-blood_group').value,
   };
 
   if (!payload.license_number || !payload.holder_firstname) {
@@ -336,10 +450,10 @@ async function saveLicenseDgrtr() {
     if (!r.ok) throw new Error(data.error || 'Erreur');
 
     var licId = data.id;
-    var photoFile = document.getElementById('f-photo').files[0];
-    if (photoFile && licId) {
+    var photoBlob = window._photoCroppedBlob || (document.getElementById('f-photo').files[0] || null);
+    if (photoBlob && licId) {
       var fd = new FormData();
-      fd.append('photo', photoFile);
+      fd.append('photo', photoBlob, 'photo.jpg');
       await fetch('/api/licenses/' + licId + '/photo', {
         method: 'POST',
         credentials: 'same-origin',
@@ -347,17 +461,11 @@ async function saveLicenseDgrtr() {
       });
     }
 
+    window._photoCroppedBlob = null;
     showAlert('Permis enregistré avec succès.', 'success');
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-save me-1"></i>Enregistrer';
-    ['f-license_number','f-holder_firstname','f-holder_name','f-date_of_birth','f-lieu_naissance',
-     'f-nationalite','f-holder_phone','f-holder_address','f-issue_date','f-expiry_date','f-notes']
-      .forEach(function(id){ var el = document.getElementById(id); if(el) el.value = ''; });
-    ['f-status','f-sexe','f-holder_island','f-type_permis','f-centre_immatriculation']
-      .forEach(function(id){ var el = document.getElementById(id); if(el) el.selectedIndex = 0; });
-    document.querySelectorAll('input[name="categories"]').forEach(function(cb){ cb.checked = false; });
-    document.getElementById('f-photo').value = '';
-    var prev = document.getElementById('photo-preview'); if(prev) prev.style.display = 'none';
+    setTimeout(function(){ window.location.reload(); }, 1200);
   } catch (err) {
     showAlert(err.message || "Erreur lors de l'enregistrement.", 'danger');
     btn.disabled = false;
@@ -365,4 +473,7 @@ async function saveLicenseDgrtr() {
   }
 }
 </script>
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+{% endblock %}
 {% endblock %}
