@@ -656,6 +656,162 @@ def create_app():
                                 conn.execute(text(sql))
                                 logger.info(f"Added carte_grise.{col} column")
 
+            elif 'postgresql' in str(app.config.get('SQLALCHEMY_DATABASE_URI', '')):
+                with db.engine.begin() as conn:
+                    pg_patches = [
+                        # driver_licenses
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS nationalite VARCHAR(100)",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS sexe VARCHAR(10)",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 12",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS holder_firstname VARCHAR(100)",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS lieu_naissance VARCHAR(150)",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS centre_immatriculation VARCHAR(150)",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS type_permis VARCHAR(20) NOT NULL DEFAULT 'permanent'",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS registered_phone VARCHAR(20)",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS registered_at TIMESTAMP",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS category_details TEXT",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS smarttech_print_validated BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS smarttech_validated_at TIMESTAMP",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS smarttech_validated_by VARCHAR(100)",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS blood_group VARCHAR(10)",
+                        "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS nin VARCHAR(50)",
+                        # vehicles
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS track_token VARCHAR(36)",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_payment_approved BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_payment_approved_at TIMESTAMP",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_payment_approved_by VARCHAR(80)",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_payment_method VARCHAR(50)",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_payment_requested_at TIMESTAMP",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_payment_requested_by VARCHAR(80)",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_payment_requested_expiry TIMESTAMP",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_last_paid_at TIMESTAMP",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_last_paid_by VARCHAR(150)",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_last_paid_vignette_amount FLOAT NOT NULL DEFAULT 0.0",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_last_paid_penalty_amount FLOAT NOT NULL DEFAULT 0.0",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_last_paid_fines_amount FLOAT NOT NULL DEFAULT 0.0",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_last_paid_qr_amount FLOAT NOT NULL DEFAULT 0.0",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vignette_last_paid_total_amount FLOAT NOT NULL DEFAULT 0.0",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS created_by VARCHAR(80)",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS qr_renewed_by VARCHAR(80)",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS work_zone VARCHAR(100)",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS qr_pending_approval BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS nombre_chevaux INTEGER",
+                        # users
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0",
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS dgrtr_type VARCHAR(30)",
+                        # vehicle_owners
+                        "ALTER TABLE vehicle_owners ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0",
+                        "ALTER TABLE vehicle_owners ADD COLUMN IF NOT EXISTS current_device_id VARCHAR(128)",
+                        "ALTER TABLE vehicle_owners ADD COLUMN IF NOT EXISTS expo_push_token VARCHAR(255)",
+                        # fines
+                        "ALTER TABLE fines ADD COLUMN IF NOT EXISTS base_amount NUMERIC(10,2)",
+                        "ALTER TABLE fines ADD COLUMN IF NOT EXISTS photo_filename VARCHAR(255)",
+                        # payments
+                        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS destination_phone VARCHAR(20)",
+                        # huri_destination_settings
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS fine_phone_updated_at TIMESTAMP",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS fine_phone_updated_by VARCHAR(80)",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS vignette_phone_updated_at TIMESTAMP",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS vignette_phone_updated_by VARCHAR(80)",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS qr_renewal_phone_updated_at TIMESTAMP",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS qr_renewal_phone_updated_by VARCHAR(80)",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS carte_grise_phone VARCHAR(20)",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS carte_grise_phone_updated_at TIMESTAMP",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS carte_grise_phone_updated_by VARCHAR(80)",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS permis_phone VARCHAR(20)",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS permis_phone_updated_at TIMESTAMP",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS permis_phone_updated_by VARCHAR(80)",
+                        # vehicle_insurance_assignments
+                        "ALTER TABLE vehicle_insurance_assignments ADD COLUMN IF NOT EXISTS driver_license_numbers TEXT",
+                        # insurance_accounts
+                        "ALTER TABLE insurance_accounts ADD COLUMN IF NOT EXISTS attestation_template TEXT",
+                        # license_settings
+                        "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS directeur_general_name VARCHAR(150)",
+                        "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS directeur_signature_filename VARCHAR(255)",
+                        "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS permanent_validity_years INTEGER NOT NULL DEFAULT 10",
+                        "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS category_validity TEXT",
+                        # license_print_requests
+                        "ALTER TABLE license_print_requests ADD COLUMN IF NOT EXISTS unit_price FLOAT NOT NULL DEFAULT 0",
+                        # alerts
+                        "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS contact_phones TEXT",
+                        "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE",
+                        # fine_types
+                        "ALTER TABLE fine_types ADD COLUMN IF NOT EXISTS article_id INTEGER",
+                        # point_reduction_reasons
+                        "ALTER TABLE point_reduction_reasons ADD COLUMN IF NOT EXISTS article_id INTEGER",
+                        # license_dossiers
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS nom VARCHAR(150)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS prenom VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS date_naissance DATE",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS telephone VARCHAR(30)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS country VARCHAR(50)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS doc_recu_paiement BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS photo_filename VARCHAR(255)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS final_status VARCHAR(20) DEFAULT 'actif'",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS lieu_naissance VARCHAR(150)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS sexe VARCHAR(10)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS nationalite VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS holder_address VARCHAR(255)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS license_number_proposed VARCHAR(50)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS type_permis VARCHAR(20)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS issue_date DATE",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS expiry_date DATE",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS centre_immatriculation VARCHAR(150)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS categories VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS category_details TEXT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step2_data TEXT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step2_validated_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step2_validated_by VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step3_data TEXT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step3_validated_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step3_validated_by VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step4_data TEXT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step4_validated_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step4_validated_by VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step5_data TEXT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step5_validated_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step5_validated_by VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step6_data TEXT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step6_validated_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step6_validated_by VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS license_id INTEGER",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS rejected_by VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS nin VARCHAR(50)",
+                        # carte_grise_setting
+                        "ALTER TABLE carte_grise_setting ADD COLUMN IF NOT EXISTS signature_filename VARCHAR(255)",
+                        "ALTER TABLE carte_grise_setting ADD COLUMN IF NOT EXISTS island VARCHAR(50) NOT NULL DEFAULT 'Grande Comore'",
+                        # carte_grise
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'brouillon'",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS signature_requested_at TIMESTAMP",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS signature_requested_by VARCHAR(100)",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS signed_at TIMESTAMP",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS signed_by VARCHAR(100)",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS prix FLOAT",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS nombre_chevaux INTEGER",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS civilite VARCHAR(10)",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS carte_bleue BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS qr_price INTEGER NOT NULL DEFAULT 0",
+                        # smart_tech_accounts
+                        "ALTER TABLE smart_tech_accounts ADD COLUMN IF NOT EXISTS employee_id INTEGER",
+                        "ALTER TABLE smart_tech_accounts ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'admin'",
+                        # st_subscriptions
+                        "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) NOT NULL DEFAULT 'manuel'",
+                        "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS last_paid_at TIMESTAMP",
+                        "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS last_paid_by VARCHAR(80)",
+                        "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS phone_id INTEGER",
+                        "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS start_date DATE",
+                        "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS employee_id INTEGER",
+                    ]
+                    for sql in pg_patches:
+                        try:
+                            conn.execute(text(sql))
+                        except Exception as _pg_e:
+                            logger.warning(f"PG schema patch skipped: {_pg_e}")
+                    logger.info("PostgreSQL schema patches applied")
+
         except Exception as e:
             logger.warning(f"Could not auto-fix SQLite schema: {e}")
 
