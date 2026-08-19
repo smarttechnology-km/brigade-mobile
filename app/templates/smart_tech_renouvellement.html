@@ -200,6 +200,14 @@
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
         </a>
         {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.suppressions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-trash-alt"></i></span>Suppressions
+            {% if deletion_pending_count > 0 %}
+            <span class="nav-badge ms-auto" style="background:#ef4444;color:#fff;">{{ deletion_pending_count }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
         {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
@@ -527,13 +535,16 @@
             });
             const data = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(data.error || 'Erreur');
+            // Capture owner_island before removing from list
+            const vRow = allVehicles.find(v => v.id === vid);
+            const ownerIsland = vRow ? (vRow.owner_island || '') : '';
             // Remove from local list and re-render
             allVehicles = allVehicles.filter(v => v.id !== vid);
             updateBanner();
             renderTable();
             showToast(`QR Code renouvelé pour ${plate}`, 'success');
             // Merge vehicle info for receipt (plate & owner come from the row data)
-            showQRReceipt(Object.assign({ license_plate: plate }, data));
+            showQRReceipt(Object.assign({ license_plate: plate, owner_island: ownerIsland }, data));
         } catch (e) {
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i>Renouveler'; }
             showToast(e.message || 'Erreur lors du renouvellement.', 'error');
@@ -667,6 +678,14 @@
 
     function esc(s) {
         return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    var _IC = {'Grande Comore':'NG','Anjouan':'ND','Moheli':'MW'};
+    function _plateHtml(plate, island) {
+        var code = _IC[island] || '';
+        if (!plate) return '—';
+        if (code && plate.startsWith('UC ')) return 'UC<sub style="font-size:.65em;font-weight:700;">' + code + '</sub> ' + plate.slice(3);
+        return esc(plate);
     }
 
     /* ── Init ── */

@@ -1,3 +1,6 @@
+{% set _ic = {'Grande Comore':'NG','Anjouan':'ND','Moheli':'MW'} %}
+{% set _island_code = _ic.get(vehicle.owner_island, '') %}
+{% macro plate_display() %}{% if _island_code and vehicle.license_plate and vehicle.license_plate.startswith('UC ') %}UC<sub style="font-size:.65em;font-weight:700;">{{ _island_code }}</sub> {{ vehicle.license_plate[3:] }}{% else %}{{ vehicle.license_plate }}{% endif %}{% endmacro %}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -402,7 +405,7 @@
       <div class="field-block">
         <div class="field-row">
           <span class="fl">Est propriétaire du véhicule immatriculé sous le N° :&nbsp;</span>
-          <span class="fv">{{ vehicle.license_plate }}</span>
+          <span class="fv">{{ plate_display() }}</span>
         </div>
       </div>
 
@@ -506,7 +509,7 @@
         {% if vehicle_qr_data_uri %}
         <div style="font-size:11px; text-align:center; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">QR Code Véhicule</div>
         <img src="{{ vehicle_qr_data_uri }}" style="width:90px; height:90px; display:block; margin:0 auto;">
-        <div style="font-size:10px; text-align:center; margin-top:3px; font-weight:700;">{{ vehicle.license_plate }}</div>
+        <div style="font-size:10px; text-align:center; margin-top:3px; font-weight:700;">{{ plate_display() }}</div>
         {% endif %}
       </div>
 
@@ -540,7 +543,7 @@
 <div class="receipt-page" style="display:block;">
 
   <div class="receipt-title">Reçu de Paiement</div>
-  <div class="receipt-subtitle">Carte Grise Provisoire &mdash; {{ vehicle.license_plate }}</div>
+  <div class="receipt-subtitle">Carte Grise Provisoire &mdash; {{ plate_display() }}</div>
 
   <hr class="receipt-divider">
 
@@ -550,7 +553,7 @@
   </div>
   <div class="receipt-row">
     <span class="rl">Immatriculation</span>
-    <span class="rv">{{ vehicle.license_plate }}</span>
+    <span class="rv">{{ plate_display() }}</span>
   </div>
   <div class="receipt-row">
     <span class="rl">Genre</span>

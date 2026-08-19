@@ -74,7 +74,7 @@
         /* KPIs */
         .kpis-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
             gap: 15px;
             margin-bottom: 25px;
         }
@@ -219,6 +219,10 @@
                 <p class="kpi-label">AMENDES IMPAYÉES</p>
                 <p class="kpi-value" id="kpi-fines">-</p>
             </div>
+            <div class="kpi-box" style="border-color: #e8f7f9; background: #f8fcfd;">
+                <p class="kpi-label">TARIF QR CODE</p>
+                <p class="kpi-value" style="color: #0dcaf0;" id="kpi-qr">-</p>
+            </div>
         </div>
 
         <!-- Tableau Détails -->
@@ -232,12 +236,13 @@
                         <th class="text-right">Prix Vignette</th>
                         <th class="text-right">Pénalité</th>
                         <th class="text-right">Amende</th>
+                        <th class="text-right">Tarif QR</th>
                         <th class="text-right">Montant Total</th>
                     </tr>
                 </thead>
                 <tbody id="report-table-body">
                     <tr>
-                        <td colspan="6" style="text-align: center; color: #999;">Chargement...</td>
+                        <td colspan="7" style="text-align: center; color: #999;">Chargement...</td>
                     </tr>
                 </tbody>
             </table>
@@ -312,19 +317,20 @@
             document.getElementById('kpi-revenue').textContent = formatKMF(data.total_revenue);
             document.getElementById('kpi-penalties').textContent = formatKMF(data.total_penalties);
             document.getElementById('kpi-fines').textContent = formatKMF(data.total_fines);
+            const kpiQrEl = document.getElementById('kpi-qr');
+            if (kpiQrEl) kpiQrEl.textContent = formatKMF(data.total_qr || 0);
             document.getElementById('report-generated-date').textContent = new Date().toLocaleDateString('fr-FR');
 
             // Update Summary Section
-            // Calculate total for summary
-            const totalAmount = (parseFloat(data.total_revenue) || 0) + 
-                               (parseFloat(data.total_penalties) || 0) + 
+            const totalAmount = (parseFloat(data.total_revenue) || 0) +
+                               (parseFloat(data.total_penalties) || 0) +
                                (parseFloat(data.total_fines) || 0);
             document.getElementById('summary-total').textContent = formatKMF(totalAmount);
 
             // Build table
             const tbody = document.getElementById('report-table-body');
             if (!data.vehicles || data.vehicles.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">Aucune données pour cette date</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">Aucune données pour cette date</td></tr>';
                 return;
             }
 
@@ -335,6 +341,7 @@
                     <td class="text-right">${formatNumberKMF(v.vignette_price)}</td>
                     <td class="text-right">${formatNumberKMF(v.penalty_amount)}</td>
                     <td class="text-right">${formatNumberKMF(v.fines_amount)}</td>
+                    <td class="text-right" style="color: ${v.qr_amount > 0 ? '#0dcaf0' : '#aaa'};">${v.qr_amount > 0 ? formatNumberKMF(v.qr_amount) : '-'}</td>
                     <td class="text-right" style="font-weight: bold;">${formatNumberKMF(v.total)}</td>
                 </tr>
             `).join('');

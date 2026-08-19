@@ -281,6 +281,14 @@
             <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
         </a>
         {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.suppressions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-trash-alt"></i></span>Suppressions
+            {% if deletion_pending_count > 0 %}
+            <span class="nav-badge ms-auto" style="background:#ef4444;color:#fff;">{{ deletion_pending_count }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
         {% if current_user.role in ['admin', 'secretaire'] %}
         <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
@@ -592,6 +600,14 @@
         return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    var _IC = {'Grande Comore':'NG','Anjouan':'ND','Moheli':'MW'};
+    function _plateHtml(plate, island) {
+        var code = _IC[island] || '';
+        if (!plate) return '—';
+        if (code && plate.startsWith('UC ')) return 'UC<sub style="font-size:.65em;font-weight:700;">' + code + '</sub> ' + plate.slice(3);
+        return escHtml(plate);
+    }
+
     /* ── State ── */
     const searchInput = document.getElementById('search-input');
     const typeSelect  = document.getElementById('type-filter');
@@ -811,7 +827,7 @@
         const typeLabel = data.payment_type === 'activation' ? 'Activation QR Code' : 'Renouvellement QR Code';
         document.getElementById('receipt-type-label').textContent = data.payment_type === 'activation' ? 'Reçu d\'activation' : 'Reçu de renouvellement';
         document.getElementById('receipt-amount').textContent = Number(data.amount).toLocaleString('fr-FR') + ' KMF';
-        document.getElementById('receipt-plate').textContent  = data.license_plate || '—';
+        document.getElementById('receipt-plate').innerHTML  = _plateHtml(data.license_plate, data.owner_island);
         document.getElementById('receipt-owner').textContent  = data.owner_name || '—';
         document.getElementById('receipt-type').textContent   = typeLabel;
         document.getElementById('receipt-date').textContent   = data.paid_at || '—';
@@ -862,7 +878,7 @@
     <div class="amount-label">Montant payé</div>
   </div>
   <div class="details">
-    <div class="row"><span class="label">Immatriculation</span><span class="value plate">${d.license_plate || '—'}</span></div>
+    <div class="row"><span class="label">Immatriculation</span><span class="value plate">${_plateHtml(d.license_plate, d.owner_island)}</span></div>
     <div class="row"><span class="label">Propriétaire</span><span class="value">${d.owner_name || '—'}</span></div>
     <div class="row"><span class="label">Type</span><span class="value">${typeLabel}</span></div>${splitRows}
     <div class="row"><span class="label">Date</span><span class="value">${d.paid_at || '—'}</span></div>

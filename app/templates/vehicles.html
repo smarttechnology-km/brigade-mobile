@@ -9,14 +9,14 @@
         <h2><i class="fas fa-car me-2"></i>Véhicules</h2>
         <p class="text-muted mb-0">Gestion et suivi du parc de véhicules</p>
       </div>
-      {% if current_user.role in ('administrateur', 'judiciaire') or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional') %}
+      {% if current_user.role in ('administrateur', 'judiciaire') or (current_user.role == 'dgrtr' and current_user.dgrtr_type in ('directeur_regional', 'directeur_general')) %}
       <div class="col-md-4 text-end d-flex gap-2 justify-content-end align-items-center">
         {% if current_user.role in ('administrateur', 'judiciaire') %}
         <button id="btn-add-vehicle" class="btn btn-primary">
           <i class="fas fa-plus me-2"></i>Ajouter un véhicule
         </button>
         {% endif %}
-        {% if current_user.role == 'administrateur' or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional') %}
+        {% if current_user.role == 'administrateur' or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_general') %}
         <button id="btn-plate-settings" class="btn btn-outline-secondary" title="Paramètres immatriculation" data-bs-toggle="modal" data-bs-target="#plateSettingsModal">
           <i class="fas fa-cog me-1"></i>Paramètres
         </button>
@@ -264,7 +264,19 @@
       <div class="modal-body p-4">
         <form id="vehicle-form">
           <input type="hidden" id="vehicle-id" />
-          
+
+          <!-- Toggle Nouveau / Existant (visible uniquement en ajout) -->
+          <div id="vehicle-type-toggle-row" class="align-items-center gap-3 mb-4 p-3 rounded" style="display:none;background:rgba(13,110,253,0.06);border:1px solid rgba(13,110,253,0.2);">
+            <span class="fw-semibold" style="white-space:nowrap;">Type d'ajout :</span>
+            <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+              <input class="form-check-input" type="checkbox" role="switch" id="toggle-nouveau-vehicule" checked style="width:2.5em;height:1.3em;cursor:pointer;">
+              <label class="form-check-label fw-semibold" for="toggle-nouveau-vehicule" id="toggle-nouveau-label" style="cursor:pointer;">
+                <i class="fas fa-star-of-life me-1 text-primary"></i>Nouveau véhicule
+              </label>
+            </div>
+            <span class="text-muted" id="toggle-nouveau-desc" style="font-size:.82rem;">Le QR Code sera généré après validation SmartDev.</span>
+          </div>
+
           <!-- Section: Informations du Véhicule -->
           <div class="mb-4">
             <h6 class="text-primary border-bottom pb-2 mb-3">
@@ -382,7 +394,7 @@
                   <option value="D">D</option>
                 </select>
               </div>
-              <div class="col-md-3">
+              <div id="field-cv-class" class="col-md-3">
                 <label class="form-label fw-semibold">
                   <i class="fas fa-tachometer-alt text-muted me-1"></i>Classe CV
                 </label>
@@ -394,11 +406,18 @@
                   <option value="12 CV et +">12 CV et +</option>
                 </select>
               </div>
+              <div id="field-nombre-chevaux" class="col-md-3" style="display:none;">
+                <label class="form-label fw-semibold">
+                  <i class="fas fa-horse text-muted me-1"></i>Nombre de chevaux <span class="text-danger">*</span>
+                </label>
+                <input type="number" id="nombre_chevaux_vehicle" class="form-control" min="0" step="1" placeholder="ex: 7" oninput="_onNbChevauxInput()">
+                <div class="form-text text-muted" id="cv-class-preview"></div>
+              </div>
               <div class="col-md-6">
                 <label class="form-label fw-semibold">
-                  <i class="fas fa-barcode text-muted me-1"></i>VIN (Numéro de série)
+                  <i class="fas fa-barcode text-muted me-1"></i>VIN (Numéro de série) <span class="text-danger">*</span>
                 </label>
-                <input type="text" id="vin" name="vin" class="form-control" placeholder="Ex: 1HGBH41JXMN109186" />
+                <input type="text" id="vin" name="vin" class="form-control" placeholder="Ex: 1HGBH41JXMN109186" required />
                 <div id="vin-plate-hint" class="d-none mt-1" style="font-size:.78rem;color:#0d6efd;">
                   <i class="fas fa-car me-1"></i>Immatriculation : <strong id="vin-plate-value"></strong>
                 </div>
@@ -544,7 +563,7 @@
                 <input type="text" id="insurance_company_other" class="form-control mt-2 d-none" placeholder="Précisez la compagnie" />
                 <input type="hidden" id="insurance_company_hidden" />
               </div>
-              <div class="col-md-6">
+              <div class="col-md-6" id="field-insurance-expiry">
                 <label class="form-label fw-semibold">
                   <i class="fas fa-calendar-check text-muted me-1"></i>Date d'expiration
                 </label>
@@ -649,7 +668,7 @@
 </div>
 
 <!-- ── Plate Settings Modal ──────────────────────────────────────── -->
-{% if current_user.role == 'administrateur' or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional') %}
+{% if current_user.role == 'administrateur' or (current_user.role == 'dgrtr' and current_user.dgrtr_type in ('directeur_regional', 'directeur_general')) %}
 <div class="modal fade" id="plateSettingsModal" tabindex="-1" aria-labelledby="plateSettingsModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -661,74 +680,81 @@
       </div>
       <div class="modal-body">
         <p class="text-muted small mb-3">
-          Configurez la numérotation des immatriculations par île. Format : <strong>3 chiffres + lettre principale + lettre secondaire + code île</strong>
-          <br>Exemple : <strong>001AB73</strong> (Grande Comore), <strong>001AB71</strong> (Anjouan), <strong>001AB72</strong> (Mohéli)
+          Numérotation nationale unique — le compteur s'incrémente globalement quelle que soit l'île.
+          Le numéro enregistré est <strong>UC 0001 A</strong> — le code île (<strong>NG</strong> / <strong>ND</strong> / <strong>MW</strong>) s'affiche en indice uniquement à titre indicatif selon l'île du véhicule.
         </p>
 
-        <!-- Island tabs -->
-        <ul class="nav nav-pills mb-3" id="plateIslandTabs" role="tablist">
-          <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="ps-gc-tab" data-bs-toggle="pill" data-bs-target="#ps-gc" type="button">🏝️ Grande Comore <span class="badge bg-secondary ms-1">73</span></button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ps-an-tab" data-bs-toggle="pill" data-bs-target="#ps-an" type="button">🏝️ Anjouan <span class="badge bg-secondary ms-1">71</span></button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" id="ps-mo-tab" data-bs-toggle="pill" data-bs-target="#ps-mo" type="button">🏝️ Mohéli <span class="badge bg-secondary ms-1">72</span></button>
-          </li>
-        </ul>
+        <div class="card border-0 bg-body-tertiary rounded-3 p-3">
+          <!-- Enable toggle -->
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="ps-enabled-global" role="switch">
+            <label class="form-check-label fw-semibold" for="ps-enabled-global">
+              Activer l'immatriculation automatique nationale
+            </label>
+          </div>
 
-        <div class="tab-content" id="plateIslandTabContent">
-          {% for island_key, island_label, island_suffix in [('gc','Grande Comore','73'),('an','Anjouan','71'),('mo','Moheli','72')] %}
-          <div class="tab-pane fade {% if island_key == 'gc' %}show active{% endif %}" id="ps-{{ island_key }}">
-            <div class="card border-0 bg-body-tertiary rounded-3 p-3">
-              <!-- Enable toggle -->
-              <div class="form-check form-switch mb-3">
-                <input class="form-check-input" type="checkbox" id="ps-enabled-{{ island_key }}" role="switch">
-                <label class="form-check-label fw-semibold" for="ps-enabled-{{ island_key }}">
-                  Activer l'immatriculation automatique pour {{ island_label }}
-                </label>
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label class="form-label fw-semibold small">Prochain numéro <span class="text-muted">(0001–9999)</span></label>
+              <input type="number" class="form-control" id="ps-number-global" min="1" max="9999" value="1" placeholder="0001">
+              <div class="form-text">Partagé entre toutes les îles</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">Lettre courante <span class="text-muted">(incrémentale)</span></label>
+              <select class="form-select" id="ps-letter2-global">
+                {% for l in 'ABCDEFGHJKLMNPQRSTUVWXYZ' %}
+                <option value="{{ l }}">{{ l }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Avance après 9999 véhicules</div>
+            </div>
+          </div>
+
+          <!-- Previews par île -->
+          <div class="mt-3 p-3 rounded-3 border">
+            <div class="text-muted small mb-2">Aperçu du prochain matricule selon l'île</div>
+            <div class="d-flex gap-4 flex-wrap">
+              <div class="text-center">
+                <div class="text-muted" style="font-size:.72rem;">🏝️ Grande Comore</div>
+                <span class="fs-5 fw-bold font-monospace ps-preview-gc">—</span>
               </div>
+              <div class="text-center">
+                <div class="text-muted" style="font-size:.72rem;">🏝️ Anjouan</div>
+                <span class="fs-5 fw-bold font-monospace ps-preview-an">—</span>
+              </div>
+              <div class="text-center">
+                <div class="text-muted" style="font-size:.72rem;">🏝️ Mohéli</div>
+                <span class="fs-5 fw-bold font-monospace ps-preview-mo">—</span>
+              </div>
+            </div>
+          </div>
 
-              <div class="ps-fields-{{ island_key }}">
-                <div class="row g-3">
-                  <div class="col-md-4">
-                    <label class="form-label fw-semibold small">Prochain numéro <span class="text-muted">(001–999)</span></label>
-                    <input type="number" class="form-control" id="ps-number-{{ island_key }}" min="1" max="999" value="1" placeholder="001">
-                    <div class="form-text">Les 3 chiffres du prochain véhicule</div>
-                  </div>
-                  <div class="col-md-4">
-                    <label class="form-label fw-semibold small">Lettre principale <span class="text-muted">(fixe)</span></label>
-                    <select class="form-select" id="ps-letter1-{{ island_key }}">
-                      {% for l in 'ABCDEFGHJKLMNPQRSTUVWXYZ' %}
-                      <option value="{{ l }}">{{ l }}</option>
-                      {% endfor %}
-                    </select>
-                    <div class="form-text">Première lettre, reste fixe</div>
-                  </div>
-                  <div class="col-md-4">
-                    <label class="form-label fw-semibold small">Lettre secondaire <span class="text-muted">(incrémentale)</span></label>
-                    <select class="form-select" id="ps-letter2-{{ island_key }}">
-                      {% for l in 'ABCDEFGHJKLMNPQRSTUVWXYZ' %}
-                      <option value="{{ l }}">{{ l }}</option>
-                      {% endfor %}
-                    </select>
-                    <div class="form-text">Avance après 999 véhicules</div>
-                  </div>
+          <div class="mt-3 text-end">
+            <button class="btn btn-primary btn-sm" onclick="savePlateSettings()">
+              <i class="fas fa-save me-1"></i>Enregistrer
+            </button>
+          </div>
+        </div>
+
+        <!-- dummy tab-content so old JS refs don't error -->
+        <div class="tab-content d-none" id="plateIslandTabContent">
+          {% for island_key, island_label, island_code in [('gc','Grande Comore','NG'),('an','Anjouan','ND'),('mo','Moheli','MW')] %}
+          <div id="ps-{{ island_key }}">
+            <div class="ps-fields-{{ island_key }}">
+              <div class="row g-3">
+                <div class="col-md-5">
+                  <input type="number" class="form-control" id="ps-number-{{ island_key }}" min="1" max="9999" value="1">
                 </div>
-
-                <!-- Preview -->
-                <div class="mt-3 p-3 rounded-3 border text-center">
-                  <span class="text-muted small d-block mb-1">Prochain matricule suggéré</span>
-                  <span class="fs-4 fw-bold font-monospace ps-preview-{{ island_key }}">—</span>
+                <div class="col-md-4">
+                  <select class="form-select" id="ps-letter2-{{ island_key }}">
+                    {% for l in 'ABCDEFGHJKLMNPQRSTUVWXYZ' %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-12">
+                  <input type="checkbox" id="ps-enabled-{{ island_key }}">
                 </div>
               </div>
 
-              <div class="mt-3 text-end">
-                <button class="btn btn-primary btn-sm" onclick="savePlateSettings('{{ island_key }}', '{{ island_label }}')">
-                  <i class="fas fa-save me-1"></i>Enregistrer
-                </button>
-              </div>
             </div>
           </div>
           {% endfor %}
@@ -752,5 +778,5 @@
 </script>
 <script src="{{ url_for('static', filename='js/insurance-settings.js') }}"></script>
 <script src="{{ url_for('static', filename='js/insurance-accounts.js') }}"></script>
-<script src="{{ url_for('static', filename='js/vehicles.js') }}"></script>
+<script src="{{ url_for('static', filename='js/vehicles.js') }}?v=20260819a"></script>
 {% endblock %}

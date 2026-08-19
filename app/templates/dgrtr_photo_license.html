@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}Photo Permis — DGRTR{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+{% endblock %}
+
+{% block content %}
+<style>
+.card-form { background:#fff; border-radius:12px; padding:28px 32px; box-shadow:0 1px 6px rgba(0,0,0,.08); }
+.photo-box {
+  width:120px; height:150px; border:2px dashed #ccc; border-radius:10px;
+  overflow:hidden; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  background:#f8f9fa; transition:border-color .2s;
+}
+.photo-box:hover { border-color:#0d6efd; }
+.info-line { font-size:.85rem; color:#555; }
+.info-line strong { color:#111; }
+</style>
+
+<div class="container-fluid py-4" style="max-width:700px;">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h4 class="fw-bold mb-0"><i class="fas fa-camera text-primary me-2"></i>Photo du permis</h4>
+      <small class="text-muted">Ajouter ou modifier la photo d'un permis existant</small>
+    </div>
+    <a href="/dgrtr-dashboard" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-2"></i>Retour
+    </a>
+  </div>
+
+  <!-- Recherche -->
+  <div class="card-form mb-4">
+    <label class="form-label fw-semibold">Numéro de permis</label>
+    <div class="input-group">
+      <input type="text" id="search-num" class="form-control text-uppercase"
+             placeholder="Ex : PC-2024-00123"
+             onkeydown="if(event.key==='Enter') searchLicense()">
+      <button class="btn btn-primary" onclick="searchLicense()">
+        <i class="fas fa-search me-1"></i>Rechercher
+      </button>
+    </div>
+    <div id="search-error" class="text-danger small mt-2" style="display:none;"></div>
+  </div>
+
+  <!-- Résultat / édition photo -->
+  <div id="result-section" style="display:none;">
+    <div class="card-form">
+
+      <!-- Info permis + photo -->
+      <div class="d-flex gap-4 align-items-start mb-4">
+
+        <!-- Photo -->
+        <div>
+          <div class="photo-box" id="photo-box" onclick="document.getElementById('f-photo').click()" title="Cliquer pour choisir une photo">
+            <img id="photo-preview-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;">
+            <span id="photo-preview-icon" style="font-size:2.5rem;color:#aaa;"><i class="fas fa-user-circle"></i></span>
+          </div>
+          <input type="file" id="f-photo" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="previewPhoto(this)">
+          <div class="text-center mt-1" style="font-size:.72rem;">
+            <span class="text-muted">Cliquer pour choisir</span>
+            <button type="button" id="btn-recadrer" onclick="openCropperOnExisting()"
+                    style="display:none;border:none;background:none;padding:0 0 0 6px;font-size:.72rem;color:#0d6efd;cursor:pointer;">
+              <i class="fas fa-crop-alt"></i> Recadrer
+            </button>
+          </div>
+        </div>
+
+        <!-- Infos -->
+        <div class="flex-fill">
+          <div class="fw-bold fs-5 mb-1" id="info-name">—</div>
+          <div class="info-line mb-1"><strong>N° permis :</strong> <span id="info-num">—</span></div>
+          <div class="info-line mb-1"><strong>Île :</strong> <span id="info-island">—</span></div>
+          <div class="info-line mb-1"><strong>Statut :</strong> <span id="info-status">—</span></div>
+          <div class="info-line mb-1"><strong>Type :</strong> <span id="info-type">—</span></div>
+          <div class="info-line"><strong>Catégories :</strong> <span id="info-cats">—</span></div>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="d-flex justify-content-between align-items-center">
+        <span class="text-muted small" id="current-photo-hint"></span>
+        <button class="btn btn-primary" id="btn-save-photo" onclick="savePhoto()" disabled>
+          <i class="fas fa-save me-2"></i>Enregistrer la photo
+        </button>
+      </div>
+
+      <div id="save-status" class="mt-2" style="display:none;"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ CROPPER MODAL ═══ -->
+<div class="modal fade" id="cropperModal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-crop-alt me-2"></i>Recadrer la photo</h5>
+        <button type="button" class="btn-close" onclick="cancelCrop()"></button>
+      </div>
+      <div class="modal-body" style="background:#1a1a1a;padding:16px;text-align:center;">
+        <div style="max-height:480px;overflow:hidden;">
+          <img id="cropper-image" style="max-width:100%;display:block;">
+        </div>
+        <div class="d-flex gap-2 mt-3 justify-content-center flex-wrap">
+          <button class="btn btn-sm btn-outline-light" onclick="cropperZoom(0.1)"><i class="fas fa-search-plus"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperZoom(-0.1)"><i class="fas fa-search-minus"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperRotate(-90)"><i class="fas fa-undo"></i></button>
+          <button class="btn btn-sm btn-outline-light" onclick="cropperRotate(90)"><i class="fas fa-redo"></i></button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="cropperReset()"><i class="fas fa-sync-alt me-1"></i>Réinitialiser</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="cancelCrop()">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="confirmCrop()">
+          <i class="fas fa-check me-1"></i>Confirmer le recadrage
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var _licenseId   = null;
+var _cropper     = null;
+window._photoCroppedBlob = null;
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function searchLicense() {
+  var num = (document.getElementById('search-num').value || '').trim();
+  if (!num) return;
+  document.getElementById('search-error').style.display = 'none';
+  document.getElementById('result-section').style.display = 'none';
+
+  fetch('/api/licenses?q=' + encodeURIComponent(num), { credentials: 'same-origin' })
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      var list = data.licenses || data.items || data;
+      if (!Array.isArray(list) || list.length === 0) {
+        showError('Aucun permis trouvé pour ce numéro.');
+        return;
+      }
+      // Exact match preferred
+      var lic = list.find(function(l){ return l.license_number.toUpperCase() === num.toUpperCase(); }) || list[0];
+      showResult(lic);
+    })
+    .catch(function(){ showError('Erreur lors de la recherche.'); });
+}
+
+function showError(msg) {
+  var el = document.getElementById('search-error');
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+function showResult(lic) {
+  _licenseId = lic.id;
+  window._photoCroppedBlob = null;
+
+  var statusLabel = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqué', expire: 'Expiré' }[lic.status] || lic.status;
+  var typeLabel   = lic.type_permis === 'temporaire' ? 'Temporaire' : 'Permanent';
+
+  document.getElementById('info-name').textContent   = (lic.holder_firstname || '') + ' ' + (lic.holder_name || '');
+  document.getElementById('info-num').textContent    = lic.license_number;
+  document.getElementById('info-island').textContent = lic.holder_island || '—';
+  document.getElementById('info-status').textContent = statusLabel;
+  document.getElementById('info-type').textContent   = typeLabel;
+  document.getElementById('info-cats').textContent   = lic.categories || '—';
+
+  var previewImg  = document.getElementById('photo-preview-img');
+  var previewIcon = document.getElementById('photo-preview-icon');
+  var btnR        = document.getElementById('btn-recadrer');
+  var hint        = document.getElementById('current-photo-hint');
+
+  if (lic.photo_url) {
+    previewImg.src          = lic.photo_url;
+    previewImg.style.display = '';
+    previewIcon.style.display = 'none';
+    btnR.style.display      = '';
+    hint.textContent        = 'Photo actuelle — cliquer sur la photo pour en choisir une nouvelle.';
+  } else {
+    previewImg.style.display = 'none';
+    previewIcon.style.display = '';
+    btnR.style.display      = 'none';
+    hint.textContent        = 'Aucune photo enregistrée.';
+  }
+
+  document.getElementById('f-photo').value = '';
+  document.getElementById('btn-save-photo').disabled = true;
+  document.getElementById('save-status').style.display = 'none';
+  document.getElementById('result-section').style.display = '';
+}
+
+/* ─── Photo / Cropper ─── */
+
+function previewPhoto(input) {
+  var file = input.files[0];
+  if (!file) return;
+  window._photoCroppedBlob = null;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = document.getElementById('cropper-image');
+    img.src = e.target.result;
+    if (_cropper) { _cropper.destroy(); _cropper = null; }
+    var modal = new bootstrap.Modal(document.getElementById('cropperModal'));
+    var el = document.getElementById('cropperModal');
+    el.addEventListener('shown.bs.modal', function init() {
+      el.removeEventListener('shown.bs.modal', init);
+      _cropper = new Cropper(img, {
+        aspectRatio: 3 / 4, viewMode: 1, dragMode: 'move',
+        autoCropArea: 0.9, guides: true, center: true, highlight: false,
+        cropBoxMovable: true, cropBoxResizable: true, toggleDragModeOnDblclick: false,
+      });
+    });
+    modal.show();
+  };
+  reader.readAsDataURL(file);
+}
+
+function openCropperOnExisting() {
+  var img = document.getElementById('photo-preview-img');
+  if (!img || !img.src || img.style.display === 'none') return;
+  var cropImg = document.getElementById('cropper-image');
+  cropImg.src = img.src;
+  if (_cropper) { _cropper.destroy(); _cropper = null; }
+  var modal = new bootstrap.Modal(document.getElementById('cropperModal'));
+  var el = document.getElementById('cropperModal');
+  el.addEventListener('shown.bs.modal', function init() {
+    el.removeEventListener('shown.bs.modal', init);
+    _cropper = new Cropper(cropImg, {
+      aspectRatio: 3 / 4, viewMode: 1, dragMode: 'move',
+      autoCropArea: 0.9, guides: true, center: true, highlight: false,
+      cropBoxMovable: true, cropBoxResizable: true, toggleDragModeOnDblclick: false,
+    });
+  });
+  modal.show();
+}
+
+function cropperZoom(r)  { if (_cropper) _cropper.zoom(r); }
+function cropperRotate(d){ if (_cropper) _cropper.rotate(d); }
+function cropperReset()  { if (_cropper) _cropper.reset(); }
+
+function cancelCrop() {
+  bootstrap.Modal.getInstance(document.getElementById('cropperModal'))?.hide();
+  if (!window._photoCroppedBlob) document.getElementById('f-photo').value = '';
+}
+
+function confirmCrop() {
+  if (!_cropper) return;
+  _cropper.getCroppedCanvas({ width: 600, height: 800, imageSmoothingQuality: 'high' })
+    .toBlob(function(blob) {
+      window._photoCroppedBlob = blob;
+      var url = URL.createObjectURL(blob);
+      var previewImg  = document.getElementById('photo-preview-img');
+      previewImg.src            = url;
+      previewImg.style.display  = '';
+      document.getElementById('photo-preview-icon').style.display = 'none';
+      document.getElementById('btn-recadrer').style.display = '';
+      document.getElementById('current-photo-hint').textContent = 'Nouvelle photo prête — cliquer sur Enregistrer.';
+      document.getElementById('btn-save-photo').disabled = false;
+      bootstrap.Modal.getInstance(document.getElementById('cropperModal'))?.hide();
+    }, 'image/jpeg', 0.95);
+}
+
+/* ─── Save ─── */
+
+function savePhoto() {
+  if (!_licenseId) return;
+  var blob = window._photoCroppedBlob;
+  if (!blob) {
+    var fileInput = document.getElementById('f-photo');
+    blob = fileInput.files[0] || null;
+  }
+  if (!blob) { alert('Aucune photo sélectionnée.'); return; }
+
+  var btn = document.getElementById('btn-save-photo');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement…';
+
+  var fd = new FormData();
+  fd.append('photo', blob, 'photo.jpg');
+
+  fetch('/api/licenses/' + _licenseId + '/photo', {
+    method: 'POST', credentials: 'same-origin', body: fd,
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer la photo';
+    var st = document.getElementById('save-status');
+    if (data.photo_url) {
+      document.getElementById('photo-preview-img').src = data.photo_url;
+      document.getElementById('current-photo-hint').textContent = 'Photo mise à jour avec succès.';
+      st.className = 'alert alert-success py-2 small mt-2';
+      st.textContent = 'Photo enregistrée.';
+      st.style.display = '';
+      window._photoCroppedBlob = null;
+      document.getElementById('f-photo').value = '';
+    } else {
+      st.className = 'alert alert-danger py-2 small mt-2';
+      st.textContent = data.error || 'Erreur lors de l\'enregistrement.';
+      st.style.display = '';
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer la photo';
+    var st = document.getElementById('save-status');
+    st.className = 'alert alert-danger py-2 small mt-2';
+    st.textContent = 'Erreur réseau.';
+    st.style.display = '';
+  });
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+{% endblock %}

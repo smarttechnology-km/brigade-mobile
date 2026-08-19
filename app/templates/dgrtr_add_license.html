@@ -64,7 +64,7 @@
           </div>
           <div class="col-md-6">
             <label class="form-label fw-semibold">Prénom</label>
-            <input type="text" id="f-holder_name" class="form-control" placeholder="Ex : Ahmed">
+            <input type="text" id="f-holder_name" class="form-control text-uppercase" placeholder="Ex : Ahmed">
           </div>
         </div>
       </div>
@@ -81,7 +81,7 @@
       </div>
       <div class="col-md-4">
         <label class="form-label">Lieu de naissance</label>
-        <input type="text" id="f-lieu_naissance" class="form-control" placeholder="Ville, pays…">
+        <input type="text" id="f-lieu_naissance" class="form-control text-uppercase" placeholder="Ville, pays…">
       </div>
       <div class="col-md-4">
         <label class="form-label">Sexe</label>
@@ -107,11 +107,15 @@
       </div>
       <div class="col-md-4">
         <label class="form-label">Nationalité</label>
-        <input type="text" id="f-nationalite" class="form-control" placeholder="Ex : Comorien">
+        <input type="text" id="f-nationalite" class="form-control text-uppercase" placeholder="Ex : Comorien" value="COMORIENNE">
       </div>
       <div class="col-md-4">
         <label class="form-label">Téléphone</label>
         <input type="tel" id="f-holder_phone" class="form-control" placeholder="Ex : 3321234">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">NIN</label>
+        <input type="text" id="f-nin" class="form-control" placeholder="Ex : 12345678">
       </div>
       <div class="col-md-4">
         <label class="form-label">Île</label>
@@ -124,7 +128,7 @@
       </div>
       <div class="col-md-4">
         <label class="form-label">Adresse</label>
-        <input type="text" id="f-holder_address" class="form-control" placeholder="Quartier, ville…">
+        <input type="text" id="f-holder_address" class="form-control text-uppercase" placeholder="Quartier, ville…">
       </div>
     </div>
 
@@ -138,6 +142,14 @@
         <select id="f-type_permis" class="form-select" onchange="onTypePermisChange()">
           <option value="permanent">Permanent</option>
           <option value="temporaire">Temporaire</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Type spécial</label>
+        <select id="f-type_special" class="form-select">
+          <option value="">— Standard —</option>
+          <option value="M">M — Militaire</option>
+          <option value="P">P — Professionnelle</option>
         </select>
       </div>
       <div class="col-md-4">
@@ -160,11 +172,11 @@
       <div class="col-12">
         <label class="form-label">Catégories</label>
         <div class="d-flex flex-column gap-2 mt-1" id="categories-checkboxes">
-          {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'M', 'P'] %}
+          {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F'] %}
           <div class="border rounded p-2">
             <div class="form-check">
               <input class="form-check-input cat-checkbox" type="checkbox" id="cat-{{ cat }}" value="{{ cat }}" onchange="onCategoryToggle('{{ cat }}')">
-              <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}{% if cat == 'P' %} <span class="text-muted fw-normal">(Professionnelle)</span>{% elif cat == 'M' %} <span class="text-muted fw-normal">(Militaire)</span>{% endif %}</label>
+              <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}</label>
             </div>
             <div class="row g-2 mt-1 cat-details" id="cat-details-{{ cat }}" style="display:none;">
               <div class="col-sm-4">
@@ -382,7 +394,10 @@ function autoFillCategoryExpiration(cat) {
 }
 
 function getCategories() {
-  return Array.from(document.querySelectorAll('.cat-checkbox:checked')).map(function(cb){ return cb.value; }).join(',');
+  var cats = Array.from(document.querySelectorAll('.cat-checkbox:checked')).map(function(cb){ return cb.value; });
+  var special = (document.getElementById('f-type_special') || {}).value || '';
+  if (special) cats.push(special);
+  return cats.join(',');
 }
 
 function getCategoryDetails() {
@@ -409,14 +424,15 @@ function showAlert(msg, type) {
 async function saveLicenseDgrtr() {
   var payload = {
     license_number:        document.getElementById('f-license_number').value.trim().toUpperCase(),
-    holder_name:           document.getElementById('f-holder_name').value.trim(),
-    holder_firstname:      document.getElementById('f-holder_firstname').value.trim(),
+    holder_name:           document.getElementById('f-holder_name').value.trim().toUpperCase(),
+    holder_firstname:      document.getElementById('f-holder_firstname').value.trim().toUpperCase(),
     holder_phone:          document.getElementById('f-holder_phone').value.trim(),
+    nin:                   document.getElementById('f-nin').value.trim(),
     holder_island:         document.getElementById('f-holder_island').value,
-    holder_address:        document.getElementById('f-holder_address').value.trim(),
-    nationalite:           document.getElementById('f-nationalite').value.trim(),
+    holder_address:        document.getElementById('f-holder_address').value.trim().toUpperCase(),
+    nationalite:           document.getElementById('f-nationalite').value.trim().toUpperCase(),
     sexe:                  document.getElementById('f-sexe').value,
-    lieu_naissance:        document.getElementById('f-lieu_naissance').value.trim(),
+    lieu_naissance:        document.getElementById('f-lieu_naissance').value.trim().toUpperCase(),
     centre_immatriculation:document.getElementById('f-centre_immatriculation').value.trim(),
     type_permis:           document.getElementById('f-type_permis').value,
     date_of_birth:         document.getElementById('f-date_of_birth').value,
@@ -472,6 +488,11 @@ async function saveLicenseDgrtr() {
     btn.innerHTML = '<i class="fas fa-save me-1"></i>Enregistrer';
   }
 }
+
+['f-holder_firstname','f-holder_name','f-lieu_naissance','f-nationalite','f-holder_address'].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (el) el.addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+});
 </script>
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>

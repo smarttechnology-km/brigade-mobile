@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Development — Demandes de Suppression</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg:#0d1117; --st-surface:#161b22; --st-border:rgba(255,255,255,0.08);
+            --st-cyan:#00d4ff; --st-green:#3fb950; --st-yellow:#f0b429;
+            --st-red:#f85149; --st-blue:#58a6ff; --st-purple:#bc8cff;
+            --st-orange:#f78166; --sidebar-w:260px;
+        }
+        *{box-sizing:border-box;}
+        body{background:var(--st-bg);color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;margin:0;}
+        .st-sidebar{background:linear-gradient(180deg,#1a1a2e 0%,#0f3460 100%);width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;padding:1.4rem 1rem;border-right:1px solid rgba(0,212,255,0.1);z-index:100;display:flex;flex-direction:column;}
+        .st-brand{display:flex;align-items:center;gap:10px;padding-bottom:1.2rem;border-bottom:1px solid rgba(0,212,255,0.15);margin-bottom:1.5rem;}
+        .st-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--st-cyan),#0080ff);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:#fff;flex-shrink:0;}
+        .st-brand-name{font-weight:700;font-size:.92rem;color:#fff;line-height:1.2;}
+        .st-brand-sub{font-size:.7rem;color:var(--st-cyan);}
+        .st-nav{flex:1;overflow-y:auto;min-height:0;}
+        .st-nav-item{display:flex;align-items:center;gap:11px;padding:.7rem 1rem;border-radius:10px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:.9rem;margin-bottom:4px;transition:all .18s;}
+        .st-nav-item:hover,.st-nav-item.active{background:rgba(0,212,255,0.1);color:#fff;}
+        .st-nav-item.active{border-left:3px solid var(--st-cyan);}
+        .st-nav-icon{width:20px;text-align:center;color:var(--st-cyan);flex-shrink:0;font-size:1rem;}
+        .st-nav-divider{font-size:.68rem;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.3);padding:1rem 1rem .35rem;}
+        .st-bottom-row{display:flex;border-top:1px solid rgba(255,255,255,0.07);}
+        .st-bottom-row .st-nav-item{flex:1;justify-content:center;padding:.7rem .4rem;font-size:.8rem;border-left:none !important;}
+        .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;}
+        .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
+        .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
+        .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);text-decoration:none;}
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+        .st-theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .2s;}
+        .st-theme-btn:hover{background:rgba(0,212,255,0.15);border-color:var(--st-cyan);color:var(--st-cyan);}
+        .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.4rem;}
+        .stat-card{background:var(--st-surface);border:1px solid var(--st-border);border-radius:12px;padding:.9rem 1.1rem;display:flex;align-items:center;gap:.85rem;}
+        .stat-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
+        .stat-label{font-size:.72rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.4px;}
+        .stat-val{font-size:1.3rem;font-weight:700;margin-top:1px;}
+        .st-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;overflow:hidden;}
+        .st-section-header{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.2rem;border-bottom:1px solid var(--st-border);}
+        .st-section-title{font-size:.86rem;font-weight:600;color:#fff;}
+        .table{--bs-table-color:#e6edf3;--bs-table-bg:transparent;color:#e6edf3;margin:0;font-size:.82rem;}
+        .table thead th{background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.45);border-color:var(--st-border);font-weight:500;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;padding:.65rem 1rem;}
+        .table tbody td{border-color:rgba(255,255,255,0.04);padding:.75rem 1rem;vertical-align:middle;}
+        .table tbody tr:hover td{background:rgba(0,212,255,0.07);color:#e6edf3;}
+        .modal-content{background:#1c2333;border:1px solid rgba(0,212,255,0.15);border-radius:14px;}
+        .modal-header{border-bottom:1px solid rgba(255,255,255,0.07);padding:1rem 1.3rem;}
+        .modal-title{font-size:.95rem;font-weight:700;color:#fff;}
+        .modal-footer{border-top:1px solid rgba(255,255,255,0.07);padding:.75rem 1.3rem;}
+        .btn-close{filter:invert(1) brightness(0.6);}
+        .form-label{font-size:.78rem;color:rgba(255,255,255,0.5);margin-bottom:.25rem;}
+        .form-control,.form-select{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#e6edf3;font-size:.83rem;padding:.45rem .7rem;}
+        .form-control:focus,.form-select:focus{background:rgba(255,255,255,0.07);border-color:var(--st-cyan);box-shadow:0 0 0 2px rgba(0,212,255,0.15);color:#e6edf3;}
+        .form-control::placeholder{color:rgba(255,255,255,0.2);}
+        .nav-badge{margin-left:auto;background:var(--st-yellow);color:#000;border-radius:20px;font-size:.65rem;font-weight:700;padding:.15em .55em;}
+        .badge-pending{background:rgba(240,180,41,0.15);color:var(--st-yellow);border:1px solid rgba(240,180,41,0.3);padding:.2em .65em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        .badge-approved{background:rgba(63,185,80,0.15);color:var(--st-green);border:1px solid rgba(63,185,80,0.3);padding:.2em .65em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        .badge-rejected{background:rgba(248,81,73,0.12);color:var(--st-red);border:1px solid rgba(248,81,73,0.25);padding:.2em .65em;border-radius:20px;font-size:.72rem;font-weight:600;}
+        .badge-vehicle{background:rgba(0,212,255,0.1);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.25);padding:.2em .65em;border-radius:20px;font-size:.72rem;}
+        .badge-license{background:rgba(188,140,255,0.1);color:var(--st-purple);border:1px solid rgba(188,140,255,0.25);padding:.2em .65em;border-radius:20px;font-size:.72rem;}
+        .empty-state{padding:3rem;text-align:center;color:rgba(255,255,255,0.25);}
+        .filter-tabs{display:flex;gap:.4rem;margin-bottom:1rem;}
+        .filter-tab{padding:.35rem .85rem;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.55);font-size:.8rem;cursor:pointer;transition:all .16s;}
+        .filter-tab.active,.filter-tab:hover{border-color:var(--st-cyan);background:rgba(0,212,255,0.1);color:#fff;}
+        .filter-tab.active{font-weight:600;}
+        html[data-theme="light"] body{background:#f0f2f5;color:#1a1a2e;}
+        html[data-theme="light"] .st-brand-name{color:#fff;}
+        html[data-theme="light"] .stat-card,.html[data-theme="light"] .st-section{background:#fff;border-color:rgba(0,0,0,0.08);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+        html[data-theme="light"] .st-section{background:#fff;border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .stat-card{background:#fff;border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .stat-label{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .stat-val{color:#1a1a2e;}
+        html[data-theme="light"] .st-section-title{color:#1a1a2e;}
+        html[data-theme="light"] .table{color:#1a1a2e;--bs-table-color:#1a1a2e;}
+        html[data-theme="light"] .table tbody tr:hover td{color:#1a1a2e;background:rgba(0,149,179,0.06);}
+        html[data-theme="light"] .text-muted{color:rgba(0,0,0,0.45) !important;}
+        html[data-theme="light"] .table thead th{background:#f6f8fa;color:rgba(0,0,0,0.45);border-color:rgba(0,0,0,0.08);}
+        html[data-theme="light"] .table tbody td{border-color:rgba(0,0,0,0.05);}
+        html[data-theme="light"] .st-user-pill{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.1);color:#1a1a2e;}
+        html[data-theme="light"] .st-theme-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:#1a1a2e;}
+        html[data-theme="light"] .st-theme-btn:hover{background:rgba(0,128,192,0.1);border-color:#0080c0;color:#0080c0;}
+        html[data-theme="light"] .st-page-title{color:#1a1a2e;}
+        html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .modal-content{background:#fff;border-color:rgba(0,0,0,0.1);}
+        html[data-theme="light"] .modal-header,.html[data-theme="light"] .modal-footer{border-color:rgba(0,0,0,0.07);}
+        html[data-theme="light"] .modal-title{color:#1a1a2e;}
+        html[data-theme="light"] .form-label{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .form-control,.html[data-theme="light"] .form-select{background:#f6f8fa;border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
+        html[data-theme="light"] .btn-close{filter:none;}
+        html[data-theme="light"] .empty-state{color:rgba(0,0,0,0.25);}
+        html[data-theme="light"] .filter-tab{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.1);color:rgba(0,0,0,0.55);}
+        html[data-theme="light"] .filter-tab.active,.html[data-theme="light"] .filter-tab:hover{border-color:#0080c0;background:rgba(0,128,192,0.08);color:#0d6efd;}
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        @media(max-width:992px){.stats-row{grid-template-columns:1fr 1fr;}}
+        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}.stats-row{grid-template-columns:1fr 1fr;}}
+    </style>
+    <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">SIGVA Administration</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+        {% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ '' if pending_count > 0 else 'display:none;' }}">{{ pending_count }}</span>
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.suppressions_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-trash-alt"></i></span>Suppressions
+            {% if deletion_pending_count > 0 %}
+            <span class="nav-badge ms-auto" style="background:#ef4444;color:#fff;">{{ deletion_pending_count }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+    </nav>
+    <div class="st-bottom-row">
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<main class="st-main">
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-trash-alt me-2" style="color:#ef4444;"></i>Demandes de Suppression</div>
+            <div class="st-page-sub">Validation des suppressions de véhicules et de permis</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row" id="stat-cards">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(255,255,255,0.06);"><i class="fas fa-list" style="color:rgba(255,255,255,0.4);"></i></div>
+            <div><div class="stat-label">Total</div><div class="stat-val" id="stat-total">—</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(240,180,41,0.12);"><i class="fas fa-clock" style="color:var(--st-yellow);"></i></div>
+            <div><div class="stat-label">En attente</div><div class="stat-val" style="color:var(--st-yellow);" id="stat-pending">—</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(63,185,80,0.12);"><i class="fas fa-check-circle" style="color:var(--st-green);"></i></div>
+            <div><div class="stat-label">Approuvées</div><div class="stat-val" style="color:var(--st-green);" id="stat-approved">—</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(248,81,73,0.12);"><i class="fas fa-times-circle" style="color:var(--st-red);"></i></div>
+            <div><div class="stat-label">Rejetées</div><div class="stat-val" style="color:var(--st-red);" id="stat-rejected">—</div></div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="st-section">
+        <div class="st-section-header">
+            <span class="st-section-title"><i class="fas fa-trash-alt me-2" style="color:#ef4444;"></i>Liste des demandes</span>
+        </div>
+        <div class="p-3">
+            <div class="filter-tabs">
+                <button class="filter-tab active" id="tab-pending" onclick="setFilter('pending')"><i class="fas fa-clock me-1"></i>En attente</button>
+                <button class="filter-tab" id="tab-approved" onclick="setFilter('approved')"><i class="fas fa-check me-1"></i>Approuvées</button>
+                <button class="filter-tab" id="tab-rejected" onclick="setFilter('rejected')"><i class="fas fa-times me-1"></i>Rejetées</button>
+                <button class="filter-tab" id="tab-all" onclick="setFilter('all')">Toutes</button>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Objet</th>
+                            <th>Motif</th>
+                            <th>Demandé par</th>
+                            <th>Date demande</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="del-tbody">
+                        <tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Modal Approuver -->
+<div class="modal fade" id="approveModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-check-circle text-success me-2"></i>Confirmer la suppression</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger py-2 mb-3" style="font-size:.85rem;">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    <strong>Action irréversible.</strong> L'objet sera définitivement supprimé.
+                </div>
+                <p id="approve-desc" class="mb-3" style="font-size:.88rem;"></p>
+                <label class="form-label">Commentaire (facultatif)</label>
+                <textarea class="form-control" id="approve-comment" rows="2" placeholder="Ajoutez un commentaire…"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-danger btn-sm" id="approve-btn"><i class="fas fa-trash me-1"></i>Valider la suppression</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Rejeter -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-times-circle text-warning me-2"></i>Rejeter la demande</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="reject-desc" class="mb-3" style="font-size:.88rem;"></p>
+                <label class="form-label">Motif du rejet <span class="text-danger">*</span></label>
+                <textarea class="form-control" id="reject-comment" rows="2" placeholder="Expliquez pourquoi la suppression est refusée"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-warning btn-sm text-dark" id="reject-btn"><i class="fas fa-ban me-1"></i>Rejeter</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    const html = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    window.openSidebar = function () {
+        document.querySelector('.st-sidebar').classList.add('mob-open');
+        document.getElementById('mob-overlay').classList.add('active');
+    };
+    window.closeSidebar = function () {
+        document.querySelector('.st-sidebar').classList.remove('mob-open');
+        document.getElementById('mob-overlay').classList.remove('active');
+    };
+})();
+
+const approveModal = new bootstrap.Modal(document.getElementById('approveModal'));
+const rejectModal  = new bootstrap.Modal(document.getElementById('rejectModal'));
+
+let _allRequests = [];
+let _currentFilter = 'pending';
+let _currentId = null;
+
+const TYPE_LABEL = { vehicle: 'Véhicule', license: 'Permis' };
+const STATUS_LABEL = { pending: 'En attente', approved: 'Approuvée', rejected: 'Rejetée' };
+
+function setFilter(f) {
+    _currentFilter = f;
+    ['pending','approved','rejected','all'].forEach(k => {
+        const btn = document.getElementById('tab-' + k);
+        if (btn) btn.classList.toggle('active', k === f);
+    });
+    renderTable();
+}
+
+function renderTable() {
+    const tbody = document.getElementById('del-tbody');
+    const rows = _currentFilter === 'all'
+        ? _allRequests
+        : _allRequests.filter(r => r.status === _currentFilter);
+
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune demande${_currentFilter !== 'all' ? ' ' + STATUS_LABEL[_currentFilter]?.toLowerCase() : ''}.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = rows.map(r => {
+        const typeBadge = r.object_type === 'vehicle'
+            ? `<span class="badge-vehicle"><i class="fas fa-car me-1"></i>Véhicule</span>`
+            : `<span class="badge-license"><i class="fas fa-id-card me-1"></i>Permis</span>`;
+
+        let statusBadge = '';
+        if (r.status === 'pending')   statusBadge = `<span class="badge-pending"><i class="fas fa-clock me-1"></i>En attente</span>`;
+        if (r.status === 'approved')  statusBadge = `<span class="badge-approved"><i class="fas fa-check me-1"></i>Approuvée</span>`;
+        if (r.status === 'rejected')  statusBadge = `<span class="badge-rejected"><i class="fas fa-times me-1"></i>Rejetée</span>`;
+
+        const reviewInfo = r.status !== 'pending' && r.reviewed_by
+            ? `<div style="font-size:.72rem;color:rgba(255,255,255,0.4);margin-top:.2rem;">par ${r.reviewed_by} · ${r.reviewed_at}${r.review_comment ? ' — ' + r.review_comment : ''}</div>`
+            : '';
+
+        const actions = r.status === 'pending'
+            ? `<button class="btn btn-sm btn-success me-1" style="font-size:.75rem;" onclick="openApprove(${r.id}, '${(r.object_label||'').replace(/'/g,"\\'")}', '${TYPE_LABEL[r.object_type]}')">
+                   <i class="fas fa-check me-1"></i>Approuver
+               </button>
+               <button class="btn btn-sm btn-outline-danger" style="font-size:.75rem;" onclick="openReject(${r.id}, '${(r.object_label||'').replace(/'/g,"\\'")}')">
+                   <i class="fas fa-times me-1"></i>Rejeter
+               </button>`
+            : '—';
+
+        return `<tr>
+            <td>${typeBadge}</td>
+            <td><strong>${r.object_label || '—'}</strong></td>
+            <td>${r.reason || '<em style="opacity:.45;">Non précisé</em>'}</td>
+            <td>${r.requested_by}</td>
+            <td style="white-space:nowrap;font-size:.78rem;">${r.requested_at}</td>
+            <td>${statusBadge}${reviewInfo}</td>
+            <td>${actions}</td>
+        </tr>`;
+    }).join('');
+}
+
+function updateStats(rows) {
+    document.getElementById('stat-total').textContent   = rows.length;
+    document.getElementById('stat-pending').textContent  = rows.filter(r => r.status === 'pending').length;
+    document.getElementById('stat-approved').textContent = rows.filter(r => r.status === 'approved').length;
+    document.getElementById('stat-rejected').textContent = rows.filter(r => r.status === 'rejected').length;
+}
+
+function loadRequests() {
+    fetch('/smart-tech/api/deletion-requests', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(rows => {
+            _allRequests = rows;
+            updateStats(rows);
+            renderTable();
+        })
+        .catch(() => {
+            document.getElementById('del-tbody').innerHTML =
+                '<tr><td colspan="7" class="text-center text-danger py-3">Erreur de chargement.</td></tr>';
+        });
+}
+
+window.openApprove = function(id, label, type) {
+    _currentId = id;
+    document.getElementById('approve-desc').innerHTML =
+        `Vous allez supprimer définitivement <strong>${label}</strong> <em>(${type})</em>.`;
+    document.getElementById('approve-comment').value = '';
+    approveModal.show();
+};
+
+window.openReject = function(id, label) {
+    _currentId = id;
+    document.getElementById('reject-desc').innerHTML =
+        `Rejeter la demande de suppression de <strong>${label}</strong> ?`;
+    document.getElementById('reject-comment').value = '';
+    rejectModal.show();
+};
+
+document.getElementById('approve-btn').addEventListener('click', function() {
+    if (!_currentId) return;
+    const comment = document.getElementById('approve-comment').value.trim();
+    this.disabled = true;
+    this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Traitement…';
+    fetch(`/smart-tech/api/deletion-requests/${_currentId}/approve`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ comment })
+    }).then(r => r.json()).then(d => {
+        approveModal.hide();
+        if (d.ok) { loadRequests(); }
+        else { alert(d.error || 'Erreur'); }
+    }).catch(() => alert('Erreur réseau.'))
+      .finally(() => { this.disabled = false; this.innerHTML = '<i class="fas fa-trash me-1"></i>Valider la suppression'; });
+});
+
+document.getElementById('reject-btn').addEventListener('click', function() {
+    if (!_currentId) return;
+    const comment = document.getElementById('reject-comment').value.trim();
+    if (!comment) { alert('Veuillez indiquer un motif de rejet.'); return; }
+    this.disabled = true;
+    fetch(`/smart-tech/api/deletion-requests/${_currentId}/reject`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ comment })
+    }).then(r => r.json()).then(d => {
+        rejectModal.hide();
+        if (d.ok) { loadRequests(); }
+        else { alert(d.error || 'Erreur'); }
+    }).catch(() => alert('Erreur réseau.'))
+      .finally(() => { this.disabled = false; });
+});
+
+loadRequests();
+setInterval(loadRequests, 30000);
+</script>
+</body>
+</html>

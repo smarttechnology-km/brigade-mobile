@@ -8,7 +8,7 @@
 }
 .stat-label { font-size:12px; font-weight:700; text-transform:uppercase;
   letter-spacing:.05em; color:#6b7280; margin-bottom:6px; }
-.stat-value { font-size:32px; font-weight:800; line-height:1; }
+.stat-value { font-size:28px; font-weight:800; line-height:1; }
 .stat-sub   { font-size:12px; color:#9ca3af; margin-top:6px; }
 #rec-table th { font-size:12px; font-weight:600; text-transform:uppercase;
   letter-spacing:.04em; color:#6b7280; border-bottom:2px solid #e5e7eb; }
@@ -27,21 +27,17 @@
 
   <!-- Filtres -->
   <div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
-    <!-- Mode Jour -->
     <button id="btn-mode-jour" class="btn btn-primary btn-sm" onclick="setMode('jour')">
       <i class="fas fa-calendar-day me-1"></i>Jour
     </button>
-    <!-- Mode plage -->
     <button id="btn-mode-plage" class="btn btn-outline-secondary btn-sm" onclick="setMode('plage')">
       <i class="fas fa-calendar-alt me-1"></i>Du…au
     </button>
 
-    <!-- Jour : champ date unique -->
     <div id="zone-jour" style="display:flex;align-items:center;gap:.5rem;">
       <input type="date" class="form-control form-control-sm" id="f-jour" style="width:160px;" oninput="loadData()">
     </div>
 
-    <!-- Plage : deux champs -->
     <div id="zone-plage" style="display:none;align-items:center;gap:.5rem;">
       <input type="date" class="form-control form-control-sm" id="f-date-from" style="width:150px;">
       <span class="text-muted fw-semibold">→</span>
@@ -54,25 +50,32 @@
 
   <!-- Cartes stats -->
   <div class="row g-3 mb-4">
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <div class="stat-card" style="border-left:4px solid #3b82f6;">
         <div class="stat-label">Véhicules enregistrés</div>
         <div class="stat-value text-primary" id="s-count">—</div>
         <div class="stat-sub">Cartes grises signées</div>
       </div>
     </div>
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <div class="stat-card" style="border-left:4px solid #10b981;">
         <div class="stat-label">Montant total encaissé</div>
         <div class="stat-value text-success" id="s-total">—</div>
-        <div class="stat-sub">Somme des prix saisis</div>
+        <div class="stat-sub">Droit + Chevaux</div>
       </div>
     </div>
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
+      <div class="stat-card" style="border-left:4px solid #6366f1;">
+        <div class="stat-label">Prix du droit</div>
+        <div class="stat-value text-indigo" id="s-droit" style="color:#6366f1;">—</div>
+        <div class="stat-sub">3 000 KMF × nb cartes grises</div>
+      </div>
+    </div>
+    <div class="col-12 col-md-3">
       <div class="stat-card" style="border-left:4px solid #f59e0b;">
-        <div class="stat-label">Sans prix renseigné</div>
-        <div class="stat-value text-warning" id="s-missing">—</div>
-        <div class="stat-sub">CGs signées sans montant</div>
+        <div class="stat-label">Prix des chevaux</div>
+        <div class="stat-value text-warning" id="s-chevaux">—</div>
+        <div class="stat-sub">Chevaux × 1 000 KMF par CG</div>
       </div>
     </div>
   </div>
@@ -94,11 +97,14 @@
               <th>Propriétaire</th>
               <th>Date de signature</th>
               <th>Date d'émission</th>
-              <th class="text-end pe-4">Prix (FC)</th>
+              <th class="text-center">Chevaux</th>
+              <th class="text-end">Droit</th>
+              <th class="text-end pe-4">Prix des chevaux</th>
+              <th class="text-end pe-4">Total</th>
             </tr>
           </thead>
           <tbody id="rec-tbody">
-            <tr><td colspan="5" class="text-center text-muted py-4">
+            <tr><td colspan="8" class="text-center text-muted py-4">
               <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
             </td></tr>
           </tbody>
@@ -110,12 +116,12 @@
 </div>
 
 <script>
-function fmt(n) {
+function fmtKmf(n) {
   if (n === null || n === undefined) return '<span class="text-muted">—</span>';
-  return Number(n).toLocaleString('fr-FR') + ' FC';
+  return Number(n).toLocaleString('fr-FR') + ' KMF';
 }
 function fmtTotal(n) {
-  return Number(n).toLocaleString('fr-FR') + ' FC';
+  return Number(n).toLocaleString('fr-FR') + ' KMF';
 }
 
 let _mode = 'jour';
@@ -151,7 +157,7 @@ async function loadData() {
   if (params.length) url += '?' + params.join('&');
 
   const tbody = document.getElementById('rec-tbody');
-  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
 
   try {
     const res  = await fetch(url, { credentials: 'same-origin' });
@@ -159,24 +165,33 @@ async function loadData() {
 
     document.getElementById('s-count').textContent   = data.count;
     document.getElementById('s-total').textContent   = fmtTotal(data.total_montant);
-    document.getElementById('s-missing').textContent = data.count - data.nb_avec_prix;
+    document.getElementById('s-droit').textContent   = fmtTotal(data.total_droit);
+    document.getElementById('s-chevaux').textContent = fmtTotal(data.total_chevaux);
     document.getElementById('row-count').textContent = `(${data.count})`;
 
     if (!data.rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-inbox me-2"></i>Aucun résultat</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-inbox me-2"></i>Aucun résultat</td></tr>';
       return;
     }
 
-    tbody.innerHTML = data.rows.map(r => `
+    tbody.innerHTML = data.rows.map(r => {
+      const cv = r.nombre_chevaux !== null && r.nombre_chevaux !== undefined ? r.nombre_chevaux : null;
+      const droitAmt  = r.prix !== null ? 3000 : null;
+      const chevAmt   = cv !== null ? cv * 1000 : null;
+      return `
       <tr>
         <td class="px-4 fw-bold">${r.license_plate}</td>
         <td>${r.civilite ? r.civilite + ' ' : ''}${r.owner_name}</td>
         <td>${r.signed_at || '—'}</td>
         <td>${r.date_emission || '—'}</td>
-        <td class="text-end pe-4 fw-semibold">${fmt(r.prix)}</td>
-      </tr>`).join('');
+        <td class="text-center">${cv !== null ? cv + ' CV' : '<span class="text-muted">—</span>'}</td>
+        <td class="text-end">${fmtKmf(droitAmt)}</td>
+        <td class="text-end">${fmtKmf(chevAmt)}</td>
+        <td class="text-end pe-4 fw-semibold">${fmtKmf(r.prix)}</td>
+      </tr>`;
+    }).join('');
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Erreur de chargement</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur de chargement</td></tr>';
   }
 }
 

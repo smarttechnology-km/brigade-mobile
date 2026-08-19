@@ -117,7 +117,7 @@
     <div class="col-md-6">
       <div class="input-group">
         <span class="input-group-text"><i class="fas fa-search"></i></span>
-        <input id="search-input" type="text" class="form-control" placeholder="Numéro, nom, téléphone…">
+        <input id="search-input" type="text" class="form-control" placeholder="Numéro, nom, téléphone, NIN…">
       </div>
     </div>
     <div class="col-md-3">
@@ -292,11 +292,15 @@
           </div>
           <div class="col-md-4">
             <label class="form-label">Nationalité</label>
-            <input type="text" id="f-nationalite" class="form-control" placeholder="Ex : Comorien">
+            <input type="text" id="f-nationalite" class="form-control" placeholder="Ex : Comorien" value="COMORIENNE">
           </div>
           <div class="col-md-4">
             <label class="form-label">Téléphone</label>
             <input type="tel" id="f-holder_phone" class="form-control" placeholder="Ex : 3321234">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">NIN</label>
+            <input type="text" id="f-nin" class="form-control" placeholder="Ex : 12345678">
           </div>
           <div class="col-md-4">
             <label class="form-label">Île</label>
@@ -326,6 +330,14 @@
             </select>
           </div>
           <div class="col-md-4">
+            <label class="form-label fw-semibold">Type spécial</label>
+            <select id="f-type_special" class="form-select">
+              <option value="">— Standard —</option>
+              <option value="M">M — Militaire</option>
+              <option value="P">P — Professionnelle</option>
+            </select>
+          </div>
+          <div class="col-md-4">
             <label class="form-label" id="issue-date-label">Date de début</label>
             <input type="date" id="f-issue_date" class="form-control">
           </div>
@@ -345,11 +357,11 @@
           <div class="col-12">
             <label class="form-label">Catégories</label>
             <div class="d-flex flex-column gap-2 mt-1" id="categories-checkboxes">
-              {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'M', 'P'] %}
+              {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F'] %}
               <div class="border rounded p-2">
                 <div class="form-check">
                   <input class="form-check-input cat-checkbox" type="checkbox" id="cat-{{ cat }}" value="{{ cat }}" onchange="onCategoryToggle('{{ cat }}')">
-                  <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}{% if cat == 'P' %} <span class="text-muted fw-normal">(Professionnelle)</span>{% elif cat == 'M' %} <span class="text-muted fw-normal">(Militaire)</span>{% endif %}</label>
+                  <label class="form-check-label fw-semibold" for="cat-{{ cat }}">{{ cat }}</label>
                 </div>
                 <div class="row g-2 mt-1 cat-details" id="cat-details-{{ cat }}" style="display:none;">
                   <div class="col-sm-4">
@@ -626,7 +638,7 @@
                   <tr><th>Catégorie</th><th>Validité</th><th style="width:160px;">Durée</th></tr>
                 </thead>
                 <tbody>
-                  {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'M', 'P'] %}
+                  {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F'] %}
                   <tr>
                     <td class="fw-semibold">{{ cat }}</td>
                     <td>

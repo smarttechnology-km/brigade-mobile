@@ -40,14 +40,15 @@
 <div class="container-fluid py-4 px-4">
 
   <!-- Header -->
+  {%- set _jud_mode = current_user.role == 'judiciaire' or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_general') -%}
   <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
       <h4 class="fw-bold mb-0"><i class="fas fa-car text-primary me-2"></i>Cartes Grises Provisoires</h4>
       <small class="text-muted">
-        {% if current_user.role == 'judiciaire' %}Saisie et envoi pour signature{% else %}Documents en attente de signature{% endif %}
+        {% if _jud_mode %}Saisie et envoi pour signature{% else %}Documents en attente de signature{% endif %}
       </small>
     </div>
-    {% if current_user.role != 'judiciaire' %}
+    {% if not _jud_mode %}
     <button class="btn btn-outline-secondary" onclick="openSettings()">
       <i class="fas fa-cog me-2"></i>Paramètres
     </button>
@@ -125,7 +126,7 @@
   {% endif %}
 
   <!-- ── Demandes en attente (DGRTR/admin) ── -->
-  {% if current_user.role != 'judiciaire' %}
+  {% if not _jud_mode %}
   <div id="pending-section" style="display:none;">
     <h6 class="fw-bold text-primary mb-3">
       <i class="fas fa-clock me-2"></i>Documents en attente de signature
@@ -141,8 +142,8 @@
   <span id="pending-count" style="display:none;"></span>
   {% endif %}
 
-  <!-- Tableau + recherche (judiciaire uniquement) -->
-  {% if current_user.role == 'judiciaire' %}
+  <!-- Tableau + recherche (judiciaire / directeur_general) -->
+  {% if _jud_mode %}
 
   <!-- Status tabs -->
   <div class="mb-3" style="border-bottom:2px solid #e5e7eb;">
@@ -192,7 +193,7 @@
           <th>Marque / Modèle</th>
           <th>Genre</th>
           <th>Statut</th>
-          <th class="text-end">Actions</th>
+          {% if current_user.dgrtr_type != 'directeur_general' %}<th class="text-end">Actions</th>{% endif %}
         </tr>
       </thead>
       <tbody id="results-tbody">
@@ -358,8 +359,39 @@
             <input type="date" class="form-control" id="cg-date-emission">
           </div>
           <div class="col-md-4">
-            <label class="form-label fw-semibold">Prix (FC) <span class="text-danger">*</span></label>
-            <input type="number" min="0" step="any" class="form-control" id="cg-prix" placeholder="ex: 25000">
+            <label class="form-label fw-semibold">Nombre de chevaux <span class="text-danger">*</span></label>
+            <input type="number" min="0" step="1" class="form-control" id="cg-nombre-chevaux" placeholder="ex: 5" oninput="updateCgPrixTotal()">
+          </div>
+          <div class="col-12">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="cg-carte-bleue" onchange="updateCgPrixTotal()">
+              <label class="form-check-label fw-semibold" for="cg-carte-bleue">
+                <i class="fas fa-id-card text-primary me-1"></i>Carte Bleu
+              </label>
+            </div>
+            <div class="border rounded p-2 bg-light" style="font-size:13px;">
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-muted">Droit :</span>
+                <span class="fw-semibold">3 000 KMF</span>
+              </div>
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-muted">Chevaux (<span id="cg-cv-count">0</span> × 1 000 KMF) :</span>
+                <span class="fw-semibold" id="cg-cv-amount">0 KMF</span>
+              </div>
+              <div id="cg-carte-bleue-row" style="display:none;justify-content:space-between;" class="mb-1">
+                <span class="text-muted">Carte Bleu :</span>
+                <span class="fw-semibold">2 500 KMF</span>
+              </div>
+              <div class="d-flex justify-content-between mb-1" id="cg-qr-row">
+                <span class="text-muted">Tarif QR Code :</span>
+                <span class="fw-semibold" id="cg-qr-amount">— KMF</span>
+              </div>
+              <hr class="my-1">
+              <div class="d-flex justify-content-between">
+                <span class="fw-bold">Prix total :</span>
+                <span class="fw-bold text-primary" id="cg-prix-total">3 000 KMF</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -395,6 +427,7 @@
 const USER_ROLE = {{ current_user.role | tojson }};
 const USER_DGRTR_TYPE = {{ (current_user.dgrtr_type or '') | tojson }};
 const USER_COUNTRY = {{ (current_user.country or '') | tojson }};
+const IS_JUDICIAIRE_MODE = USER_ROLE === 'judiciaire' || (USER_ROLE === 'dgrtr' && USER_DGRTR_TYPE === 'directeur_general');
 let _activeIsland = 'Grande Comore';
 let _currentVehicleId = null;
 let _searchTimer = null;
@@ -666,7 +699,7 @@ function renderTable(data) {
       <td>${v.make ? v.make + (v.model ? ' ' + v.model : '') : '—'}</td>
       <td>${v.vehicle_type || '—'}</td>
       <td>${statusBadge(v.carte_grise)}</td>
-      <td class="text-end" style="white-space:nowrap;">${rowActions(v)}</td>
+      ${USER_DGRTR_TYPE !== 'directeur_general' ? `<td class="text-end" style="white-space:nowrap;">${rowActions(v)}</td>` : ''}
     </tr>`).join('');
 }
 
@@ -743,7 +776,12 @@ function openCG(v, apercu = false) {
     ? `<div class="col-6"><span class="text-muted">${label} :</span> <b>${val}</b></div>`
     : '';
 
-  const prixFormatted = (cg.prix !== undefined && cg.prix !== '') ? Number(cg.prix).toLocaleString('fr-FR') + ' FC' : '';
+  const prixTotal = (cg.prix !== undefined && cg.prix !== '') ? Number(cg.prix) : null;
+  const prixFormatted = prixTotal !== null
+    ? (cg.nombre_chevaux !== undefined && cg.nombre_chevaux !== ''
+        ? `Droit 3 000 + ${cg.nombre_chevaux} CV (${(cg.nombre_chevaux * 1000).toLocaleString('fr-FR')})${cg.carte_bleue ? ' + Carte Bleu 2 500' : ''} = ${prixTotal.toLocaleString('fr-FR')} KMF`
+        : prixTotal.toLocaleString('fr-FR') + ' KMF')
+    : '';
 
   document.getElementById('cg-vehicle-summary').innerHTML = `
     <div class="row g-2">
@@ -787,24 +825,32 @@ function openCG(v, apercu = false) {
   document.getElementById('cg-poids-vide').value   = cg.poids_a_vide || '';
   document.getElementById('cg-charge-utile').value = cg.charge_utile_ptc || '';
   document.getElementById('cg-observation').value  = cg.observation || '';
-  document.getElementById('cg-civilite').value      = cg.civilite || '';
-  document.getElementById('cg-date-emission').value = cg.date_emission || '';
-  document.getElementById('cg-prix').value          = cg.prix !== undefined && cg.prix !== '' ? cg.prix : '';
+  document.getElementById('cg-civilite').value       = cg.civilite || '';
+  document.getElementById('cg-date-emission').value  = cg.date_emission || '';
+  const _cgNbCv = (cg.nombre_chevaux != null && cg.nombre_chevaux !== '')
+    ? cg.nombre_chevaux
+    : (v.nombre_chevaux != null ? v.nombre_chevaux : '');
+  document.getElementById('cg-nombre-chevaux').value = _cgNbCv;
+  const _carteBleueEl = document.getElementById('cg-carte-bleue');
+  if (_carteBleueEl) _carteBleueEl.checked = !!(cg.carte_bleue);
+  if (cg.qr_price) _cgQrPrice = cg.qr_price;
+  updateCgPrixTotal();
 
-  // Verrouiller le montant une fois le paiement confirmé par mobile money
-  const prixInput = document.getElementById('cg-prix');
+  // Verrouiller le nombre de chevaux et la carte bleu une fois le paiement confirmé
+  const chevInput = document.getElementById('cg-nombre-chevaux');
   const prixLocked = (status === 'en_attente' || status === 'signee');
-  prixInput.readOnly = prixLocked;
-  prixInput.classList.toggle('bg-light', prixLocked);
-  prixInput.title = prixLocked ? 'Montant verrouillé — paiement déjà confirmé' : '';
+  chevInput.readOnly = prixLocked;
+  if (_carteBleueEl) _carteBleueEl.disabled = prixLocked;
+  chevInput.classList.toggle('bg-light', prixLocked);
+  chevInput.title = prixLocked ? 'Montant verrouillé — paiement déjà confirmé' : '';
 
-  // Judiciaire : Envoyer pour signature si carte saisie, pas encore envoyée ni signée
+  // Judiciaire / DG : Envoyer pour signature si carte saisie, pas encore envoyée ni signée
   document.getElementById('btn-request-sig').classList.toggle('d-none',
-    !(USER_ROLE === 'judiciaire' && v.has_carte_grise && status !== 'signee' && status !== 'en_attente' && status !== 'en_attente_paiement'));
+    !(IS_JUDICIAIRE_MODE && v.has_carte_grise && status !== 'signee' && status !== 'en_attente' && status !== 'en_attente_paiement'));
 
-  // DGRTR/admin : Valider & Signer si en attente
+  // DGRTR (hors DG) / admin : Valider & Signer si en attente
   document.getElementById('btn-sign-cg').classList.toggle('d-none',
-    !((USER_ROLE === 'dgrtr' || USER_ROLE === 'administrateur') && status === 'en_attente'));
+    !(!IS_JUDICIAIRE_MODE && (USER_ROLE === 'dgrtr' || USER_ROLE === 'administrateur') && status === 'en_attente'));
 
   // Print : seulement si signée
   const btnPrint = document.getElementById('btn-print-cg');
@@ -835,19 +881,42 @@ async function saveSignedUpdate() {
   } catch(e) { alert('Erreur : ' + e.message); }
 }
 
+let _cgQrPrice = 0;
+fetch('/api/smarttech/qr-activation-price')
+  .then(r => r.json())
+  .then(d => { _cgQrPrice = d.price || 0; updateCgPrixTotal(); })
+  .catch(() => {});
+
+function updateCgPrixTotal() {
+  const cv = parseInt(document.getElementById('cg-nombre-chevaux').value) || 0;
+  const cvAmount = cv * 1000;
+  const carteBleue = document.getElementById('cg-carte-bleue') && document.getElementById('cg-carte-bleue').checked;
+  const carteBleueAmount = carteBleue ? 2500 : 0;
+  const total = 3000 + cvAmount + carteBleueAmount + _cgQrPrice;
+  document.getElementById('cg-cv-count').textContent  = cv;
+  document.getElementById('cg-cv-amount').textContent = cvAmount.toLocaleString('fr-FR') + ' KMF';
+  const carteBleueRow = document.getElementById('cg-carte-bleue-row');
+  if (carteBleueRow) carteBleueRow.style.display = carteBleue ? 'flex' : 'none';
+  const qrAmountEl = document.getElementById('cg-qr-amount');
+  if (qrAmountEl) qrAmountEl.textContent = _cgQrPrice.toLocaleString('fr-FR') + ' KMF';
+  document.getElementById('cg-prix-total').textContent = total.toLocaleString('fr-FR') + ' KMF';
+}
+
 async function saveCG() {
   if (!_currentVehicleId) return;
   const civiliteVal = document.getElementById('cg-civilite').value;
   const dateVal = document.getElementById('cg-date-emission').value.trim();
-  const prixVal = document.getElementById('cg-prix').value.trim();
-  if (!civiliteVal || !dateVal || !prixVal) {
-    alert('Veuillez renseigner la Civilité, la Date d\'émission et le Prix avant d\'enregistrer.');
+  const chevVal = document.getElementById('cg-nombre-chevaux').value.trim();
+  if (!civiliteVal || !dateVal || !chevVal) {
+    alert('Veuillez renseigner la Civilité, la Date d\'émission et le Nombre de chevaux avant d\'enregistrer.');
     return;
   }
   const payload = {
-    civilite:      civiliteVal,
-    date_emission: dateVal,
-    prix:          prixVal,
+    civilite:       civiliteVal,
+    date_emission:  dateVal,
+    nombre_chevaux: chevVal,
+    carte_bleue:    !!(document.getElementById('cg-carte-bleue') && document.getElementById('cg-carte-bleue').checked),
+    qr_price:       _cgQrPrice,
   };
   try {
     const res = await fetch(`/api/dgrtr/cartes-grises/${_currentVehicleId}`, {
@@ -868,18 +937,18 @@ async function requestSignature() {
   if (!_currentVehicleId) return;
 
   const dateVal = document.getElementById('cg-date-emission').value.trim();
-  const prixVal = document.getElementById('cg-prix').value.trim();
-  if (!dateVal || !prixVal) {
-    alert('Veuillez renseigner la Date d\'émission et le Prix de la carte grise avant d\'envoyer pour signature.');
+  const chevVal = document.getElementById('cg-nombre-chevaux').value.trim();
+  if (!dateVal || !chevVal) {
+    alert('Veuillez renseigner la Date d\'émission et le Nombre de chevaux avant d\'envoyer pour signature.');
     return;
   }
 
-  // Save date + prix before sending for signature
+  // Save date + nombre_chevaux before sending for signature
   try {
     const saveRes = await fetch(`/api/dgrtr/cartes-grises/${_currentVehicleId}`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ civilite: document.getElementById('cg-civilite').value, date_emission: dateVal, prix: prixVal }),
+      body: JSON.stringify({ civilite: document.getElementById('cg-civilite').value, date_emission: dateVal, nombre_chevaux: chevVal, carte_bleue: !!(document.getElementById('cg-carte-bleue') && document.getElementById('cg-carte-bleue').checked), qr_price: _cgQrPrice }),
     });
     if (!saveRes.ok) throw new Error('Erreur lors de la sauvegarde');
     const saveData = await saveRes.json();
@@ -943,7 +1012,7 @@ function startSSE() {
       try {
         const data = JSON.parse(e.data);
         if (data.type === 'new_request') {
-          if (USER_ROLE === 'judiciaire') {
+          if (IS_JUDICIAIRE_MODE) {
             loadAllVehicles();
           } else {
             loadPending();
@@ -952,7 +1021,7 @@ function startSSE() {
           }
         } else if (data.type === 'signed') {
           loadAllVehicles();
-          if (USER_ROLE !== 'judiciaire') { loadPending(); loadDrStats(); }
+          if (!IS_JUDICIAIRE_MODE) { loadPending(); loadDrStats(); }
           showNotifToast('Une carte grise vient d\'être signée');
         }
       } catch(_) {}
@@ -966,7 +1035,7 @@ function startSSE() {
 }
 
 async function loadPending() {
-  if (USER_ROLE === 'judiciaire') return;
+  if (IS_JUDICIAIRE_MODE) return;
   try {
     const data = await fetch('/api/dgrtr/cartes-grises/pending').then(r => r.json());
     const section   = document.getElementById('pending-section');
@@ -1014,7 +1083,7 @@ async function loadDrStats() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  if (USER_ROLE === 'judiciaire') {
+  if (IS_JUDICIAIRE_MODE) {
     loadAllVehicles();
   } else {
     loadPending();

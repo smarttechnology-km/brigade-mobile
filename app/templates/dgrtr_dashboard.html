@@ -56,9 +56,11 @@
       <small class="text-muted">Workflow de traitement — 5 étapes</small>
     </div>
     <div class="d-flex gap-2">
+      {% if not (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_general') %}
       <button class="btn btn-primary" onclick="openNewDossier()">
         <i class="fas fa-plus me-2"></i>Nouveau dossier
       </button>
+      {% endif %}
     </div>
   </div>
 
@@ -236,15 +238,25 @@
           </div>
         </div>
 
-        <!-- Île -->
-        <div class="mt-3">
-          <label class="form-label small fw-semibold mb-1">Île <span class="text-danger">*</span></label>
-          <select id="s1-country" class="form-select" onchange="checkDocProgress()">
-            <option value="">— Sélectionner une île —</option>
-            <option value="Grande Comore">Grande Comore</option>
-            <option value="Anjouan">Anjouan</option>
-            <option value="Moheli">Mohéli</option>
-          </select>
+        <!-- Île + coordonnées candidat -->
+        <div class="row g-2 mt-3">
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold mb-1">Île <span class="text-danger">*</span></label>
+            <select id="s1-country" class="form-select" onchange="checkDocProgress()">
+              <option value="">— Sélectionner une île —</option>
+              <option value="Grande Comore">Grande Comore</option>
+              <option value="Anjouan">Anjouan</option>
+              <option value="Moheli">Mohéli</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold mb-1">Téléphone <span class="text-danger">*</span></label>
+            <input type="tel" id="s1-telephone" class="form-control" placeholder="Ex : 3210001" oninput="checkDocProgress()">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold mb-1">NIN <span class="text-danger">*</span></label>
+            <input type="text" id="s1-nin" class="form-control" placeholder="Ex : 12345678" oninput="checkDocProgress()">
+          </div>
         </div>
 
         <!-- Progress hint -->
@@ -947,6 +959,8 @@ function openNewDossier() {
   currentDossierId = null;
   document.querySelectorAll('.doc-cb').forEach(cb => cb.checked = false);
   document.getElementById('s1-country').value = '';
+  document.getElementById('s1-telephone').value = '';
+  document.getElementById('s1-nin').value = '';
   document.getElementById('doc-checked-count').textContent = '0';
   document.getElementById('doc-progress-bar').style.width = '0%';
   document.getElementById('btn-validate-step1').disabled = true;
@@ -958,8 +972,10 @@ function checkDocProgress() {
   var checked = document.querySelectorAll('.doc-cb:checked').length;
   document.getElementById('doc-checked-count').textContent = checked;
   document.getElementById('doc-progress-bar').style.width = (checked / 6 * 100) + '%';
-  var country = document.getElementById('s1-country').value;
-  var allDone = checked >= 6 && !!country;
+  var country    = document.getElementById('s1-country').value;
+  var telephone  = (document.getElementById('s1-telephone').value || '').trim();
+  var nin        = (document.getElementById('s1-nin').value || '').trim();
+  var allDone = checked >= 6 && !!country && !!telephone && !!nin;
   document.getElementById('btn-validate-step1').disabled = !allDone;
   document.getElementById('dossier-number-preview').classList.toggle('d-none', checked < 6);
 }
@@ -977,6 +993,8 @@ function submitStep1() {
     doc_carte_nationale:    document.getElementById('doc-cni').checked,
     doc_recu_paiement:      document.getElementById('doc-recu').checked,
     country:                document.getElementById('s1-country').value,
+    telephone:              (document.getElementById('s1-telephone').value || '').trim(),
+    nin:                    (document.getElementById('s1-nin').value || '').trim(),
   };
 
   var isEdit  = !!currentDossierId;
@@ -1208,6 +1226,8 @@ function openStep1Edit(dossierId) {
   document.getElementById('doc-cni').checked       = !!d.doc_carte_nationale;
   document.getElementById('doc-recu').checked      = !!d.doc_recu_paiement;
   document.getElementById('s1-country').value      = d.country || '';
+  document.getElementById('s1-telephone').value    = d.telephone || '';
+  document.getElementById('s1-nin').value          = d.nin || '';
   checkDocProgress();
   bootstrap.Modal.getOrCreateInstance(document.getElementById('newDossierModal')).show();
 }

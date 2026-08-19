@@ -58,7 +58,7 @@
     <!-- Statistics Cards -->
     <div class="row mb-4">
         <!-- Total Active Vignettes -->
-        <div class="col-md-3 mb-3">
+        <div class="col-md mb-3">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
@@ -92,7 +92,7 @@
         </div>
 
         <!-- Total Penalties -->
-        <div class="col-md-3 mb-3">
+        <div class="col-md mb-3">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
@@ -108,8 +108,25 @@
             </div>
         </div>
 
+        <!-- QR Code Revenue -->
+        <div class="col-md mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-2 small">
+                                <i class="fas fa-qrcode me-1"></i>Tarif QR Code
+                            </p>
+                            <h3 class="mb-0 text-info" id="stat-qr-revenue">-</h3>
+                        </div>
+                        <i class="fas fa-qrcode text-info" style="font-size: 2rem; opacity: 0.2;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Total Revenue -->
-        <div class="col-md-3 mb-3">
+        <div class="col-md mb-3">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
@@ -167,12 +184,13 @@
                                     <th class="text-end">Prix Vignette</th>
                                     <th class="text-end">Pénalité</th>
                                     <th class="text-end">Amende</th>
+                                    <th class="text-end">Tarif QR</th>
                                     <th class="text-end">Montant Total</th>
                                 </tr>
                             </thead>
                             <tbody id="finance-vehicles-table">
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">
+                                    <td colspan="7" class="text-center text-muted py-4">
                                         <i class="fas fa-spinner fa-spin me-2"></i>Chargement...
                                     </td>
                                 </tr>
