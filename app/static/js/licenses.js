@@ -265,11 +265,12 @@
 
     /* ── Form helpers ── */
     function clearForm() {
-        ['f-id','f-license_number','f-holder_name','f-holder_firstname','f-holder_phone','f-holder_address',
-         'f-nationalite','f-lieu_naissance','f-centre_immatriculation',
+        ['f-id','f-license_number','f-holder_name','f-holder_firstname','f-holder_phone','f-nin','f-holder_address',
+         'f-lieu_naissance','f-centre_immatriculation',
          'f-date_of_birth','f-issue_date','f-expiry_date','f-notes'].forEach(id => {
             document.getElementById(id).value = '';
         });
+        document.getElementById('f-nationalite').value = 'COMORIENNE';
         document.getElementById('f-holder_island').value = '';
         document.getElementById('f-sexe').value = '';
         document.getElementById('f-blood_group').value = '';
@@ -277,6 +278,8 @@
         document.getElementById('f-points').value = '12';
         document.getElementById('f-type_permis').value = 'permanent';
         onTypePermisChange();
+        const specSel = document.getElementById('f-type_special');
+        if (specSel) specSel.value = '';
         document.getElementById('f-photo').value = '';
         window._photoCroppedBlob = null;
         document.getElementById('photo-preview-img').src = '';
@@ -295,6 +298,7 @@
         document.getElementById('f-holder_name').value     = l.holder_name;
         document.getElementById('f-holder_firstname').value= l.holder_firstname || '';
         document.getElementById('f-holder_phone').value   = l.holder_phone || '';
+        document.getElementById('f-nin').value             = l.nin || '';
         document.getElementById('f-holder_island').value  = l.holder_island || '';
         document.getElementById('f-holder_address').value = l.holder_address || '';
         document.getElementById('f-nationalite').value          = l.nationalite || '';
@@ -311,7 +315,12 @@
         if (!l.expiry_date && l.issue_date) autoFillExpiry();
         document.getElementById('f-status').value       = l.status || 'actif';
         document.getElementById('f-notes').value        = l.notes || '';
-        const cats = (l.categories || '').split(',').map(c => c.trim()).filter(Boolean);
+        const allCats = (l.categories || '').split(',').map(c => c.trim()).filter(Boolean);
+        // M and P are now a "type spécial", not a checkbox category
+        const specialVal = allCats.includes('M') ? 'M' : (allCats.includes('P') ? 'P' : '');
+        const specSel = document.getElementById('f-type_special');
+        if (specSel) specSel.value = specialVal;
+        const cats = allCats.filter(c => c !== 'M' && c !== 'P');
         const catDetails = l.category_details || {};
         document.querySelectorAll('.cat-checkbox').forEach(cb => {
             const cat = cb.value;
@@ -350,7 +359,10 @@
     }
 
     function getCategories() {
-        return Array.from(document.querySelectorAll('.cat-checkbox:checked')).map(cb => cb.value).join(',');
+        const cats = Array.from(document.querySelectorAll('.cat-checkbox:checked')).map(cb => cb.value);
+        const special = document.getElementById('f-type_special')?.value || '';
+        if (special) cats.push(special);
+        return cats.join(',');
     }
 
     function getCategoryDetails() {
@@ -369,17 +381,6 @@
 
     window.onCategoryToggle = function (cat) {
         const cb = document.getElementById(`cat-${cat}`);
-        // M and P are mutually exclusive
-        if (cb && cb.checked) {
-            const opposite = cat === 'M' ? 'P' : (cat === 'P' ? 'M' : null);
-            if (opposite) {
-                const oppCb = document.getElementById(`cat-${opposite}`);
-                if (oppCb && oppCb.checked) {
-                    oppCb.checked = false;
-                    onCategoryToggle(opposite);
-                }
-            }
-        }
         const detailsDiv = document.getElementById(`cat-details-${cat}`);
         if (!detailsDiv) return;
         detailsDiv.style.display = cb && cb.checked ? '' : 'none';
@@ -718,7 +719,7 @@
         }
     };
 
-    const ALL_CATS = ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F', 'P'];
+    const ALL_CATS = ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F'];
 
     function populateCategoryValidityForm() {
         const cfg = _settings.category_validity || {};
@@ -1068,6 +1069,7 @@
             holder_name:       document.getElementById('f-holder_name').value.trim(),
             holder_firstname:  document.getElementById('f-holder_firstname').value.trim(),
             holder_phone:   document.getElementById('f-holder_phone').value.trim(),
+            nin:            document.getElementById('f-nin').value.trim(),
             holder_island:  document.getElementById('f-holder_island').value,
             holder_address: document.getElementById('f-holder_address').value.trim(),
             nationalite:           document.getElementById('f-nationalite').value.trim(),
@@ -1425,10 +1427,27 @@
 
     /* ── Delete ── */
     window.deleteLicense = function (id, num) {
-        if (!confirm(`Supprimer le permis « ${num} » ? Cette action est irréversible.`)) return;
-        fetch(`/api/licenses/${id}`, { method: 'DELETE', credentials: 'same-origin' })
-            .then(r => r.ok ? (loadLicenses(false), loadStats()) : r.json().then(d => alert(d.error || 'Erreur')))
-            .catch(() => alert('Erreur réseau.'));
+        const reason = prompt(`Motif de la suppression du permis « ${num} » (obligatoire) :`);
+        if (reason === null) return;
+        if (!reason.trim()) { alert('Veuillez indiquer un motif de suppression.'); return; }
+        fetch(`/api/licenses/${id}`, {
+            method: 'DELETE', credentials: 'same-origin',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ reason: reason.trim() })
+        })
+            .then(async r => {
+                const d = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(d.error || 'Erreur');
+                return d;
+            })
+            .then(d => {
+                if (d.pending) {
+                    alert('✅ ' + d.message);
+                } else {
+                    loadLicenses(false); loadStats();
+                }
+            })
+            .catch(e => alert(e.message || 'Erreur réseau.'));
     };
 
     /* ── Stats ── */

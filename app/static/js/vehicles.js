@@ -1,6 +1,27 @@
 var vehicleModalInstance = window.vehicleModalInstance || null;
 window.vehicleModalInstance = vehicleModalInstance;
 
+function cvClassFromChevaux(n) {
+    n = parseInt(n) || 0;
+    if (n <= 5)  return '0-5 CV';
+    if (n <= 9)  return '6-9 CV';
+    if (n <= 12) return '10-12 CV';
+    return '12 CV et +';
+}
+function _onNbChevauxInput() {
+    var n = parseInt(document.getElementById('nombre_chevaux_vehicle').value) || 0;
+    var preview = document.getElementById('cv-class-preview');
+    if (preview) preview.textContent = n > 0 ? 'Classe CV : ' + cvClassFromChevaux(n) : '';
+}
+
+var _IC = {'Grande Comore':'NG','Anjouan':'ND','Moheli':'MW'};
+function _plateHtml(plate, island) {
+    var code = _IC[island] || '';
+    if (!plate) return '—';
+    if (code && plate.startsWith('UC ')) return 'UC<sub style="font-size:.65em;font-weight:700;">' + code + '</sub> ' + plate.slice(3);
+    return plate;
+}
+
 // Active tab for status filtering
 var activeVehicleTab = 'all';
 
@@ -442,6 +463,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         const islandEl = document.getElementById('owner_island');
                         if (islandEl && !islandEl.value && data.owner_island) {
                             islandEl.value = data.owner_island;
+                            // Manually trigger plate suggestion since .value= doesn't fire 'change'
+                            var _vId = (document.getElementById('vehicle-id') || {}).value || '';
+                            if (!_vId && typeof window._suggestPlateForIsland === 'function') {
+                                window._suggestPlateForIsland(data.owner_island);
+                            }
                         }
                         const addressEl = document.getElementById('owner_address');
                         if (addressEl && !addressEl.value.trim() && data.owner_address) {
@@ -483,6 +509,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const saveBtn = document.getElementById('save-vehicle-btn');
     if (saveBtn) saveBtn.addEventListener('click', saveVehicle);
+
+    // Toggle nouveau/existant
+    const toggleEl = document.getElementById('toggle-nouveau-vehicule');
+    if (toggleEl) toggleEl.addEventListener('change', function() { _applyVehicleToggleMode(this.checked); });
 
     // Ensure we clean up modal when it is hidden (covers cancel/backdrop click)
     const modalEl = document.getElementById('vehicleModal');
@@ -741,6 +771,51 @@ function _setSaveBlocked(blocked) {
     if (msg) msg.classList.toggle('d-none', !blocked);
 }
 
+function _applyVehicleToggleMode(isNouveau) {
+    const cgPendingBadge   = document.getElementById('cg-pending-badge');
+    const cgPendingAlert   = document.getElementById('cg-pending-alert');
+    const fieldVignette    = document.getElementById('field-vignette-expiry');
+    const fieldEmission    = document.getElementById('field-cg-date-emission');
+    const sectionAssurance = document.getElementById('section-assurance');
+    const fieldCvClass     = document.getElementById('field-cv-class');
+    const fieldNbChevaux   = document.getElementById('field-nombre-chevaux');
+    const genBtn           = document.getElementById('btn-gen-plate');
+    const plateInput       = document.getElementById('license_plate');
+    const label            = document.getElementById('toggle-nouveau-label');
+    const desc             = document.getElementById('toggle-nouveau-desc');
+
+    if (isNouveau) {
+        if (cgPendingBadge) cgPendingBadge.style.display = '';
+        if (cgPendingAlert) cgPendingAlert.style.display = '';
+        if (fieldVignette)    fieldVignette.style.display    = 'none';
+        if (fieldEmission)    fieldEmission.style.display    = 'none';
+        if (sectionAssurance) sectionAssurance.style.display = 'none';
+        if (fieldCvClass)     fieldCvClass.style.display     = 'none';
+        if (fieldNbChevaux)   fieldNbChevaux.style.display   = '';
+        if (genBtn)           genBtn.style.display           = '';
+        if (plateInput)       { plateInput.value = ''; }
+        _autoFilledPlate = null;
+        _plateAutoLocked = false;
+        _setPlateAutoLocked(false);
+        var _islandSel = document.getElementById('owner_island');
+        if (_islandSel && _islandSel.value) window._suggestPlateForIsland(_islandSel.value);
+        if (label) label.innerHTML = '<i class="fas fa-star-of-life me-1 text-primary"></i>Nouveau véhicule';
+        if (desc)  desc.textContent = 'Le QR Code sera généré après validation SmartDev.';
+    } else {
+        if (cgPendingBadge) cgPendingBadge.style.display = 'none';
+        if (cgPendingAlert) cgPendingAlert.style.display = 'none';
+        if (fieldVignette)    fieldVignette.style.display    = 'none';
+        if (fieldEmission)    fieldEmission.style.display    = '';
+        if (sectionAssurance) sectionAssurance.style.display = '';
+        if (fieldCvClass)     fieldCvClass.style.display     = '';
+        if (fieldNbChevaux)   fieldNbChevaux.style.display   = 'none';
+        if (genBtn)           genBtn.style.display           = 'none';
+        if (plateInput)       { plateInput.readOnly = false; plateInput.value = ''; _autoFilledPlate = null; _plateAutoLocked = false; _setPlateAutoLocked(false); }
+        if (label) label.innerHTML = '<i class="fas fa-archive me-1 text-secondary"></i>Véhicule existant';
+        if (desc)  desc.textContent = 'Tous les champs sont disponibles. Aucune activation SmartDev requise.';
+    }
+}
+
 function openVehicleModal(vehicle) {
     // Reset form FIRST
     document.getElementById('vehicle-form').reset();
@@ -766,26 +841,41 @@ function openVehicleModal(vehicle) {
     const cgPendingBadge   = document.getElementById('cg-pending-badge');
     const cgPendingAlert   = document.getElementById('cg-pending-alert');
     const _fieldVignette   = document.getElementById('field-vignette-expiry');
+    const _fieldInsuranceExpiry = document.getElementById('field-insurance-expiry');
     const _fieldEmission   = document.getElementById('field-cg-date-emission');
     const _sectionAssurance = document.getElementById('section-assurance');
+    var _fieldCvClass  = document.getElementById('field-cv-class');
+    var _fieldNbChevaux = document.getElementById('field-nombre-chevaux');
     if(vehicle) {
         modalTitle.innerHTML = '<i class="fas fa-edit me-2"></i><span>Éditer le véhicule</span>';
         if(genBtn) genBtn.style.display = 'none';
         if(cgSection)      cgSection.classList.remove('d-none');
         if(cgPendingBadge) cgPendingBadge.style.display = 'none';
         if(cgPendingAlert) cgPendingAlert.style.display = 'none';
-        if(_fieldVignette)    _fieldVignette.style.display = '';
+        if(_fieldVignette)       _fieldVignette.style.display = 'none';
+        if(_fieldInsuranceExpiry) _fieldInsuranceExpiry.style.display = 'none';
         if(_fieldEmission)    _fieldEmission.style.display = '';
         if(_sectionAssurance) _sectionAssurance.style.display = '';
+        if(_fieldCvClass)   _fieldCvClass.style.display = '';
+        if(_fieldNbChevaux) _fieldNbChevaux.style.display = 'none';
+        // Hide toggle in edit mode
+        const toggleRow = document.getElementById('vehicle-type-toggle-row');
+        if (toggleRow) toggleRow.style.display = 'none';
     } else {
         modalTitle.innerHTML = '<i class="fas fa-car me-2"></i><span>Ajouter un véhicule</span>';
-        if(genBtn) genBtn.style.display = '';
-        if(cgSection)      cgSection.classList.remove('d-none');
-        if(cgPendingBadge) cgPendingBadge.style.display = '';
-        if(cgPendingAlert) cgPendingAlert.style.display = '';
-        if(_fieldVignette)    _fieldVignette.style.display = 'none';
-        if(_fieldEmission)    _fieldEmission.style.display = 'none';
-        if(_sectionAssurance) _sectionAssurance.style.display = 'none';
+        if(cgSection) cgSection.classList.remove('d-none');
+
+        // Show toggle row and reset to "Nouveau véhicule"
+        const toggleRow = document.getElementById('vehicle-type-toggle-row');
+        if (toggleRow) toggleRow.style.display = 'flex';
+        const toggleEl = document.getElementById('toggle-nouveau-vehicule');
+        if (toggleEl) toggleEl.checked = true;
+        _applyVehicleToggleMode(true);
+
+        var _nbChEl = document.getElementById('nombre_chevaux_vehicle');
+        if(_nbChEl) { _nbChEl.value = ''; }
+        var _preview = document.getElementById('cv-class-preview');
+        if(_preview) _preview.textContent = '';
 
         // Pre-select island and suggest plate for directeur_regional (or any user with a fixed country)
         var _preIsland = window.currentUserCountry || '';
@@ -1082,7 +1172,20 @@ function saveVehicle() {
         vignette_expiry: document.getElementById('vignette_expiry') ? document.getElementById('vignette_expiry').value : '',
         insurance_company: insuranceCompanyValue,
         fiscal_class: document.getElementById('fiscal_class') ? document.getElementById('fiscal_class').value : '',
-        cv_class: document.getElementById('cv_class') ? document.getElementById('cv_class').value : '',
+        cv_class: (function() {
+            var fieldCv = document.getElementById('field-cv-class');
+            if (fieldCv && fieldCv.style.display !== 'none') {
+                return document.getElementById('cv_class') ? document.getElementById('cv_class').value : '';
+            }
+            var nbEl = document.getElementById('nombre_chevaux_vehicle');
+            return nbEl && nbEl.value.trim() ? cvClassFromChevaux(nbEl.value) : '';
+        })(),
+        nombre_chevaux: (function() {
+            var nbEl = document.getElementById('nombre_chevaux_vehicle');
+            if (!nbEl || !nbEl.value.trim()) return null;
+            var parsed = parseInt(nbEl.value);
+            return isNaN(parsed) ? null : parsed;
+        })(),
         work_zone: (function(){
             var grp = document.getElementById('work_zone_group');
             if (!grp || grp.classList.contains('d-none')) return undefined;
@@ -1114,11 +1217,13 @@ function saveVehicle() {
     Object.assign(payload, cgPayload);
 
     if (!vid) {
-        payload.pending_approval = true;
+        const toggleEl = document.getElementById('toggle-nouveau-vehicule');
+        const isNouveau = !toggleEl || toggleEl.checked;
+        if (isNouveau) payload.pending_approval = true;
     }
 
-    if (!payload.license_plate || !payload.owner_name || !payload.owner_phone || !payload.vehicle_type) {
-        alert('Veuillez remplir les champs requis, y compris le numéro de téléphone');
+    if (!payload.license_plate || !payload.owner_name || !payload.owner_phone || !payload.vehicle_type || !payload.vin) {
+        alert('Veuillez remplir les champs requis : immatriculation, propriétaire, téléphone, type de véhicule et VIN (numéro de série).');
         return;
     }
 
@@ -1289,20 +1394,27 @@ function viewVehicle(trackToken){
 }
 
 function removeVehicle(id) {
-    if (!confirm('Confirmer la suppression de ce véhicule ?')) return;
-    fetch(`/api/vehicles/${id}`, {method: 'DELETE'})
+    const reason = prompt('Motif de la suppression (obligatoire) :');
+    if (reason === null) return;
+    if (!reason.trim()) { alert('Veuillez indiquer un motif de suppression.'); return; }
+    fetch(`/api/vehicles/${id}`, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ reason: reason.trim() })
+    })
         .then(async r => {
             const data = await r.json().catch(() => ({}));
-            if (!r.ok) {
-                throw new Error(data.error || 'Impossible de supprimer le véhicule');
-            }
+            if (!r.ok) throw new Error(data.error || 'Impossible de supprimer le véhicule');
             return data;
         })
-        .then(() => loadVehicles())
-        .catch(err => {
-            console.error('Erreur suppression:', err);
-            alert(err.message || 'Impossible de supprimer le véhicule');
-        });
+        .then(data => {
+            if (data.pending) {
+                alert('✅ ' + data.message);
+            } else {
+                loadVehicles();
+            }
+        })
+        .catch(err => alert(err.message || 'Impossible de supprimer le véhicule'));
 }
 
 function capitalizeFirst(s){ if(!s) return ''; return s.charAt(0).toUpperCase()+s.slice(1);}
@@ -1386,66 +1498,57 @@ function statusLabel(s){ if(s==='active') return 'Actif'; if(s==='inactive') ret
 
 var _plateSettings = {};
 
-var _ISLAND_KEY_MAP = {
-    'gc': 'Grande Comore',
-    'an': 'Anjouan',
-    'mo': 'Moheli'
-};
+var _ISLAND_CODE_MAP = { 'gc': 'NG', 'an': 'ND', 'mo': 'MW' };
 
-function _updatePlatePreview(key) {
-    var island = _ISLAND_KEY_MAP[key];
-    var suffix = {'Grande Comore':'73','Anjouan':'71','Moheli':'72'}[island] || '';
-    var num = parseInt(document.getElementById('ps-number-' + key)?.value || 1);
-    var l1 = document.getElementById('ps-letter1-' + key)?.value || 'A';
-    var l2 = document.getElementById('ps-letter2-' + key)?.value || 'A';
-    var el = document.querySelector('.ps-preview-' + key);
-    if (!el) return;
-    var enabled = document.getElementById('ps-enabled-' + key)?.checked;
-    if (!enabled) { el.textContent = '—'; return; }
-    el.textContent = String(num).padStart(3,'0') + l1 + l2 + suffix;
-}
-
-function _loadPlateSettingsIntoModal(data) {
-    Object.keys(_ISLAND_KEY_MAP).forEach(function(key) {
-        var island = _ISLAND_KEY_MAP[key];
-        var s = data[island];
-        if (!s) return;
-        var enabledEl  = document.getElementById('ps-enabled-' + key);
-        var numberEl   = document.getElementById('ps-number-' + key);
-        var letter1El  = document.getElementById('ps-letter1-' + key);
-        var letter2El  = document.getElementById('ps-letter2-' + key);
-        if (enabledEl)  enabledEl.checked = !!s.enabled;
-        if (numberEl)   numberEl.value = s.current_number || 1;
-        if (letter1El)  letter1El.value = s.principal_letter || 'A';
-        if (letter2El)  letter2El.value = s.current_second_letter || 'A';
-        _updatePlatePreview(key);
-
-        // wire live preview
-        [numberEl, letter1El, letter2El, enabledEl].forEach(function(el) {
-            if (el && !el._platePreviewWired) {
-                el._platePreviewWired = true;
-                el.addEventListener('change', function() { _updatePlatePreview(key); });
-                el.addEventListener('input',  function() { _updatePlatePreview(key); });
-            }
-        });
+function _updatePlatePreview() {
+    var num    = parseInt(document.getElementById('ps-number-global')?.value || 1);
+    var letter = document.getElementById('ps-letter2-global')?.value || 'A';
+    var enabled = document.getElementById('ps-enabled-global')?.checked;
+    var pad = String(num).padStart(4, '0');
+    // Stored value (no island code)
+    var stored = 'UC ' + pad + ' ' + letter;
+    Object.keys(_ISLAND_CODE_MAP).forEach(function(key) {
+        var el = document.querySelector('.ps-preview-' + key);
+        if (!el) return;
+        if (!enabled) { el.innerHTML = '—'; return; }
+        var code = _ISLAND_CODE_MAP[key];
+        // Visual display with subscript island code; actual stored plate has no island code
+        el.innerHTML = 'UC<sub style="font-size:.6em;font-weight:700;">' + code + '</sub> ' + pad + ' ' + letter;
+        el.title = 'Enregistré comme : ' + stored;
     });
 }
 
-window.savePlateSettings = function(key, island) {
-    var enabledEl = document.getElementById('ps-enabled-' + key);
-    var numberEl  = document.getElementById('ps-number-' + key);
-    var l1El      = document.getElementById('ps-letter1-' + key);
-    var l2El      = document.getElementById('ps-letter2-' + key);
+function _loadPlateSettingsIntoModal(data) {
+    var enabledEl = document.getElementById('ps-enabled-global');
+    var numberEl  = document.getElementById('ps-number-global');
+    var letter2El = document.getElementById('ps-letter2-global');
+    if (enabledEl)  enabledEl.checked = !!data.enabled;
+    if (numberEl)   numberEl.value    = data.current_number || 1;
+    if (letter2El)  letter2El.value   = data.current_second_letter || 'A';
+    _updatePlatePreview();
+
+    [numberEl, letter2El, enabledEl].forEach(function(el) {
+        if (el && !el._platePreviewWired) {
+            el._platePreviewWired = true;
+            el.addEventListener('change', _updatePlatePreview);
+            el.addEventListener('input',  _updatePlatePreview);
+        }
+    });
+}
+
+window.savePlateSettings = function() {
+    var enabledEl = document.getElementById('ps-enabled-global');
+    var numberEl  = document.getElementById('ps-number-global');
+    var l2El      = document.getElementById('ps-letter2-global');
     var msgEl     = document.getElementById('ps-save-msg');
 
     var payload = {
         enabled:               enabledEl?.checked || false,
         current_number:        parseInt(numberEl?.value || 1),
-        principal_letter:      (l1El?.value || 'A').toUpperCase(),
         current_second_letter: (l2El?.value || 'A').toUpperCase(),
     };
 
-    fetch('/api/vehicles/plate-settings/' + encodeURIComponent(island), {
+    fetch('/api/vehicles/plate-settings', {
         method: 'PUT',
         credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
@@ -1454,12 +1557,17 @@ window.savePlateSettings = function(key, island) {
     .then(function(r) { return r.json(); })
     .then(function(d) {
         if (d.success) {
-            if (d.settings) _plateSettings[island] = d.settings;
-            _updatePlatePreview(key);
+            if (d.settings) _loadPlateSettingsIntoModal(d.settings);
             if (msgEl) {
                 msgEl.className = 'alert alert-success mt-3';
-                msgEl.textContent = 'Paramètres enregistrés pour ' + island + '.';
+                msgEl.textContent = 'Paramètres enregistrés.';
                 setTimeout(function() { msgEl.className = 'alert d-none mt-3'; }, 3000);
+            }
+            // Refresh plate suggestion in add-vehicle form if an island is already selected
+            var _vIsland = (document.getElementById('owner_island') || {}).value || '';
+            var _vId     = (document.getElementById('vehicle-id')   || {}).value || '';
+            if (_vIsland && !_vId && typeof window._suggestPlateForIsland === 'function') {
+                window._suggestPlateForIsland(_vIsland);
             }
         } else {
             if (msgEl) {
@@ -1502,7 +1610,6 @@ window.savePlateSettings = function(key, island) {
     }
 
     modalEl.addEventListener('show.bs.modal', function() {
-        _restrictTabs();
         fetch('/api/vehicles/plate-settings', { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {

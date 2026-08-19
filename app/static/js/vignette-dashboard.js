@@ -296,16 +296,17 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
         
         // Get penalty amount from API response
         const penaltyAmount = vehicle.penalty_amount || 0;
-        
+
         // Get unpaid fines amount (default to 0 if not provided)
         const finesAmount = vehicle.unpaid_fines_amount || 0;
-        
+
         // Get vignette price from API response
         const vignettePrice = vehicle.vignette_price || 0;
+        const qrActivationPrice = vehicle.qr_activation_price || 0;
         const displayExpiry = vehicle.vignette_expiry || vehicle.vignette_requested_expiry || null;
-        
-        // Calculate total
-        const totalAmount = vignettePrice + penaltyAmount + finesAmount;
+
+        // Calculate total (includes QR activation for vehicles never activated)
+        const totalAmount = vignettePrice + penaltyAmount + finesAmount + qrActivationPrice;
         
         return `
             <tr>
@@ -316,6 +317,7 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
                 <td class="text-center">${vignettePrice > 0 ? vignettePrice.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td class="text-center ${penaltyAmount > 0 ? 'text-danger' : ''}">${penaltyAmount > 0 ? penaltyAmount.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td class="text-center ${finesAmount > 0 ? 'text-danger' : ''}">${finesAmount > 0 ? finesAmount.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
+                <td class="text-center ${qrActivationPrice > 0 ? 'text-info fw-semibold' : 'text-muted'}">${qrActivationPrice > 0 ? qrActivationPrice.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td class="fw-semibold text-center ${totalAmount > 0 ? 'text-danger' : ''}">${totalAmount > 0 ? totalAmount.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td><span class="${statusBadge}">${statusText}</span></td>
                 <td>${actionButtons}</td>

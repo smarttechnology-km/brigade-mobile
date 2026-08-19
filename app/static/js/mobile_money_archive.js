@@ -148,9 +148,12 @@ function renderArchiveTables() {
 
     if (vignetteBody) {
         if (!vignettes.length) {
-            vignetteBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Aucune vignette payée trouvée</td></tr>';
+            vignetteBody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Aucune vignette payée trouvée</td></tr>';
         } else {
             vignetteBody.innerHTML = vignettes.map(function (item, idx) {
+                var qrCell = item.qr_amount > 0
+                    ? '<td class="text-end" style="color:#0dcaf0;font-weight:600;">' + formatKMF(item.qr_amount) + '</td>'
+                    : '<td class="text-end text-muted">-</td>';
                 return '<tr>' +
                     '<td>' + (idx + 1) + '</td>' +
                     '<td>' + escapeHtml(item.license_plate || '-') + '</td>' +
@@ -159,6 +162,7 @@ function renderArchiveTables() {
                     '<td class="text-end">' + formatKMF(item.vignette_price) + '</td>' +
                     '<td class="text-end text-warning">' + formatKMF(item.penalty_amount) + '</td>' +
                     '<td class="text-end text-danger">' + formatKMF(item.fines_amount) + '</td>' +
+                    qrCell +
                     '<td class="text-end fw-semibold text-success">' + formatKMF(item.total_amount) + '</td>' +
                     '<td>' + escapeHtml(item.approved_by || '-') + '</td>' +
                     '</tr>';

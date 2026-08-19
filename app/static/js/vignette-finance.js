@@ -69,6 +69,8 @@ function displayFinanceStats(data) {
     document.getElementById('stat-active-vignettes').textContent = data.total_active_vignettes || 0;
     document.getElementById('stat-renewed-vignettes').textContent = data.renewed_vignettes || 0;
     document.getElementById('stat-penalties').textContent = formatKMF(data.total_penalties);
+    const statQr = document.getElementById('stat-qr-revenue');
+    if (statQr) statQr.textContent = formatKMF(data.total_qr_revenue || 0);
     document.getElementById('stat-total-revenue').textContent = formatKMF(data.total_revenue);
     
     // Update detailed breakdown
@@ -98,6 +100,16 @@ function displayFinanceStats(data) {
                 <strong class="text-danger">${formatKMF(data.total_fines)}</strong>
             </td>
         </tr>
+        ${(data.total_qr_revenue || 0) > 0 ? `
+        <tr>
+            <td class="fw-semibold">
+                <i class="fas fa-qrcode text-info me-2"></i>Tarif QR Code
+            </td>
+            <td class="text-end">
+                <strong class="text-info">${formatKMF(data.total_qr_revenue)}</strong>
+            </td>
+        </tr>
+        ` : ''}
         <tr class="table-active">
             <td class="fw-semibold text-success">
                 <i class="fas fa-coins me-2"></i>Total Collecté
@@ -155,6 +167,7 @@ function displayVehiclesTable(vehicles) {
             <td class="text-end">${formatNumberKMF(v.vignette_price)}</td>
             <td class="text-end ${v.penalty_amount > 0 ? 'text-warning' : ''}">${formatNumberKMF(v.penalty_amount)}</td>
             <td class="text-end ${v.fines_amount > 0 ? 'text-danger' : ''}">${formatNumberKMF(v.fines_amount)}</td>
+            <td class="text-end ${v.qr_amount > 0 ? 'text-info fw-semibold' : 'text-muted'}">${v.qr_amount > 0 ? formatNumberKMF(v.qr_amount) : '-'}</td>
             <td class="text-end fw-semibold ${v.total > 0 ? 'text-success' : ''}">${formatNumberKMF(v.total)}</td>
         </tr>
     `).join('');

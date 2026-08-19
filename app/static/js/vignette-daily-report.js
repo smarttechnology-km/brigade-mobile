@@ -75,6 +75,8 @@ function displayDailyReport(data) {
     
     const grandTotal = (data.total_revenue || 0) + (data.total_penalties || 0) + (data.total_fines || 0);
     document.getElementById('summary-total').textContent = formatKMF(grandTotal);
+    const kpiQr = document.getElementById('kpi-qr');
+    if (kpiQr) kpiQr.textContent = formatKMF(data.total_qr || 0);
 
     // Update table
     const tbody = document.getElementById('report-vehicles-body');
@@ -104,6 +106,7 @@ function displayDailyReport(data) {
             <td style="padding: 6px 8px; border: 1px solid #e0e0e0; text-align: right;">${formatKMF(vehicle.vignette_price)}</td>
             <td style="padding: 6px 8px; border: 1px solid #e0e0e0; text-align: right; color: #f39c12;">${formatKMF(vehicle.penalty_amount)}</td>
             <td style="padding: 6px 8px; border: 1px solid #e0e0e0; text-align: right; color: #e74c3c;">${formatKMF(vehicle.fines_amount)}</td>
+            <td style="padding: 6px 8px; border: 1px solid #e0e0e0; text-align: right; color: ${vehicle.qr_amount > 0 ? '#0dcaf0' : '#aaa'};">${vehicle.qr_amount > 0 ? formatKMF(vehicle.qr_amount) : '-'}</td>
             <td style="padding: 6px 8px; border: 1px solid #e0e0e0; text-align: right; font-weight: bold; color: #27ae60;">${formatKMF(vehicle.total)}</td>
         </tr>
     `).join('');
@@ -112,11 +115,14 @@ function displayDailyReport(data) {
     const totalRevenue = data.total_revenue || 0;
     const totalPenalties = data.total_penalties || 0;
     const totalFines = data.total_fines || 0;
+    const totalQr = data.total_qr || 0;
     const total = totalRevenue + totalPenalties + totalFines;
-    
+
     document.getElementById('footer-revenue').textContent = formatKMF(totalRevenue);
     document.getElementById('footer-penalties').textContent = formatKMF(totalPenalties);
     document.getElementById('footer-fines').textContent = formatKMF(totalFines);
+    const footerQr = document.getElementById('footer-qr');
+    if (footerQr) footerQr.textContent = totalQr > 0 ? formatKMF(totalQr) : '-';
     document.getElementById('footer-total').textContent = formatKMF(total);
 }
 

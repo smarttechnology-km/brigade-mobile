@@ -242,8 +242,9 @@ function openAddVignetteModal(vehicleId) {
     // Get pricing information
     const vignettePrice = vehicle.vignette_price || 0;
     const finesAmount = vehicle.unpaid_fines_amount || 0;
-    const totalAmount = vignettePrice + finesAmount;
-    
+    const qrActivationPrice = vehicle.qr_activation_price || 0;
+    const totalAmount = vignettePrice + finesAmount + qrActivationPrice;
+
     // Build fines display
     let finesDisplay = '';
     if (finesAmount > 0) {
@@ -254,7 +255,7 @@ function openAddVignetteModal(vehicleId) {
             </div>
         `;
     }
-    
+
     // Build price summary
     const priceSummary = `
         <div class="card border-start border-success border-4 bg-light">
@@ -267,6 +268,16 @@ function openAddVignetteModal(vehicleId) {
                         ${vignettePrice > 0 ? vignettePrice.toLocaleString('fr-KM') + ' KMF' : '0 KMF'}
                     </div>
                 </div>
+                ${qrActivationPrice > 0 ? `
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Activation QR Code:</strong>
+                    </div>
+                    <div class="col-6 text-end">
+                        ${qrActivationPrice.toLocaleString('fr-KM')} KMF
+                    </div>
+                </div>
+                ` : ''}
                 ${finesAmount > 0 ? `
                 <div class="row mb-2">
                     <div class="col-6">
@@ -276,26 +287,16 @@ function openAddVignetteModal(vehicleId) {
                         ${finesAmount.toLocaleString('fr-KM')} KMF
                     </div>
                 </div>
+                ` : ''}
                 <hr/>
                 <div class="row">
                     <div class="col-6">
                         <strong>Montant total à payer:</strong>
                     </div>
                     <div class="col-6 text-end">
-                        <strong class="text-danger">${totalAmount.toLocaleString('fr-KM')} KMF</strong>
+                        <strong class="${finesAmount > 0 ? 'text-danger' : ''}">${totalAmount.toLocaleString('fr-KM')} KMF</strong>
                     </div>
                 </div>
-                ` : `
-                <hr/>
-                <div class="row">
-                    <div class="col-6">
-                        <strong>Montant à payer:</strong>
-                    </div>
-                    <div class="col-6 text-end">
-                        <strong>${vignettePrice.toLocaleString('fr-KM')} KMF</strong>
-                    </div>
-                </div>
-                `}
             </div>
         </div>
     `;

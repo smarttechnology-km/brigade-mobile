@@ -126,7 +126,8 @@ function renderVignetteVehicles(items) {
         const vignettePrice = Number(vehicle.vignette_price || 0);
         const penaltyAmount = Number(vehicle.penalty_amount || 0);
         const finesAmount = Number(vehicle.unpaid_fines_amount || 0);
-        const totalAmount = vignettePrice + penaltyAmount + finesAmount;
+        const qrActivationPrice = Number(vehicle.qr_activation_price || 0);
+        const totalAmount = vignettePrice + penaltyAmount + finesAmount + qrActivationPrice;
 
         let expiryDate = vehicle.vignette_expiry || '-';
         if (vehicle.vignette_expiry) {
@@ -163,6 +164,7 @@ function renderVignetteVehicles(items) {
             '<td>' + Math.round(vignettePrice) + ' KMF</td>' +
             '<td>' + Math.round(penaltyAmount) + ' KMF</td>' +
             '<td>' + Math.round(finesAmount) + ' KMF</td>' +
+            '<td>' + (qrActivationPrice > 0 ? '<span style="color:#0dcaf0;font-weight:600;">' + Math.round(qrActivationPrice) + ' KMF</span>' : '<span class="text-muted">-</span>') + '</td>' +
             '<td><strong>' + Math.round(totalAmount) + ' KMF</strong></td>' +
             '<td>' + statusBadge + '</td>' +
             '<td>' + actionButton + '</td>' +
@@ -186,11 +188,16 @@ function openVignettePaymentModal(vehicleId) {
     const vignettePrice = Number(vehicle.vignette_price || 0);
     const penaltyAmount = Number(vehicle.penalty_amount || 0);
     const finesAmount = Number(vehicle.unpaid_fines_amount || 0);
-    const totalAmount = vignettePrice + penaltyAmount + finesAmount;
+    const qrActivationPrice = Number(vehicle.qr_activation_price || 0);
+    const totalAmount = vignettePrice + penaltyAmount + finesAmount + qrActivationPrice;
 
     const text = document.getElementById('mm-vignette-pay-text');
     if (text) {
-        text.textContent = 'Approuver le paiement de ' + (vehicle.license_plate || '') + ' pour renouvellement: ' + Math.round(totalAmount) + ' KMF ?';
+        let breakdown = 'Approuver le paiement de ' + (vehicle.license_plate || '') + ' : ' + Math.round(totalAmount) + ' KMF';
+        if (qrActivationPrice > 0) {
+            breakdown += ' (dont Activation QR : ' + Math.round(qrActivationPrice) + ' KMF)';
+        }
+        text.textContent = breakdown + ' ?';
     }
 
     const modal = new bootstrap.Modal(document.getElementById('mmVignettePayModal'));
