@@ -179,6 +179,12 @@
     statusFilter?.addEventListener('change', () => { loadLicenses(true); loadTabCounts(); });
     typeFilter?.addEventListener('change',   () => { loadLicenses(true); loadTabCounts(); });
 
+    /* ── Auto-uppercase inputs ── */
+    ['f-holder_firstname','f-holder_name','f-lieu_naissance','f-nationalite','f-holder_address'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+    });
+
     /* ── Photo preview ── */
     let _cropper = null;
     window._photoCroppedBlob = null;
@@ -1066,16 +1072,16 @@
         const isEdit = !!id;
         const payload = {
             license_number: document.getElementById('f-license_number').value.trim().toUpperCase(),
-            holder_name:       document.getElementById('f-holder_name').value.trim(),
-            holder_firstname:  document.getElementById('f-holder_firstname').value.trim(),
+            holder_name:       document.getElementById('f-holder_name').value.trim().toUpperCase(),
+            holder_firstname:  document.getElementById('f-holder_firstname').value.trim().toUpperCase(),
             holder_phone:   document.getElementById('f-holder_phone').value.trim(),
             nin:            document.getElementById('f-nin').value.trim(),
             holder_island:  document.getElementById('f-holder_island').value,
-            holder_address: document.getElementById('f-holder_address').value.trim(),
-            nationalite:           document.getElementById('f-nationalite').value.trim(),
+            holder_address: document.getElementById('f-holder_address').value.trim().toUpperCase(),
+            nationalite:           document.getElementById('f-nationalite').value.trim().toUpperCase(),
             sexe:                  document.getElementById('f-sexe').value,
             blood_group:           document.getElementById('f-blood_group').value,
-            lieu_naissance:        document.getElementById('f-lieu_naissance').value.trim(),
+            lieu_naissance:        document.getElementById('f-lieu_naissance').value.trim().toUpperCase(),
             centre_immatriculation:document.getElementById('f-centre_immatriculation').value.trim(),
             type_permis:           document.getElementById('f-type_permis').value,
             date_of_birth:         document.getElementById('f-date_of_birth').value,
