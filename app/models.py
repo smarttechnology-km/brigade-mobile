@@ -110,12 +110,14 @@ class Vehicle(db.Model):
     vignette_last_paid_vignette_amount = db.Column(db.Float, nullable=False, default=0.0)
     vignette_last_paid_penalty_amount = db.Column(db.Float, nullable=False, default=0.0)
     vignette_last_paid_fines_amount = db.Column(db.Float, nullable=False, default=0.0)
+    vignette_last_paid_qr_amount = db.Column(db.Float, nullable=False, default=0.0)
     vignette_last_paid_total_amount = db.Column(db.Float, nullable=False, default=0.0)
     qr_code_generated_at = db.Column(db.DateTime, nullable=True)  # When QR code was generated or renewed
     qr_code_expiry = db.Column(db.DateTime, nullable=True)  # When QR code expires (1 year after generation)
     qr_pending_approval = db.Column(db.Boolean, nullable=False, default=False)  # True until SmartTech validates QR creation
     fiscal_class = db.Column(db.String(10))  # A, B, C, D
     cv_class = db.Column(db.String(20))  # 0-5 CV, 6-9 CV, 10-12 CV, 12 CV et +
+    nombre_chevaux = db.Column(db.Integer, nullable=True)
     work_zone = db.Column(db.String(100))  # Zone de travail for Taxi / Transport public
     notes = db.Column(db.Text)
     created_by = db.Column(db.String(80), nullable=True)   # username who registered the vehicle
@@ -180,6 +182,7 @@ class Vehicle(db.Model):
             'vin': self.vin,
             'fiscal_class': self.fiscal_class,
             'cv_class': self.cv_class,
+            'nombre_chevaux': self.nombre_chevaux if self.nombre_chevaux is not None else None,
             'work_zone': self.work_zone,
             'registration_expiry': format_date(self.registration_expiry),
             'insurance_company': self.insurance_company,
@@ -197,6 +200,7 @@ class Vehicle(db.Model):
             'vignette_last_paid_vignette_amount': float(self.vignette_last_paid_vignette_amount or 0),
             'vignette_last_paid_penalty_amount': float(self.vignette_last_paid_penalty_amount or 0),
             'vignette_last_paid_fines_amount': float(self.vignette_last_paid_fines_amount or 0),
+            'vignette_last_paid_qr_amount': float(self.vignette_last_paid_qr_amount or 0),
             'vignette_last_paid_total_amount': float(self.vignette_last_paid_total_amount or 0),
             'qr_code_generated_at': format_date(self.qr_code_generated_at),
             'qr_code_expiry': format_date(self.qr_code_expiry),
@@ -1168,6 +1172,7 @@ class DriverLicense(db.Model):
     holder_name = db.Column(db.String(150), nullable=False)   # nom de famille
     holder_firstname = db.Column(db.String(100))              # prénom
     holder_phone = db.Column(db.String(30))
+    nin          = db.Column(db.String(50), nullable=True, index=True)
     holder_island = db.Column(db.String(50))
     holder_address = db.Column(db.String(255))
     nationalite = db.Column(db.String(100))
@@ -1218,6 +1223,7 @@ class DriverLicense(db.Model):
             'holder_name': self.holder_name,
             'holder_firstname': self.holder_firstname or '',
             'holder_phone': self.holder_phone or '',
+            'nin': self.nin or '',
             'holder_island': self.holder_island or '',
             'holder_address': self.holder_address or '',
             'nationalite': self.nationalite or '',
@@ -1640,6 +1646,7 @@ class LicenseDossier(db.Model):
     nationalite            = db.Column(db.String(100), nullable=True)
     holder_address         = db.Column(db.String(255), nullable=True)
     telephone              = db.Column(db.String(30), nullable=True)
+    nin                    = db.Column(db.String(50), nullable=True)
     country                = db.Column(db.String(50), nullable=True)
     # Détails du permis (étape 2)
     license_number_proposed = db.Column(db.String(50), nullable=True)
@@ -1736,6 +1743,7 @@ class LicenseDossier(db.Model):
             'nationalite': self.nationalite or '',
             'holder_address': self.holder_address or '',
             'telephone': self.telephone or '',
+            'nin': self.nin or '',
             'country': self.country or '',
             'license_number_proposed': self.license_number_proposed or '',
             'type_permis': self.type_permis or '',
@@ -1796,6 +1804,9 @@ class CarteGrise(db.Model):
     observation            = db.Column(db.Text)
     date_emission          = db.Column(db.Date)
     prix                   = db.Column(db.Float)
+    nombre_chevaux         = db.Column(db.Integer, nullable=True)
+    carte_bleue            = db.Column(db.Boolean, default=False, nullable=False)
+    qr_price               = db.Column(db.Integer, default=0, nullable=False)
 
     # Workflow: brouillon → en_attente → signee
     status                     = db.Column(db.String(30), default='brouillon', nullable=False)
@@ -1824,6 +1835,9 @@ class CarteGrise(db.Model):
             'observation': self.observation or '',
             'date_emission': self.date_emission.strftime('%Y-%m-%d') if self.date_emission else '',
             'prix': self.prix if self.prix is not None else '',
+            'nombre_chevaux': self.nombre_chevaux if self.nombre_chevaux is not None else '',
+            'carte_bleue': bool(self.carte_bleue),
+            'qr_price': int(self.qr_price or 0),
             'status': self.status or 'brouillon',
             'signature_requested_at': self.signature_requested_at.strftime('%d/%m/%Y %H:%M') if self.signature_requested_at else '',
             'signature_requested_by': self.signature_requested_by or '',
@@ -1835,6 +1849,36 @@ class CarteGrise(db.Model):
         }
 
 
+
+
+class DeletionRequest(db.Model):
+    __tablename__ = 'deletion_requests'
+    id           = db.Column(db.Integer, primary_key=True)
+    object_type  = db.Column(db.String(20), nullable=False)   # 'vehicle' or 'license'
+    object_id    = db.Column(db.Integer, nullable=False)
+    object_label = db.Column(db.String(300))                  # plate / license number + owner
+    status       = db.Column(db.String(20), default='pending', nullable=False)  # pending / approved / rejected
+    reason       = db.Column(db.Text)
+    requested_by = db.Column(db.String(100))
+    requested_at = db.Column(db.DateTime, default=now_comoros)
+    reviewed_by  = db.Column(db.String(100))
+    reviewed_at  = db.Column(db.DateTime)
+    review_comment = db.Column(db.Text)
+
+    def to_dict(self):
+        return {
+            'id':             self.id,
+            'object_type':    self.object_type,
+            'object_id':      self.object_id,
+            'object_label':   self.object_label or '',
+            'status':         self.status,
+            'reason':         self.reason or '',
+            'requested_by':   self.requested_by or '',
+            'requested_at':   self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else '',
+            'reviewed_by':    self.reviewed_by or '',
+            'reviewed_at':    self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else '',
+            'review_comment': self.review_comment or '',
+        }
 
 
 class CarteGriseSetting(db.Model):
@@ -1870,8 +1914,13 @@ class PlateSettings(db.Model):
     current_number        = db.Column(db.Integer, nullable=False, default=1)
     enabled               = db.Column(db.Boolean, nullable=False, default=False)
 
-    LETTERS       = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
-    ISLAND_SUFFIX = {'Grande Comore': '73', 'Anjouan': '71', 'Moheli': '72'}
+    LETTERS     = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+    ISLAND_CODE = {'Grande Comore': 'NG', 'Anjouan': 'ND', 'Moheli': 'MW'}
+    GLOBAL_KEY  = '__global__'
+
+    @classmethod
+    def get_global(cls):
+        return cls.get(cls.GLOBAL_KEY)
 
     @classmethod
     def get(cls, island):
@@ -1882,12 +1931,12 @@ class PlateSettings(db.Model):
             db.session.commit()
         return obj
 
-    def current_plate(self):
-        suffix = self.ISLAND_SUFFIX.get(self.island, '73')
-        return f"{self.current_number:03d}{self.principal_letter}{self.current_second_letter}{suffix}"
+    @classmethod
+    def format_plate(cls, island, number, letter):
+        return f"UC {number:04d} {letter}"
 
     def advance(self):
-        if self.current_number < 999:
+        if self.current_number < 9999:
             self.current_number += 1
         else:
             self.current_number = 1
@@ -1896,11 +1945,7 @@ class PlateSettings(db.Model):
 
     def to_dict(self):
         return {
-            'island':                self.island,
-            'principal_letter':      self.principal_letter,
             'current_second_letter': self.current_second_letter,
             'current_number':        self.current_number,
             'enabled':               self.enabled,
-            'suffix':                self.ISLAND_SUFFIX.get(self.island, '73'),
-            'next_plate':            self.current_plate() if self.enabled else None,
         }

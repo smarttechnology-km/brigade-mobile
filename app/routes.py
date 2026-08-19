@@ -34,8 +34,9 @@ vehicle_bp = Blueprint('vehicles', __name__, url_prefix='/api/vehicles')
 logo_path = os.path.join(os.path.dirname(__file__), 'static', 'img', 'logo.png')
 
 # Helper function: Calculate vignette expiry date (March 31st)
-def _make_qr_with_plate(data, plate_text, box_size=10, border=2):
-    """Generate a QR code image with the license plate text overlaid in the center."""
+def _make_qr_with_plate(data, plate_text, box_size=10, border=2, island_code=''):
+    """Generate a QR code image with the license plate text overlaid in the center.
+    If island_code is set and plate starts with 'UC ', renders the island code as a subscript."""
     from PIL import Image, ImageDraw, ImageFont
     import qrcode as _qrcode
 
@@ -51,40 +52,68 @@ def _make_qr_with_plate(data, plate_text, box_size=10, border=2):
     draw = ImageDraw.Draw(qr_img)
     w, h = qr_img.size
     font_size = max(16, int(h * 0.10))
+    pad = int(h * 0.03)
 
-    font = None
-    for fp in [
+    _font_paths = [
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Arial.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-    ]:
-        try:
-            font = ImageFont.truetype(fp, size=font_size)
-            break
-        except Exception:
-            pass
-    if font is None:
-        try:
-            font = ImageFont.load_default(size=font_size)
-        except Exception:
-            font = ImageFont.load_default()
+    ]
 
-    bbox = draw.textbbox((0, 0), plate_text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    pad = int(h * 0.03)
+    def _load_font(size):
+        for fp in _font_paths:
+            try:
+                return ImageFont.truetype(fp, size=size)
+            except Exception:
+                pass
+        try:
+            return ImageFont.load_default(size=size)
+        except Exception:
+            return ImageFont.load_default()
 
-    rx1 = (w - tw) // 2 - pad
-    ry1 = (h - th) // 2 - pad
-    rx2 = (w + tw) // 2 + pad
-    ry2 = (h + th) // 2 + pad
-    draw.rectangle([rx1, ry1, rx2, ry2], fill='white')
-    draw.text(
-        ((w - tw) // 2 - bbox[0], (h - th) // 2 - bbox[1]),
-        plate_text, fill='black', font=font,
-    )
+    font = _load_font(font_size)
+
+    if island_code and plate_text and plate_text.startswith('UC '):
+        sub_font = _load_font(max(10, int(font_size * 0.65)))
+        part1 = 'UC'
+        part2 = island_code
+        part3 = plate_text[2:]  # ' 0001 A'
+
+        bb1 = draw.textbbox((0, 0), part1, font=font)
+        bb2 = draw.textbbox((0, 0), part2, font=sub_font)
+        bb3 = draw.textbbox((0, 0), part3, font=font)
+
+        tw1, th1 = bb1[2] - bb1[0], bb1[3] - bb1[1]
+        tw2, th2 = bb2[2] - bb2[0], bb2[3] - bb2[1]
+        tw3       = bb3[2] - bb3[0]
+        total_w   = tw1 + tw2 + tw3
+
+        # Main text centered vertically
+        y_main_top  = (h - th1) // 2
+        y_main_draw = y_main_top - bb1[1]
+
+        # Subscript: top starts 55% down the main text height
+        y_sub_top  = y_main_top + int(th1 * 0.55)
+        y_sub_draw = y_sub_top - bb2[1]
+
+        x_start = (w - total_w) // 2
+        v_bottom = max(y_main_top + th1, y_sub_top + th2)
+        draw.rectangle([x_start - pad, y_main_top - pad, x_start + total_w + pad, v_bottom + pad], fill='white')
+
+        draw.text((x_start - bb1[0],           y_main_draw), part1, fill='black', font=font)
+        draw.text((x_start + tw1 - bb2[0],     y_sub_draw),  part2, fill='black', font=sub_font)
+        draw.text((x_start + tw1 + tw2 - bb3[0], y_main_draw), part3, fill='black', font=font)
+    else:
+        bbox = draw.textbbox((0, 0), plate_text, font=font)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        draw.rectangle([(w - tw) // 2 - pad, (h - th) // 2 - pad,
+                         (w + tw) // 2 + pad, (h + th) // 2 + pad], fill='white')
+        draw.text(((w - tw) // 2 - bbox[0], (h - th) // 2 - bbox[1]),
+                  plate_text, fill='black', font=font)
+
     return qr_img
 
 
@@ -1287,7 +1316,7 @@ def dgrtr_statistiques():
 @main_bp.route('/dgrtr-dossiers-complets')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_dossiers_complets():
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_technique':
         from flask import abort
         abort(403)
     return render_template('dgrtr_dossiers_complets.html')
@@ -1299,6 +1328,14 @@ def dgrtr_add_license():
     if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'employe':
         abort(403)
     return render_template('dgrtr_add_license.html')
+
+
+@main_bp.route('/dgrtr/photo-permis')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_photo_license():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'employe':
+        abort(403)
+    return render_template('dgrtr_photo_license.html')
 
 
 def compute_category_expiries(lic, settings, main_expiry):
@@ -1919,7 +1956,8 @@ def create_vehicle():
             pass
     if current_user and getattr(current_user, 'is_authenticated', False):
         vehicle.created_by = getattr(current_user, 'username', None)
-    vehicle.qr_pending_approval = True
+    pending = data.get('pending_approval')
+    vehicle.qr_pending_approval = (str(pending).lower() in ('true', '1', 'yes')) if pending is not None else False
     db.session.add(vehicle)
     db.session.flush()  # Flush to get the vehicle ID before committing
     
@@ -2693,7 +2731,9 @@ def get_vehicle_qrcode_pdf(vehicle_id):
 
 
         # Générer QR code avec numéro d'immatriculation intégré
-        qr_img = _make_qr_with_plate(vehicle.license_plate, vehicle.license_plate)
+        _island_codes = {'Grande Comore': 'NG', 'Anjouan': 'ND', 'Moheli': 'MW'}
+        _icode = _island_codes.get(vehicle.owner_island or '', '')
+        qr_img = _make_qr_with_plate(vehicle.license_plate, vehicle.license_plate, island_code=_icode)
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
@@ -3930,7 +3970,9 @@ def public_track_qrcode_pdf(token):
 
 
         # Générer QR code avec numéro d'immatriculation intégré
-        qr_img = _make_qr_with_plate(vehicle.license_plate, vehicle.license_plate)
+        _island_codes2 = {'Grande Comore': 'NG', 'Anjouan': 'ND', 'Moheli': 'MW'}
+        _icode2 = _island_codes2.get(vehicle.owner_island or '', '')
+        qr_img = _make_qr_with_plate(vehicle.license_plate, vehicle.license_plate, island_code=_icode2)
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
@@ -4260,38 +4302,34 @@ def update_vehicle(vehicle_id):
 @vehicle_bp.route('/<int:vehicle_id>', methods=['DELETE'])
 @login_required
 def delete_vehicle(vehicle_id):
-    vehicle = Vehicle.query.get_or_404(vehicle_id)
-    license_plate = vehicle.license_plate
-    owner_name = vehicle.owner_name
+    from app.models import DeletionRequest
+    if getattr(current_user, 'role', '') != 'administrateur':
+        return jsonify({'error': 'Seul un administrateur peut demander la suppression d\'un véhicule.'}), 403
 
-    # Prevent deletion when a vehicle has history rows that require vehicle_id.
-    if vehicle.history.count() > 0:
-        return jsonify({'error': 'Cette voiture ne peut pas etre supprimee car elle a un historique.'}), 400
-    
-    try:
-        db.session.delete(vehicle)
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({'error': 'Cette voiture ne peut pas etre supprimee car elle a un historique.'}), 400
-    except Exception:
-        db.session.rollback()
-        return jsonify({'error': 'Erreur serveur lors de la suppression du vehicule.'}), 500
-    
-    # Log action in user history
-    try:
-        from app.models import UserHistory
-        user_history = UserHistory(
-            user_id=current_user.id,
-            action='Véhicule supprimé',
-            details=f'Véhicule {license_plate} - {owner_name}'
-        )
-        db.session.add(user_history)
-        db.session.commit()
-    except Exception as e:
-        print(f'Error logging vehicle deletion: {e}')
-    
-    return jsonify({'message': 'Véhicule supprimé'})
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    # Block if a pending request already exists
+    existing = DeletionRequest.query.filter_by(
+        object_type='vehicle', object_id=vehicle_id, status='pending'
+    ).first()
+    if existing:
+        return jsonify({'pending': True, 'message': 'Une demande de suppression est déjà en attente de validation SmartTech.'}), 200
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or '').strip()
+
+    label = f'{vehicle.license_plate} — {vehicle.owner_name or ""}'
+    req = DeletionRequest(
+        object_type='vehicle',
+        object_id=vehicle_id,
+        object_label=label,
+        status='pending',
+        reason=reason,
+        requested_by=current_user.username,
+    )
+    db.session.add(req)
+    db.session.commit()
+    return jsonify({'pending': True, 'message': 'Demande de suppression envoyée. En attente de validation par l\'administrateur SmartTech.'})
 
 
 # Exoneration routes
@@ -5057,8 +5095,19 @@ def get_vignette_vehicles():
         # Calculate vignette price based on vehicle attributes
         vignette_price = calculate_vignette_price(vehicle)
         vehicle_data['vignette_price'] = vignette_price
-        
+
         payment_approved = bool(getattr(vehicle, 'vignette_payment_approved', False))
+
+        # QR activation price: use stored amount after approval, live calculation before
+        from app.models import SmartTechSetting
+        if payment_approved:
+            qr_activation_price = float(getattr(vehicle, 'vignette_last_paid_qr_amount', 0.0) or 0.0)
+            needs_qr_activation = False
+        else:
+            needs_qr_activation = vehicle.qr_code_expiry is None
+            qr_activation_price = int(SmartTechSetting.get('qr_activation_price', 5000)) if needs_qr_activation else 0
+        vehicle_data['qr_activation_price'] = qr_activation_price
+        vehicle_data['needs_qr_activation'] = needs_qr_activation
 
         # Determine renewal period status
         renewal_opening = get_renewal_opening_datetime()
@@ -5168,7 +5217,15 @@ def approve_vignette_payment(vehicle_id):
         penalty_amount = calculate_penalty_amount(days_late)
     unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
     unpaid_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
-    total_amount = vignette_price + penalty_amount + unpaid_fines_amount
+
+    # QR activation: include price for vehicles that have never been activated
+    from app.models import SmartTechSetting, QRCodePayment
+    needs_qr_activation = vehicle.qr_code_expiry is None
+    qr_activation_price = 0.0
+    if needs_qr_activation:
+        qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000)
+
+    total_amount = vignette_price + penalty_amount + unpaid_fines_amount + qr_activation_price
 
     # Persist last paid breakdown so tax dashboard can still display paid components after renewal.
     vehicle.vignette_last_paid_at = now_time
@@ -5176,10 +5233,23 @@ def approve_vignette_payment(vehicle_id):
     vehicle.vignette_last_paid_vignette_amount = float(vignette_price or 0.0)
     vehicle.vignette_last_paid_penalty_amount = float(penalty_amount or 0.0)
     vehicle.vignette_last_paid_fines_amount = float(unpaid_fines_amount or 0.0)
+    vehicle.vignette_last_paid_qr_amount = float(qr_activation_price or 0.0)
     vehicle.vignette_last_paid_total_amount = float(total_amount or 0.0)
     vehicle.vignette_payment_requested_at = None
     vehicle.vignette_payment_requested_by = None
     vehicle.vignette_payment_requested_expiry = None
+
+    # Generate QR code and record activation payment if this is the first activation
+    if needs_qr_activation:
+        vehicle.generate_qr_code_with_expiry()
+        db.session.add(QRCodePayment(
+            vehicle_id=vehicle.id,
+            payment_type='activation',
+            amount=qr_activation_price,
+            status='paid',
+            paid_at=now_time,
+            recorded_by=agent_display_name or 'Système',
+        ))
 
     unpaid_fines_count = len(unpaid_fines)
 
@@ -5205,6 +5275,7 @@ def approve_vignette_payment(vehicle_id):
         'annual_ds_amount': 0.0,
         'penalty_amount': float(penalty_amount or 0.0),
         'fines_amount': float(unpaid_fines_amount or 0.0),
+        'qr_activation_price': float(qr_activation_price or 0.0),
         'total_amount': float(total_amount or 0.0),
         'requested_expiry': vehicle.vignette_expiry.isoformat() if vehicle.vignette_expiry else None,
         'fine_ids': paid_fine_ids,
@@ -5222,11 +5293,14 @@ def approve_vignette_payment(vehicle_id):
     )
     db.session.add(payment_record)
 
+    history_notes = f"Mode: {payment_method} | Montant total: {round(total_amount, 2)} KMF | Amendes payées: {unpaid_fines_count}"
+    if needs_qr_activation:
+        history_notes += f" | Activation QR: {round(qr_activation_price, 2)} KMF"
     db.session.add(VehicleHistory(
         vehicle_id=vehicle.id,
         action='Paiement vignette approuvé',
         officer=vehicle.vignette_payment_approved_by,
-        notes=f"Mode: {payment_method} | Montant total: {round(total_amount, 2)} KMF | Amendes payées: {unpaid_fines_count}"
+        notes=history_notes
     ))
     db.session.commit()
 
@@ -5241,6 +5315,7 @@ def approve_vignette_payment(vehicle_id):
         'vignette_price': round(vignette_price, 2),
         'penalty_amount': round(penalty_amount, 2),
         'unpaid_fines_amount': round(unpaid_fines_amount, 2),
+        'qr_activation_price': round(qr_activation_price, 2),
         'total_amount': round(total_amount, 2)
     })
 
@@ -5373,13 +5448,20 @@ def get_vignette_vehicles_without():
         # Calculate vignette price based on vehicle attributes
         vignette_price = calculate_vignette_price(vehicle)
         vehicle_data['vignette_price'] = vignette_price
-        
+
+        # QR activation price: added once for vehicles that have never been activated
+        from app.models import SmartTechSetting
+        needs_qr_activation = vehicle.qr_code_expiry is None
+        qr_activation_price = int(SmartTechSetting.get('qr_activation_price', 5000)) if needs_qr_activation else 0
+        vehicle_data['qr_activation_price'] = qr_activation_price
+        vehicle_data['needs_qr_activation'] = needs_qr_activation
+
         # Add unpaid fines amount
         unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
         total_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
         vehicle_data['unpaid_fines_amount'] = total_fines_amount
         vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
-        
+
         vehicles_payload.append(vehicle_data)
 
     return jsonify({
@@ -5452,6 +5534,7 @@ def get_vignette_finance_stats():
     total_penalties = 0.0
     total_vignette_revenue = 0.0
     total_fines = 0.0
+    total_qr_revenue = 0.0
     
     for vehicle in vehicles:
         paid_at = getattr(vehicle, 'vignette_last_paid_at', None)
@@ -5476,6 +5559,7 @@ def get_vignette_finance_stats():
         stored_vignette = float(getattr(vehicle, 'vignette_last_paid_vignette_amount', 0.0) or 0.0)
         stored_penalty = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         stored_fines = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
+        stored_qr = float(getattr(vehicle, 'vignette_last_paid_qr_amount', 0.0) or 0.0)
 
         if stored_vignette == 0.0 and stored_penalty == 0.0 and stored_fines == 0.0:
             # Legacy fallback calculation
@@ -5496,9 +5580,10 @@ def get_vignette_finance_stats():
         total_vignette_revenue += stored_vignette
         total_penalties += stored_penalty
         total_fines += stored_fines
-    
+        total_qr_revenue += stored_qr
+
     # Calculate total revenue
-    total_revenue = total_vignette_revenue + total_penalties + total_fines
+    total_revenue = total_vignette_revenue + total_penalties + total_fines + total_qr_revenue
     
     return jsonify({
         'total_active_vignettes': total_active_vignettes,
@@ -5506,6 +5591,7 @@ def get_vignette_finance_stats():
         'total_penalties': round(total_penalties, 2),
         'total_vignette_revenue': round(total_vignette_revenue, 2),
         'total_fines': round(total_fines, 2),
+        'total_qr_revenue': round(total_qr_revenue, 2),
         'total_revenue': round(total_revenue, 2),
         'date_range': {
             'start': start_date.isoformat(),
@@ -5582,6 +5668,7 @@ def get_vignette_finance_vehicles():
         vignette_price = float(getattr(vehicle, 'vignette_last_paid_vignette_amount', 0.0) or 0.0)
         penalty_amount = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         fines_amount = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
+        qr_amount = float(getattr(vehicle, 'vignette_last_paid_qr_amount', 0.0) or 0.0)
 
         if vignette_price == 0.0 and penalty_amount == 0.0 and fines_amount == 0.0:
             vignette_price = float(calculate_vignette_price(vehicle) or 0.0)
@@ -5604,7 +5691,7 @@ def get_vignette_finance_vehicles():
         except Exception:
             payment_date = payment_date_dt.strftime('%Y-%m-%d') if payment_date_dt else '-'
 
-        total = vignette_price + penalty_amount + fines_amount
+        total = vignette_price + penalty_amount + fines_amount + qr_amount
 
         vehicles_data.append({
             'license_plate': vehicle.license_plate,
@@ -5612,10 +5699,11 @@ def get_vignette_finance_vehicles():
             'vignette_price': round(vignette_price, 2),
             'penalty_amount': round(penalty_amount, 2),
             'fines_amount': round(fines_amount, 2),
+            'qr_amount': round(qr_amount, 2),
             'total': round(total, 2),
             'updated_at': payment_date_dt.strftime('%Y-%m-%d %H:%M:%S') if payment_date_dt else None
         })
-    
+
     return jsonify(vehicles_data)
 
 
@@ -5653,6 +5741,7 @@ def get_vignette_daily_report():
     total_paid = 0
     total_revenue = 0.0
     total_penalties = 0.0
+    total_qr = 0.0
     total_fines = 0.0
     
     now = now_comoros()
@@ -5680,6 +5769,7 @@ def get_vignette_daily_report():
         vignette_price = float(getattr(vehicle, 'vignette_last_paid_vignette_amount', 0.0) or 0.0)
         penalty_amount = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         fines_amount = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
+        qr_amount = float(getattr(vehicle, 'vignette_last_paid_qr_amount', 0.0) or 0.0)
 
         if vignette_price == 0.0 and penalty_amount == 0.0 and fines_amount == 0.0:
             vignette_price = float(calculate_vignette_price(vehicle) or 0.0)
@@ -5702,7 +5792,7 @@ def get_vignette_daily_report():
         except Exception:
             payment_date = payment_date_dt.strftime('%Y-%m-%d') if payment_date_dt else '-'
 
-        total = vignette_price + penalty_amount + fines_amount
+        total = vignette_price + penalty_amount + fines_amount + qr_amount
 
         vehicles_data.append({
             'license_plate': vehicle.license_plate,
@@ -5710,6 +5800,7 @@ def get_vignette_daily_report():
             'vignette_price': round(vignette_price, 2),
             'penalty_amount': round(penalty_amount, 2),
             'fines_amount': round(fines_amount, 2),
+            'qr_amount': round(qr_amount, 2),
             'total': round(total, 2),
             'updated_at': payment_date_dt.strftime('%Y-%m-%d %H:%M:%S') if payment_date_dt else None
         })
@@ -5718,13 +5809,15 @@ def get_vignette_daily_report():
         total_revenue += vignette_price
         total_penalties += penalty_amount
         total_fines += fines_amount
+        total_qr += qr_amount
     
     return jsonify({
         'date': date_str,
         'total_paid': total_paid,
-        'total_revenue': round(total_revenue, 2),
+        'total_revenue': round(total_revenue + total_qr, 2),
         'total_penalties': round(total_penalties, 2),
         'total_fines': round(total_fines, 2),
+        'total_qr': round(total_qr, 2),
         'vehicles': vehicles_data
     })
 
@@ -5849,7 +5942,8 @@ def get_mobile_money_archive():
         vignette_price = float(getattr(vehicle, 'vignette_last_paid_vignette_amount', 0.0) or 0.0)
         penalty_amount = float(getattr(vehicle, 'vignette_last_paid_penalty_amount', 0.0) or 0.0)
         fines_amount = float(getattr(vehicle, 'vignette_last_paid_fines_amount', 0.0) or 0.0)
-        total_amount = float(getattr(vehicle, 'vignette_last_paid_total_amount', 0.0) or (vignette_price + penalty_amount + fines_amount))
+        qr_amount = float(getattr(vehicle, 'vignette_last_paid_qr_amount', 0.0) or 0.0)
+        total_amount = float(getattr(vehicle, 'vignette_last_paid_total_amount', 0.0) or (vignette_price + penalty_amount + fines_amount + qr_amount))
 
         vignette_archive.append({
             'vehicle_id': vehicle.id,
@@ -5860,6 +5954,7 @@ def get_mobile_money_archive():
             'vignette_price': vignette_price,
             'penalty_amount': penalty_amount,
             'fines_amount': fines_amount,
+            'qr_amount': qr_amount,
             'total_amount': total_amount,
             'approved_by': (lambda raw: f'App Citoyen / {raw}' if raw and raw not in mobile_agent_usernames and not raw.startswith('App Citoyen /') else (raw or '-'))(vehicle.vignette_last_paid_by or vehicle.vignette_payment_approved_by),
             'payment_method': vehicle.vignette_payment_method,
@@ -7092,14 +7187,14 @@ def api_dgrtr_users():
 # ─────────────────────────────────────────────────────────────
 
 def _require_cg_access():
-    """Block dgrtr users who are not directeur_regional from cartes-grises pages."""
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_regional':
+    """Allow directeur_regional and directeur_general; block all other dgrtr types."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
         abort(403)
 
 
 def _require_dr_only():
-    """Block dgrtr users who are not directeur_regional from police-style pages."""
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_regional':
+    """Allow directeur_regional and directeur_general; block all other dgrtr types."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
         abort(403)
 
 
@@ -7195,6 +7290,7 @@ def dgrtr_cg_search():
             'year': v.year or '',
             'fuel_type': v.fuel_type or '',
             'cv_class': v.cv_class or '',
+            'nombre_chevaux': v.nombre_chevaux if v.nombre_chevaux is not None else None,
             'vin': v.vin or '',
             'has_carte_grise': v.carte_grise is not None,
             'carte_grise': v.carte_grise.to_dict() if v.carte_grise else None,
@@ -7235,14 +7331,27 @@ def dgrtr_cg_vehicle(vehicle_id):
         else:
             cg.date_emission = None
 
-    raw_prix = data.get('prix')
-    if raw_prix is not None and raw_prix != '':
+    raw_chevaux = data.get('nombre_chevaux')
+    if raw_chevaux is not None and raw_chevaux != '':
         try:
-            cg.prix = float(str(raw_prix).replace(',', '.'))
+            nb_cv = int(float(str(raw_chevaux)))
+            cg.nombre_chevaux = nb_cv
         except (ValueError, TypeError):
             pass
-    else:
-        cg.prix = None
+    elif 'nombre_chevaux' in data:
+        cg.nombre_chevaux = None
+
+    if 'carte_bleue' in data:
+        cg.carte_bleue = bool(data['carte_bleue'])
+
+    if 'qr_price' in data:
+        try:
+            cg.qr_price = max(0, int(data['qr_price']))
+        except (ValueError, TypeError):
+            cg.qr_price = 0
+
+    nb_cv = cg.nombre_chevaux or 0
+    cg.prix = 3000 + nb_cv * 1000 + (2500 if cg.carte_bleue else 0) + (cg.qr_price or 0)
 
     cg.updated_at = now_comoros()
     db.session.commit()
@@ -7363,6 +7472,8 @@ def dgrtr_rapport_cg():
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_recettes_cg():
     _require_cg_access()
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general':
+        abort(403)
     return render_template('dgrtr_recettes_cg.html')
 
 
@@ -7370,6 +7481,8 @@ def dgrtr_recettes_cg():
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_recettes_cg_api():
     _require_cg_access()
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general':
+        abort(403)
     from app.models import CarteGrise, Vehicle
     from sqlalchemy import func
     from datetime import date
@@ -7392,8 +7505,9 @@ def dgrtr_recettes_cg_api():
             pass
 
     cgs = q.order_by(CarteGrise.signed_at.desc()).all()
-    total_montant = sum(c.prix for c in cgs if c.prix is not None)
-    nb_avec_prix  = sum(1 for c in cgs if c.prix is not None)
+    total_montant  = sum(c.prix for c in cgs if c.prix is not None)
+    total_droit    = sum(3000 for c in cgs if c.prix is not None)
+    total_chevaux  = sum((c.nombre_chevaux or 0) * 1000 for c in cgs)
 
     rows = []
     for c in cgs:
@@ -7407,11 +7521,13 @@ def dgrtr_recettes_cg_api():
             'signed_at': c.signed_at.strftime('%d/%m/%Y') if c.signed_at else '',
             'date_emission': c.date_emission.strftime('%d/%m/%Y') if c.date_emission else '',
             'prix': c.prix if c.prix is not None else None,
+            'nombre_chevaux': c.nombre_chevaux if c.nombre_chevaux is not None else None,
         })
     return jsonify({
         'count': len(cgs),
-        'nb_avec_prix': nb_avec_prix,
         'total_montant': total_montant,
+        'total_droit': total_droit,
+        'total_chevaux': total_chevaux,
         'rows': rows,
     })
 

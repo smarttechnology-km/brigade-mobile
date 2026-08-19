@@ -706,7 +706,7 @@ def _check_plate_settings_access():
         return False
     if u.role == 'administrateur':
         return True
-    if u.role == 'dgrtr' and getattr(u, 'dgrtr_type', None) == 'directeur_regional':
+    if u.role == 'dgrtr' and getattr(u, 'dgrtr_type', None) in ('directeur_regional', 'directeur_general'):
         return True
     return False
 
@@ -719,36 +719,32 @@ def _dr_island():
     return None
 
 
+@api_bp.route('/smarttech/qr-activation-price', methods=['GET'])
+def api_smarttech_qr_activation_price():
+    from app.models import SmartTechSetting
+    price = int(SmartTechSetting.get('qr_activation_price', 5000))
+    return jsonify({'price': price})
+
+
 @api_bp.route('/vehicles/plate-settings', methods=['GET'])
 @jwt_required(optional=True)
 def api_plate_settings_get():
     if not _check_plate_settings_access():
         return jsonify({'error': 'Accès refusé'}), 403
     from app.models import PlateSettings
-    dr_island = _dr_island()
-    islands = [dr_island] if dr_island else list(_PLATE_ISLANDS)
-    return jsonify({island: PlateSettings.get(island).to_dict() for island in islands})
+    return jsonify(PlateSettings.get_global().to_dict())
 
 
-@api_bp.route('/vehicles/plate-settings/<path:island>', methods=['PUT'])
+@api_bp.route('/vehicles/plate-settings', methods=['PUT'])
 @jwt_required(optional=True)
-def api_plate_settings_update(island):
+def api_plate_settings_update():
     if not _check_plate_settings_access():
         return jsonify({'error': 'Accès refusé'}), 403
-    if island not in _PLATE_ISLANDS:
-        return jsonify({'error': 'Île invalide'}), 400
-    dr_island = _dr_island()
-    if dr_island and island != dr_island:
-        return jsonify({'error': 'Accès refusé pour cette île'}), 403
     from app.models import PlateSettings
-    s = PlateSettings.get(island)
+    s = PlateSettings.get_global()
     data = request.get_json() or {}
     if 'enabled' in data:
         s.enabled = bool(data['enabled'])
-    if 'principal_letter' in data:
-        l = (data['principal_letter'] or '').upper().strip()
-        if l and l in PlateSettings.LETTERS:
-            s.principal_letter = l
     if 'current_second_letter' in data:
         l = (data['current_second_letter'] or '').upper().strip()
         if l and l in PlateSettings.LETTERS:
@@ -756,7 +752,7 @@ def api_plate_settings_update(island):
     if 'current_number' in data:
         try:
             n = int(data['current_number'])
-            if 1 <= n <= 999:
+            if 1 <= n <= 9999:
                 s.current_number = n
         except (ValueError, TypeError):
             pass
@@ -774,23 +770,24 @@ def api_vehicles_next_plate():
     if not island:
         return jsonify({'plate': None})
     from app.models import PlateSettings
-    s = PlateSettings.get(island)
+    if island not in PlateSettings.ISLAND_CODE:
+        return jsonify({'plate': None})
+    s = PlateSettings.get_global()
     if not s.enabled:
         return jsonify({'plate': None, 'enabled': False})
-    suffix = PlateSettings.ISLAND_SUFFIX.get(island, '73')
     letters = PlateSettings.LETTERS
     num = s.current_number
-    l2 = s.current_second_letter
-    for _ in range(999 * len(letters)):
-        plate = f"{num:03d}{s.principal_letter}{l2}{suffix}"
+    letter = s.current_second_letter
+    for _ in range(9999 * len(letters)):
+        plate = PlateSettings.format_plate(island, num, letter)
         if not Vehicle.query.filter_by(license_plate=plate).first():
             return jsonify({'plate': plate, 'enabled': True})
-        if num < 999:
+        if num < 9999:
             num += 1
         else:
             num = 1
-            idx = letters.find(l2)
-            l2 = letters[idx + 1] if idx < len(letters) - 1 else letters[0]
+            idx = letters.find(letter)
+            letter = letters[idx + 1] if idx < len(letters) - 1 else letters[0]
     return jsonify({'plate': None, 'enabled': True, 'exhausted': True})
 
 
@@ -945,6 +942,17 @@ def api_vehicles_create():
             pass
     
     vehicle.qr_pending_approval = True
+    if data.get('fuel_type'):
+        vehicle.fuel_type = data['fuel_type']
+    if data.get('fiscal_class'):
+        vehicle.fiscal_class = data['fiscal_class']
+    if data.get('cv_class'):
+        vehicle.cv_class = data['cv_class']
+    if data.get('nombre_chevaux') is not None and data['nombre_chevaux'] != '':
+        try:
+            vehicle.nombre_chevaux = int(data['nombre_chevaux'])
+        except (ValueError, TypeError):
+            pass
 
     db.session.add(vehicle)
     db.session.commit()
@@ -954,10 +962,10 @@ def api_vehicles_create():
     if _owner_island:
         import re as _re
         from app.models import PlateSettings as _PS
-        _ps = _PS.query.filter_by(island=_owner_island, enabled=True).first()
-        if _ps:
-            _suffix = _PS.ISLAND_SUFFIX.get(_owner_island, '')
-            if _suffix and _re.match(r'^\d{3}[A-Z][A-Z]' + _re.escape(_suffix) + r'$', license_plate):
+        _ps = _PS.get_global()
+        if _ps and _ps.enabled:
+            _code = _PS.ISLAND_CODE.get(_owner_island, '')
+            if _re.match(r'^UC \d{4} [A-Z]$', license_plate):
                 _ps.advance()
                 db.session.commit()
 
@@ -1087,6 +1095,9 @@ def api_vehicles_update(vehicle_id):
         vehicle.fiscal_class = data['fiscal_class']
     if 'cv_class' in data:
         vehicle.cv_class = data['cv_class']
+    if 'nombre_chevaux' in data:
+        raw_nb = data['nombre_chevaux']
+        vehicle.nombre_chevaux = int(raw_nb) if raw_nb not in (None, '') else None
     if 'status' in data:
         vehicle.status = data['status']
     if 'insurance_company' in data:
@@ -3821,6 +3832,7 @@ def api_licenses_list():
                 DriverLicense.holder_name.ilike(term),
                 DriverLicense.holder_firstname.ilike(term),
                 DriverLicense.holder_phone.ilike(term),
+                DriverLicense.nin.ilike(term),
             )
         )
     if status_f:
@@ -3916,6 +3928,7 @@ def api_licenses_create():
         holder_name           = name,
         holder_firstname      = (data.get('holder_firstname') or '').strip() or None,
         holder_phone          = (data.get('holder_phone') or '').strip() or None,
+        nin                   = (data.get('nin') or '').strip() or None,
         holder_island         = data.get('holder_island') or None,
         holder_address        = (data.get('holder_address') or '').strip() or None,
         nationalite           = (data.get('nationalite') or '').strip() or None,
@@ -4170,7 +4183,7 @@ def api_licenses_update(license_id):
             lic.points = max(0, min(12, int(data['points'])))
         except (ValueError, TypeError):
             pass
-    for field in ['holder_name', 'holder_firstname', 'holder_phone', 'holder_island', 'holder_address',
+    for field in ['holder_name', 'holder_firstname', 'holder_phone', 'nin', 'holder_island', 'holder_address',
                   'nationalite', 'sexe', 'blood_group', 'lieu_naissance', 'centre_immatriculation', 'type_permis', 'categories', 'status', 'notes']:
         if field in data:
             setattr(lic, field, (data[field] or '').strip() or None)
@@ -4318,27 +4331,33 @@ def api_license_associated_vehicles(license_id):
 @api_bp.route('/licenses/<int:license_id>', methods=['DELETE'])
 @login_required
 def api_licenses_delete(license_id):
-    if not _is_license_admin():
-        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import DeletionRequest
+    if getattr(current_user, 'role', '') != 'administrateur':
+        return jsonify({'error': 'Seul un administrateur peut demander la suppression d\'un permis.'}), 403
+
     lic = DriverLicense.query.get_or_404(license_id)
-    if PointReductionHistory.query.filter_by(license_id=lic.id).first():
-        return jsonify({'error': 'Ce permis a un historique de points et ne peut pas être supprimé.'}), 400
-    if lic.photo_filename:
-        try:
-            from app.cloudinary_utils import delete_file as cloud_delete
-            cloud_delete(lic.photo_filename, local_folder='license_photos')
-        except Exception:
-            pass
-    # Supprimer les demandes d'impression liées
-    from app.models import LicenseDossier, LicensePrintRequest
-    LicensePrintRequest.query.filter_by(license_id=lic.id).delete()
-    # Supprimer le dossier DGRTR lié s'il existe
-    dossier = LicenseDossier.query.filter_by(license_id=lic.id).first()
-    if dossier:
-        db.session.delete(dossier)
-    db.session.delete(lic)
+
+    existing = DeletionRequest.query.filter_by(
+        object_type='license', object_id=license_id, status='pending'
+    ).first()
+    if existing:
+        return jsonify({'pending': True, 'message': 'Une demande de suppression est déjà en attente de validation SmartTech.'}), 200
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or '').strip()
+
+    label = f'{lic.license_number} — {lic.holder_firstname or ""} {lic.holder_name or ""}'.strip(' —')
+    req = DeletionRequest(
+        object_type='license',
+        object_id=license_id,
+        object_label=label,
+        status='pending',
+        reason=reason,
+        requested_by=current_user.username,
+    )
+    db.session.add(req)
     db.session.commit()
-    return jsonify({'ok': True})
+    return jsonify({'pending': True, 'message': 'Demande de suppression envoyée. En attente de validation par l\'administrateur SmartTech.'})
 
 
 @api_bp.route('/licenses/<int:license_id>/photo', methods=['POST'])
@@ -5035,6 +5054,8 @@ def create_dossier_permis():
         doc_carte_nationale=bool(data.get('doc_carte_nationale')),
         doc_recu_paiement=bool(data.get('doc_recu_paiement')),
         country=(data.get('country') or '').strip() or None,
+        telephone=(data.get('telephone') or '').strip() or None,
+        nin=(data.get('nin') or '').strip() or None,
         created_by=current_user.username,
     )
 
@@ -5304,6 +5325,10 @@ def update_dossier_permis(dossier_id):
             setattr(d, field, bool(data[field]))
     if 'country' in data:
         d.country = (data.get('country') or '').strip() or None
+    if 'telephone' in data:
+        d.telephone = (data.get('telephone') or '').strip() or None
+    if 'nin' in data:
+        d.nin = (data.get('nin') or '').strip() or None
 
     if d.all_docs_checked and not d.step1_validated_at:
         d.dossier_number   = _generate_dossier_number()

@@ -384,11 +384,13 @@ def create_app():
                             'vignette_last_paid_vignette_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_vignette_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_penalty_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_penalty_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_fines_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_fines_amount FLOAT NOT NULL DEFAULT 0.0",
+                            'vignette_last_paid_qr_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_qr_amount FLOAT NOT NULL DEFAULT 0.0",
                             'vignette_last_paid_total_amount': "ALTER TABLE vehicles ADD COLUMN vignette_last_paid_total_amount FLOAT NOT NULL DEFAULT 0.0",
                             'created_by': "ALTER TABLE vehicles ADD COLUMN created_by VARCHAR(80)",
                             'qr_renewed_by': "ALTER TABLE vehicles ADD COLUMN qr_renewed_by VARCHAR(80)",
                             'work_zone': "ALTER TABLE vehicles ADD COLUMN work_zone VARCHAR(100)",
                             'qr_pending_approval': "ALTER TABLE vehicles ADD COLUMN qr_pending_approval BOOLEAN NOT NULL DEFAULT 0",
+                            'nombre_chevaux': "ALTER TABLE vehicles ADD COLUMN nombre_chevaux INTEGER",
                         }
                         for column_name, alter_sql in vehicle_column_definitions.items():
                             if column_name not in vehicle_columns:
@@ -507,6 +509,7 @@ def create_app():
                         'smarttech_validated_at':     "ALTER TABLE driver_licenses ADD COLUMN smarttech_validated_at DATETIME",
                         'smarttech_validated_by':     "ALTER TABLE driver_licenses ADD COLUMN smarttech_validated_by VARCHAR(100)",
                         'blood_group':                "ALTER TABLE driver_licenses ADD COLUMN blood_group VARCHAR(10)",
+                        'nin':                        "ALTER TABLE driver_licenses ADD COLUMN nin VARCHAR(50)",
                     }
                     for col, sql in dl_col_defs.items():
                         if col not in dl_cols:
@@ -614,6 +617,7 @@ def create_app():
                             'rejected_at':          "ALTER TABLE license_dossiers ADD COLUMN rejected_at DATETIME",
                             'rejected_by':          "ALTER TABLE license_dossiers ADD COLUMN rejected_by VARCHAR(100)",
                             'rejection_reason':     "ALTER TABLE license_dossiers ADD COLUMN rejection_reason TEXT",
+                            'nin':                  "ALTER TABLE license_dossiers ADD COLUMN nin VARCHAR(50)",
                         }
                         for col, sql in ld_col_defs.items():
                             if col not in ld_cols:
@@ -642,7 +646,10 @@ def create_app():
                             'signed_at':              "ALTER TABLE carte_grise ADD COLUMN signed_at DATETIME",
                             'signed_by':              "ALTER TABLE carte_grise ADD COLUMN signed_by VARCHAR(100)",
                             'prix':                   "ALTER TABLE carte_grise ADD COLUMN prix FLOAT",
+                            'nombre_chevaux':         "ALTER TABLE carte_grise ADD COLUMN nombre_chevaux INTEGER",
                             'civilite':               "ALTER TABLE carte_grise ADD COLUMN civilite VARCHAR(10)",
+                            'carte_bleue':            "ALTER TABLE carte_grise ADD COLUMN carte_bleue BOOLEAN NOT NULL DEFAULT 0",
+                            'qr_price':               "ALTER TABLE carte_grise ADD COLUMN qr_price INTEGER NOT NULL DEFAULT 0",
                         }
                         for col, sql in cg_col_defs.items():
                             if col not in cg_cols:

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response, abort
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response, abort, session
 from flask_login import login_user, logout_user, login_required, current_user
 from functools import wraps
 from app.models import SmartTechAccount, QRCodePayment, Vehicle, Subscription, Expense, Employee, SmartTechSetting, LicensePrintRequest, Insurance, InsuranceAccount, VehicleInsuranceAssignment, HuriDestinationSetting
@@ -9,11 +9,16 @@ smart_tech_bp = Blueprint('smart_tech', __name__, url_prefix='/smart-tech')
 
 @smart_tech_bp.context_processor
 def inject_licences_pending_count():
+    from app.models import DeletionRequest
     try:
         count = _lpr_q().filter(LicensePrintRequest.status == 'pending').count()
     except Exception:
         count = 0
-    return {'pending_count': count}
+    try:
+        deletion_pending = DeletionRequest.query.filter_by(status='pending').count()
+    except Exception:
+        deletion_pending = 0
+    return {'pending_count': count, 'deletion_pending_count': deletion_pending}
 
 
 def smart_tech_required(f):
@@ -586,6 +591,7 @@ def _vehicles_query_filtered(search, type_filter):
             'vehicle_id':    v.id,
             'license_plate': v.license_plate or '',
             'owner_name':    v.owner_name or '',
+            'owner_island':  v.owner_island or '',
             'payment_type':  payment_type,
             'amount':        amount,
             'recorded_by':   recorded_by or None,
@@ -864,6 +870,120 @@ def api_qr_table():
         'activation_price':  int(SmartTechSetting.get('qr_activation_price', 5000)),
         'renewal_price':     int(SmartTechSetting.get('qr_renewal_price', 3000)),
     })
+
+
+# ── Demandes de suppression ────────────────────────────────────────────────────
+
+@smart_tech_bp.route('/suppressions')
+@st_admin_required
+def suppressions_page():
+    return render_template('smart_tech_suppressions.html')
+
+
+@smart_tech_bp.route('/api/deletion-requests')
+@st_admin_required
+def api_deletion_requests_list():
+    from app.models import DeletionRequest
+    reqs = DeletionRequest.query.order_by(DeletionRequest.requested_at.desc()).all()
+    return jsonify([r.to_dict() for r in reqs])
+
+
+@smart_tech_bp.route('/api/deletion-requests/pending-count')
+@smart_tech_required
+def api_deletion_requests_count():
+    from app.models import DeletionRequest
+    count = DeletionRequest.query.filter_by(status='pending').count()
+    return jsonify({'count': count})
+
+
+@smart_tech_bp.route('/api/deletion-requests/<int:req_id>/approve', methods=['POST'])
+@st_admin_required
+def api_deletion_request_approve(req_id):
+    from app.models import DeletionRequest, Vehicle, DriverLicense, LicenseDossier, LicensePrintRequest
+    from app.timezone_utils import now_comoros
+    req = DeletionRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': 'Cette demande n\'est plus en attente.'}), 400
+
+    data = request.get_json(silent=True) or {}
+    req.reviewed_by = session.get('st_user')
+    req.reviewed_at = now_comoros()
+    req.review_comment = (data.get('comment') or '').strip()
+
+    try:
+        if req.object_type == 'vehicle':
+            vehicle = Vehicle.query.get(req.object_id)
+            if vehicle:
+                from app.models import (VehicleHistory, VehicleOwner, Fine,
+                                         QRCodePayment, VehicleInsuranceAssignment,
+                                         ExoneratedVehicle, VehicleTransfer,
+                                         CarteGrise, PhotoSubmission)
+                vid = vehicle.id
+
+                # Nullify nullable FK on PhotoSubmission (preserve submission records)
+                PhotoSubmission.query.filter_by(vehicle_id=vid).update({'vehicle_id': None})
+
+                # Delete child records in dependency order
+                VehicleHistory.query.filter_by(vehicle_id=vid).delete()
+                Fine.query.filter_by(vehicle_id=vid).delete()
+                QRCodePayment.query.filter_by(vehicle_id=vid).delete()
+                VehicleInsuranceAssignment.query.filter_by(vehicle_id=vid).delete()
+                ExoneratedVehicle.query.filter_by(vehicle_id=vid).delete()
+                VehicleTransfer.query.filter_by(vehicle_id=vid).delete()
+
+                # Many-to-many association table (alert_vehicles)
+                from sqlalchemy import text
+                db.session.execute(text('DELETE FROM alert_vehicles WHERE vehicle_id = :vid'), {'vid': vid})
+
+                # One-to-one records
+                cg = CarteGrise.query.filter_by(vehicle_id=vid).first()
+                if cg:
+                    db.session.delete(cg)
+
+                owner = VehicleOwner.query.filter_by(vehicle_id=vid).first()
+                if owner:
+                    db.session.delete(owner)
+
+                db.session.flush()
+                db.session.delete(vehicle)
+        elif req.object_type == 'license':
+            lic = DriverLicense.query.get(req.object_id)
+            if lic:
+                if lic.photo_filename:
+                    try:
+                        from app.cloudinary_utils import delete_file as cloud_delete
+                        cloud_delete(lic.photo_filename, local_folder='license_photos')
+                    except Exception:
+                        pass
+                LicensePrintRequest.query.filter_by(license_id=lic.id).delete()
+                dossier = LicenseDossier.query.filter_by(license_id=lic.id).first()
+                if dossier:
+                    db.session.delete(dossier)
+                db.session.delete(lic)
+        req.status = 'approved'
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'ok': True, 'message': 'Suppression validée et effectuée.'})
+
+
+@smart_tech_bp.route('/api/deletion-requests/<int:req_id>/reject', methods=['POST'])
+@st_admin_required
+def api_deletion_request_reject(req_id):
+    from app.models import DeletionRequest
+    from app.timezone_utils import now_comoros
+    req = DeletionRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': 'Cette demande n\'est plus en attente.'}), 400
+    data = request.get_json(silent=True) or {}
+    req.status = 'rejected'
+    req.reviewed_by = session.get('st_user')
+    req.reviewed_at = now_comoros()
+    req.review_comment = (data.get('comment') or '').strip()
+    db.session.commit()
+    return jsonify({'ok': True, 'message': 'Demande de suppression rejetée.'})
 
 
 # ── Gestion des Véhicules ──────────────────────────────────────────────────────
