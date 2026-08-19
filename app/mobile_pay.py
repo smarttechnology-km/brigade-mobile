@@ -341,6 +341,9 @@ def lookup():
             qr_status = 'active'
     qr_renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
 
+    needs_qr_activation = vehicle.qr_code_expiry is None
+    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if needs_qr_activation else 0.0
+
     return jsonify({
         'vehicle': vehicle_payload,
         'fines': unpaid_fines,
@@ -350,7 +353,8 @@ def lookup():
             'annual_ds_amount': round(annual_ds_amount, 2),
             'penalty_amount': round(penalty_amount, 2),
             'fines_amount': round(unpaid_fines_amount, 2),
-            'total_amount': round(vignette_total + penalty_amount + unpaid_fines_amount, 2) if renewal_allowed else 0.0,
+            'qr_activation_price': round(qr_activation_price, 2),
+            'total_amount': round(vignette_total + penalty_amount + unpaid_fines_amount + qr_activation_price, 2) if renewal_allowed else 0.0,
             'requested_expiry': requested_expiry.isoformat() if requested_expiry else None,
             'is_renewal': bool(vignette_expiry and (vignette_expiry < now or renewal_needed)),
             'renewal_allowed': renewal_allowed,
@@ -392,7 +396,10 @@ def _build_vignette_payment_payload(vehicle, requested_expiry=None):
     unpaid_fines_ids = [f.id for f in unpaid_fines]
     unpaid_fines_amount = float(sum(float(f.amount or 0.0) for f in unpaid_fines))
 
-    total_amount = round(vignette_price + annual_ds_amount + penalty_amount + unpaid_fines_amount, 2)
+    needs_qr_activation = vehicle.qr_code_expiry is None
+    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if needs_qr_activation else 0.0
+
+    total_amount = round(vignette_price + annual_ds_amount + penalty_amount + unpaid_fines_amount + qr_activation_price, 2)
     payload = {
         'type': 'vignette_request',
         'payment_type': 'vignette',
@@ -405,6 +412,7 @@ def _build_vignette_payment_payload(vehicle, requested_expiry=None):
         'penalty_amount': penalty_amount,
         'fine_ids': unpaid_fines_ids,
         'fines_amount': unpaid_fines_amount,
+        'qr_activation_price': qr_activation_price,
         'total_amount': total_amount,
     }
 
