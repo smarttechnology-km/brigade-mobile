@@ -122,6 +122,14 @@ Key pages:
 - **Rapport** (`smart_tech_rapport.html`) – auto-generates report on load without showing the loading overlay (pass `false` to `generateReport(false)`).
 - **Paramètres** (`smart_tech_parametres.html`) – simulator uses `sim_licenses_per_year` and `sim_insurance_rate` keys. "dont QR", "dont Licences", "dont Commissions" are sub-components of "Total revenus"; `Bénéfice cumulé = Total revenus − Total dépenses`.
 
+### Supporting services (`app/`)
+
+- `sms_service.py` – OTP delivery for citizen auth; `enabled = False` by default (no credentials configured), logs to an in-memory history instead of sending in that state.
+- `email_service.py` – sends approval codes (e.g. payment destination phone changes) via the Resend HTTP API rather than SMTP (Render blocks outbound SMTP ports). Unlike `sms_service.py`, it fails loudly when unconfigured rather than simulating success — the confirmation channel must be one the requesting admin doesn't control.
+- `cloudinary_utils.py` – file storage; active only when `USE_CLOUDINARY=true` (set on Render), otherwise falls back to local disk.
+- `push_notifications.py` – sends Expo push notifications to a vehicle owner's registered device token.
+- `payment_security.py` – server-side request signing/verification helpers for payment endpoints.
+
 ### Licenses system
 
 Routes in `app/routes.py`. `license_print()` accepts `?temporaire=1` to force TEMPORAIRE rendering and compute `computed_expiry` from `issue_date + relativedelta(months=temp_validity_months)` when no `expiry_date` is set. Uses `dateutil.relativedelta`.
