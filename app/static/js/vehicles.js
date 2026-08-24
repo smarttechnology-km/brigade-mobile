@@ -12,6 +12,23 @@ function _onNbChevauxInput() {
     var n = parseInt(document.getElementById('nombre_chevaux_vehicle').value) || 0;
     var preview = document.getElementById('cv-class-preview');
     if (preview) preview.textContent = n > 0 ? 'Classe CV : ' + cvClassFromChevaux(n) : '';
+    var cvEl = document.getElementById('cv_class');
+    if (cvEl && n > 0) {
+        cvEl.value = cvClassFromChevaux(n);
+    }
+}
+function _setNbChevauxUnlocked(unlocked) {
+    var fieldCv = document.getElementById('field-cv-class');
+    var fieldNb = document.getElementById('field-nombre-chevaux');
+    var btnBack = document.getElementById('btn-lock-nb-chevaux');
+    if (fieldCv) fieldCv.style.display = unlocked ? 'none' : '';
+    if (fieldNb) fieldNb.style.display = unlocked ? '' : 'none';
+    if (btnBack) btnBack.style.display = unlocked ? '' : 'none';
+}
+function _toggleCvClassLock() {
+    var fieldNb = document.getElementById('field-nombre-chevaux');
+    if (!fieldNb) return;
+    _setNbChevauxUnlocked(fieldNb.style.display === 'none');
 }
 
 var _IC = {'Grande Comore':'NG','Anjouan':'ND','Moheli':'MW'};
@@ -808,7 +825,7 @@ function _applyVehicleToggleMode(isNouveau) {
         if (fieldEmission)    fieldEmission.style.display    = '';
         if (sectionAssurance) sectionAssurance.style.display = '';
         if (fieldCvClass)     fieldCvClass.style.display     = '';
-        if (fieldNbChevaux)   fieldNbChevaux.style.display   = 'none';
+        _setNbChevauxUnlocked(false);
         if (genBtn)           genBtn.style.display           = 'none';
         if (plateInput)       { plateInput.readOnly = false; plateInput.value = ''; _autoFilledPlate = null; _plateAutoLocked = false; _setPlateAutoLocked(false); }
         if (label) label.innerHTML = '<i class="fas fa-archive me-1 text-secondary"></i>Véhicule existant';
@@ -857,7 +874,7 @@ function openVehicleModal(vehicle) {
         if(_fieldEmission)    _fieldEmission.style.display = '';
         if(_sectionAssurance) _sectionAssurance.style.display = '';
         if(_fieldCvClass)   _fieldCvClass.style.display = '';
-        if(_fieldNbChevaux) _fieldNbChevaux.style.display = 'none';
+        _setNbChevauxUnlocked(false);
         // Hide toggle in edit mode
         const toggleRow = document.getElementById('vehicle-type-toggle-row');
         if (toggleRow) toggleRow.style.display = 'none';
@@ -1034,6 +1051,10 @@ function openVehicleModal(vehicle) {
         if(document.getElementById('insurance_expiry')) document.getElementById('insurance_expiry').value = vehicle.insurance_expiry || '';
         if(document.getElementById('fiscal_class')) document.getElementById('fiscal_class').value = vehicle.fiscal_class || '';
         if(document.getElementById('cv_class')) document.getElementById('cv_class').value = vehicle.cv_class || '';
+        if(document.getElementById('nombre_chevaux_vehicle')) {
+            document.getElementById('nombre_chevaux_vehicle').value = (vehicle.nombre_chevaux != null) ? vehicle.nombre_chevaux : '';
+            _onNbChevauxInput();
+        }
         // Populate work zone: show if Taxi/Transport public + insurance set, OR if a value already exists (set by insurance)
         var workZoneGroup = document.getElementById('work_zone_group');
         var workZoneEl = document.getElementById('work_zone');
@@ -1173,12 +1194,10 @@ function saveVehicle() {
         insurance_company: insuranceCompanyValue,
         fiscal_class: document.getElementById('fiscal_class') ? document.getElementById('fiscal_class').value : '',
         cv_class: (function() {
-            var fieldCv = document.getElementById('field-cv-class');
-            if (fieldCv && fieldCv.style.display !== 'none') {
-                return document.getElementById('cv_class') ? document.getElementById('cv_class').value : '';
-            }
             var nbEl = document.getElementById('nombre_chevaux_vehicle');
-            return nbEl && nbEl.value.trim() ? cvClassFromChevaux(nbEl.value) : '';
+            if (nbEl && nbEl.value.trim()) return cvClassFromChevaux(nbEl.value);
+            var cvEl = document.getElementById('cv_class');
+            return cvEl ? cvEl.value : '';
         })(),
         nombre_chevaux: (function() {
             var nbEl = document.getElementById('nombre_chevaux_vehicle');
