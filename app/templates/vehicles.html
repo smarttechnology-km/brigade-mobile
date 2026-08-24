@@ -395,20 +395,27 @@
                 </select>
               </div>
               <div id="field-cv-class" class="col-md-3">
-                <label class="form-label fw-semibold">
-                  <i class="fas fa-tachometer-alt text-muted me-1"></i>Classe CV
+                <label class="form-label fw-semibold d-flex align-items-center justify-content-between">
+                  <span><i class="fas fa-tachometer-alt text-muted me-1"></i>Classe CV</span>
+                  <button type="button" id="btn-unlock-cv-class" class="btn btn-link btn-sm p-0" onclick="_toggleCvClassLock()" title="Déverrouiller pour saisir le nombre de chevaux">
+                    <i class="fas fa-lock"></i>
+                  </button>
                 </label>
-                <select id="cv_class" name="cv_class" class="form-select">
+                <select id="cv_class" name="cv_class" class="form-select" disabled>
                   <option value="">-- Sélectionner --</option>
                   <option value="0-5 CV">0-5 CV</option>
                   <option value="6-9 CV">6-9 CV</option>
                   <option value="10-12 CV">10-12 CV</option>
                   <option value="12 CV et +">12 CV et +</option>
                 </select>
+                <div class="form-text text-muted">Calculée depuis le nombre de chevaux. Déverrouillez pour le renseigner.</div>
               </div>
               <div id="field-nombre-chevaux" class="col-md-3" style="display:none;">
-                <label class="form-label fw-semibold">
-                  <i class="fas fa-horse text-muted me-1"></i>Nombre de chevaux <span class="text-danger">*</span>
+                <label class="form-label fw-semibold d-flex align-items-center justify-content-between">
+                  <span><i class="fas fa-horse text-muted me-1"></i>Nombre de chevaux <span class="text-danger">*</span></span>
+                  <button type="button" id="btn-lock-nb-chevaux" class="btn btn-link btn-sm p-0" onclick="_toggleCvClassLock()" title="Revenir à la classe CV" style="display:none;">
+                    <i class="fas fa-lock-open"></i>
+                  </button>
                 </label>
                 <input type="number" id="nombre_chevaux_vehicle" class="form-control" min="0" step="1" placeholder="ex: 7" oninput="_onNbChevauxInput()">
                 <div class="form-text text-muted" id="cv-class-preview"></div>
