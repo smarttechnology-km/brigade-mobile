@@ -382,7 +382,7 @@ class FineArticle(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(50), nullable=False)          # e.g. "Art. 234-2"
     description = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
     def to_dict(self):
         return {
@@ -400,7 +400,7 @@ class FineType(db.Model):
     label = db.Column(db.String(150), nullable=False)
     amount = db.Column(db.Numeric(10,2), nullable=False)
     article_id = db.Column(db.Integer, db.ForeignKey('fine_articles.id'), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
     article = db.relationship('FineArticle', backref='fine_types', lazy=True)
 

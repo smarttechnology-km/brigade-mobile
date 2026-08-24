@@ -335,7 +335,7 @@ def calculate_vignette_price(vehicle):
         vehicle_age = None
         if vehicle.year:
             try:
-                current_year = datetime.utcnow().year
+                current_year = now_comoros().year
                 vehicle_age = current_year - int(vehicle.year)
             except Exception:
                 vehicle_age = None
@@ -1904,6 +1904,11 @@ def create_vehicle():
     insurance_expiry = data.get('insurance_expiry')
     fiscal_class = data.get('fiscal_class')
     cv_class = data.get('cv_class')
+    raw_nombre_chevaux = data.get('nombre_chevaux')
+    try:
+        nombre_chevaux = int(raw_nombre_chevaux) if raw_nombre_chevaux not in (None, '') else None
+    except (ValueError, TypeError):
+        nombre_chevaux = None
 
     owner_phone = (data.get('owner_phone') or '').strip()
 
@@ -1931,7 +1936,8 @@ def create_vehicle():
         owner_address=owner_address,
         insurance_company=insurance_company,
         fiscal_class=fiscal_class,
-        cv_class=cv_class
+        cv_class=cv_class,
+        nombre_chevaux=nombre_chevaux
     )
     # Use vignette_expiry as the source of truth for vignette management.
     # Keep compatibility with older clients that may still send registration_expiry.
@@ -4130,7 +4136,14 @@ def update_vehicle(vehicle_id):
                 setattr(vehicle, field, None)
             else:
                 setattr(vehicle, field, data.get(field))
-    
+
+    if 'nombre_chevaux' in data:
+        raw_nombre_chevaux = data.get('nombre_chevaux')
+        try:
+            vehicle.nombre_chevaux = int(raw_nombre_chevaux) if raw_nombre_chevaux not in (None, '') else None
+        except (ValueError, TypeError):
+            pass
+
     # parse registration_expiry if present
     if 'registration_expiry' in data and data.get('registration_expiry'):
         try:
@@ -5835,7 +5848,7 @@ def get_mobile_money_archive():
     end_date_str = request.args.get('end_date', '')
     show_all = request.args.get('all', '').lower() == 'true'
 
-    now = datetime.utcnow()
+    now = now_comoros()
     if show_all:
         start_date = None
         end_date = None
@@ -6032,7 +6045,7 @@ def init_vignettes():
     
     # Set different expiry dates based on status (some expired, some active, some expiring)
     from datetime import datetime, timedelta
-    now = datetime.utcnow()
+    now = now_comoros()
     
     # Mix of expired, expiring, and active dates
     expiry_dates = [
@@ -6132,7 +6145,7 @@ def get_expired_insurance_report():
     
     result = {
         "report_type": "Assurances Expirées",
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": now_comoros().isoformat(),
         "insurance_company": current_user.insurance.company_name,
         "count": len(vehicles),
         "vehicles": [v.to_dict() for v in vehicles]
@@ -6163,7 +6176,7 @@ def get_expiring_soon_report():
     
     result = {
         "report_type": "Assurances Expirant Bientôt (30 jours)",
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": now_comoros().isoformat(),
         "insurance_company": current_user.insurance.company_name,
         "count": len(vehicles),
         "vehicles": [v.to_dict() for v in vehicles]
@@ -6187,7 +6200,7 @@ def get_all_vehicles_report():
     
     result = {
         "report_type": "Tous les Véhicules",
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": now_comoros().isoformat(),
         "insurance_company": current_user.insurance.company_name,
         "count": len(vehicles),
         "vehicles": [v.to_dict() for v in vehicles]
@@ -6281,7 +6294,7 @@ def get_statistics_report():
         return jsonify({"error": "Not an insurance account"}), 403
     
     from datetime import datetime, timedelta
-    today = datetime.now().date()
+    today = now_comoros().date()
     
     # Total vehicles
     total = Vehicle.query.filter(
@@ -6329,7 +6342,7 @@ def get_statistics_report():
     
     result = {
         "report_type": "Statistiques",
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": now_comoros().isoformat(),
         "insurance_company": current_user.insurance.company_name,
         "statistics": {
             "total_vehicles": total,
@@ -7105,7 +7118,7 @@ def submit_vehicle_transfer():
                 else:
                     upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'vehicle_transfers')
                     os.makedirs(upload_dir, exist_ok=True)
-                    filename = secure_filename(f"{vehicle_id}_{datetime.now().timestamp()}_{file.filename}")
+                    filename = secure_filename(f"{vehicle_id}_{now_comoros().timestamp()}_{file.filename}")
                     file.save(os.path.join(upload_dir, filename))
                     identity_document_path = os.path.join('vehicle_transfers', filename)
 

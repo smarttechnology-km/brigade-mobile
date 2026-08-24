@@ -91,7 +91,7 @@ def _get_vignette_rate_breakdown(vehicle):
         vehicle_age = None
         if vehicle.year:
             try:
-                current_year = datetime.utcnow().year
+                current_year = now_comoros().year
                 vehicle_age = current_year - int(vehicle.year)
             except Exception:
                 vehicle_age = None

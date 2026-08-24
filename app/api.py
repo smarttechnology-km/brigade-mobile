@@ -1593,7 +1593,7 @@ def api_reports_expired_insurances():
     # Get vehicles with expired insurance
     expired_insurance_query = Vehicle.query.filter(
         Vehicle.insurance_expiry != None,
-        Vehicle.insurance_expiry < datetime.utcnow().date()
+        Vehicle.insurance_expiry < now_comoros().date()
     )
     
     # Apply island filter for judiciaire and policier users

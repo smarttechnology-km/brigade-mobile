@@ -95,7 +95,9 @@ def check_days_until_expiry(expiry_date_str):
         else:
             expiry = expiry_date_str
         
-        now = datetime.utcnow()
+        if expiry.tzinfo is not None:
+            expiry = expiry.replace(tzinfo=None)
+        now = now_comoros().replace(tzinfo=None)
         days_diff = (expiry.replace(hour=0, minute=0, second=0, microsecond=0) - now.replace(hour=0, minute=0, second=0, microsecond=0)).days
         
         return days_diff if days_diff > 0 else None
@@ -154,7 +156,7 @@ def register():
             'vin': vin,
             'license_plate': license_plate,
             'device_id': device_id,
-            'expires_at': datetime.utcnow() + timedelta(minutes=10),
+            'expires_at': now_comoros() + timedelta(minutes=10),
             'attempts': 0
         }
         
@@ -260,7 +262,7 @@ def login():
             'vehicle_id': owner.vehicle_id,
             'is_login': True,  # Flag to differentiate from registration
             'device_id': device_id,
-            'expires_at': datetime.utcnow() + timedelta(minutes=10),
+            'expires_at': now_comoros() + timedelta(minutes=10),
             'attempts': 0
         }
         
@@ -309,7 +311,7 @@ def verify_otp():
             return jsonify({'error': 'No OTP found for this phone. Please register first.'}), 404
         
         # Check expiry
-        if datetime.utcnow() > otp_data['expires_at']:
+        if now_comoros() > otp_data['expires_at']:
             del _otp_store[phone]
             print(f"⚠️  OTP verification failed: OTP expired for {phone}")
             return jsonify({'error': 'OTP expired. Please try again.'}), 400
@@ -351,7 +353,7 @@ def verify_otp():
             device_id
             or otp_data.get('device_id')
             or getattr(owner, 'current_device_id', None)
-            or f'device_{vehicle.id}_{int(datetime.utcnow().timestamp())}'
+            or f'device_{vehicle.id}_{int(now_comoros().timestamp())}'
         )
 
         if not owner:
@@ -413,7 +415,7 @@ def verify_login_otp():
             return jsonify({'error': 'Invalid OTP type'}), 400
         
         # Check expiry
-        if datetime.utcnow() > otp_data['expires_at']:
+        if now_comoros() > otp_data['expires_at']:
             del _otp_store[phone]
             print(f"⚠️  Login OTP verification failed: OTP expired for {phone}")
             return jsonify({'error': 'OTP expired. Please try again.'}), 400
@@ -451,12 +453,12 @@ def verify_login_otp():
         # Update last login timestamp
         owner = VehicleOwner.query.filter_by(vehicle_id=vehicle.id).first()
         if owner:
-            owner.last_login = datetime.utcnow()
+            owner.last_login = now_comoros()
             owner.session_version = int(getattr(owner, 'session_version', 0)) + 1
             owner.current_device_id = (
                 otp_data.get('device_id')
                 or owner.current_device_id
-                or f'device_{vehicle.id}_{int(datetime.utcnow().timestamp())}'
+                or f'device_{vehicle.id}_{int(now_comoros().timestamp())}'
             )
             db.session.commit()
         
@@ -757,7 +759,7 @@ def request_delete_account_otp():
             'vehicle_id': vehicle.id,
             'phone': phone,
             'is_delete_account': True,
-            'expires_at': datetime.utcnow() + timedelta(minutes=10),
+            'expires_at': now_comoros() + timedelta(minutes=10),
             'attempts': 0,
         }
 
@@ -808,7 +810,7 @@ def confirm_delete_account_otp():
         if not otp_data or not otp_data.get('is_delete_account'):
             return jsonify({'error': 'No deletion OTP found. Please request a new one.'}), 404
 
-        if datetime.utcnow() > otp_data['expires_at']:
+        if now_comoros() > otp_data['expires_at']:
             del _otp_store[phone]
             return jsonify({'error': 'OTP expired. Please try again.'}), 400
 
@@ -862,7 +864,7 @@ def get_my_vehicles():
         owner_vehicle_ids = {o.vehicle_id for o in owners}
         legacy_vehicles = Vehicle.query.filter_by(owner_phone=phone).all()
         created_links = False
-        now = datetime.utcnow()
+        now = now_comoros()
 
         for legacy_vehicle in legacy_vehicles:
             if legacy_vehicle.id in owner_vehicle_ids:
@@ -966,7 +968,7 @@ def switch_vehicle():
             if legacy_vehicle:
                 existing_owner = VehicleOwner.query.filter_by(vehicle_id=legacy_vehicle.id).first()
                 if not existing_owner:
-                    now = datetime.utcnow()
+                    now = now_comoros()
                     owner = VehicleOwner(
                         vehicle_id=legacy_vehicle.id,
                         owner_name=legacy_vehicle.owner_name or 'Proprietaire',
@@ -994,7 +996,7 @@ def switch_vehicle():
         if vehicle.status == 'inactive':
             return jsonify({'error': "Ce véhicule est inactif. Vous pouvez le voir, mais vous ne pouvez pas l'activer."}), 403
 
-        owner.last_login = datetime.utcnow()
+        owner.last_login = now_comoros()
         if device_id:
             owner.current_device_id = device_id
         db.session.commit()

@@ -8,6 +8,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta
 from functools import wraps
+from app.timezone_utils import now_comoros
 from flask import request, jsonify, current_app
 import logging
 
@@ -69,7 +70,7 @@ class RequestValidator:
         try:
             # Verify timestamp is recent
             request_timestamp = int(timestamp)
-            current_timestamp = int(datetime.utcnow().timestamp())
+            current_timestamp = int(now_comoros().timestamp())
             
             if abs(current_timestamp - request_timestamp) > PaymentSecurityConfig.MAX_TIMESTAMP_DELTA:
                 security_logger.warning(f"Request timestamp too old: {request_timestamp}")
@@ -139,7 +140,7 @@ class FraudDetection:
         
         # Check daily limit
         if payment_history:
-            today = datetime.utcnow().date()
+            today = now_comoros().date()
             daily_total = sum(
                 p['amount'] for p in payment_history 
                 if p['created_at'].date() == today
@@ -149,7 +150,7 @@ class FraudDetection:
         
         # Check hourly attempts
         if payment_history:
-            one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+            one_hour_ago = now_comoros() - timedelta(hours=1)
             recent_attempts = [
                 p for p in payment_history 
                 if p['created_at'] > one_hour_ago
@@ -179,13 +180,13 @@ class FraudDetection:
         score += min(amount_ratio * 30, 30)
         
         # Time-based risk (midnight-6am)
-        hour = datetime.utcnow().hour
+        hour = now_comoros().hour
         if hour < 6 or hour > 23:
             score += 15
         
         # Velocity-based risk
         if payment_history:
-            now = datetime.utcnow()
+            now = now_comoros()
             last_hour = [p for p in payment_history 
                         if p['created_at'] > now - timedelta(hours=1)]
             
