@@ -7368,6 +7368,18 @@ def dgrtr_cg_vehicle(vehicle_id):
 
     cg.updated_at = now_comoros()
     db.session.commit()
+
+    try:
+        from app.models import UserHistory
+        db.session.add(UserHistory(
+            user_id=current_user.id,
+            action='Carte grise modifiée',
+            details=f'Véhicule {vehicle.license_plate} - {vehicle.owner_name}'
+        ))
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging carte grise update: {e}')
+
     return jsonify({'success': True, 'carte_grise': cg.to_dict()})
 
 
@@ -7386,6 +7398,18 @@ def dgrtr_cg_request_signature(vehicle_id):
     cg.signature_requested_at = now_comoros()
     cg.signature_requested_by = current_user.username
     db.session.commit()
+
+    try:
+        from app.models import UserHistory
+        db.session.add(UserHistory(
+            user_id=current_user.id,
+            action='Signature carte grise demandée',
+            details=f'Véhicule {vehicle.license_plate} - {vehicle.owner_name}'
+        ))
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging carte grise signature request: {e}')
+
     return jsonify({'success': True, 'carte_grise': cg.to_dict()})
 
 
@@ -7404,6 +7428,18 @@ def dgrtr_cg_sign(vehicle_id):
     cg.signed_at = now_comoros()
     cg.signed_by = current_user.username
     db.session.commit()
+
+    try:
+        from app.models import UserHistory
+        db.session.add(UserHistory(
+            user_id=current_user.id,
+            action='Carte grise signée',
+            details=f'Véhicule {vehicle.license_plate} - {vehicle.owner_name}'
+        ))
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging carte grise signature: {e}')
+
     return jsonify({'success': True, 'carte_grise': cg.to_dict()})
 
 

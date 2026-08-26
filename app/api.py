@@ -3666,6 +3666,9 @@ def api_licenses_reduce_points(license_id):
     )
     db.session.add(history)
     db.session.commit()
+
+    log_user_history(current_user, 'Points retirés', f'Permis {lic.license_number} - {lic.holder_name}: -{reason.points_to_deduct} pts ({reason.label})')
+
     send_point_reduction_notification(lic, reason.points_to_deduct, after, reason.label)
     return jsonify(lic.to_dict())
 
@@ -3963,6 +3966,9 @@ def api_licenses_create():
     )
     db.session.add(pr)
     db.session.commit()
+
+    log_user_history(current_user, 'Permis créé', f'Permis {num} - {name}')
+
     return jsonify(lic.to_dict()), 201
 
 
@@ -4246,6 +4252,10 @@ def api_licenses_update(license_id):
             ))
 
     db.session.commit()
+
+    if has_changes:
+        log_user_history(current_user, 'Permis modifié', f'Permis {lic.license_number} - {lic.holder_name}')
+
     return jsonify(lic.to_dict())
 
 
@@ -4407,6 +4417,9 @@ def api_license_print_request_create(license_id):
     )
     db.session.add(req)
     db.session.commit()
+
+    log_user_history(current_user, 'Demande d\'impression permis', f'Permis {lic.license_number} - {lic.holder_name}')
+
     return jsonify({'ok': True, 'request': req.to_dict()}), 201
 
 
@@ -4449,6 +4462,11 @@ def api_license_mark_printed(license_id):
     req.printed_by = current_user.username
     req.printed_at = now_comoros()
     db.session.commit()
+
+    lic = DriverLicense.query.get(license_id)
+    if lic:
+        log_user_history(current_user, 'Permis marqué imprimé', f'Permis {lic.license_number} - {lic.holder_name}')
+
     return jsonify({'ok': True})
 
 
