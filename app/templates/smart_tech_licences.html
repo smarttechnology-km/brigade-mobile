@@ -469,6 +469,10 @@
                 Demandes d'impression en attente
                 <span class="requests-count" id="req-count">0</span>
             </div>
+            <div class="hist-search-wrap">
+                <i class="fas fa-search hist-search-icon"></i>
+                <input type="text" id="req-search" placeholder="Nom, permis, agent…" oninput="filterRequests()" class="hist-search-input">
+            </div>
         </div>
         <div id="requests-grid" class="requests-grid">
             <div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
@@ -524,53 +528,74 @@
     /* ══════════════════════════════════════════
        SECTION 1 — Demandes en attente
     ══════════════════════════════════════════ */
+    let _pendingReqData = [];
+
+    function renderRequests(reqs) {
+        const grid = document.getElementById('requests-grid');
+        if (!reqs.length) {
+            grid.innerHTML = _pendingReqData.length
+                ? '<div class="requests-empty"><i class="fas fa-search me-2"></i>Aucun résultat pour cette recherche.</div>'
+                : '<div class="requests-empty"><i class="fas fa-check-circle me-2"></i>Aucune demande en attente.</div>';
+            return;
+        }
+
+        grid.innerHTML = reqs.map(r => {
+            const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
+            const photo = (r.photo_url || r.photo_filename)
+                ? `<img class="request-photo" src="${r.photo_url || '/uploads/license_photos/' + esc(r.photo_filename)}" alt="">`
+                : `<div class="request-photo-empty"><i class="fas fa-user"></i></div>`;
+            return `
+            <div class="request-card" id="req-card-${r.id}">
+                <div class="request-card-header">
+                    ${photo}
+                    <div class="request-info">
+                        <div class="request-name">${fullName}</div>
+                        <div class="request-num">${esc(r.license_number)}</div>
+                        <div class="request-meta">
+                            <i class="fas fa-clock me-1"></i>${esc(r.requested_at)}
+                            &nbsp;·&nbsp; par <strong>${esc(r.requested_by)}</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="request-actions">
+                    <a href="/smart-tech/licences/${r.license_id}/preview" target="_blank" class="btn-open-card">
+                        <i class="fas fa-eye"></i> Voir le permis
+                    </a>
+                    <button class="btn-validate" id="btn-val-${r.id}" onclick="validateRequest(${r.id})">
+                        <i class="fas fa-check"></i> Valider
+                    </button>
+                    <button class="btn-cancel-req" title="Annuler la demande" onclick="cancelRequest(${r.id})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    window.filterRequests = function () {
+        const q = (document.getElementById('req-search').value || '').toLowerCase().trim();
+        if (!q) { renderRequests(_pendingReqData); return; }
+        renderRequests(_pendingReqData.filter(r => {
+            const fullName = ((r.holder_firstname || '') + ' ' + r.holder_name).toLowerCase();
+            return fullName.includes(q)
+                || (r.license_number || '').toLowerCase().includes(q)
+                || (r.requested_by   || '').toLowerCase().includes(q);
+        }));
+    };
+
     window.loadRequests = function () {
         lastRefresh = Date.now();
-        const grid = document.getElementById('requests-grid');
-        grid.innerHTML = '<div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+        if (!_pendingReqData.length) {
+            document.getElementById('requests-grid').innerHTML =
+                '<div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+        }
 
         fetch('/smart-tech/api/licences/requests')
             .then(r => r.ok ? r.json() : [])
             .then(reqs => {
-                const countEl = document.getElementById('req-count');
-                countEl.textContent = reqs.length;
-
-                if (!reqs.length) {
-                    grid.innerHTML = '<div class="requests-empty"><i class="fas fa-check-circle me-2"></i>Aucune demande en attente.</div>';
-                    return;
-                }
-
-                grid.innerHTML = reqs.map(r => {
-                    const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
-                    const photo = (r.photo_url || r.photo_filename)
-                        ? `<img class="request-photo" src="${r.photo_url || '/uploads/license_photos/' + esc(r.photo_filename)}" alt="">`
-                        : `<div class="request-photo-empty"><i class="fas fa-user"></i></div>`;
-                    return `
-                    <div class="request-card" id="req-card-${r.id}">
-                        <div class="request-card-header">
-                            ${photo}
-                            <div class="request-info">
-                                <div class="request-name">${fullName}</div>
-                                <div class="request-num">${esc(r.license_number)}</div>
-                                <div class="request-meta">
-                                    <i class="fas fa-clock me-1"></i>${esc(r.requested_at)}
-                                    &nbsp;·&nbsp; par <strong>${esc(r.requested_by)}</strong>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="request-actions">
-                            <a href="/smart-tech/licences/${r.license_id}/preview" target="_blank" class="btn-open-card">
-                                <i class="fas fa-eye"></i> Voir le permis
-                            </a>
-                            <button class="btn-validate" id="btn-val-${r.id}" onclick="validateRequest(${r.id})">
-                                <i class="fas fa-check"></i> Valider
-                            </button>
-                            <button class="btn-cancel-req" title="Annuler la demande" onclick="cancelRequest(${r.id})">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                    </div>`;
-                }).join('');
+                _pendingReqData = reqs;
+                document.getElementById('req-count').textContent = reqs.length;
+                filterRequests();
             })
             .catch(() => {
                 document.getElementById('requests-grid').innerHTML =
@@ -592,7 +617,7 @@
                         card.style.opacity = '0';
                         card.style.transform = 'scale(0.95)';
                         setTimeout(() => {
-                            card.remove(); updateReqCount();
+                            card.remove(); updateReqCount(reqId);
                             {% if current_user.role in ['admin', 'employe'] %}loadStats(); loadHistory();{% endif %}
                         }, 320);
                     }
@@ -615,7 +640,7 @@
                         card.style.transition = 'opacity 0.3s';
                         card.style.opacity = '0';
                         setTimeout(() => {
-                            card.remove(); updateReqCount();
+                            card.remove(); updateReqCount(reqId);
                             {% if current_user.role == 'admin' %}loadStats();{% endif %}
                         }, 300);
                     }
@@ -623,13 +648,10 @@
             });
     };
 
-    function updateReqCount() {
-        const remaining = document.querySelectorAll('[id^="req-card-"]').length;
-        document.getElementById('req-count').textContent = remaining;
-        if (!remaining) {
-            document.getElementById('requests-grid').innerHTML =
-                '<div class="requests-empty"><i class="fas fa-check-circle me-2"></i>Aucune demande en attente.</div>';
-        }
+    function updateReqCount(reqId) {
+        if (reqId != null) _pendingReqData = _pendingReqData.filter(r => r.id !== reqId);
+        document.getElementById('req-count').textContent = _pendingReqData.length;
+        filterRequests();
     }
 
     /* ══════════════════════════════════════════

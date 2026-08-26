@@ -401,7 +401,7 @@ document.getElementById('btn-download-backup').addEventListener('click', functio
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'backup_' + new Date().toISOString().slice(0,19).replace(/[:T]/g, '-') + '.zip';
+            a.download = 'backup_' + new Date().toLocaleString('sv-SE').replace(/[: ]/g, '-') + '.zip';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
