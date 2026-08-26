@@ -6,7 +6,7 @@ function applyPeriod(period) {
     const startCol = document.getElementById('custom-start-col');
     const endCol = document.getElementById('custom-end-col');
     const today = new Date();
-    const fmt = d => d.toISOString().split('T')[0];
+    const fmt = d => d.toLocaleDateString('en-CA');
 
     // Show/hide the date inputs depending on the period
     const isCustom = (period === 'custom');

@@ -352,7 +352,7 @@ function openEditDatesModal(vehicleId) {
         if (alertEl) alertEl.style.display = 'none';
     }
 
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = now.toLocaleDateString('en-CA');
     const insuranceActive = vehicle.insurance_expiry && vehicle.insurance_expiry.split('T')[0] >= todayStr;
     const durationBtns = document.getElementById('edit-duration-btns');
     if (durationBtns) durationBtns.style.display = insuranceActive ? 'none' : 'flex';

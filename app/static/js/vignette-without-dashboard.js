@@ -236,8 +236,7 @@ function openAddVignetteModal(vehicleId) {
     // Default expiry: 31 March of next year
     const nowDate = new Date();
     const nextYear = nowDate.getFullYear() + 1;
-    const march31 = new Date(nextYear, 2, 31);
-    const defaultExpiryValue = march31.toISOString().split('T')[0];
+    const defaultExpiryValue = `${nextYear}-03-31`;
     
     // Get pricing information
     const vignettePrice = vehicle.vignette_price || 0;

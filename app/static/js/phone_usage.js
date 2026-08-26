@@ -748,7 +748,10 @@ function submitManualBorrow() {
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Traitement...';
 
-    const checkoutAt = new Date(borrowDatetime).toISOString();
+    // borrowDatetime is already "YYYY-MM-DDTHH:MM" in Comoros local time (from the
+    // datetime-local input) — send it as-is. Converting via Date/toISOString would
+    // re-express it in UTC and the backend stores naive Comoros-local timestamps.
+    const checkoutAt = borrowDatetime;
 
     fetch('/api/phone-usage/checkout', {
         method: 'POST',

@@ -1160,7 +1160,7 @@
         if (!_currentLicense) return;
         const months = _settings.temp_validity_months || 12;
         const today = new Date();
-        const toISO = d => d.toISOString().slice(0, 10);
+        const toISO = d => d.toLocaleDateString('en-CA');
         const expiry = new Date(today);
         expiry.setMonth(expiry.getMonth() + months);
         const issueStr  = toISO(today);

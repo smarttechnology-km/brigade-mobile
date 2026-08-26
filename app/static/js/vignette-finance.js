@@ -32,8 +32,8 @@ function setDefaultDates() {
     const days = parseInt(period) || 30;
     startDate.setDate(startDate.getDate() - days);
     
-    document.getElementById('finance-start-date').value = startDate.toISOString().split('T')[0];
-    document.getElementById('finance-end-date').value = endDate.toISOString().split('T')[0];
+    document.getElementById('finance-start-date').value = startDate.toLocaleDateString('en-CA');
+    document.getElementById('finance-end-date').value = endDate.toLocaleDateString('en-CA');
 }
 
 function loadFinanceStats() {
