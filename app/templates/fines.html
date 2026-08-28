@@ -121,7 +121,21 @@
           <div class="tab-pane show active" id="tab-fine-types">
             <form id="fine-type-form" class="row g-2 align-items-end mb-3">
               <input type="hidden" id="fine-type-id" />
-              <div class="col-md-5">
+              <input type="hidden" id="fine-type-icon" />
+              <div class="col-md-1">
+                <label class="form-label small">Icône</label>
+                <div class="dropdown">
+                  <button type="button" id="fine-type-icon-btn" class="btn btn-outline-secondary w-100" data-bs-toggle="dropdown" aria-expanded="false" title="Choisir une icône">
+                    <span id="fine-type-icon-preview">🏷️</span>
+                  </button>
+                  <div class="dropdown-menu p-2" style="min-width:260px;max-width:280px;">
+                    <div class="d-flex flex-wrap gap-1" id="fine-type-icon-grid"></div>
+                    <div class="dropdown-divider"></div>
+                    <button type="button" class="dropdown-item small text-muted" data-icon-choice="">Aucune icône</button>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
                 <label class="form-label small">Motif (libellé)</label>
                 <input type="text" id="fine-type-label" class="form-control" placeholder="Ex: Non-port du casque" required />
               </div>
@@ -144,7 +158,7 @@
               <table class="table table-sm table-hover">
                 <thead>
                   <tr>
-                    <th>#</th>
+                    <th>Icône</th>
                     <th>Motif</th>
                     <th>Montant (KMF)</th>
                     <th>Article</th>
