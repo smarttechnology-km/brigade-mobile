@@ -443,6 +443,7 @@ def api_fine_types_list():
             "default_amount": float(ft.amount),
             "article_code": ft.article.code if ft.article else None,
             "article_description": ft.article.description if ft.article else None,
+            "icon": ft.icon,
         } for ft in fine_types]
     })
 
@@ -3542,7 +3543,8 @@ def api_point_reasons_create():
     except (ValueError, TypeError):
         pts = 1
     article_id = data.get('article_id') or None
-    r = PointReductionReason(label=label, points_to_deduct=pts,
+    icon = (data.get('icon') or '').strip() or None
+    r = PointReductionReason(label=label, points_to_deduct=pts, icon=icon,
                              article_id=int(article_id) if article_id else None)
     db.session.add(r)
     db.session.commit()
@@ -3562,6 +3564,8 @@ def api_point_reasons_update(reason_id):
         r.points_to_deduct = int(data['points_to_deduct'])
     if 'article_id' in data:
         r.article_id = int(data['article_id']) if data['article_id'] else None
+    if 'icon' in data:
+        r.icon = (data.get('icon') or '').strip() or None
     db.session.commit()
     return jsonify(r.to_dict())
 

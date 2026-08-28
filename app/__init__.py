@@ -335,6 +335,26 @@ def create_app():
                                 conn.execute(text("ALTER TABLE fines ADD COLUMN photo_filename VARCHAR(255)"))
                                 logger.info("Added fines.photo_filename column")
 
+                        # Patch fine_types table (icon shown in web + mobile app)
+                        fine_types_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='fine_types'")
+                        ).first() is not None
+                        if fine_types_table_exists:
+                            fine_type_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(fine_types)")).fetchall()}
+                            if 'icon' not in fine_type_columns:
+                                conn.execute(text("ALTER TABLE fine_types ADD COLUMN icon VARCHAR(10)"))
+                                logger.info("Added fine_types.icon column")
+
+                        # Patch point_reduction_reasons table (icon shown in licenses settings)
+                        reasons_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='point_reduction_reasons'")
+                        ).first() is not None
+                        if reasons_table_exists:
+                            reason_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(point_reduction_reasons)")).fetchall()}
+                            if 'icon' not in reason_columns:
+                                conn.execute(text("ALTER TABLE point_reduction_reasons ADD COLUMN icon VARCHAR(10)"))
+                                logger.info("Added point_reduction_reasons.icon column")
+
                         # Patch payments table
                         payments_table_exists = conn.execute(
                             text("SELECT name FROM sqlite_master WHERE type='table' AND name='payments'")

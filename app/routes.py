@@ -2390,6 +2390,7 @@ def manage_fine_types():
     label = data.get('label')
     amount = data.get('amount')
     code = data.get('code')
+    icon = (data.get('icon') or '').strip() or None
     article_id = data.get('article_id') or None
     if not label or not amount:
         return jsonify({'error': 'label et amount requis'}), 400
@@ -2397,7 +2398,7 @@ def manage_fine_types():
         amt = Decimal(str(amount))
     except Exception:
         return jsonify({'error': 'Montant invalide'}), 400
-    ft = FineType(label=label, amount=amt, code=code,
+    ft = FineType(label=label, amount=amt, code=code, icon=icon,
                   article_id=int(article_id) if article_id else None)
     db.session.add(ft)
     db.session.commit()
@@ -2424,6 +2425,8 @@ def fine_type_detail(type_id):
             return jsonify({'error': 'Montant invalide'}), 400
     if 'code' in data:
         ft.code = data.get('code')
+    if 'icon' in data:
+        ft.icon = (data.get('icon') or '').strip() or None
     if 'article_id' in data:
         ft.article_id = int(data['article_id']) if data['article_id'] else None
     db.session.commit()

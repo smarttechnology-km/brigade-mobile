@@ -400,6 +400,7 @@ class FineType(db.Model):
     label = db.Column(db.String(150), nullable=False)
     amount = db.Column(db.Numeric(10,2), nullable=False)
     article_id = db.Column(db.Integer, db.ForeignKey('fine_articles.id'), nullable=True)
+    icon = db.Column(db.String(10), nullable=True)  # emoji, shown in web + mobile app
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
     article = db.relationship('FineArticle', backref='fine_types', lazy=True)
@@ -415,6 +416,7 @@ class FineType(db.Model):
             'amount': float(self.amount),
             'article_id': self.article_id,
             'article_code': self.article.code if self.article else None,
+            'icon': self.icon,
             'created_at': self.created_at.isoformat(),
         }
 
@@ -1314,6 +1316,7 @@ class PointReductionReason(db.Model):
     label            = db.Column(db.String(200), nullable=False)
     points_to_deduct = db.Column(db.Integer, nullable=False, default=1)
     article_id       = db.Column(db.Integer, db.ForeignKey('point_reduction_articles.id'), nullable=True)
+    icon             = db.Column(db.String(10), nullable=True)  # emoji, shown in the reasons table
     created_at       = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
     article = db.relationship('PointReductionArticle', backref='reasons', lazy=True)
@@ -1325,6 +1328,7 @@ class PointReductionReason(db.Model):
             'points_to_deduct': self.points_to_deduct,
             'article_id': self.article_id,
             'article_code': self.article.code if self.article else None,
+            'icon': self.icon,
         }
 
 
