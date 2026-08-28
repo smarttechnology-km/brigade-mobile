@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     const typeForm = document.getElementById('fine-type-form');
     if(typeForm) typeForm.addEventListener('submit', submitFineTypeForm);
+    setupFineTypeIconPicker();
     // reload fine types when the modal is shown (keeps list fresh)
     const modalEl = document.getElementById('fine-types-modal');
     if(modalEl){
@@ -69,6 +70,7 @@ document.addEventListener('DOMContentLoaded', function(){
             try{
                 document.getElementById('fine-type-form').reset();
                 document.getElementById('fine-type-id').value = '';
+                setFineTypeIcon('');
                 toggleFineTypeFormAddMode(true);
                 document.getElementById('fine-article-form').reset();
                 document.getElementById('fine-article-id').value = '';
@@ -455,7 +457,7 @@ function loadFineTypes(){
             // populate select for creating fines
             const typeSel = document.getElementById('fine-type-select');
             if(typeSel){
-                typeSel.innerHTML = '<option value="">-- Type d\'amande (optionnel) --</option>' + data.map(t=>`<option value="${t.id}" data-amount="${t.amount}" data-label="${t.label}">${t.label}</option>`).join('');
+                typeSel.innerHTML = '<option value="">-- Type d\'amande (optionnel) --</option>' + data.map(t=>`<option value="${t.id}" data-amount="${t.amount}" data-label="${t.label}">${t.icon ? t.icon + ' ' : ''}${t.label}</option>`).join('');
                 typeSel.addEventListener('change', function(){
                     const opt = this.options[this.selectedIndex];
                     if(!opt || !opt.value) return;
@@ -481,7 +483,7 @@ function renderFineTypesTable(items){
         return;
     }
     tbody.innerHTML = items.map((t,i)=>`<tr>
-        <td>${i+1}</td>
+        <td class="text-center" style="font-size:1.1rem;">${t.icon || '<span class="text-muted small">—</span>'}</td>
         <td>${t.label}</td>
         <td>${Math.round(t.amount)} KMF</td>
         <td>${t.article_code ? `<span class="badge bg-secondary">${t.article_code}</span>` : '<span class="text-muted">—</span>'}</td>
@@ -510,20 +512,109 @@ function renderFineTypesTable(items){
     });
 }
 
+const FINE_TYPE_ICONS = [
+    '🚗','🏍️','🚲','🚚','🚌','🚕',
+    '🚦','🛑','🚫','⛔','🚸','🚧',
+    '🦺','⛑️','👶','💤',
+    '📱','🍺',
+    '🪪','📄','🧾',
+    '🛞','🔧','🛢️','💡','🔊',
+    '📷','🚨','⚠️','🧯',
+];
+
+// Suggestion automatique d'icône à partir de mots-clés dans le motif. Ordre = priorité en cas de match multiple.
+const FINE_TYPE_ICON_KEYWORDS = [
+    { icon: '🏍️', words: ['moto', 'scooter', 'deux-roues', 'deux roues'] },
+    { icon: '🚲', words: ['velo', 'vélo', 'bicyclette', 'cycliste'] },
+    { icon: '🚚', words: ['camion', 'poids lourd', 'marchandise', 'surcharge'] },
+    { icon: '🚌', words: ['bus', 'autobus', 'transport public'] },
+    { icon: '🚕', words: ['taxi'] },
+    { icon: '⛑️', words: ['casque'] },
+    { icon: '🦺', words: ['ceinture', 'securite', 'sécurité'] },
+    { icon: '👶', words: ['siege enfant', 'siège enfant', 'dispositif de retenue', 'enfant'] },
+    { icon: '💤', words: ['fatigue', 'somnolence', 'endormi'] },
+    { icon: '🅿️', words: ['stationnement', 'parking', 'stationner', 'gare', 'garé'] },
+    { icon: '📱', words: ['telephone', 'téléphone', 'portable', 'gsm'] },
+    { icon: '🍺', words: ['alcool', 'ivresse', 'alcoolemie', 'alcoolémie', 'boisson'] },
+    { icon: '🚸', words: ['pieton', 'piéton', 'ecole', 'école', 'passage'] },
+    { icon: '🚧', words: ['travaux', 'chantier'] },
+    { icon: '🚫', words: ['interdit', 'interdiction', 'sens interdit'] },
+    { icon: '🛑', words: ['stop', 'arret', 'arrêt'] },
+    { icon: '🚦', words: ['feu rouge', 'feu', 'signalisation', 'priorite', 'priorité'] },
+    { icon: '💡', words: ['phare', 'eclairage', 'éclairage', 'veilleuse', 'lumiere', 'lumière'] },
+    { icon: '🔊', words: ['bruit', 'klaxon', 'avertisseur', 'echappement', 'échappement'] },
+    { icon: '📷', words: ['radar', 'flash'] },
+    { icon: '🚨', words: ['police', 'urgence', 'gyrophare'] },
+    { icon: '🛞', words: ['pneu', 'pneumatique'] },
+    { icon: '🔧', words: ['mecanique', 'mécanique', 'technique', 'panne', 'controle technique', 'contrôle technique'] },
+    { icon: '🛢️', words: ['pollution', 'fuite', 'huile', 'emission', 'émission', 'fumee', 'fumée'] },
+    { icon: '🪪', words: ['permis', 'identite', 'identité', 'piece identite', 'pièce identité'] },
+    { icon: '📄', words: ['document', 'papier', 'carte grise', 'assurance', 'immatriculation'] },
+    { icon: '⚠️', words: ['danger', 'dangereux', 'imprudence', 'depassement', 'dépassement'] },
+    { icon: '🚗', words: ['vitesse', 'exces', 'excès', 'voiture', 'vehicule', 'véhicule'] },
+];
+
+function _normalizeForMatch(s){
+    return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function suggestFineTypeIcon(label){
+    const norm = _normalizeForMatch(label);
+    if(!norm) return '';
+    for(const entry of FINE_TYPE_ICON_KEYWORDS){
+        if(entry.words.some(w => norm.includes(_normalizeForMatch(w)))){
+            return entry.icon;
+        }
+    }
+    return '';
+}
+
+let _fineTypeIconManual = false;
+
+function setupFineTypeIconPicker(){
+    const grid = document.getElementById('fine-type-icon-grid');
+    if(!grid) return;
+    grid.innerHTML = FINE_TYPE_ICONS.map(icon =>
+        `<button type="button" class="btn btn-outline-secondary btn-sm" style="width:2.2rem;" data-icon-choice="${icon}">${icon}</button>`
+    ).join('');
+    document.querySelectorAll('[data-icon-choice]').forEach(btn=>{
+        btn.addEventListener('click', function(){
+            setFineTypeIcon(this.dataset.iconChoice, true);
+        });
+    });
+    const labelInput = document.getElementById('fine-type-label');
+    if(labelInput){
+        labelInput.addEventListener('input', function(){
+            if(_fineTypeIconManual) return;
+            setFineTypeIcon(suggestFineTypeIcon(this.value), false);
+        });
+    }
+}
+
+function setFineTypeIcon(icon, manual){
+    const hidden = document.getElementById('fine-type-icon');
+    const preview = document.getElementById('fine-type-icon-preview');
+    if(hidden) hidden.value = icon || '';
+    if(preview) preview.textContent = icon || '🏷️';
+    _fineTypeIconManual = !!manual;
+}
+
 function submitFineTypeForm(e){
     e.preventDefault();
     const id = document.getElementById('fine-type-id').value;
     const label = document.getElementById('fine-type-label').value;
     const amount = document.getElementById('fine-type-amount').value;
     const article_id = document.getElementById('fine-type-article').value || null;
+    const icon = document.getElementById('fine-type-icon').value || null;
     if(!label || !amount){ alert('Veuillez remplir label et montant'); return; }
-    const payload = { label, amount, article_id };
+    const payload = { label, amount, article_id, icon };
     const url = id ? `/api/vehicles/fines/types/${id}` : '/api/vehicles/fines/types';
     fetch(url, { method: id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
         .then(r=>{ if(!r.ok) return r.json().then(x=>{ throw x; }); return r.json(); })
         .then(()=>{
             document.getElementById('fine-type-form').reset();
             document.getElementById('fine-type-id').value='';
+            setFineTypeIcon('');
             toggleFineTypeFormAddMode(true);
             loadFineTypes();
         })
@@ -536,6 +627,7 @@ if(fineTypeCancelBtn){
     fineTypeCancelBtn.addEventListener('click', function(){
         document.getElementById('fine-type-form').reset();
         document.getElementById('fine-type-id').value = '';
+        setFineTypeIcon('');
         toggleFineTypeFormAddMode(true);
     });
 }
@@ -546,6 +638,8 @@ function openEditFineType(id){
     document.getElementById('fine-type-id').value = t.id;
     document.getElementById('fine-type-label').value = t.label;
     document.getElementById('fine-type-amount').value = t.amount;
+    // An existing icon was deliberately chosen — don't let further label edits auto-override it.
+    setFineTypeIcon(t.icon || '', !!t.icon);
     const artSel = document.getElementById('fine-type-article');
     if(artSel) artSel.value = t.article_id || '';
     toggleFineTypeFormAddMode(false);

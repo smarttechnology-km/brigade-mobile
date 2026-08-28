@@ -497,6 +497,88 @@
         document.getElementById('s-article-cancel-btn')?.classList.add('d-none');
     }
 
+    // ── Motifs de réduction : icônes ────────────────────────────────────────
+    const REASON_ICONS = [
+        '🍺','🍷','🥃','💊','🙅',
+        '🚗','🚌','🏍️','🚲',
+        '🛣️','🚧','↔️','🚦','🛑','🅿️',
+        '🪪','🚫','🚑','🩹','🪟',
+        '📱','🦺','⛑️','👶','💤','🔊','⚠️',
+    ];
+
+    // Suggestion automatique d'icône à partir de mots-clés dans le motif. Ordre = priorité en cas de match multiple.
+    const REASON_ICON_KEYWORDS = [
+        { icon: '🍺', words: ['0.20', '0,20', '0.2 litre', '0,2 litre'] },
+        { icon: '🥃', words: ['0.8', '0,8'] },
+        { icon: '🍷', words: ['0.5', '0,5'] },
+        { icon: '🍺', words: ['alcool', 'ivresse', 'alcoolemie', 'alcoolémie'] },
+        { icon: '💊', words: ['stupefiant', 'stupéfiant', 'drogue', 'salivaire', 'sanguine'] },
+        { icon: '🙅', words: ['depistage', 'dépistage', 'depister', 'dépister'] },
+        { icon: '🚌', words: ['transport'] },
+        { icon: '🚗', words: ['vitesse', 'exces', 'excès', 'acceleration', 'accélération'] },
+        { icon: '🛣️', words: ['ligne continue', 'chevauchement'] },
+        { icon: '🚧', words: ['terre-plein', 'terre plein'] },
+        { icon: '↔️', words: ['distance de securite', 'distance de sécurité', 'distances de securite', 'distances de sécurité'] },
+        { icon: '🚦', words: ['priorite', 'priorité', 'feu rouge', 'cedez', 'cédez'] },
+        { icon: '🛑', words: ['stop', 'arret', 'arrêt'] },
+        { icon: '🅿️', words: ['stationnement', 'parking'] },
+        { icon: '🚫', words: ['suspension', 'conduire malgre', 'conduire malgré'] },
+        { icon: '🪪', words: ['permis', 'identite', 'identité'] },
+        { icon: '🚑', words: ['blessure', 'blessures', 'accident', 'interruption de travail'] },
+        { icon: '🪟', words: ['vitre', 'vitres', 'transparence', 'pare-brise'] },
+        { icon: '🏍️', words: ['moto', 'scooter'] },
+        { icon: '🚲', words: ['velo', 'vélo', 'cycliste'] },
+        { icon: '📱', words: ['telephone', 'téléphone', 'portable'] },
+        { icon: '🦺', words: ['ceinture'] },
+        { icon: '⛑️', words: ['casque'] },
+        { icon: '👶', words: ['siege enfant', 'siège enfant', 'enfant'] },
+        { icon: '💤', words: ['fatigue', 'somnolence', 'endormi'] },
+        { icon: '🔊', words: ['bruit', 'klaxon', 'echappement', 'échappement'] },
+    ];
+
+    function _normalizeForMatch(s) {
+        return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
+
+    function suggestReasonIcon(label) {
+        const norm = _normalizeForMatch(label);
+        if (!norm) return '';
+        for (const entry of REASON_ICON_KEYWORDS) {
+            if (entry.words.some(w => norm.includes(_normalizeForMatch(w)))) return entry.icon;
+        }
+        return '';
+    }
+
+    let _reasonIconManual = false;
+
+    function setupReasonIconPicker() {
+        const grid = document.getElementById('s-reason-icon-grid');
+        if (!grid) return;
+        grid.innerHTML = REASON_ICONS.map(icon =>
+            `<button type="button" class="btn btn-outline-secondary btn-sm" style="width:2.2rem;" data-reason-icon-choice="${icon}">${icon}</button>`
+        ).join('');
+        document.querySelectorAll('[data-reason-icon-choice]').forEach(btn => {
+            btn.addEventListener('click', function () {
+                setReasonIcon(this.dataset.reasonIconChoice, true);
+            });
+        });
+        const labelInput = document.getElementById('s-reason-label');
+        if (labelInput) {
+            labelInput.addEventListener('input', function () {
+                if (_reasonIconManual) return;
+                setReasonIcon(suggestReasonIcon(this.value), false);
+            });
+        }
+    }
+
+    function setReasonIcon(icon, manual) {
+        const hidden  = document.getElementById('s-reason-icon');
+        const preview = document.getElementById('s-reason-icon-preview');
+        if (hidden) hidden.value = icon || '';
+        if (preview) preview.textContent = icon || '🏷️';
+        _reasonIconManual = !!manual;
+    }
+
     // ── Motifs de réduction ───────────────────────────────────────────────
     window.loadReasons = function loadReasons() {
         loadPointArticles().then(() => {
@@ -518,12 +600,12 @@
         }
         el.innerHTML = _reasons.map((r, i) => `
             <tr>
-                <td>${i + 1}</td>
+                <td class="text-center" style="font-size:1.1rem;">${r.icon || '<span class="text-muted small">—</span>'}</td>
                 <td>${esc(r.label)}</td>
                 <td><span class="badge bg-danger">−${r.points_to_deduct} pt${r.points_to_deduct > 1 ? 's' : ''}</span></td>
                 <td>${r.article_code ? `<span class="badge bg-secondary">${esc(r.article_code)}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-warning me-1" onclick="editReason(this)" data-id="${r.id}" data-label="${esc(r.label)}" data-pts="${r.points_to_deduct}" data-article="${r.article_id || ''}" title="Modifier">
+                    <button class="btn btn-sm btn-outline-warning me-1" onclick="editReason(this)" data-id="${r.id}" data-label="${esc(r.label)}" data-pts="${r.points_to_deduct}" data-article="${r.article_id || ''}" data-icon="${r.icon || ''}" title="Modifier">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteReason(${r.id})" title="Supprimer">
@@ -805,6 +887,7 @@
         document.getElementById('s-reason-label').value      = '';
         document.getElementById('s-reason-pts').value        = '1';
         document.getElementById('s-reason-editing-id').value = '';
+        setReasonIcon('');
         const artSel = document.getElementById('s-reason-article');
         if (artSel) artSel.value = '';
         const submitBtn = document.getElementById('s-reason-submit-btn');
@@ -816,6 +899,7 @@
         const label      = document.getElementById('s-reason-label').value.trim();
         const pts        = parseInt(document.getElementById('s-reason-pts').value) || 1;
         const article_id = document.getElementById('s-reason-article')?.value || null;
+        const icon       = document.getElementById('s-reason-icon')?.value || null;
         const editingId  = document.getElementById('s-reason-editing-id').value;
         if (!label) { alert('Libellé obligatoire.'); return; }
 
@@ -827,7 +911,7 @@
             method,
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ label, points_to_deduct: pts, article_id: article_id || null }),
+            body: JSON.stringify({ label, points_to_deduct: pts, article_id: article_id || null, icon }),
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { alert(d.error || 'Erreur'); return; }
@@ -840,9 +924,12 @@
         const label      = el.dataset.label;
         const pts        = el.dataset.pts;
         const article_id = el.dataset.article || '';
+        const icon       = el.dataset.icon || '';
         document.getElementById('s-reason-label').value      = label;
         document.getElementById('s-reason-pts').value        = pts;
         document.getElementById('s-reason-editing-id').value = id;
+        // An existing icon was deliberately chosen — don't let further label edits auto-override it.
+        setReasonIcon(icon, !!icon);
         const artSel = document.getElementById('s-reason-article');
         if (artSel) artSel.value = article_id;
         const submitBtn = document.getElementById('s-reason-submit-btn');
@@ -1497,8 +1584,8 @@
 
     /* ── Init ── */
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts(); });
+        document.addEventListener('DOMContentLoaded', () => { loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts(); setupReasonIconPicker(); });
     } else {
-        loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts();
+        loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts(); setupReasonIconPicker();
     }
 })();
