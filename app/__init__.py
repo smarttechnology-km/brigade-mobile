@@ -757,8 +757,10 @@ def create_app():
                         "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE",
                         # fine_types
                         "ALTER TABLE fine_types ADD COLUMN IF NOT EXISTS article_id INTEGER",
+                        "ALTER TABLE fine_types ADD COLUMN IF NOT EXISTS icon VARCHAR(10)",
                         # point_reduction_reasons
                         "ALTER TABLE point_reduction_reasons ADD COLUMN IF NOT EXISTS article_id INTEGER",
+                        "ALTER TABLE point_reduction_reasons ADD COLUMN IF NOT EXISTS icon VARCHAR(10)",
                         # license_dossiers
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS nom VARCHAR(150)",
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS prenom VARCHAR(100)",
