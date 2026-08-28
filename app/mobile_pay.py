@@ -260,6 +260,7 @@ def lookup():
         ft.label: {
             'article_code': ft.article.code if ft.article else None,
             'article_description': ft.article.description if ft.article else None,
+            'icon': ft.icon,
         }
         for ft in fine_types
     }
@@ -270,6 +271,7 @@ def lookup():
         info = article_map.get(f.reason, {})
         d['article_code'] = info.get('article_code')
         d['article_description'] = info.get('article_description')
+        d['icon'] = info.get('icon')
         unpaid_fines.append(d)
 
     unpaid_fines_amount = _calculate_unpaid_fines_amount(vehicle)
