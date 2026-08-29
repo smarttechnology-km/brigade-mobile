@@ -1102,8 +1102,13 @@
             .then(l => {
                 clearForm();
                 populateForm(l);
-                document.getElementById('modal-title').innerHTML = '<i class="fas fa-edit me-2"></i>Modifier le permis';
-                document.getElementById('save-btn').innerHTML    = '<i class="fas fa-save me-1"></i>Enregistrer les modifications';
+                if (window.CURRENT_USER_DGRTR_TYPE === 'employe') {
+                    document.getElementById('modal-title').innerHTML = '<i class="fas fa-paper-plane me-2"></i>Proposer une modification';
+                    document.getElementById('save-btn').innerHTML    = '<i class="fas fa-paper-plane me-1"></i>Envoyer pour validation';
+                } else {
+                    document.getElementById('modal-title').innerHTML = '<i class="fas fa-edit me-2"></i>Modifier le permis';
+                    document.getElementById('save-btn').innerHTML    = '<i class="fas fa-save me-1"></i>Enregistrer les modifications';
+                }
                 // Afficher "Demander l'impression" seulement si le permis est dans "Permis imprimés"
                 // = a une demande printed/validated ET pas de pending en cours
                 const btnDem = document.getElementById('btn-demander-impression');
@@ -1188,6 +1193,29 @@
         const btn = document.getElementById('save-btn');
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Enregistrement…';
+
+        // Employé DGRTR : proposer une modification au lieu d'enregistrer directement — nécessite la validation du directeur technique/général
+        if (isEdit && window.CURRENT_USER_DGRTR_TYPE === 'employe') {
+            try {
+                const r = await fetch(`/api/licenses/${id}/edit-requests`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(payload),
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(data.error || 'Erreur');
+                bootstrap.Modal.getInstance(document.getElementById('licenseModal'))?.hide();
+                alert('Demande de modification envoyée. En attente de validation du directeur technique ou général.');
+                loadLicenses(false);
+            } catch (err) {
+                alert(err.message || 'Erreur lors de la demande de modification');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save me-1"></i>Enregistrer';
+            }
+            return;
+        }
 
         try {
             const url    = isEdit ? `/api/licenses/${id}` : '/api/licenses';

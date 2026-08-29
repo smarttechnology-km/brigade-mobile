@@ -864,7 +864,13 @@ function openVehicleModal(vehicle) {
     var _fieldCvClass  = document.getElementById('field-cv-class');
     var _fieldNbChevaux = document.getElementById('field-nombre-chevaux');
     if(vehicle) {
-        modalTitle.innerHTML = '<i class="fas fa-edit me-2"></i><span>Éditer le véhicule</span>';
+        modalTitle.innerHTML = window.currentUserRole === 'judiciaire'
+            ? '<i class="fas fa-paper-plane me-2"></i><span>Proposer une modification</span>'
+            : '<i class="fas fa-edit me-2"></i><span>Éditer le véhicule</span>';
+        const _saveBtn = document.getElementById('save-vehicle-btn');
+        if(_saveBtn) _saveBtn.innerHTML = window.currentUserRole === 'judiciaire'
+            ? '<i class="fas fa-paper-plane me-1"></i>Envoyer pour validation'
+            : '<i class="fas fa-save me-1"></i>Enregistrer';
         if(genBtn) genBtn.style.display = 'none';
         if(cgSection)      cgSection.classList.remove('d-none');
         if(cgPendingBadge) cgPendingBadge.style.display = 'none';
@@ -880,6 +886,8 @@ function openVehicleModal(vehicle) {
         if (toggleRow) toggleRow.style.display = 'none';
     } else {
         modalTitle.innerHTML = '<i class="fas fa-car me-2"></i><span>Ajouter un véhicule</span>';
+        const _saveBtnAdd = document.getElementById('save-vehicle-btn');
+        if(_saveBtnAdd) _saveBtnAdd.innerHTML = '<i class="fas fa-save me-1"></i>Enregistrer';
         if(cgSection) cgSection.classList.remove('d-none');
 
         // Show toggle row and reset to "Nouveau véhicule"
@@ -1253,6 +1261,27 @@ function saveVehicle() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(cgPayload)
         }).catch(() => {});
+    }
+
+    if (vid && window.currentUserRole === 'judiciaire') {
+        // judiciaire: propose an edit instead of saving directly — needs directeur régional approval
+        fetch(`/api/vehicles/${vid}/edit-requests`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(async r => {
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || `Erreur ${r.status}`);
+            return data;
+        }).then(() => {
+            safeHideModal();
+            alert('Demande de modification envoyée. En attente de validation du directeur régional.');
+            loadVehicles();
+        }).catch(err => {
+            alert(err.message || 'Erreur lors de la demande de modification');
+        });
+        return;
     }
 
     if (vid) {
