@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+{% block title %}Rechercher un permis — DGRTR{% endblock %}
+
+{% block content %}
+<style>
+.sp-result-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 14px 18px; transition: box-shadow .15s, border-color .15s;
+}
+.sp-result-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.09); border-color: #3b82f6; }
+.form-card { background:#fff; border-radius:12px; padding:28px 32px; box-shadow:0 1px 6px rgba(0,0,0,.08); }
+</style>
+
+<div class="container-fluid py-4 px-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h4 class="fw-bold mb-0"><i class="fas fa-search text-primary me-2"></i>Rechercher / Modifier un permis</h4>
+      <small class="text-muted">Recherchez un permis, proposez une modification — validation du directeur technique ou général requise</small>
+    </div>
+    <a href="/dgrtr-dashboard" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-2"></i>Retour
+    </a>
+  </div>
+
+  <!-- Search -->
+  <div class="d-flex gap-2 mb-3 align-items-center flex-wrap">
+    <input type="search" id="sp-search" class="form-control" style="max-width:400px;"
+      placeholder="N° de permis, nom, téléphone, NIN…">
+  </div>
+
+  <div id="sp-results"></div>
+</div>
+
+<!-- Edit request modal -->
+<div class="modal fade" id="spEditModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-paper-plane text-primary me-2"></i>Proposer une modification</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="sp-license-id">
+
+        <!-- Photo + numéro / nom -->
+        <div class="row g-3 mb-3">
+          <div class="col-auto">
+            <div id="sp-photo-wrap" style="width:90px;height:110px;border:2px dashed #ccc;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8f9fa;">
+              <img id="sp-photo-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;">
+              <span id="sp-photo-icon" class="text-muted" style="font-size:2rem;"><i class="fas fa-user-circle"></i></span>
+            </div>
+            <div class="text-muted text-center" style="font-size:0.65rem;">Photo (via « Photo permis »)</div>
+          </div>
+          <div class="col">
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Numéro de permis</label>
+                <input type="text" id="sp-current-number" class="form-control" disabled>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Statut</label>
+                <input type="text" id="sp-current-status" class="form-control" disabled>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Nom</label>
+                <input type="text" id="sp-holder_name" class="form-control text-uppercase">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Prénom</label>
+                <input type="text" id="sp-holder_firstname" class="form-control text-uppercase">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr>
+
+        <!-- Infos personnelles -->
+        <h6 class="text-muted text-uppercase" style="font-size:0.72rem;letter-spacing:.5px;">Informations personnelles</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Date de naissance</label>
+            <input type="date" id="sp-date_of_birth" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Lieu de naissance</label>
+            <input type="text" id="sp-lieu_naissance" class="form-control text-uppercase" placeholder="Ville, pays…">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Sexe</label>
+            <select id="sp-sexe" class="form-select">
+              <option value="">— Sélectionner —</option>
+              <option value="masculin">Masculin</option>
+              <option value="feminin">Féminin</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Groupe sanguin</label>
+            <select id="sp-blood_group" class="form-select">
+              <option value="">— Sélectionner —</option>
+              {% for bg in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}
+              <option value="{{ bg }}">{{ bg }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Nationalité</label>
+            <input type="text" id="sp-nationalite" class="form-control text-uppercase" placeholder="Ex : Comorien">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Téléphone</label>
+            <input type="tel" id="sp-holder_phone" class="form-control" placeholder="Ex : 3321234">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">NIN</label>
+            <input type="text" id="sp-nin" class="form-control" placeholder="Ex : 12345678">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Île</label>
+            <select id="sp-holder_island" class="form-select">
+              <option value="">— Sélectionner —</option>
+              <option value="Grande Comore">Grande Comore</option>
+              <option value="Anjouan">Anjouan</option>
+              <option value="Moheli">Mohéli</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Adresse</label>
+            <input type="text" id="sp-holder_address" class="form-control text-uppercase" placeholder="Quartier, ville…">
+          </div>
+        </div>
+
+        <hr>
+
+        <!-- Permis -->
+        <h6 class="text-muted text-uppercase" style="font-size:0.72rem;letter-spacing:.5px;">Détails du permis</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Type de permis</label>
+            <select id="sp-type_permis" class="form-select">
+              <option value="permanent">Permanent</option>
+              <option value="temporaire">Temporaire</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Type spécial</label>
+            <select id="sp-type_special" class="form-select">
+              <option value="">— Civile —</option>
+              <option value="M">M — Militaire</option>
+              <option value="P">P — Professionnelle</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Date de délivrance</label>
+            <input type="date" id="sp-issue_date" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Date d'expiration</label>
+            <input type="date" id="sp-expiry_date" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Centre d'immatriculation</label>
+            <select id="sp-centre_immatriculation" class="form-select">
+              <option value="">— Sélectionner un centre —</option>
+              <option value="Centre de Moroni">Centre de Moroni</option>
+              <option value="Centre de Mutsamudu">Centre de Mutsamudu</option>
+              <option value="Centre de Fomboni">Centre de Fomboni</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Catégories</label>
+            <div class="d-flex flex-column gap-2 mt-1" id="sp-categories-checkboxes">
+              {% for cat in ['A', 'A1', 'A2', 'B', 'C', 'D', 'E', 'F'] %}
+              <div class="border rounded p-2">
+                <div class="form-check">
+                  <input class="form-check-input sp-cat-checkbox" type="checkbox" id="sp-cat-{{ cat }}" value="{{ cat }}" onchange="spOnCategoryToggle('{{ cat }}')">
+                  <label class="form-check-label fw-semibold" for="sp-cat-{{ cat }}">{{ cat }}</label>
+                </div>
+                <div class="row g-2 mt-1 sp-cat-details" id="sp-cat-details-{{ cat }}" style="display:none;">
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-0">N° d'identifiant</label>
+                    <input type="text" class="form-control form-control-sm sp-cat-identifiant" id="sp-cat-identifiant-{{ cat }}" placeholder="N° d'identifiant">
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-0">Date d'obtention</label>
+                    <input type="date" class="form-control form-control-sm sp-cat-date" id="sp-cat-date-{{ cat }}" onchange="spAutoFillCategoryExpiration('{{ cat }}')">
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small text-muted mb-0">Date d'expiration</label>
+                    <input type="date" class="form-control form-control-sm sp-cat-expiration" id="sp-cat-expiration-{{ cat }}">
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <hr>
+
+        <div>
+          <label class="form-label">Notes</label>
+          <textarea id="sp-notes" class="form-control" rows="2" placeholder="Observations…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="sp-submit-btn">
+          <i class="fas fa-paper-plane me-1"></i>Envoyer pour validation
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let spSearchTimer = null;
+let _spSettings = { category_validity: {} };
+
+fetch('/api/licenses/settings', { credentials: 'same-origin' })
+  .then(r => r.ok ? r.json() : null)
+  .then(d => { if (d) _spSettings = d; })
+  .catch(() => {});
+
+document.getElementById('sp-search').addEventListener('input', function () {
+  clearTimeout(spSearchTimer);
+  spSearchTimer = setTimeout(spSearch, 350);
+});
+
+function spAutoFillCategoryExpiration(cat) {
+  const expInput = document.getElementById(`sp-cat-expiration-${cat}`);
+  if (!expInput) return;
+  const cfg = (_spSettings.category_validity || {})[cat] || { mode: 'card' };
+  if (cfg.mode === 'custom' && cfg.years) {
+    const baseStr = document.getElementById(`sp-cat-date-${cat}`)?.value || document.getElementById('sp-issue_date')?.value;
+    if (baseStr) {
+      const d = new Date(baseStr);
+      d.setFullYear(d.getFullYear() + Number(cfg.years));
+      expInput.value = d.toISOString().slice(0, 10);
+    }
+  } else {
+    expInput.value = document.getElementById('sp-expiry_date')?.value || '';
+  }
+}
+
+function spOnCategoryToggle(cat) {
+  const cb = document.getElementById(`sp-cat-${cat}`);
+  const detailsDiv = document.getElementById(`sp-cat-details-${cat}`);
+  if (!detailsDiv) return;
+  detailsDiv.style.display = cb && cb.checked ? '' : 'none';
+  if (cb && cb.checked) {
+    const idInput = document.getElementById(`sp-cat-identifiant-${cat}`);
+    if (idInput && !idInput.value.trim()) {
+      idInput.value = document.getElementById('sp-current-number')?.value || '';
+    }
+    spAutoFillCategoryExpiration(cat);
+  } else {
+    const idInput   = document.getElementById(`sp-cat-identifiant-${cat}`);
+    const dateInput = document.getElementById(`sp-cat-date-${cat}`);
+    const expInput  = document.getElementById(`sp-cat-expiration-${cat}`);
+    if (idInput)   idInput.value = '';
+    if (dateInput) dateInput.value = '';
+    if (expInput)  expInput.value = '';
+  }
+}
+
+function spGetCategories() {
+  const cats = Array.from(document.querySelectorAll('.sp-cat-checkbox:checked')).map(cb => cb.value);
+  const special = document.getElementById('sp-type_special')?.value || '';
+  if (special) cats.push(special);
+  return cats.join(',');
+}
+
+function spGetCategoryDetails() {
+  const details = {};
+  document.querySelectorAll('.sp-cat-checkbox:checked').forEach(cb => {
+    const cat = cb.value;
+    const identifiant = document.getElementById(`sp-cat-identifiant-${cat}`)?.value.trim() || '';
+    const date = document.getElementById(`sp-cat-date-${cat}`)?.value || '';
+    const expiration = document.getElementById(`sp-cat-expiration-${cat}`)?.value || '';
+    if (identifiant || date || expiration) {
+      details[cat] = { identifiant, date, expiration };
+    }
+  });
+  return details;
+}
+
+function esc(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function spSearch() {
+  const q = document.getElementById('sp-search').value.trim();
+  const results = document.getElementById('sp-results');
+  if (!q) { results.innerHTML = ''; return; }
+  results.innerHTML = '<div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Recherche…</div>';
+  fetch(`/api/licenses?q=${encodeURIComponent(q)}&page=1`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : { items: [] })
+    .then(data => {
+      const items = data.items || [];
+      if (!items.length) {
+        results.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-id-card fa-2x mb-2 d-block"></i>Aucun permis trouvé.</div>';
+        return;
+      }
+      results.innerHTML = items.map(l => `
+        <div class="sp-result-card mb-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-3">
+            ${l.photo_url ? `<img src="${esc(l.photo_url)}" style="width:44px;height:52px;object-fit:cover;border-radius:6px;">` : '<div class="d-flex align-items-center justify-content-center bg-light rounded" style="width:44px;height:52px;"><i class="fas fa-user text-muted"></i></div>'}
+            <div>
+              <strong>${esc(l.license_number)}</strong> — ${esc(l.holder_firstname)} ${esc(l.holder_name)}
+              <div class="small text-muted">${esc(l.holder_island || '—')} ${l.categories ? '· ' + esc(l.categories) : ''}</div>
+              ${l.has_pending_edit_request ? '<span class="badge bg-warning text-dark mt-1"><i class="fas fa-clock me-1"></i>En attente de validation</span>' : ''}
+            </div>
+          </div>
+          ${l.has_pending_edit_request
+            ? '<button class="btn btn-outline-secondary btn-sm" disabled title="Une demande est déjà en attente pour ce permis"><i class="fas fa-clock me-1"></i>Déjà en attente</button>'
+            : `<button class="btn btn-outline-primary btn-sm" onclick='spOpenEdit(${JSON.stringify(l).replace(/'/g, "&apos;")})'>
+                <i class="fas fa-edit me-1"></i>Proposer une modification
+              </button>`}
+        </div>`).join('');
+    })
+    .catch(() => { results.innerHTML = '<div class="text-center text-danger py-4">Erreur de recherche.</div>'; });
+}
+
+const SP_STATUS_LABELS = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqué', expire: 'Expiré' };
+
+function spOpenEdit(l) {
+  document.getElementById('sp-license-id').value = l.id;
+  document.getElementById('sp-current-number').value = l.license_number;
+  document.getElementById('sp-current-status').value = SP_STATUS_LABELS[l.status] || l.status || '';
+
+  const photoImg = document.getElementById('sp-photo-img');
+  const photoIcon = document.getElementById('sp-photo-icon');
+  if (l.photo_url) {
+    photoImg.src = l.photo_url;
+    photoImg.style.display = '';
+    photoIcon.style.display = 'none';
+  } else {
+    photoImg.style.display = 'none';
+    photoIcon.style.display = '';
+  }
+
+  // NB : dans toute l'appli (licenses.html, dgrtr_add_license.html), la colonne
+  // "holder_name" stocke en réalité le prénom et "holder_firstname" le nom de
+  // famille — on reprend cette même convention ici pour rester cohérent.
+  document.getElementById('sp-holder_name').value = l.holder_firstname || '';
+  document.getElementById('sp-holder_firstname').value = l.holder_name || '';
+  document.getElementById('sp-holder_phone').value = l.holder_phone || '';
+  document.getElementById('sp-nin').value = l.nin || '';
+  document.getElementById('sp-holder_island').value = l.holder_island || '';
+  document.getElementById('sp-holder_address').value = l.holder_address || '';
+  document.getElementById('sp-nationalite').value = l.nationalite || '';
+  document.getElementById('sp-sexe').value = l.sexe || '';
+  document.getElementById('sp-blood_group').value = l.blood_group || '';
+  document.getElementById('sp-lieu_naissance').value = l.lieu_naissance || '';
+  document.getElementById('sp-date_of_birth').value = l.date_of_birth || '';
+  document.getElementById('sp-centre_immatriculation').value = l.centre_immatriculation || '';
+  document.getElementById('sp-type_permis').value = l.type_permis || 'permanent';
+  document.getElementById('sp-issue_date').value = l.issue_date || '';
+  document.getElementById('sp-expiry_date').value = l.expiry_date || '';
+  document.getElementById('sp-notes').value = l.notes || '';
+
+  const allCats = (l.categories || '').split(',').map(c => c.trim()).filter(Boolean);
+  const specialVal = allCats.includes('M') ? 'M' : (allCats.includes('P') ? 'P' : '');
+  document.getElementById('sp-type_special').value = specialVal;
+  const cats = allCats.filter(c => c !== 'M' && c !== 'P');
+  const catDetails = l.category_details || {};
+  document.querySelectorAll('.sp-cat-checkbox').forEach(cb => {
+    const cat = cb.value;
+    cb.checked = cats.includes(cat);
+    const detailsDiv = document.getElementById(`sp-cat-details-${cat}`);
+    if (detailsDiv) detailsDiv.style.display = cb.checked ? '' : 'none';
+    const d = catDetails[cat] || {};
+    const idInput   = document.getElementById(`sp-cat-identifiant-${cat}`);
+    const dateInput = document.getElementById(`sp-cat-date-${cat}`);
+    const expInput  = document.getElementById(`sp-cat-expiration-${cat}`);
+    if (idInput)   idInput.value = d.identifiant || (cb.checked ? (l.license_number || '') : '');
+    if (dateInput) dateInput.value = d.date || '';
+    if (expInput)  expInput.value = d.expiration || (cb.checked ? (l.expiry_date || '') : '');
+  });
+
+  new bootstrap.Modal(document.getElementById('spEditModal')).show();
+}
+
+document.getElementById('sp-submit-btn').addEventListener('click', function () {
+  const id = document.getElementById('sp-license-id').value;
+  const payload = {
+    holder_name: document.getElementById('sp-holder_firstname').value.trim().toUpperCase(),
+    holder_firstname: document.getElementById('sp-holder_name').value.trim().toUpperCase(),
+    holder_phone: document.getElementById('sp-holder_phone').value.trim(),
+    nin: document.getElementById('sp-nin').value.trim(),
+    holder_island: document.getElementById('sp-holder_island').value,
+    holder_address: document.getElementById('sp-holder_address').value.trim(),
+    nationalite: document.getElementById('sp-nationalite').value.trim(),
+    sexe: document.getElementById('sp-sexe').value,
+    blood_group: document.getElementById('sp-blood_group').value,
+    lieu_naissance: document.getElementById('sp-lieu_naissance').value.trim(),
+    date_of_birth: document.getElementById('sp-date_of_birth').value,
+    centre_immatriculation: document.getElementById('sp-centre_immatriculation').value.trim(),
+    type_permis: document.getElementById('sp-type_permis').value,
+    categories: spGetCategories(),
+    category_details: spGetCategoryDetails(),
+    issue_date: document.getElementById('sp-issue_date').value,
+    expiry_date: document.getElementById('sp-expiry_date').value,
+    notes: document.getElementById('sp-notes').value.trim(),
+  };
+
+  const btn = this;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Envoi…';
+
+  fetch(`/api/licenses/${id}/edit-requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(payload),
+  })
+    .then(async r => {
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Erreur');
+      return data;
+    })
+    .then(() => {
+      bootstrap.Modal.getInstance(document.getElementById('spEditModal')).hide();
+      alert('Demande de modification envoyée. En attente de validation du directeur technique ou général.');
+      spSearch();
+    })
+    .catch(err => alert(err.message || 'Erreur lors de la demande.'))
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Envoyer pour validation';
+    });
+});
+</script>
+{% endblock %}

@@ -143,8 +143,13 @@
             {% if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'judiciaire' or _is_dr_dt or _is_dg) %}
             <a class="nav-link text-white {% if request.path.startswith('/reports') %}active{% endif %}" href="/reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
             {% endif %}
+            {% if current_user.is_authenticated and current_user.is_admin %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr/demandes-modification' %}active{% endif %}" href="/dgrtr/demandes-modification"><i class="fas fa-edit me-2"></i> Demandes  <span id="ver-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/demandes-modification-permis') %}active{% endif %}" href="/dgrtr/demandes-modification-permis"><i class="fas fa-edit me-2"></i> Demandes permis <span id="ler-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
+            {% endif %}
             {% if current_user.is_authenticated and current_user.role == 'judiciaire' %}
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/cartes-grises') %}active{% endif %}" href="/dgrtr/cartes-grises"><i class="fas fa-car me-2"></i> Cartes Grises Provi</a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr/demandes-modification' %}active{% endif %}" href="/dgrtr/demandes-modification"><i class="fas fa-edit me-2"></i> Mes demandes <span id="ver-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'policier') %}
@@ -158,21 +163,24 @@
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/cartes-grises') %}active{% endif %}" href="/dgrtr/cartes-grises"><i class="fas fa-car me-2"></i> Cartes Grises Provi</a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/rapport-cg') %}active{% endif %}" href="/dgrtr/rapport-cg"><i class="fas fa-chart-bar me-2"></i> Rapport CG</a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/recettes-cg') %}active{% endif %}" href="/dgrtr/recettes-cg"><i class="fas fa-coins me-2"></i> Recettes</a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr/demandes-modification' %}active{% endif %}" href="/dgrtr/demandes-modification"><i class="fas fa-edit me-2"></i> Demandes  <span id="ver-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% elif current_user.dgrtr_type == 'employe' %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/ajouter-permis' %}active{% endif %}" href="/dgrtr/ajouter-permis"><i class="fas fa-plus-circle me-2"></i> Ajouter un permis</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/photo-permis' %}active{% endif %}" href="/dgrtr/photo-permis"><i class="fas fa-camera me-2"></i> Photo permis</a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr/rechercher-permis' %}active{% endif %}" href="/dgrtr/rechercher-permis"><i class="fas fa-search me-2"></i> Modifier un permis</a>
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/demandes-modification-permis') %}active{% endif %}" href="/dgrtr/demandes-modification-permis"><i class="fas fa-edit me-2"></i> Mes demandes <span id="ler-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% elif current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
-            <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis</a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis <span id="dossier-sig-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% if current_user.dgrtr_type == 'directeur_technique' %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-dossiers-complets' %}active{% endif %}" href="/dgrtr-dossiers-complets"><i class="fas fa-check-circle me-2"></i> Dossiers Complétés</a>
             {% endif %}
             <a class="nav-link text-white {% if request.path == '/licenses' %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/demandes-modification-permis') %}active{% endif %}" href="/dgrtr/demandes-modification-permis"><i class="fas fa-edit me-2"></i> Demandes permis <span id="ler-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             <a class="nav-link text-white {% if request.path == '/dgrtr-statistiques' %}active{% endif %}" href="/dgrtr-statistiques"><i class="fas fa-chart-bar me-2"></i> Statistiques</a>
             {% if current_user.dgrtr_type == 'directeur_general' %}
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/cartes-grises') %}active{% endif %}" href="/dgrtr/cartes-grises"><i class="fas fa-car me-2"></i> Cartes Grises Provi</a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/rapport-cg') %}active{% endif %}" href="/dgrtr/rapport-cg"><i class="fas fa-chart-bar me-2"></i> Rapport — Cartes Grises</a>
-            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/parametres-cg') %}active{% endif %}" href="/dgrtr/parametres-cg"><i class="fas fa-cog me-2"></i> Paramètres CG</a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/comptes') %}active{% endif %}" href="/dgrtr/comptes"><i class="fas fa-users-cog me-2"></i> Gestion des comptes</a>
             {% endif %}
             {% endif %}
@@ -251,6 +259,54 @@
                 }
                 document.addEventListener('DOMContentLoaded', updatePhotoCount);
                 setInterval(updatePhotoCount, 30000);
+            </script>
+            <script>
+                function updateVerCount() {
+                    const badge = document.getElementById('ver-count-badge');
+                    if (!badge) return;
+                    fetch('/api/vehicle-edit-requests/count-pending')
+                        .then(r => r.json())
+                        .then(data => {
+                            const count = data.pending_count || 0;
+                            badge.textContent = count;
+                            badge.style.display = count > 0 ? 'inline-block' : 'none';
+                        })
+                        .catch(() => {});
+                }
+                document.addEventListener('DOMContentLoaded', updateVerCount);
+                setInterval(updateVerCount, 30000);
+            </script>
+            <script>
+                function updateLerCount() {
+                    const badge = document.getElementById('ler-count-badge');
+                    if (!badge) return;
+                    fetch('/api/license-edit-requests/count-pending')
+                        .then(r => r.json())
+                        .then(data => {
+                            const count = data.pending_count || 0;
+                            badge.textContent = count;
+                            badge.style.display = count > 0 ? 'inline-block' : 'none';
+                        })
+                        .catch(() => {});
+                }
+                document.addEventListener('DOMContentLoaded', updateLerCount);
+                setInterval(updateLerCount, 30000);
+            </script>
+            <script>
+                function updateDossierSigCount() {
+                    const badge = document.getElementById('dossier-sig-count-badge');
+                    if (!badge) return;
+                    fetch('/api/dossiers-permis/count-pending-signature')
+                        .then(r => r.json())
+                        .then(data => {
+                            const count = data.pending_count || 0;
+                            badge.textContent = count;
+                            badge.style.display = count > 0 ? 'inline-block' : 'none';
+                        })
+                        .catch(() => {});
+                }
+                document.addEventListener('DOMContentLoaded', updateDossierSigCount);
+                setInterval(updateDossierSigCount, 30000);
             </script>
             {% else %}
             <a class="nav-link text-white mt-3" href="/auth/login"><i class="fas fa-sign-in-alt me-2"></i> Se connecter</a>

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.ver-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px;
+  border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+.ver-badge-pending  { background:#fef3c7; color:#d97706; }
+.ver-badge-approved { background:#dcfce7; color:#15803d; }
+.ver-badge-rejected { background:#fee2e2; color:#b91c1c; }
+.ver-card {
+  background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+  padding:16px 18px; margin-bottom:12px;
+}
+.ver-diff-row { display:flex; gap:8px; align-items:baseline; font-size:13.5px; padding:3px 0; }
+.ver-diff-label { color:#6b7280; min-width:150px; font-weight:600; }
+.ver-diff-old { color:#b91c1c; text-decoration:line-through; }
+.ver-diff-new { color:#15803d; font-weight:600; }
+.ver-tab { background:none; border:none; border-bottom:3px solid transparent;
+  padding:8px 16px; font-size:13.5px; font-weight:600; color:#6b7280; cursor:pointer; }
+.ver-tab.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
+</style>
+
+<div class="container-fluid py-4 px-4">
+  {%- set _is_reviewer = current_user.is_admin or (current_user.role == 'dgrtr' and current_user.dgrtr_type in ('directeur_regional', 'directeur_general')) -%}
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h4 class="fw-bold mb-0"><i class="fas fa-edit text-primary me-2"></i>Demandes de modification de véhicule</h4>
+      <small class="text-muted">
+        {% if _is_reviewer %}Validez ou rejetez les modifications proposées par les judiciaires{% else %}Vos demandes de modification et leur statut{% endif %}
+      </small>
+    </div>
+  </div>
+
+  <ul class="nav mb-3" id="ver-tabs">
+    <li class="nav-item"><button class="ver-tab active" data-status="pending" onclick="verSwitchTab('pending', this)">En attente</button></li>
+    <li class="nav-item"><button class="ver-tab" data-status="approved" onclick="verSwitchTab('approved', this)">Validées</button></li>
+    <li class="nav-item"><button class="ver-tab" data-status="rejected" onclick="verSwitchTab('rejected', this)">Rejetées</button></li>
+  </ul>
+
+  <div id="ver-list">
+    <div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+  </div>
+</div>
+
+<!-- Reject modal -->
+<div class="modal fade" id="verRejectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rejeter la demande</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label small">Motif du rejet (optionnel)</label>
+        <textarea id="ver-reject-comment" class="form-control" rows="3" placeholder="Ex : information incorrecte, doublon..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger" id="ver-reject-confirm-btn">Rejeter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const VER_IS_REVIEWER = {{ 'true' if (current_user.is_admin or (current_user.role == 'dgrtr' and current_user.dgrtr_type in ('directeur_regional', 'directeur_general'))) else 'false' }};
+let verCurrentStatus = 'pending';
+let verRejectingId = null;
+
+function esc(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function verSwitchTab(status, btn) {
+  verCurrentStatus = status;
+  document.querySelectorAll('#ver-tabs .ver-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  verLoad();
+}
+
+function verBadge(status) {
+  if (status === 'approved') return '<span class="ver-badge ver-badge-approved"><i class="fas fa-check-circle"></i> Validée</span>';
+  if (status === 'rejected') return '<span class="ver-badge ver-badge-rejected"><i class="fas fa-times-circle"></i> Rejetée</span>';
+  return '<span class="ver-badge ver-badge-pending"><i class="fas fa-clock"></i> En attente</span>';
+}
+
+function verLoad() {
+  const list = document.getElementById('ver-list');
+  list.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+  fetch(`/api/vehicle-edit-requests?status=${verCurrentStatus}`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(reqs => {
+      if (!reqs.length) {
+        list.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune demande.</div>';
+        return;
+      }
+      list.innerHTML = reqs.map(r => {
+        const changes = r.proposed_changes || {};
+        const oldValues = r.old_values || {};
+        const diffRows = Object.keys(changes).map(field => `
+          <div class="ver-diff-row">
+            <span class="ver-diff-label">${esc(field)}</span>
+            <span class="ver-diff-old">${esc(oldValues[field] || '—')}</span>
+            <i class="fas fa-arrow-right text-muted" style="font-size:11px;"></i>
+            <span class="ver-diff-new">${esc(changes[field] || '—')}</span>
+          </div>`).join('');
+
+        const actions = (VER_IS_REVIEWER && r.status === 'pending') ? `
+          <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-sm btn-success" onclick="verApprove(${r.id})"><i class="fas fa-check me-1"></i>Valider</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="verOpenReject(${r.id})"><i class="fas fa-times me-1"></i>Rejeter</button>
+          </div>` : '';
+
+        const reviewInfo = r.status !== 'pending' ? `
+          <div class="mt-2 small text-muted">
+            ${r.status === 'approved' ? 'Validée' : 'Rejetée'} par <strong>${esc(r.reviewed_by)}</strong> le ${esc(r.reviewed_at)}
+            ${r.review_comment ? `<br>Commentaire : ${esc(r.review_comment)}` : ''}
+          </div>` : '';
+
+        const printCg = (r.status === 'approved' && r.has_signed_carte_grise) ? `
+          <div class="mt-3">
+            <a class="btn btn-sm btn-outline-primary" href="/dgrtr/cartes-grises/${r.vehicle_id}/print" target="_blank">
+              <i class="fas fa-print me-1"></i>Imprimer la carte grise provisoire
+            </a>
+          </div>` : '';
+
+        return `
+        <div class="ver-card">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+              <strong>${esc(r.license_plate)}</strong> — ${esc(r.owner_name)}
+              <span class="text-muted small ms-2">${esc(r.owner_island || '')}</span>
+            </div>
+            ${verBadge(r.status)}
+          </div>
+          <div class="small text-muted mt-1">Demandé par <strong>${esc(r.requested_by)}</strong> le ${esc(r.requested_at)}</div>
+          <div class="mt-3">${diffRows}</div>
+          ${reviewInfo}
+          ${printCg}
+          ${actions}
+        </div>`;
+      }).join('');
+    })
+    .catch(() => {
+      list.innerHTML = '<div class="text-center text-danger py-4">Erreur de chargement.</div>';
+    });
+}
+
+function verApprove(id) {
+  if (!confirm('Valider cette demande de modification ? Les changements seront appliqués immédiatement.')) return;
+  fetch(`/api/vehicle-edit-requests/${id}/approve`, { method: 'POST', credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => verLoad())
+    .catch(d => alert(d.error || 'Erreur.'));
+}
+
+function verOpenReject(id) {
+  verRejectingId = id;
+  document.getElementById('ver-reject-comment').value = '';
+  new bootstrap.Modal(document.getElementById('verRejectModal')).show();
+}
+
+document.getElementById('ver-reject-confirm-btn').addEventListener('click', function () {
+  if (!verRejectingId) return;
+  const comment = document.getElementById('ver-reject-comment').value.trim();
+  fetch(`/api/vehicle-edit-requests/${verRejectingId}/reject`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => {
+      bootstrap.Modal.getInstance(document.getElementById('verRejectModal')).hide();
+      verRejectingId = null;
+      verLoad();
+    })
+    .catch(d => alert(d.error || 'Erreur.'));
+});
+
+verLoad();
+</script>
+{% endblock %}
