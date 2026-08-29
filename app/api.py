@@ -3899,9 +3899,19 @@ def api_licenses_list():
         if pr.license_id not in print_status_map:
             print_status_map[pr.license_id] = pr.status  # premier = plus récent
 
+    # Demande de modification en attente par permis (batch, évite N+1)
+    from app.models import LicenseEditRequest
+    pending_edit_ids = {
+        r.license_id for r in LicenseEditRequest.query.filter(
+            LicenseEditRequest.license_id.in_(ids),
+            LicenseEditRequest.status == 'pending'
+        ).all()
+    }
+
     def item_dict(l):
         d = l.to_dict()
         d['print_status'] = print_status_map.get(l.id)  # 'pending'|'printed'|'cancelled'|None
+        d['has_pending_edit_request'] = l.id in pending_edit_ids
         return d
 
     return jsonify({
@@ -4147,6 +4157,11 @@ def api_mobile_reduce_points(license_id):
 def api_licenses_update(license_id):
     if not (current_user.is_admin or getattr(current_user, 'role', '') in ('administrateur', 'judiciaire', 'dgrtr')):
         return jsonify({'error': 'Accès refusé'}), 403
+    if getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'employe':
+        return jsonify({
+            'error': "Les employés ne peuvent plus modifier un permis directement. "
+                     "Utilisez « Proposer une modification » — le directeur technique ou général doit valider le changement."
+        }), 403
     lic  = DriverLicense.query.get_or_404(license_id)
     err = check_island_access(lic.holder_island)
     if err:
@@ -4261,6 +4276,197 @@ def api_licenses_update(license_id):
         log_user_history(current_user, 'Permis modifié', f'Permis {lic.license_number} - {lic.holder_name}')
 
     return jsonify(lic.to_dict())
+
+
+# ─────────────────────────────────────────────────────────────
+#  Demandes de modification de permis (employé DGRTR → directeur technique/général)
+# ─────────────────────────────────────────────────────────────
+
+LICENSE_EDIT_REQUEST_FIELDS = [
+    'holder_name', 'holder_firstname', 'holder_phone', 'nin', 'holder_island', 'holder_address',
+    'nationalite', 'sexe', 'blood_group', 'lieu_naissance', 'centre_immatriculation',
+    'type_permis', 'categories', 'category_details', 'date_of_birth', 'issue_date', 'expiry_date', 'notes',
+]
+LICENSE_EDIT_REQUEST_DATE_FIELDS = {'date_of_birth', 'issue_date', 'expiry_date'}
+LICENSE_EDIT_REQUEST_JSON_FIELDS = {'category_details'}
+LICENSE_EDIT_REQUEST_FIELD_LABELS = {
+    'holder_name': 'Nom', 'holder_firstname': 'Prénom', 'holder_phone': 'Téléphone',
+    'nin': 'NIN', 'holder_island': 'Île', 'holder_address': 'Adresse',
+    'nationalite': 'Nationalité', 'sexe': 'Sexe', 'blood_group': 'Groupe sanguin',
+    'lieu_naissance': 'Lieu de naissance', 'centre_immatriculation': "Centre d'immatriculation",
+    'type_permis': 'Type de permis', 'categories': 'Catégories', 'category_details': 'Détails des catégories',
+    'date_of_birth': 'Date de naissance', 'issue_date': 'Date de délivrance',
+    'expiry_date': "Date d'expiration", 'notes': 'Notes',
+}
+
+
+def _is_license_employe():
+    return getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'employe'
+
+
+def _is_license_reviewer():
+    return current_user.is_admin or (getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) in ('directeur_technique', 'directeur_general'))
+
+
+@api_bp.route('/licenses/<int:license_id>/edit-requests', methods=['POST'])
+@login_required
+def create_license_edit_request(license_id):
+    from app.models import LicenseEditRequest
+    if not _is_license_employe():
+        return jsonify({'error': 'Réservé aux employés DGRTR'}), 403
+    lic = DriverLicense.query.get_or_404(license_id)
+
+    existing = LicenseEditRequest.query.filter_by(license_id=license_id, status='pending').first()
+    if existing:
+        return jsonify({'error': 'Une demande est déjà en attente pour ce permis.'}), 400
+
+    data = request.get_json() or {}
+    changes = {}
+    old_values = {}
+    for field in LICENSE_EDIT_REQUEST_FIELDS:
+        if field not in data:
+            continue
+        raw_new = data.get(field)
+        if field in LICENSE_EDIT_REQUEST_DATE_FIELDS:
+            new_val = (raw_new or '').strip() or None
+            current_val = getattr(lic, field)
+            old_val = current_val.isoformat() if current_val else None
+            changed = str(new_val or '') != str(old_val or '')
+        elif field in LICENSE_EDIT_REQUEST_JSON_FIELDS:
+            new_val = raw_new or {}
+            current_val = getattr(lic, field)
+            old_val = json.loads(current_val) if current_val else {}
+            changed = json.dumps(new_val, sort_keys=True) != json.dumps(old_val, sort_keys=True)
+        else:
+            new_val = raw_new.strip() if isinstance(raw_new, str) else raw_new
+            old_val = getattr(lic, field)
+            changed = str(new_val or '') != str(old_val or '')
+        if changed:
+            changes[field] = new_val
+            old_values[field] = old_val
+
+    if not changes:
+        return jsonify({'error': 'Aucune modification détectée.'}), 400
+
+    req = LicenseEditRequest(
+        license_id=license_id,
+        proposed_changes=json.dumps(changes),
+        old_values=json.dumps(old_values),
+        requested_by=current_user.username,
+    )
+    db.session.add(req)
+    db.session.commit()
+    return jsonify(req.to_dict()), 201
+
+
+@api_bp.route('/license-edit-requests', methods=['GET'])
+@login_required
+def list_license_edit_requests():
+    from app.models import LicenseEditRequest
+
+    if _is_license_employe():
+        query = LicenseEditRequest.query.filter_by(requested_by=current_user.username)
+    elif _is_license_reviewer():
+        query = LicenseEditRequest.query
+    else:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    status_filter = request.args.get('status')
+    if status_filter:
+        query = query.filter(LicenseEditRequest.status == status_filter)
+
+    reqs = query.order_by(LicenseEditRequest.requested_at.desc()).all()
+    return jsonify([r.to_dict() for r in reqs])
+
+
+@api_bp.route('/license-edit-requests/count-pending', methods=['GET'])
+@login_required
+def count_pending_license_edit_requests():
+    from app.models import LicenseEditRequest
+
+    if _is_license_employe():
+        query = LicenseEditRequest.query.filter_by(requested_by=current_user.username, status='pending')
+    elif _is_license_reviewer():
+        query = LicenseEditRequest.query.filter_by(status='pending')
+    else:
+        return jsonify({'pending_count': 0})
+
+    return jsonify({'pending_count': query.count()})
+
+
+@api_bp.route('/license-edit-requests/<int:req_id>/approve', methods=['POST'])
+@login_required
+def approve_license_edit_request(req_id):
+    from app.models import LicenseEditRequest
+    if not _is_license_reviewer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = LicenseEditRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+    lic = req.license
+
+    changes = json.loads(req.proposed_changes)
+    old_values = json.loads(req.old_values)
+    for field, value in changes.items():
+        if field in LICENSE_EDIT_REQUEST_DATE_FIELDS:
+            try:
+                setattr(lic, field, datetime.strptime(value, '%Y-%m-%d').date() if value else None)
+            except ValueError:
+                continue
+        elif field in LICENSE_EDIT_REQUEST_JSON_FIELDS:
+            setattr(lic, field, json.dumps(value) if value else None)
+        else:
+            setattr(lic, field, value)
+    lic.updated_at = now_comoros()
+    # Modifying identity fields should re-trigger SmartTech print validation, same as a direct edit
+    lic.smarttech_print_validated = False
+    lic.smarttech_validated_at = None
+    lic.smarttech_validated_by = None
+
+    req.status = 'approved'
+    req.reviewed_by = current_user.username
+    req.reviewed_at = now_comoros()
+
+    # Auto-request a print, same as a direct edit in api_licenses_update
+    existing_pending = LicensePrintRequest.query.filter_by(license_id=lic.id, status='pending').first()
+    if not existing_pending:
+        db.session.add(LicensePrintRequest(
+            license_id=lic.id,
+            requested_by=current_user.username,
+            notes=f'Demande automatique après modification du permis (demande de {req.requested_by})',
+        ))
+
+    db.session.commit()
+
+    for field, new_value in changes.items():
+        label = LICENSE_EDIT_REQUEST_FIELD_LABELS.get(field, field)
+        old_value = old_values.get(field)
+        log_user_history(
+            current_user,
+            f"Permis modifié (demande employé) : {label}",
+            f"Permis {lic.license_number} - Ancien: {old_value or '—'} → Nouveau: {new_value or '—'} (demande de {req.requested_by})"
+        )
+
+    return jsonify(req.to_dict())
+
+
+@api_bp.route('/license-edit-requests/<int:req_id>/reject', methods=['POST'])
+@login_required
+def reject_license_edit_request(req_id):
+    from app.models import LicenseEditRequest
+    if not _is_license_reviewer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = LicenseEditRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+
+    data = request.get_json(silent=True) or {}
+    req.status = 'rejected'
+    req.reviewed_by = current_user.username
+    req.reviewed_at = now_comoros()
+    req.review_comment = (data.get('comment') or '').strip()
+    db.session.commit()
+    return jsonify(req.to_dict())
 
 
 @api_bp.route('/licenses/<int:license_id>/suspend', methods=['PATCH'])
@@ -5058,6 +5264,19 @@ def list_dossiers_permis():
 
     dossiers = q.order_by(LicenseDossier.created_at.asc()).all()
     return jsonify([d.to_dict() for d in dossiers])
+
+
+@api_bp.route('/dossiers-permis/count-pending-signature', methods=['GET'])
+@login_required
+def count_dossiers_pending_signature():
+    """Dossiers waiting for the directeur général's signature (step 5, en_cours)."""
+    is_dg = current_user.is_admin or (
+        getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general'
+    )
+    if not is_dg:
+        return jsonify({'pending_count': 0})
+    count = LicenseDossier.query.filter_by(current_step=5, status='en_cours').count()
+    return jsonify({'pending_count': count})
 
 
 @api_bp.route('/dossiers-permis', methods=['POST'])

@@ -273,6 +273,46 @@ class VehicleHistory(db.Model):
         }
 
 
+class VehicleEditRequest(db.Model):
+    """A judiciaire's proposed edit to a vehicle, pending directeur_regional approval."""
+    __tablename__ = 'vehicle_edit_requests'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    proposed_changes = db.Column(db.Text, nullable=False)  # JSON: {field: new_value}
+    old_values = db.Column(db.Text, nullable=False)        # JSON: {field: old_value} snapshot at request time
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending / approved / rejected
+    requested_by = db.Column(db.String(100), nullable=False)
+    requested_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    reviewed_by = db.Column(db.String(100), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    review_comment = db.Column(db.Text, nullable=True)
+
+    vehicle = db.relationship('Vehicle', backref=db.backref('edit_requests', lazy='dynamic'))
+
+    def to_dict(self):
+        has_pending_sibling = bool(
+            self.vehicle and self.vehicle.edit_requests.filter_by(status='pending').first()
+        )
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'license_plate': self.vehicle.license_plate if self.vehicle else None,
+            'owner_name': self.vehicle.owner_name if self.vehicle else None,
+            'owner_island': self.vehicle.owner_island if self.vehicle else None,
+            'proposed_changes': json.loads(self.proposed_changes) if self.proposed_changes else {},
+            'old_values': json.loads(self.old_values) if self.old_values else {},
+            'has_signed_carte_grise': bool(
+                self.vehicle and self.vehicle.carte_grise and self.vehicle.carte_grise.status == 'signee'
+            ) and not has_pending_sibling,
+            'status': self.status,
+            'requested_by': self.requested_by,
+            'requested_at': self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else None,
+            'reviewed_by': self.reviewed_by,
+            'reviewed_at': self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else None,
+            'review_comment': self.review_comment,
+        }
+
+
 class VehicleOwner(db.Model):
     """Mobile app owner authentication and registration"""
     __tablename__ = 'vehicle_owners'
@@ -1253,6 +1293,40 @@ class DriverLicense(db.Model):
             'smarttech_print_validated': bool(self.smarttech_print_validated),
             'smarttech_validated_at': self.smarttech_validated_at.strftime('%d/%m/%Y %H:%M') if self.smarttech_validated_at else '',
             'smarttech_validated_by': self.smarttech_validated_by or '',
+        }
+
+
+class LicenseEditRequest(db.Model):
+    """An employé's proposed edit to a driver's license, pending directeur technique/général approval."""
+    __tablename__ = 'license_edit_requests'
+    id = db.Column(db.Integer, primary_key=True)
+    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False)
+    proposed_changes = db.Column(db.Text, nullable=False)  # JSON: {field: new_value}
+    old_values = db.Column(db.Text, nullable=False)        # JSON: {field: old_value} snapshot at request time
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending / approved / rejected
+    requested_by = db.Column(db.String(100), nullable=False)
+    requested_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    reviewed_by = db.Column(db.String(100), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    review_comment = db.Column(db.Text, nullable=True)
+
+    license = db.relationship('DriverLicense', backref=db.backref('edit_requests', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'license_id': self.license_id,
+            'license_number': self.license.license_number if self.license else None,
+            'holder_name': self.license.holder_name if self.license else None,
+            'holder_island': self.license.holder_island if self.license else None,
+            'proposed_changes': json.loads(self.proposed_changes) if self.proposed_changes else {},
+            'old_values': json.loads(self.old_values) if self.old_values else {},
+            'status': self.status,
+            'requested_by': self.requested_by,
+            'requested_at': self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else None,
+            'reviewed_by': self.reviewed_by,
+            'reviewed_at': self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else None,
+            'review_comment': self.review_comment,
         }
 
 

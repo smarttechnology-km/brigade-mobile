@@ -1295,6 +1295,8 @@ def vehicles_page():
 @roles_required('administrateur', 'dgrtr')
 def licenses_page():
     _require_dgrtr_staff()
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'employe':
+        abort(403)
     return render_template('licenses.html')
 
 
@@ -4085,6 +4087,11 @@ def update_vehicle(vehicle_id):
     from app.models import VehicleHistory
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
+    if current_user.role == 'judiciaire':
+        return jsonify({
+            'error': "Les judiciaires ne peuvent plus modifier un véhicule directement. "
+                     "Utilisez « Proposer une modification » — le directeur régional doit valider le changement."
+        }), 403
     data = request.get_json() or request.form
 
     tracked_fields = [
@@ -4313,6 +4320,196 @@ def update_vehicle(vehicle_id):
         print(f'Error logging vehicle update: {e}')
     
     return jsonify(vehicle.to_dict())
+
+
+# ─────────────────────────────────────────────────────────────
+#  Demandes de modification de véhicule (judiciaire → directeur régional)
+# ─────────────────────────────────────────────────────────────
+
+VEHICLE_EDIT_REQUEST_FIELDS = [
+    'owner_name', 'owner_phone', 'owner_address', 'owner_island',
+    'vehicle_type', 'fuel_type', 'usage_type', 'color', 'make', 'model', 'year', 'vin',
+    'fiscal_class', 'cv_class', 'nombre_chevaux', 'insurance_company', 'work_zone', 'notes',
+]
+
+VEHICLE_EDIT_REQUEST_FIELD_LABELS = {
+    'owner_name': 'Propriétaire', 'owner_phone': 'Téléphone propriétaire',
+    'owner_address': 'Adresse propriétaire', 'owner_island': 'Île',
+    'vehicle_type': 'Type de véhicule', 'fuel_type': 'Carburant', 'usage_type': "Type d'usage",
+    'color': 'Couleur', 'make': 'Marque', 'model': 'Modèle', 'year': 'Année', 'vin': 'VIN',
+    'fiscal_class': 'Classe fiscale', 'cv_class': 'Classe CV', 'nombre_chevaux': 'Nombre de chevaux',
+    'insurance_company': "Compagnie d'assurance", 'work_zone': 'Zone de travail', 'notes': 'Notes',
+}
+
+
+def _is_dr_or_dg():
+    """directeur_regional only (dgrtr) — the only dgrtr type that may approve vehicle edit requests."""
+    return current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'
+
+
+@vehicle_bp.route('/<int:vehicle_id>/edit-requests', methods=['POST'])
+@login_required
+def create_vehicle_edit_request(vehicle_id):
+    from app.models import VehicleEditRequest
+    if current_user.role != 'judiciaire':
+        return jsonify({'error': 'Réservé aux judiciaires'}), 403
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+
+    existing = VehicleEditRequest.query.filter_by(vehicle_id=vehicle_id, status='pending').first()
+    if existing:
+        return jsonify({'error': 'Une demande est déjà en attente pour ce véhicule.'}), 400
+
+    data = request.get_json() or {}
+    changes = {}
+    old_values = {}
+    for field in VEHICLE_EDIT_REQUEST_FIELDS:
+        if field not in data:
+            continue
+        new_val = data.get(field)
+        new_val = new_val.strip() if isinstance(new_val, str) else new_val
+        old_val = getattr(vehicle, field)
+        if str(new_val or '') != str(old_val or ''):
+            changes[field] = new_val
+            old_values[field] = old_val
+
+    if not changes:
+        return jsonify({'error': 'Aucune modification détectée.'}), 400
+
+    req = VehicleEditRequest(
+        vehicle_id=vehicle_id,
+        proposed_changes=json.dumps(changes),
+        old_values=json.dumps(old_values),
+        requested_by=current_user.username,
+    )
+    db.session.add(req)
+    db.session.commit()
+    return jsonify(req.to_dict()), 201
+
+
+@main_bp.route('/api/vehicle-edit-requests', methods=['GET'])
+@login_required
+def list_vehicle_edit_requests():
+    from app.models import VehicleEditRequest
+    role = current_user.role
+
+    if role == 'judiciaire':
+        query = VehicleEditRequest.query.filter_by(requested_by=current_user.username)
+    elif role == 'administrateur' or _is_dr_or_dg():
+        query = VehicleEditRequest.query
+        if role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+            query = query.join(Vehicle).filter(Vehicle.owner_island == current_user.country)
+    else:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    status_filter = request.args.get('status')
+    if status_filter:
+        query = query.filter(VehicleEditRequest.status == status_filter)
+
+    reqs = query.order_by(VehicleEditRequest.requested_at.desc()).all()
+    return jsonify([r.to_dict() for r in reqs])
+
+
+@main_bp.route('/api/vehicle-edit-requests/count-pending', methods=['GET'])
+@login_required
+def count_pending_vehicle_edit_requests():
+    from app.models import VehicleEditRequest
+    role = current_user.role
+
+    if role == 'judiciaire':
+        query = VehicleEditRequest.query.filter_by(requested_by=current_user.username, status='pending')
+    elif role == 'administrateur' or _is_dr_or_dg():
+        query = VehicleEditRequest.query.filter_by(status='pending')
+        if role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+            query = query.join(Vehicle).filter(Vehicle.owner_island == current_user.country)
+    else:
+        return jsonify({'pending_count': 0})
+
+    return jsonify({'pending_count': query.count()})
+
+
+@main_bp.route('/api/vehicle-edit-requests/<int:req_id>/approve', methods=['POST'])
+@login_required
+def approve_vehicle_edit_request(req_id):
+    from app.models import VehicleEditRequest, VehicleHistory
+    if not (current_user.role == 'administrateur' or _is_dr_or_dg()):
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = VehicleEditRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+    vehicle = req.vehicle
+    if current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+        if vehicle.owner_island != current_user.country:
+            return jsonify({'error': 'Accès refusé'}), 403
+
+    changes = json.loads(req.proposed_changes)
+    old_values = json.loads(req.old_values)
+    for field, value in changes.items():
+        setattr(vehicle, field, value)
+    vehicle.updated_at = now_comoros()
+
+    req.status = 'approved'
+    req.reviewed_by = current_user.username
+    req.reviewed_at = now_comoros()
+
+    for field, new_value in changes.items():
+        label = VEHICLE_EDIT_REQUEST_FIELD_LABELS.get(field, field)
+        old_value = old_values.get(field)
+        db.session.add(VehicleHistory(
+            vehicle_id=vehicle.id,
+            action=f"Mise à jour: {label}",
+            officer=current_user.username,
+            notes=f"Ancien: {old_value or '—'} → Nouveau: {new_value or '—'} (demande de {req.requested_by}, validée par {current_user.username})"
+        ))
+    db.session.commit()
+    return jsonify(req.to_dict())
+
+
+@main_bp.route('/api/vehicle-edit-requests/<int:req_id>/reject', methods=['POST'])
+@login_required
+def reject_vehicle_edit_request(req_id):
+    from app.models import VehicleEditRequest
+    if not (current_user.role == 'administrateur' or _is_dr_or_dg()):
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = VehicleEditRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+    vehicle = req.vehicle
+    if current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+        if vehicle.owner_island != current_user.country:
+            return jsonify({'error': 'Accès refusé'}), 403
+
+    data = request.get_json(silent=True) or {}
+    req.status = 'rejected'
+    req.reviewed_by = current_user.username
+    req.reviewed_at = now_comoros()
+    req.review_comment = (data.get('comment') or '').strip()
+    db.session.commit()
+    return jsonify(req.to_dict())
+
+
+@main_bp.route('/dgrtr/demandes-modification')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def dgrtr_vehicle_edit_requests_page():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_regional':
+        abort(403)
+    return render_template('dgrtr_vehicle_edit_requests.html')
+
+
+@main_bp.route('/dgrtr/demandes-modification-permis')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_license_edit_requests_page():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('employe', 'directeur_technique', 'directeur_general'):
+        abort(403)
+    return render_template('dgrtr_license_edit_requests.html')
+
+
+@main_bp.route('/dgrtr/rechercher-permis')
+@roles_required('dgrtr')
+def dgrtr_search_permis_page():
+    if getattr(current_user, 'dgrtr_type', None) != 'employe':
+        abort(403)
+    return render_template('dgrtr_search_permis.html')
 
 
 @vehicle_bp.route('/<int:vehicle_id>', methods=['DELETE'])
@@ -7267,10 +7464,8 @@ def dgrtr_carte_grise_print(vehicle_id):
 
 
 @main_bp.route('/dgrtr/parametres-cg')
-@roles_required('administrateur', 'dgrtr')
+@roles_required('administrateur')
 def dgrtr_parametres_cg():
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_general':
-        abort(403)
     return render_template('dgrtr_parametres_cg.html')
 
 
@@ -7667,10 +7862,10 @@ def dgrtr_cg_pending():
 
 
 def _require_cg_settings_access():
-    """Allow directeur_general (all islands) and directeur_regional (own island only)."""
+    """Allow directeur_regional only (own island) among dgrtr types."""
     if current_user.role == 'dgrtr':
         dt = getattr(current_user, 'dgrtr_type', None)
-        if dt not in ('directeur_general', 'directeur_regional'):
+        if dt != 'directeur_regional':
             abort(403)
 
 
