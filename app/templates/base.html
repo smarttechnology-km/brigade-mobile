@@ -143,10 +143,6 @@
             {% if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'judiciaire' or _is_dr_dt or _is_dg) %}
             <a class="nav-link text-white {% if request.path.startswith('/reports') %}active{% endif %}" href="/reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
             {% endif %}
-            {% if current_user.is_authenticated and current_user.is_admin %}
-            <a class="nav-link text-white {% if request.path == '/dgrtr/demandes-modification' %}active{% endif %}" href="/dgrtr/demandes-modification"><i class="fas fa-edit me-2"></i> Demandes  <span id="ver-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
-            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/demandes-modification-permis') %}active{% endif %}" href="/dgrtr/demandes-modification-permis"><i class="fas fa-edit me-2"></i> Demandes permis <span id="ler-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
-            {% endif %}
             {% if current_user.is_authenticated and current_user.role == 'judiciaire' %}
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/cartes-grises') %}active{% endif %}" href="/dgrtr/cartes-grises"><i class="fas fa-car me-2"></i> Cartes Grises Provi</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/demandes-modification' %}active{% endif %}" href="/dgrtr/demandes-modification"><i class="fas fa-edit me-2"></i> Mes demandes <span id="ver-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
