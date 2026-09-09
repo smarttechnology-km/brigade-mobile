@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Visite Technique - Mobile Money{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+      <h2><i class="fas fa-clipboard-check me-2"></i>Visite Technique</h2>
+      <p class="text-muted mb-0">Encaissez le paiement des visites techniques, une fois l'inspecteur assigné et avant le rapport.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+        <span class="badge bg-warning text-dark align-self-center" id="vt-mm-pending-count">0 en attente</span>
+        <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
+          <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-group mb-3" style="max-width:420px;">
+    <span class="input-group-text"><i class="fas fa-search"></i></span>
+    <input type="text" id="vt-mm-search" class="form-control" placeholder="Rechercher par immatriculation ou propriétaire...">
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Immatriculation</th>
+              <th>Propriétaire</th>
+              <th>Île</th>
+              <th>Inspecteur</th>
+              <th>Assigné le</th>
+              <th>Prix</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vt-mm-pending-tbody">
+            <tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmation paiement -->
+<div class="modal fade" id="vtMmPendingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-circle-check me-2"></i>Confirmer le paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1" id="vt-mm-pending-text">Confirmer le paiement de cette visite technique ?</p>
+        <p class="text-muted small mb-3" id="vt-mm-pending-plate"></p>
+        <div class="mb-2">
+          <label class="form-label small">Mode de paiement</label>
+          <select id="vt-mm-pending-pay-method" class="form-select">
+            <option value="mobile_money_manual">Mobile Money (manuel)</option>
+            <option value="cash_manual">Espèces (manuel)</option>
+            <option value="bank_manual">Virement (manuel)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="vt-mm-pending-confirm-btn">
+          <i class="fas fa-check me-1"></i>Confirmer le paiement
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast success -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:1100">
+  <div id="vt-mm-toast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="vt-mm-toast-msg"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var vtMmPendingSelectedId = null;
+var vtMmAllItems = [];
+
+document.addEventListener('DOMContentLoaded', function () {
+  var searchInput = document.getElementById('vt-mm-search');
+  var timer = null;
+  searchInput.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(applyVtMmSearch, 250);
+  });
+  document.getElementById('vt-mm-pending-confirm-btn').addEventListener('click', vtMmConfirmPending);
+  loadPendingInspections();
+});
+
+function loadPendingInspections() {
+  fetch('/api/mobile-money/visite-technique/pending', { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (items) {
+      vtMmAllItems = items || [];
+      document.getElementById('vt-mm-pending-count').textContent = vtMmAllItems.length + ' en attente';
+      applyVtMmSearch();
+    })
+    .catch(function () {
+      document.getElementById('vt-mm-pending-tbody').innerHTML =
+        '<tr><td colspan="8" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+    });
+}
+
+function applyVtMmSearch() {
+  var q = document.getElementById('vt-mm-search').value.trim().toLowerCase();
+  var filtered = !q ? vtMmAllItems : vtMmAllItems.filter(function (a) {
+    return (a.license_plate || '').toLowerCase().indexOf(q) !== -1 ||
+           (a.owner_name || '').toLowerCase().indexOf(q) !== -1;
+  });
+  renderVtMmTable(filtered);
+}
+
+function renderVtMmTable(items) {
+  var tbody = document.getElementById('vt-mm-pending-tbody');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Aucune visite technique en attente de paiement.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(function (a, i) {
+    return '<tr>' +
+      '<td>' + (i + 1) + '</td>' +
+      '<td><strong>' + escapeHtmlVt(a.license_plate) + '</strong></td>' +
+      '<td>' + escapeHtmlVt(a.owner_name || '-') + '</td>' +
+      '<td>' + escapeHtmlVt(a.owner_island || '-') + '</td>' +
+      '<td>' + escapeHtmlVt(a.inspector_name || '-') + '</td>' +
+      '<td>' + escapeHtmlVt(a.created_at || '-') + '</td>' +
+      '<td><span class="badge bg-primary">' + Math.round(a.price_kmf || 0).toLocaleString('fr-FR') + ' KMF</span></td>' +
+      '<td><button class="btn btn-sm btn-success" onclick="vtMmOpenPendingModal(' + a.id + ', \'' + escapeHtmlVt(a.license_plate) + '\')">' +
+      '<i class="fas fa-check me-1"></i>Confirmer le paiement</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function vtMmOpenPendingModal(inspId, plate) {
+  vtMmPendingSelectedId = inspId;
+  document.getElementById('vt-mm-pending-plate').textContent = 'Véhicule : ' + plate;
+  document.getElementById('vt-mm-pending-pay-method').selectedIndex = 0;
+  new bootstrap.Modal(document.getElementById('vtMmPendingModal')).show();
+}
+
+function vtMmConfirmPending() {
+  if (!vtMmPendingSelectedId) return;
+  var btn = document.getElementById('vt-mm-pending-confirm-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>En cours...';
+
+  fetch('/api/mobile-money/visite-technique/' + vtMmPendingSelectedId + '/confirm-payment', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payment_method: document.getElementById('vt-mm-pending-pay-method').value }),
+  })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      bootstrap.Modal.getInstance(document.getElementById('vtMmPendingModal')).hide();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer le paiement';
+      if (res.ok) {
+        showVtMmToast('Paiement confirmé.', 'success');
+        loadPendingInspections();
+      } else {
+        showVtMmToast(res.data.error || 'Erreur.', 'danger');
+      }
+    })
+    .catch(function () {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer le paiement';
+      showVtMmToast('Erreur réseau.', 'danger');
+    });
+}
+
+function showVtMmToast(msg, type) {
+  var toast = document.getElementById('vt-mm-toast');
+  var toastMsg = document.getElementById('vt-mm-toast-msg');
+  toast.className = 'toast align-items-center text-white border-0 bg-' + type;
+  toastMsg.textContent = msg;
+  new bootstrap.Toast(toast, { delay: 4000 }).show();
+}
+
+function escapeHtmlVt(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+</script>
+{% endblock %}

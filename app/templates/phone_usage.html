@@ -81,7 +81,7 @@
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="fas fa-table me-2"></i>Utilisation Détaillée</h5>
-            {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+            {% if current_user.is_authenticated and (current_user.is_admin or current_user.role in ('judiciaire', 'policier')) %}
             <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#manualBorrowModal">
                 <i class="fas fa-plus me-2"></i>Emprunter manuellement
             </button>

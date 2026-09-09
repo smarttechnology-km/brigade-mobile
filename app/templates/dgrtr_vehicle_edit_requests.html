@@ -24,7 +24,7 @@
   {%- set _is_reviewer = current_user.is_admin or (current_user.role == 'dgrtr' and current_user.dgrtr_type in ('directeur_regional', 'directeur_general')) -%}
   <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
-      <h4 class="fw-bold mb-0"><i class="fas fa-edit text-primary me-2"></i>Demandes de modification de véhicule</h4>
+      <h2 class="mb-0"><i class="fas fa-edit me-2"></i>Demandes de modification de véhicule</h2>
       <small class="text-muted">
         {% if _is_reviewer %}Validez ou rejetez les modifications proposées par les judiciaires{% else %}Vos demandes de modification et leur statut{% endif %}
       </small>

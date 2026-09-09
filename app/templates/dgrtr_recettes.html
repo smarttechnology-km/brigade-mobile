@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.stat-card {
+  background:#fff; border-radius:12px; padding:20px 24px;
+  border:1px solid #e5e7eb; box-shadow:0 1px 4px rgba(0,0,0,.06);
+}
+.stat-label { font-size:12px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.05em; color:#6b7280; margin-bottom:6px; }
+.stat-value { font-size:28px; font-weight:800; line-height:1; }
+.stat-sub   { font-size:12px; color:#9ca3af; margin-top:6px; }
+.rec-table th { font-size:12px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.04em; color:#6b7280; border-bottom:2px solid #e5e7eb; }
+.rec-table td { font-size:13.5px; vertical-align:middle; }
+.rec-tab { background:none; border:none; border-bottom:3px solid transparent;
+  padding:8px 16px; font-size:13.5px; font-weight:600; color:#6b7280; cursor:pointer; }
+.rec-tab.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
+</style>
+
+<div class="container-fluid py-4 px-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-coins me-2"></i>Recettes</h2>
+      <small class="text-muted">Montants encaissés — Cartes Grises et Visites Techniques</small>
+    </div>
+  </div>
+
+  <ul class="nav mb-3" id="rec-tabs">
+    <li class="nav-item"><button class="rec-tab active" data-tab="cg" onclick="recSwitchTab('cg', this)">Recettes Carte Grise</button></li>
+    <li class="nav-item"><button class="rec-tab" data-tab="vt" onclick="recSwitchTab('vt', this)">Recettes Visite Technique</button></li>
+  </ul>
+
+  <!-- Filtres -->
+  <div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
+    <button id="btn-mode-jour" class="btn btn-primary btn-sm" onclick="setMode('jour')">
+      <i class="fas fa-calendar-day me-1"></i>Jour
+    </button>
+    <button id="btn-mode-plage" class="btn btn-outline-secondary btn-sm" onclick="setMode('plage')">
+      <i class="fas fa-calendar-alt me-1"></i>Du…au
+    </button>
+
+    <div id="zone-jour" style="display:flex;align-items:center;gap:.5rem;">
+      <input type="date" class="form-control form-control-sm" id="f-jour" style="width:160px;" oninput="loadData()">
+    </div>
+
+    <div id="zone-plage" style="display:none;align-items:center;gap:.5rem;">
+      <input type="date" class="form-control form-control-sm" id="f-date-from" style="width:150px;">
+      <span class="text-muted fw-semibold">→</span>
+      <input type="date" class="form-control form-control-sm" id="f-date-to" style="width:150px;">
+      <button class="btn btn-primary btn-sm" onclick="loadData()">
+        <i class="fas fa-search me-1"></i>Filtrer
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Onglet Carte Grise ── -->
+  <div id="rec-pane-cg">
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-md-3">
+        <div class="stat-card" style="border-left:4px solid #3b82f6;">
+          <div class="stat-label">Véhicules enregistrés</div>
+          <div class="stat-value text-primary" id="cg-s-count">—</div>
+          <div class="stat-sub">Cartes grises signées</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="stat-card" style="border-left:4px solid #10b981;">
+          <div class="stat-label">Montant total encaissé</div>
+          <div class="stat-value text-success" id="cg-s-total">—</div>
+          <div class="stat-sub">Droit + Chevaux</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="stat-card" style="border-left:4px solid #6366f1;">
+          <div class="stat-label">Prix du droit</div>
+          <div class="stat-value" id="cg-s-droit" style="color:#6366f1;">—</div>
+          <div class="stat-sub">3 000 KMF × nb cartes grises</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="stat-card" style="border-left:4px solid #f59e0b;">
+          <div class="stat-label">Prix des chevaux</div>
+          <div class="stat-value text-warning" id="cg-s-chevaux">—</div>
+          <div class="stat-sub">Chevaux × 1 000 KMF par CG</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        <div class="px-4 py-3 d-flex align-items-center justify-content-between border-bottom">
+          <span class="fw-semibold" style="font-size:14px;">
+            Détail des cartes grises signées
+            <span class="text-muted fw-normal ms-1" id="cg-row-count"></span>
+          </span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 rec-table">
+            <thead>
+              <tr>
+                <th class="px-4">Immatriculation</th>
+                <th>Propriétaire</th>
+                <th>Date de signature</th>
+                <th>Date d'émission</th>
+                <th class="text-center">Chevaux</th>
+                <th class="text-end">Droit</th>
+                <th class="text-end pe-4">Prix des chevaux</th>
+                <th class="text-end pe-4">Total</th>
+              </tr>
+            </thead>
+            <tbody id="cg-tbody">
+              <tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Onglet Visite Technique ── -->
+  <div id="rec-pane-vt" style="display:none;">
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-md-3">
+        <div class="stat-card" style="border-left:4px solid #3b82f6;">
+          <div class="stat-label">Visites payées</div>
+          <div class="stat-value text-primary" id="vt-s-count">—</div>
+          <div class="stat-sub">Rendez-vous confirmés</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="stat-card" style="border-left:4px solid #10b981;">
+          <div class="stat-label">Montant total encaissé</div>
+          <div class="stat-value text-success" id="vt-s-total">—</div>
+          <div class="stat-sub">Toutes visites confondues</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="stat-card" style="border-left:4px solid #0ea5e9;">
+          <div class="stat-label">Via App Citoyen</div>
+          <div class="stat-value" id="vt-s-app" style="color:#0ea5e9;">—</div>
+          <div class="stat-sub"><span id="vt-s-app-count">—</span> visite(s)</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-3">
+        <div class="stat-card" style="border-left:4px solid #a855f7;">
+          <div class="stat-label">Via Agent Huri Money</div>
+          <div class="stat-value" id="vt-s-agent" style="color:#a855f7;">—</div>
+          <div class="stat-sub"><span id="vt-s-agent-count">—</span> visite(s)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        <div class="px-4 py-3 d-flex align-items-center justify-content-between border-bottom">
+          <span class="fw-semibold" style="font-size:14px;">
+            Détail des visites techniques payées
+            <span class="text-muted fw-normal ms-1" id="vt-row-count"></span>
+          </span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 rec-table">
+            <thead>
+              <tr>
+                <th class="px-4">Immatriculation</th>
+                <th>Propriétaire</th>
+                <th>Visite le</th>
+                <th>Payé le</th>
+                <th>Canal</th>
+                <th>Payé par</th>
+                <th class="text-end pe-4">Montant</th>
+              </tr>
+            </thead>
+            <tbody id="vt-tbody">
+              <tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function fmtKmf(n) {
+  if (n === null || n === undefined) return '<span class="text-muted">—</span>';
+  return Number(n).toLocaleString('fr-FR') + ' KMF';
+}
+function fmtTotal(n) {
+  return Number(n || 0).toLocaleString('fr-FR') + ' KMF';
+}
+
+let _tab = 'cg';
+let _mode = 'jour';
+
+function recSwitchTab(tab, btn) {
+  _tab = tab;
+  document.querySelectorAll('#rec-tabs .rec-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('rec-pane-cg').style.display = tab === 'cg' ? '' : 'none';
+  document.getElementById('rec-pane-vt').style.display = tab === 'vt' ? '' : 'none';
+  loadData();
+}
+
+function setMode(mode) {
+  _mode = mode;
+  document.getElementById('btn-mode-jour').className  = mode === 'jour'  ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('btn-mode-plage').className = mode === 'plage' ? 'btn btn-primary btn-sm'          : 'btn btn-outline-secondary btn-sm';
+  document.getElementById('zone-jour').style.cssText  = mode === 'jour'  ? 'display:flex!important;align-items:center;gap:.5rem;' : 'display:none!important;';
+  document.getElementById('zone-plage').style.cssText = mode === 'plage' ? 'display:flex!important;align-items:center;gap:.5rem;' : 'display:none!important;';
+  if (mode === 'plage') {
+    const today = new Date().toLocaleDateString('en-CA');
+    if (!document.getElementById('f-date-from').value) document.getElementById('f-date-from').value = today;
+    if (!document.getElementById('f-date-to').value)   document.getElementById('f-date-to').value   = today;
+  }
+  loadData();
+}
+
+function getRange() {
+  if (_mode === 'jour') {
+    const d = document.getElementById('f-jour').value;
+    return { from: d, to: d };
+  }
+  return {
+    from: document.getElementById('f-date-from').value,
+    to: document.getElementById('f-date-to').value,
+  };
+}
+
+async function loadData() {
+  if (_tab === 'cg') return loadCgData();
+  return loadVtData();
+}
+
+async function loadCgData() {
+  const { from, to } = getRange();
+  let url = '/api/dgrtr/recettes/carte-grise';
+  const params = [];
+  if (from) params.push('date_from=' + from);
+  if (to)   params.push('date_to='   + to);
+  if (params.length) url += '?' + params.join('&');
+
+  const tbody = document.getElementById('cg-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+
+  try {
+    const res  = await fetch(url, { credentials: 'same-origin' });
+    const data = await res.json();
+
+    document.getElementById('cg-s-count').textContent   = data.count;
+    document.getElementById('cg-s-total').textContent   = fmtTotal(data.total_montant);
+    document.getElementById('cg-s-droit').textContent   = fmtTotal(data.total_droit);
+    document.getElementById('cg-s-chevaux').textContent = fmtTotal(data.total_chevaux);
+    document.getElementById('cg-row-count').textContent = `(${data.count})`;
+
+    if (!data.rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-inbox me-2"></i>Aucun résultat</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.rows.map(r => {
+      const cv = r.nombre_chevaux !== null && r.nombre_chevaux !== undefined ? r.nombre_chevaux : null;
+      const droitAmt  = r.prix !== null ? 3000 : null;
+      const chevAmt   = cv !== null ? cv * 1000 : null;
+      return `
+      <tr>
+        <td class="px-4 fw-bold">${r.license_plate}</td>
+        <td>${r.civilite ? r.civilite + ' ' : ''}${r.owner_name}</td>
+        <td>${r.signed_at || '—'}</td>
+        <td>${r.date_emission || '—'}</td>
+        <td class="text-center">${cv !== null ? cv + ' CV' : '<span class="text-muted">—</span>'}</td>
+        <td class="text-end">${fmtKmf(droitAmt)}</td>
+        <td class="text-end">${fmtKmf(chevAmt)}</td>
+        <td class="text-end pe-4 fw-semibold">${fmtKmf(r.prix)}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur de chargement</td></tr>';
+  }
+}
+
+async function loadVtData() {
+  const { from, to } = getRange();
+  let url = '/api/dgrtr/recettes/visite-technique';
+  const params = [];
+  if (from) params.push('date_from=' + from);
+  if (to)   params.push('date_to='   + to);
+  if (params.length) url += '?' + params.join('&');
+
+  const tbody = document.getElementById('vt-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+
+  try {
+    const res  = await fetch(url, { credentials: 'same-origin' });
+    const data = await res.json();
+
+    document.getElementById('vt-s-count').textContent = data.count;
+    document.getElementById('vt-s-total').textContent = fmtTotal(data.total_montant);
+    document.getElementById('vt-s-app').textContent = fmtTotal(data.total_app_citoyen);
+    document.getElementById('vt-s-app-count').textContent = data.count_app_citoyen;
+    document.getElementById('vt-s-agent').textContent = fmtTotal(data.total_agent);
+    document.getElementById('vt-s-agent-count').textContent = data.count_agent;
+    document.getElementById('vt-row-count').textContent = `(${data.count})`;
+
+    if (!data.rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-inbox me-2"></i>Aucun résultat</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.rows.map(r => `
+      <tr>
+        <td class="px-4 fw-bold">${r.license_plate}</td>
+        <td>${r.owner_name}</td>
+        <td>${r.inspected_at || '—'}</td>
+        <td>${r.paid_at || '—'}</td>
+        <td><span class="badge ${r.channel === 'app_citoyen' ? 'bg-info-subtle text-info' : 'bg-purple-subtle' }" style="${r.channel !== 'app_citoyen' ? 'background:rgba(168,85,247,.12);color:#a855f7;' : ''}">${r.channel_display}</span></td>
+        <td>${r.channel === 'app_citoyen' ? '<span class="text-muted">—</span>' : (r.recorded_by || '—')}</td>
+        <td class="text-end pe-4 fw-semibold">${fmtKmf(r.price_kmf)}</td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Erreur de chargement</td></tr>';
+  }
+}
+
+// Init : mode Jour, date = aujourd'hui
+(function() {
+  const today = new Date().toLocaleDateString('en-CA');
+  document.getElementById('f-jour').value = today;
+})();
+loadData();
+</script>
+{% endblock %}

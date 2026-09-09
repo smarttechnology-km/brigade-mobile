@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attestation de visite technique</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #f0f0f0; overflow: hidden; width: 100vw; height: 100vh; }
+#card-wrap {
+  display: flex; justify-content: center; align-items: center;
+  width: 100vw; height: 100vh;
+}
+#card-wrap .card { flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div id="card-wrap">
+{% include '_visite_technique_card.html' %}
+</div>
+<script>
+function _fit() {
+  var el = document.querySelector('#card-wrap .card');
+  if (!el) return;
+  el.style.transform = '';
+  var cw = el.offsetWidth, ch = el.offsetHeight;
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var scale = Math.min(vw / ch, vh / cw) * 0.97;
+  el.style.transformOrigin = 'center center';
+  el.style.transform = 'rotate(90deg) scale(' + scale + ')';
+}
+window.addEventListener('load', _fit);
+window.addEventListener('resize', _fit);
+</script>
+</body>
+</html>

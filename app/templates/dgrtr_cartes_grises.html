@@ -43,7 +43,7 @@
   {%- set _jud_mode = current_user.role == 'judiciaire' or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_general') -%}
   <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
-      <h4 class="fw-bold mb-0"><i class="fas fa-car text-primary me-2"></i>Cartes Grises Provisoires</h4>
+      <h2 class="mb-0"><i class="fas fa-car me-2"></i>Cartes Grises Provisoires</h2>
       <small class="text-muted">
         {% if _jud_mode %}Saisie et envoi pour signature{% else %}Documents en attente de signature{% endif %}
       </small>

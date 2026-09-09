@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.vtr-price-input { max-width: 130px; }
+</style>
+
+<div class="container-fluid py-4 px-4">
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-tags me-2"></i>Paramètres — Prix Visite Technique</h2>
+      <small class="text-muted">Tarifs selon le type de véhicule et le type d'usage</small>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/dgrtr/visite-technique" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-2"></i>Retour
+      </a>
+      <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#vtrAddModal">
+        <i class="fas fa-plus me-2"></i>Ajouter un tarif
+      </button>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Type de véhicule</th>
+              <th>Type d'usage</th>
+              <th>Prix (KMF)</th>
+              <th>Statut</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vtr-tbody">
+            <tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add rate modal -->
+<div class="modal fade" id="vtrAddModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-tags text-primary me-2"></i>Ajouter un tarif</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Type de véhicule</label>
+          <select id="vtr-add-vehicle-type" class="form-select">
+            <option value="">Toutes les types</option>
+            {% for value, label in vehicle_types %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Type d'usage</label>
+          <select id="vtr-add-usage-type" class="form-select">
+            <option value="">Tous les usages</option>
+            {% for value, label in usage_types %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Prix (KMF)</label>
+          <input type="number" id="vtr-add-price" class="form-control" min="0" step="1" placeholder="Ex : 5000">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="vtr-add-confirm-btn">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function escVtr(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+const VTR_VEHICLE_LABELS = {{ vehicle_types | tojson }}.reduce((m, [v, l]) => { m[v] = l; return m; }, {});
+const VTR_USAGE_LABELS = {{ usage_types | tojson }}.reduce((m, [v, l]) => { m[v] = l; return m; }, {});
+
+function vtrLoad() {
+  const tbody = document.getElementById('vtr-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+  fetch('/api/technical-inspection-rates', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(rates => {
+      if (!rates.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucun tarif défini.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rates.map(r => `
+        <tr>
+          <td>${r.vehicle_type ? escVtr(VTR_VEHICLE_LABELS[r.vehicle_type] || r.vehicle_type) : '<span class="text-muted">Toutes les types</span>'}</td>
+          <td>${r.usage_type ? escVtr(VTR_USAGE_LABELS[r.usage_type] || r.usage_type) : '<span class="text-muted">Tous les usages</span>'}</td>
+          <td>
+            <div class="input-group input-group-sm vtr-price-input">
+              <input type="number" min="0" step="1" class="form-control" value="${r.price_kmf}" onchange="vtrUpdatePrice(${r.id}, this.value)">
+              <span class="input-group-text">KMF</span>
+            </div>
+          </td>
+          <td>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" ${r.is_active ? 'checked' : ''} onchange="vtrToggleActive(${r.id}, this.checked)">
+            </div>
+          </td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-danger" onclick="vtrDelete(${r.id})"><i class="fas fa-trash"></i></button>
+          </td>
+        </tr>`).join('');
+    })
+    .catch(() => {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+    });
+}
+
+document.getElementById('vtr-add-confirm-btn').addEventListener('click', function () {
+  const vehicle_type = document.getElementById('vtr-add-vehicle-type').value;
+  const usage_type = document.getElementById('vtr-add-usage-type').value;
+  const price_kmf = document.getElementById('vtr-add-price').value;
+  if (price_kmf === '' || isNaN(price_kmf) || Number(price_kmf) < 0) {
+    alert('Veuillez saisir un prix valide.');
+    return;
+  }
+  fetch('/api/technical-inspection-rates', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vehicle_type, usage_type, price_kmf }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => {
+      bootstrap.Modal.getInstance(document.getElementById('vtrAddModal')).hide();
+      document.getElementById('vtr-add-vehicle-type').value = '';
+      document.getElementById('vtr-add-usage-type').value = '';
+      document.getElementById('vtr-add-price').value = '';
+      vtrLoad();
+    })
+    .catch(d => alert(d.error || 'Erreur.'));
+});
+
+function vtrUpdatePrice(id, price_kmf) {
+  fetch(`/api/technical-inspection-rates/${id}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ price_kmf }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .catch(d => { alert(d.error || 'Erreur.'); vtrLoad(); });
+}
+
+function vtrToggleActive(id, is_active) {
+  fetch(`/api/technical-inspection-rates/${id}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .catch(d => { alert(d.error || 'Erreur.'); vtrLoad(); });
+}
+
+function vtrDelete(id) {
+  if (!confirm('Supprimer ce tarif ?')) return;
+  fetch(`/api/technical-inspection-rates/${id}`, { method: 'DELETE', credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => vtrLoad())
+    .catch(d => alert(d.error || 'Erreur.'));
+}
+
+vtrLoad();
+</script>
+{% endblock %}

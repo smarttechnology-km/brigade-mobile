@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Avertissements - Contrôle Policier{% endblock %}
+
+{% block content %}
+<style>
+.warn-tab {
+  border: none; background: none; padding: 8px 18px; font-size: 14px; font-weight: 600;
+  color: #6b7280; border-bottom: 3px solid transparent; cursor: pointer;
+}
+.warn-tab.active { color: #d97706; border-bottom-color: #d97706; }
+</style>
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1 class="mb-2">
+        <i class="fas fa-exclamation-triangle text-warning"></i> Avertissements
+      </h1>
+      <p class="text-muted">
+        Éléments constatés endommagés par un agent après une visite technique validée
+        (ex : phare cassé). Émis depuis l'application mobile. Ne modifie pas le rapport
+        de visite technique du véhicule. Un avertissement ne disparaît du véhicule et de
+        l'app citoyen qu'une fois la réparation validée ici, après vérification de la preuve.
+      </p>
+    </div>
+  </div>
+
+  <ul class="nav mb-3" id="warn-tabs">
+    <li class="nav-item">
+      <button class="warn-tab active" data-tab="active" onclick="switchTab('active', this)">
+        <i class="fas fa-exclamation-triangle me-1"></i>Actifs
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="warn-tab" data-tab="archived" onclick="switchTab('archived', this)">
+        <i class="fas fa-archive me-1"></i>Archives (réparés)
+      </button>
+    </li>
+  </ul>
+
+  <div class="row mb-3">
+    <div class="col-12 col-md-5">
+      <input type="text" id="warnings-search" class="form-control" placeholder="Rechercher par immatriculation ou propriétaire...">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr id="warnings-thead-row">
+              <th>Immatriculation</th>
+              <th>Propriétaire</th>
+              <th>Île</th>
+              <th>Élément</th>
+              <th>Description</th>
+              <th>Signalé par</th>
+              <th>Statut</th>
+              <th>Preuve de réparation</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="warnings-tbody">
+            <tr><td colspan="9" class="text-center text-muted">Chargement des données...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _allWarnings = [];
+let _activeTab = 'active';
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderWarnings(rows) {
+  const tbody = document.getElementById('warnings-tbody');
+  if (!rows.length) {
+    const emptyMsg = _activeTab === 'archived' ? 'Aucun avertissement archivé' : 'Aucun avertissement actif';
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4"><i class="fas fa-check-circle me-2"></i>${emptyMsg}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(w => {
+    let statusBadge, action;
+    if (_activeTab === 'archived') {
+      statusBadge = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Réparé</span>';
+      action = `<div style="font-size:0.85rem;">${escHtml(w.resolved_by)}</div><div class="text-muted" style="font-size:0.78rem;">${escHtml(w.resolved_at)}</div>`;
+    } else {
+      statusBadge = w.pending_validation
+        ? '<span class="badge bg-info text-dark"><i class="fas fa-hourglass-half me-1"></i>En attente de validation</span>'
+        : '<span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Actif</span>';
+      action = w.pending_validation
+        ? `<button class="btn btn-sm btn-success" onclick="validateWarning(${w.id})"><i class="fas fa-check me-1"></i>Valider</button>`
+        : '<span class="text-muted">—</span>';
+    }
+
+    let proof = '<span class="text-muted">—</span>';
+    if (w.repair_submitted_at) {
+      const photoHtml = w.resolution_photo_url
+        ? `<a href="${escHtml(w.resolution_photo_url)}" target="_blank"><img src="${escHtml(w.resolution_photo_url)}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;" class="mb-1"></a>`
+        : '';
+      const noteHtml = w.resolution_note ? `<div style="font-size:0.85rem;">${escHtml(w.resolution_note)}</div>` : '';
+      proof = `${photoHtml}${noteHtml}<div class="text-muted" style="font-size:0.78rem;">Par ${escHtml(w.repair_submitted_by)} · ${escHtml(w.repair_submitted_at)}</div>`;
+    }
+
+    return `
+    <tr>
+      <td class="fw-bold">${escHtml(w.license_plate)}</td>
+      <td>${escHtml(w.owner_name)}</td>
+      <td>${escHtml(w.owner_island)}</td>
+      <td><span class="badge bg-warning text-dark">${escHtml(w.item_label)}</span></td>
+      <td>${escHtml(w.description) || '<span class="text-muted">—</span>'}</td>
+      <td>${escHtml(w.issued_by)}<div class="text-muted" style="font-size:0.78rem;">${escHtml(w.issued_at)}</div></td>
+      <td>${statusBadge}</td>
+      <td>${proof}</td>
+      <td>${action}</td>
+    </tr>
+  `;
+  }).join('');
+}
+
+function loadWarnings() {
+  document.getElementById('warnings-tbody').innerHTML =
+    '<tr><td colspan="9" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>';
+  const archivedParam = _activeTab === 'archived' ? '1' : '0';
+  fetch(`/api/avertissements?archived=${archivedParam}`)
+    .then(r => r.json())
+    .then(data => {
+      _allWarnings = Array.isArray(data) ? data : [];
+      applySearch();
+    })
+    .catch(() => {
+      document.getElementById('warnings-tbody').innerHTML =
+        '<tr><td colspan="9" class="text-center text-danger py-4">Erreur de chargement</td></tr>';
+    });
+}
+
+function applySearch() {
+  const q = document.getElementById('warnings-search').value.trim().toLowerCase();
+  if (!q) { renderWarnings(_allWarnings); return; }
+  renderWarnings(_allWarnings.filter(w =>
+    (w.license_plate || '').toLowerCase().includes(q) ||
+    (w.owner_name || '').toLowerCase().includes(q)
+  ));
+}
+
+function switchTab(tab, btn) {
+  _activeTab = tab;
+  document.querySelectorAll('#warn-tabs .warn-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  loadWarnings();
+}
+
+function validateWarning(id) {
+  if (!confirm('Confirmez-vous avoir vérifié la preuve et validez la réparation ?')) return;
+  fetch(`/api/avertissements/${id}/validate`, { method: 'POST' })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok) { alert(data.error || 'Erreur lors de la validation'); return; }
+      loadWarnings();
+    })
+    .catch(() => alert('Erreur lors de la validation'));
+}
+
+document.getElementById('warnings-search').addEventListener('input', applySearch);
+
+loadWarnings();
+</script>
+{% endblock %}

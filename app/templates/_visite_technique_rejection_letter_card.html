@@ -1,0 +1,174 @@
+<style>
+.rl-card {
+  width: 210mm;
+  height: 277mm;
+  background: #fff;
+  border: 1.5px solid #111;
+  border-radius: 5px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+  display: flex;
+  flex-direction: column;
+  color: #111;
+}
+
+.rl-header {
+  background: #fff;
+  color: #111;
+  border-bottom: 2px solid #111;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 26px;
+}
+.rl-header-left { display: flex; align-items: center; gap: 16px; }
+.rl-header-left img { width: 62px; height: 62px; object-fit: contain; flex-shrink: 0; }
+.rl-org-name { font-size: 15px; font-weight: 800; letter-spacing: .02em; line-height: 1.35; }
+.rl-org-sub  { font-size: 10px; color: #444; margin-top: 4px; }
+.rl-header-right { text-align: right; }
+.rl-doc-title { font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+.rl-doc-num   { font-size: 10px; color: #444; margin-top: 4px; }
+.rl-status-pill { display: inline-block; margin-top: 8px; font-size: 10px; font-weight: 800; padding: 3px 12px; border: 1.5px solid #111; text-transform: uppercase; letter-spacing: .03em; }
+
+.rl-body { padding: 22px 26px; font-size: 12px; border-bottom: 1px solid #ccc; }
+.rl-body b { color: #111; }
+.rl-cols { display: flex; gap: 36px; }
+.rl-col { flex: 1; line-height: 2.1; }
+.rl-col h6 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #111; font-weight: 800; margin-bottom: 6px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+
+table.rl-vinfo { width: 100%; border-collapse: collapse; margin-top: 18px; }
+table.rl-vinfo th {
+  background: #f2f2f2; border: 1px solid #999; padding: 9px 10px;
+  font-size: 10.5px; text-transform: uppercase; color: #111; font-weight: 700;
+}
+table.rl-vinfo td {
+  border: 1px solid #999; padding: 11px; text-align: center;
+  font-size: 13px; font-weight: 700; text-transform: uppercase;
+}
+
+.rl-check-strip { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 18px 26px; font-size: 10px; color: #333; border-bottom: 1px solid #ccc; }
+.rl-check-item { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.rl-check-item.ko { font-weight: 700; }
+.rl-check-item.ok { }
+
+.rl-fix-box {
+  margin: 22px 26px 0; padding: 16px 20px;
+  background: #fff; border: 1.5px solid #111; border-radius: 8px;
+}
+.rl-fix-box h6 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #111; font-weight: 800; margin-bottom: 10px; }
+.rl-fix-box ul { margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.9; }
+.rl-fix-box li { margin-bottom: 4px; }
+
+.rl-obs { margin: 22px 26px 0; font-size: 11.5px; color: #333; line-height: 1.7; }
+
+.rl-steps { margin: 22px 26px 0; padding: 16px 20px; background: #f7f7f7; border: 1px solid #ccc; border-radius: 8px; }
+.rl-steps h6 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #111; font-weight: 800; margin-bottom: 10px; }
+.rl-steps ol { margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.9; }
+.rl-steps li { margin-bottom: 4px; }
+
+.rl-deadline {
+  margin: 22px 26px; padding: 16px 20px;
+  background: #fff; border: 1.5px solid #111; border-radius: 8px;
+  font-size: 12px; line-height: 1.7; color: #111;
+}
+.rl-deadline b { text-decoration: underline; }
+
+.rl-sig { align-self: flex-end; margin: 22px 26px 70mm; margin-top: auto; text-align: center; }
+.rl-sig .sig-title { font-size: 9px; color: #888; text-transform: uppercase; margin-bottom: 6px; }
+.rl-sig img { height: 48px; max-width: 150px; object-fit: contain; display: block; margin: 0 auto 4px; filter: grayscale(1); }
+.rl-sig .sig-name { font-size: 11px; font-weight: 700; border-top: 1px solid #999; padding-top: 4px; }
+</style>
+
+<div class="rl-card">
+
+  <div class="rl-header">
+    <div class="rl-header-left">
+      <img src="/static/img/logo_comores.png" alt="Union des Comores">
+      <div>
+        <div class="rl-org-name">DIRECTION GENERALE DES ROUTES<br>ET DES TRANSPORTS ROUTIERS</div>
+        <div class="rl-org-sub">Union des Comores — Unité, Solidarité, Développement</div>
+      </div>
+    </div>
+    <div class="rl-header-right">
+      <div class="rl-doc-title">Avis de Rejet — Visite Technique</div>
+      <div class="rl-doc-num">Réf. VT-{{ '%05d' | format(insp.id) }}</div>
+      <span class="rl-status-pill">Rejetée</span>
+    </div>
+  </div>
+
+  <div class="rl-body">
+    <div class="rl-cols">
+      <div class="rl-col">
+        <h6>Véhicule / Propriétaire</h6>
+        <div><b>Propriétaire :</b> {{ vehicle.owner_name if vehicle else '—' }}</div>
+        <div><b>Île :</b> {{ vehicle.owner_island if vehicle and vehicle.owner_island else '—' }}</div>
+        {% if vehicle and vehicle.vin %}<div><b>VIN :</b> {{ vehicle.vin }}</div>{% endif %}
+      </div>
+      <div class="rl-col">
+        <h6>Visite et rejet</h6>
+        <div><b>Visite le :</b> {{ insp.inspected_at.strftime('%d/%m/%Y %H:%M') if insp.inspected_at else '—' }}</div>
+        <div><b>Inspecteur :</b> {{ insp.inspector_name or '—' }}</div>
+        <div><b>Note :</b> {{ insp.score }}/{{ score_max }}</div>
+        <div><b>Rejeté le :</b> {{ insp.reviewed_at.strftime('%d/%m/%Y') if insp.reviewed_at else '—' }}</div>
+      </div>
+    </div>
+
+    <table class="rl-vinfo">
+      <thead>
+        <tr>
+          <th>Genre</th>
+          <th>Marque / Modèle</th>
+          <th>N° Immatriculation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ vehicle.vehicle_type or '—' }}</td>
+          <td>{{ vehicle.make or '' }}{% if vehicle.model %} {{ vehicle.model }}{% endif %}{% if not vehicle.make and not vehicle.model %}—{% endif %}</td>
+          <td>{{ vehicle.license_plate }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="rl-check-strip">
+    {% for key, label in checklist_items %}
+    {% if checklist_result.get(key) == 'conforme' %}
+    <span class="rl-check-item ok">✓ {{ label }}</span>
+    {% else %}
+    <span class="rl-check-item ko">✕ {{ label }}</span>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="rl-fix-box">
+    <h6>Éléments non conformes à corriger</h6>
+    {% if non_conforme_items %}
+    <ul>
+      {% for label in non_conforme_items %}
+      <li>{{ label }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="small text-muted">Aucun élément non conforme listé.</div>
+    {% endif %}
+    {% if insp.review_comment %}
+    <div class="mt-2" style="font-size:11.5px;"><b>Motif :</b> {{ insp.review_comment }}</div>
+    {% endif %}
+  </div>
+
+  {% if insp.observations %}
+  <div class="rl-obs"><b>Observations :</b> {{ insp.observations }}</div>
+  {% endif %}
+
+  <div class="rl-deadline">
+    📅 Vous disposez d'un délai d'<b>un mois</b> (jusqu'au <b>{{ deadline.strftime('%d/%m/%Y') if deadline else '—' }}</b>) pour corriger ces éléments et vous représenter à une visite technique. Ce nouveau passage est <b>gratuit</b>, la visite technique ayant déjà été payée. Passé ce délai, une nouvelle procédure payante sera requise.
+  </div>
+
+  <div class="rl-sig">
+    <div class="sig-title">Le Directeur Régional</div>
+    {% if cg_settings.signature_url %}
+    <img src="{{ cg_settings.signature_url }}" alt="Signature">
+    {% endif %}
+    <div class="sig-name">{{ insp.reviewed_by or cg_settings.directeur_nom or 'LE DIRECTEUR' }}</div>
+  </div>
+
+</div>

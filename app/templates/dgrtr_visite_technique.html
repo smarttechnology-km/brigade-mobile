@@ -1,0 +1,728 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.vt-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px;
+  border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+.vt-badge-pending  { background:#fef3c7; color:#d97706; }
+.vt-badge-approved { background:#dcfce7; color:#15803d; }
+.vt-badge-rejected { background:#fee2e2; color:#b91c1c; }
+.vt-card {
+  background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+  padding:16px 18px; margin-bottom:12px;
+}
+.vt-tab { background:none; border:none; border-bottom:3px solid transparent;
+  padding:8px 16px; font-size:13.5px; font-weight:600; color:#6b7280; cursor:pointer; }
+.vt-tab.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
+.vt-result-card {
+  background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+  padding:12px 16px; margin-bottom:8px;
+}
+.vt-check-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap:10px; }
+.vt-check-item { border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; }
+.vt-check-item > label { font-weight:600; font-size:13px; margin-bottom:6px; display:block; }
+
+#vt-print-sheet { color:#111; }
+@media print {
+  body * { visibility: hidden; }
+  #vt-print-sheet, #vt-print-sheet * { visibility: visible; }
+  #vt-print-sheet { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+}
+</style>
+
+<div class="container-fluid py-4 px-4">
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-clipboard-check me-2"></i>Visite Technique</h2>
+      <small class="text-muted">
+        {% if can_create %}Recherchez un véhicule et soumettez un rapport de visite technique pour validation
+        {% elif is_reviewer %}Validez ou rejetez les visites techniques proposées par les judiciaires
+        {% else %}Suivi des visites techniques et attestations{% endif %}
+      </small>
+    </div>
+    <div class="d-flex gap-2">
+      {% if is_reviewer %}
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="vtOpenInspectorsModal()">
+        <i class="fas fa-user-check me-2"></i>Inspecteurs
+      </button>
+      {% endif %}
+      {% if current_user.is_admin or is_reviewer %}
+      <a href="/dgrtr/parametres-visite-technique" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-cog me-2"></i>Paramètres — Prix
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <ul class="nav mb-3" id="vt-tabs">
+    {% if can_create %}
+    <li class="nav-item"><button class="vt-tab active" data-status="walkin" onclick="vtSwitchTab('walkin', this)">Faire la visite technique</button></li>
+    {% endif %}
+    {% if not is_reviewer %}
+    <li class="nav-item"><button class="vt-tab{% if not can_create %} active{% endif %}" data-status="appointments" onclick="vtSwitchTab('appointments', this)">Prise de rendez-vous</button></li>
+    {% endif %}
+    <li class="nav-item"><button class="vt-tab{% if is_reviewer %} active{% endif %}" data-status="pending" onclick="vtSwitchTab('pending', this)">En attente</button></li>
+    <li class="nav-item"><button class="vt-tab" data-status="approved" onclick="vtSwitchTab('approved', this)">Validées</button></li>
+    <li class="nav-item"><button class="vt-tab" data-status="rejected" onclick="vtSwitchTab('rejected', this)">Rejetées</button></li>
+  </ul>
+
+  {% if can_create %}
+  <div id="vt-walkin-search-wrap">
+    <div class="d-flex gap-2 mb-3 align-items-center flex-wrap">
+      <input type="search" id="vt-walkin-search" class="form-control" style="max-width:400px;" placeholder="Plaque, propriétaire…" autofocus>
+    </div>
+  </div>
+  <div id="vt-appointments-search-wrap" style="display:none;">
+    <div class="d-flex gap-2 mb-3 align-items-center flex-wrap">
+      <input type="search" id="vt-search" class="form-control" style="max-width:400px;" placeholder="Plaque, propriétaire…">
+    </div>
+  </div>
+  {% endif %}
+
+  <div id="vt-approved-search-wrap" style="display:none;">
+    <div class="d-flex gap-2 mb-3 align-items-center flex-wrap">
+      <input type="search" id="vt-approved-search" class="form-control" style="max-width:400px;" placeholder="Plaque, propriétaire…">
+    </div>
+  </div>
+
+  <div id="vt-list">
+    <div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+  </div>
+</div>
+
+<!-- Inspection form modal -->
+<div class="modal fade" id="vtFormModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-clipboard-check text-primary me-2"></i>Rapport de visite technique</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="vt-form-vehicle-id">
+        <div class="mb-3">
+          <strong id="vt-form-plate"></strong> — <span id="vt-form-owner" class="text-muted"></span>
+        </div>
+
+        <div id="vt-form-step-inspector">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Inspecteur (vérification physique et visuelle)</label>
+            <select id="vt-form-inspector" class="form-select">
+              <option value="">-- Sélectionner l'inspecteur --</option>
+            </select>
+          </div>
+          <div class="small text-muted">
+            Imprimez la fiche de vérification pour l'inspecteur, puis continuez pour saisir les résultats du contrôle.
+          </div>
+        </div>
+
+        <div id="vt-form-step-payment" style="display:none;">
+          <div class="text-center py-4">
+            <i class="fas fa-hourglass-half fa-2x text-warning mb-3 d-block"></i>
+            <div class="fw-semibold mb-1">En attente de paiement</div>
+            <div class="text-muted small mb-2">Le paiement doit être effectué via l'application citoyenne ou par un agent mobile money avant de pouvoir saisir le rapport.</div>
+            <div class="h5" id="vt-form-payment-price"></div>
+          </div>
+        </div>
+
+        <div id="vt-form-step-checklist" style="display:none;">
+          <div class="vt-check-grid mb-3">
+            {% for key, label in checklist_items %}
+            <div class="vt-check-item">
+              <label>{{ label }}</label>
+              <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="vt-item-{{ key }}" id="vt-{{ key }}-conforme" value="conforme" autocomplete="off">
+                <label class="btn btn-outline-success btn-sm" for="vt-{{ key }}-conforme">Conforme</label>
+                <input type="radio" class="btn-check" name="vt-item-{{ key }}" id="vt-{{ key }}-non_conforme" value="non_conforme" autocomplete="off">
+                <label class="btn btn-outline-danger btn-sm" for="vt-{{ key }}-non_conforme">Non conforme</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="mb-2">
+            <label class="form-label fw-semibold">Observations</label>
+            <textarea id="vt-form-observations" class="form-control" rows="3"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <div id="vt-form-footer-step-inspector" style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-primary" id="vt-form-print-btn"><i class="fas fa-print me-1"></i>Imprimer la fiche de vérification</button>
+        </div>
+        <div id="vt-form-footer-step-payment" style="display:none; gap:8px;">
+          <button type="button" class="btn btn-primary" id="vt-form-check-payment-btn"><i class="fas fa-rotate me-1"></i>Vérifier le paiement</button>
+        </div>
+        <div id="vt-form-footer-step-checklist" style="display:none; gap:8px;">
+          <button type="button" class="btn btn-outline-secondary" id="vt-form-back-btn"><i class="fas fa-arrow-left me-1"></i>Retour</button>
+          <button type="button" class="btn btn-primary" id="vt-form-submit-btn"><i class="fas fa-paper-plane me-1"></i>Envoyer pour validation</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Inspecteurs management modal (directeur régional) -->
+<div class="modal fade" id="vtInspectorsModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-user-check text-primary me-2"></i>Inspecteurs</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex gap-2 mb-3">
+          <input type="text" id="vt-inspector-name" class="form-control" placeholder="Nom de l'inspecteur">
+          <input type="text" id="vt-inspector-phone" class="form-control" style="max-width:160px;" placeholder="Téléphone (optionnel)">
+          <button type="button" class="btn btn-primary text-nowrap" onclick="vtAddInspector()"><i class="fas fa-plus me-1"></i>Ajouter</button>
+        </div>
+        <div id="vt-inspectors-error" class="text-danger small mb-2"></div>
+        <div id="vt-inspectors-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Printable physical/visual verification sheet (print-in-place, no new tab) -->
+<div id="vt-print-sheet" class="d-none">
+  <h4>Fiche de Vérification Physique et Visuelle</h4>
+  <div class="small text-muted mb-3">Visite Technique</div>
+  <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+    <tr><td style="padding:3px 0;"><strong>Véhicule :</strong></td><td id="vt-print-plate"></td></tr>
+    <tr><td style="padding:3px 0;"><strong>Propriétaire :</strong></td><td id="vt-print-owner"></td></tr>
+    <tr><td style="padding:3px 0;"><strong>Date :</strong></td><td id="vt-print-date"></td></tr>
+    <tr><td style="padding:3px 0;"><strong>Inspecteur :</strong></td><td id="vt-print-inspector"></td></tr>
+  </table>
+  <table style="width:100%; border-collapse:collapse;" border="1" cellpadding="8">
+    <thead><tr><th style="text-align:left;">Point de contrôle</th><th style="width:110px;">Conforme</th><th style="width:130px;">Non conforme</th></tr></thead>
+    <tbody id="vt-print-checklist"></tbody>
+  </table>
+  <div class="mt-3"><strong>Observations :</strong></div>
+  <div style="border-bottom:1px solid #000; height:24px; margin-top:6px;"></div>
+  <div style="border-bottom:1px solid #000; height:24px; margin-top:6px;"></div>
+  <div style="margin-top:60px; display:flex; justify-content:flex-end;">
+    <div style="text-align:center;">
+      <div style="height:60px; width:260px; border-bottom:1px solid #000;"></div>
+      <div class="small mt-1">Signature de l'inspecteur</div>
+    </div>
+  </div>
+</div>
+
+<!-- Reject modal -->
+<div class="modal fade" id="vtRejectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rejeter la visite technique</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label small">Motif du rejet (optionnel)</label>
+        <textarea id="vt-reject-comment" class="form-control" rows="3" placeholder="Ex : véhicule non conforme, rapport incomplet..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger" id="vt-reject-confirm-btn">Rejeter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const VT_IS_REVIEWER = {{ 'true' if is_reviewer else 'false' }};
+const VT_CAN_CREATE = {{ 'true' if can_create else 'false' }};
+const VT_SHOW_SCORE = {{ 'false' if can_create else 'true' }};
+const VT_PRINT_BYPASS = false;
+const VT_CHECKLIST_ITEMS = {{ checklist_items | tojson }};
+let vtCurrentStatus = VT_CAN_CREATE ? 'walkin' : (VT_IS_REVIEWER ? 'pending' : 'appointments');
+let vtRejectingId = null;
+let vtSearchVehicles = {};
+
+function escVt(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+const vtSearchInput = document.getElementById('vt-search');
+if (vtSearchInput) {
+  let vtSearchTimer = null;
+  vtSearchInput.addEventListener('input', function () {
+    clearTimeout(vtSearchTimer);
+    vtSearchTimer = setTimeout(() => { vtLoadAppointments(); }, 300);
+  });
+}
+
+const vtWalkinSearchInput = document.getElementById('vt-walkin-search');
+if (vtWalkinSearchInput) {
+  let vtWalkinSearchTimer = null;
+  vtWalkinSearchInput.addEventListener('input', function () {
+    clearTimeout(vtWalkinSearchTimer);
+    vtWalkinSearchTimer = setTimeout(() => { vtLoadWalkin(); }, 300);
+  });
+}
+
+const vtApprovedSearchInput = document.getElementById('vt-approved-search');
+if (vtApprovedSearchInput) {
+  let vtApprovedSearchTimer = null;
+  vtApprovedSearchInput.addEventListener('input', function () {
+    clearTimeout(vtApprovedSearchTimer);
+    vtApprovedSearchTimer = setTimeout(() => { vtLoad(); }, 300);
+  });
+}
+
+function vtStartVisitFromAppointment(vehicleId, plate, ownerName) {
+  vtSearchVehicles[vehicleId] = { id: vehicleId, license_plate: plate, owner_name: ownerName };
+  vtOpenForm(vehicleId);
+}
+
+function vtOpenForm(vehicleId) {
+  const v = vtSearchVehicles[vehicleId];
+  if (!v) return;
+  document.getElementById('vt-form-vehicle-id').value = vehicleId;
+  document.getElementById('vt-form-plate').textContent = v.license_plate;
+  document.getElementById('vt-form-owner').textContent = v.owner_name || '';
+  document.getElementById('vt-form-observations').value = '';
+  document.getElementById('vt-form-inspector').value = '';
+  document.querySelectorAll('#vtFormModal input[type=radio]').forEach(r => r.checked = false);
+  vtFormShowStep('inspector');
+  new bootstrap.Modal(document.getElementById('vtFormModal')).show();
+
+  vtLoadInspectorsIntoSelect().then(() => vtCheckDraftAndShowStep(vehicleId));
+}
+
+function vtCheckDraftAndShowStep(vehicleId) {
+  fetch(`/api/vehicles/${vehicleId}/technical-inspection-draft`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : null)
+    .then(draft => {
+      if (!draft || !draft.inspector_name) return;
+      document.getElementById('vt-form-inspector').value = draft.inspector_name;
+      if (draft.is_paid) {
+        vtFormShowStep('checklist');
+      } else {
+        document.getElementById('vt-form-payment-price').textContent =
+          draft.price_kmf != null ? Math.round(draft.price_kmf).toLocaleString('fr-FR') + ' KMF' : '';
+        vtFormShowStep('payment');
+      }
+    })
+    .catch(() => {});
+}
+
+function vtFormShowStep(step) {
+  document.getElementById('vt-form-step-inspector').style.display = (step === 'inspector') ? '' : 'none';
+  document.getElementById('vt-form-step-payment').style.display = (step === 'payment') ? '' : 'none';
+  document.getElementById('vt-form-step-checklist').style.display = (step === 'checklist') ? '' : 'none';
+  document.getElementById('vt-form-footer-step-inspector').style.display = (step === 'inspector') ? 'flex' : 'none';
+  document.getElementById('vt-form-footer-step-payment').style.display = (step === 'payment') ? 'flex' : 'none';
+  document.getElementById('vt-form-footer-step-checklist').style.display = (step === 'checklist') ? 'flex' : 'none';
+}
+
+function vtLoadInspectorsIntoSelect() {
+  const select = document.getElementById('vt-form-inspector');
+  select.innerHTML = '<option value="">-- Sélectionner l\'inspecteur --</option>';
+  return fetch('/api/technical-inspection-inspectors', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(inspectors => {
+      (inspectors || []).forEach(insp => {
+        const opt = document.createElement('option');
+        opt.value = insp.name;
+        opt.textContent = insp.name;
+        select.appendChild(opt);
+      });
+    })
+    .catch(() => {});
+}
+
+function vtCollectFormChecklist() {
+  const checklist = {};
+  let missing = false;
+  VT_CHECKLIST_ITEMS.forEach(([key]) => {
+    const checked = document.querySelector(`input[name="vt-item-${key}"]:checked`);
+    if (!checked) { missing = true; return; }
+    checklist[key] = checked.value;
+  });
+  return { checklist, missing };
+}
+
+const vtFormSubmitBtn = document.getElementById('vt-form-submit-btn');
+if (vtFormSubmitBtn) {
+  vtFormSubmitBtn.addEventListener('click', function () {
+    const vehicleId = document.getElementById('vt-form-vehicle-id').value;
+    const { checklist, missing } = vtCollectFormChecklist();
+    if (missing) { alert('Veuillez renseigner tous les points de contrôle.'); return; }
+    const inspectorName = document.getElementById('vt-form-inspector').value;
+    if (!inspectorName) { alert("Veuillez sélectionner l'inspecteur ayant effectué la vérification."); return; }
+    const observations = document.getElementById('vt-form-observations').value.trim();
+    fetch(`/api/vehicles/${vehicleId}/technical-inspections`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checklist, observations, inspector_name: inspectorName }),
+    })
+      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+      .then(() => {
+        bootstrap.Modal.getInstance(document.getElementById('vtFormModal')).hide();
+        if (vtSearchInput) vtSearchInput.value = '';
+        if (vtWalkinSearchInput) vtWalkinSearchInput.value = '';
+        vtSwitchTab('pending', document.querySelector('#vt-tabs .vt-tab[data-status="pending"]'));
+      })
+      .catch(d => alert(d.error || 'Erreur.'));
+  });
+}
+
+const vtFormBackBtn = document.getElementById('vt-form-back-btn');
+if (vtFormBackBtn) {
+  vtFormBackBtn.addEventListener('click', function () {
+    vtFormShowStep('inspector');
+  });
+}
+
+const vtFormCheckPaymentBtn = document.getElementById('vt-form-check-payment-btn');
+if (vtFormCheckPaymentBtn) {
+  vtFormCheckPaymentBtn.addEventListener('click', function () {
+    const vehicleId = document.getElementById('vt-form-vehicle-id').value;
+    vtFormCheckPaymentBtn.disabled = true;
+    fetch(`/api/vehicles/${vehicleId}/technical-inspection-draft`, { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(draft => {
+        vtFormCheckPaymentBtn.disabled = false;
+        if (draft && draft.is_paid) {
+          vtFormShowStep('checklist');
+        } else {
+          alert('Le paiement est toujours en attente.');
+        }
+      })
+      .catch(() => { vtFormCheckPaymentBtn.disabled = false; });
+  });
+}
+
+const vtFormPrintBtn = document.getElementById('vt-form-print-btn');
+if (vtFormPrintBtn) {
+  vtFormPrintBtn.addEventListener('click', function () {
+    const inspectorName = document.getElementById('vt-form-inspector').value;
+    if (!inspectorName) { alert("Veuillez sélectionner l'inspecteur avant impression."); return; }
+
+    document.getElementById('vt-print-plate').textContent = document.getElementById('vt-form-plate').textContent;
+    document.getElementById('vt-print-owner').textContent = document.getElementById('vt-form-owner').textContent;
+    document.getElementById('vt-print-date').textContent = new Date().toLocaleDateString('fr-FR');
+    document.getElementById('vt-print-inspector').textContent = inspectorName;
+    document.getElementById('vt-print-checklist').innerHTML = VT_CHECKLIST_ITEMS.map(([key, label]) => {
+      return `<tr><td>${escVt(label)}</td><td style="text-align:center;">☐</td><td style="text-align:center;">☐</td></tr>`;
+    }).join('');
+
+    window.print();
+
+    const vehicleId = document.getElementById('vt-form-vehicle-id').value;
+    fetch(`/api/vehicles/${vehicleId}/technical-inspection-draft`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inspector_name: inspectorName }),
+    }).catch(() => {});
+
+    bootstrap.Modal.getInstance(document.getElementById('vtFormModal')).hide();
+  });
+}
+
+/* ── Inspecteurs (directeur régional) ── */
+let vtInspectorsModalInstance = null;
+
+function vtOpenInspectorsModal() {
+  document.getElementById('vt-inspector-name').value = '';
+  document.getElementById('vt-inspector-phone').value = '';
+  document.getElementById('vt-inspectors-error').textContent = '';
+  if (!vtInspectorsModalInstance) vtInspectorsModalInstance = new bootstrap.Modal(document.getElementById('vtInspectorsModal'));
+  vtInspectorsModalInstance.show();
+  vtLoadInspectorsList();
+}
+
+function vtLoadInspectorsList() {
+  const list = document.getElementById('vt-inspectors-list');
+  list.innerHTML = '<div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin"></i></div>';
+  fetch('/api/technical-inspection-inspectors?all=1', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(inspectors => {
+      if (!inspectors.length) {
+        list.innerHTML = '<div class="text-center text-muted py-3">Aucun inspecteur enregistré.</div>';
+        return;
+      }
+      list.innerHTML = inspectors.map(i => `
+        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+          <div>
+            <strong>${escVt(i.name)}</strong>${i.phone ? ` — <span class="text-muted small">${escVt(i.phone)}</span>` : ''}
+            ${!i.active ? '<span class="badge bg-secondary ms-2">Inactif</span>' : ''}
+          </div>
+          <button type="button" class="btn btn-sm ${i.active ? 'btn-outline-danger' : 'btn-outline-success'}" onclick="vtToggleInspector(${i.id})">
+            ${i.active ? 'Désactiver' : 'Activer'}
+          </button>
+        </div>`).join('');
+    })
+    .catch(() => { list.innerHTML = '<div class="text-center text-danger py-3">Erreur de chargement.</div>'; });
+}
+
+function vtAddInspector() {
+  const errorEl = document.getElementById('vt-inspectors-error');
+  errorEl.textContent = '';
+  const name = document.getElementById('vt-inspector-name').value.trim();
+  const phone = document.getElementById('vt-inspector-phone').value.trim();
+  if (!name) { errorEl.textContent = 'Le nom est requis.'; return; }
+  fetch('/api/technical-inspection-inspectors', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, phone }),
+  })
+    .then(r => r.json().then(d => ({ ok: r.ok, d })))
+    .then(({ ok, d }) => {
+      if (!ok) { errorEl.textContent = d.error || 'Erreur.'; return; }
+      document.getElementById('vt-inspector-name').value = '';
+      document.getElementById('vt-inspector-phone').value = '';
+      vtLoadInspectorsList();
+    })
+    .catch(() => { errorEl.textContent = 'Erreur réseau.'; });
+}
+
+function vtToggleInspector(id) {
+  fetch(`/api/technical-inspection-inspectors/${id}/toggle`, { method: 'POST', credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(() => vtLoadInspectorsList())
+    .catch(() => alert('Erreur.'));
+}
+
+function vtSwitchTab(status, btn) {
+  vtCurrentStatus = status;
+  document.querySelectorAll('#vt-tabs .vt-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const walkinWrap = document.getElementById('vt-walkin-search-wrap');
+  if (walkinWrap) walkinWrap.style.display = (status === 'walkin') ? '' : 'none';
+  const searchWrap = document.getElementById('vt-appointments-search-wrap');
+  if (searchWrap) searchWrap.style.display = (status === 'appointments') ? '' : 'none';
+  const approvedSearchWrap = document.getElementById('vt-approved-search-wrap');
+  if (approvedSearchWrap) approvedSearchWrap.style.display = (status === 'approved') ? '' : 'none';
+  vtLoad();
+}
+
+function vtBadge(status) {
+  if (status === 'approved') return '<span class="vt-badge vt-badge-approved"><i class="fas fa-check-circle"></i> Validée</span>';
+  if (status === 'rejected') return '<span class="vt-badge vt-badge-rejected"><i class="fas fa-times-circle"></i> Rejetée</span>';
+  return '<span class="vt-badge vt-badge-pending"><i class="fas fa-clock"></i> En attente</span>';
+}
+
+function vtAppointmentBadge(status) {
+  if (status === 'confirmed') return '<span class="vt-badge vt-badge-approved"><i class="fas fa-check-circle"></i> Confirmé</span>';
+  if (status === 'cancelled') return '<span class="vt-badge vt-badge-rejected"><i class="fas fa-times-circle"></i> Annulé</span>';
+  return '<span class="vt-badge vt-badge-pending"><i class="fas fa-clock"></i> En attente</span>';
+}
+
+function vtLoadAppointments() {
+  const list = document.getElementById('vt-list');
+  list.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+  const q = vtSearchInput ? vtSearchInput.value.trim() : '';
+  const url = q ? `/api/technical-inspection-appointments?q=${encodeURIComponent(q)}` : '/api/technical-inspection-appointments';
+  fetch(url, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(items => {
+      if (!items.length) {
+        list.innerHTML = q
+          ? '<div class="text-center text-muted py-5"><i class="fas fa-search fa-2x mb-2 d-block"></i>Aucun véhicule avec un rendez-vous trouvé.</div>'
+          : '<div class="text-center text-muted py-5"><i class="fas fa-calendar-times fa-2x mb-2 d-block"></i>Aucun rendez-vous.</div>';
+        return;
+      }
+      list.innerHTML = items.map(a => {
+        const visitBtn = (VT_CAN_CREATE && a.status === 'confirmed') ? `
+          <button class="btn btn-sm btn-primary mt-2" onclick="vtStartVisitFromAppointment(${a.vehicle_id}, '${escVt(a.license_plate)}', '${escVt(a.owner_name || '')}')">
+            <i class="fas fa-clipboard-check me-1"></i>Faire la visite
+          </button>` : '';
+        return `
+        <div class="vt-card">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+              <div>
+                <strong>${escVt(a.license_plate)}</strong> — ${escVt(a.owner_name)}
+                <span class="text-muted small ms-2">${escVt(a.owner_island || '')}</span>
+              </div>
+              <div class="small text-muted mt-1">
+                Rendez-vous le <strong>${escVt(a.appointment_date_display)}</strong> à <strong>${escVt(a.appointment_time)}</strong>
+              </div>
+              ${a.paid_at ? `<div class="small text-muted mt-1">Payé le ${escVt(a.paid_at)}</div>` : ''}
+            </div>
+            <div class="d-flex flex-column align-items-end">
+              ${vtAppointmentBadge(a.status)}
+              ${visitBtn}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    })
+    .catch(() => {
+      list.innerHTML = '<div class="text-center text-danger py-4">Erreur de chargement.</div>';
+    });
+}
+
+function vtLoadWalkin() {
+  const list = document.getElementById('vt-list');
+  const q = vtWalkinSearchInput ? vtWalkinSearchInput.value.trim() : '';
+  if (!q) {
+    list.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-search fa-2x mb-2 d-block"></i>Recherchez un véhicule par plaque ou propriétaire pour commencer la visite.</div>';
+    return;
+  }
+  list.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Recherche…</div>';
+  fetch(`/api/vehicles/query?q=${encodeURIComponent(q)}`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(vehicles => {
+      if (!vehicles || !vehicles.length) {
+        list.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-search fa-2x mb-2 d-block"></i>Aucun véhicule trouvé.</div>';
+        return;
+      }
+      list.innerHTML = vehicles.map(v => {
+        vtSearchVehicles[v.id] = { id: v.id, license_plate: v.license_plate, owner_name: v.owner_name };
+        return `
+        <div class="vt-card">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <strong>${escVt(v.license_plate)}</strong> — ${escVt(v.owner_name || '')}
+              <span class="text-muted small ms-2">${escVt(v.owner_island || '')}</span>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="vtOpenForm(${v.id})">
+              <i class="fas fa-clipboard-check me-1"></i>Faire la visite
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+    })
+    .catch(() => {
+      list.innerHTML = '<div class="text-center text-danger py-4">Erreur de recherche.</div>';
+    });
+}
+
+function vtLoad() {
+  if (vtCurrentStatus === 'walkin') { vtLoadWalkin(); return; }
+  if (vtCurrentStatus === 'appointments') { vtLoadAppointments(); return; }
+  const list = document.getElementById('vt-list');
+  list.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+  fetch(`/api/technical-inspections?status=${vtCurrentStatus}`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(items => {
+      const approvedQ = (vtCurrentStatus === 'approved' && vtApprovedSearchInput) ? vtApprovedSearchInput.value.trim().toLowerCase() : '';
+      if (approvedQ) {
+        items = items.filter(i =>
+          (i.license_plate || '').toLowerCase().includes(approvedQ) ||
+          (i.owner_name || '').toLowerCase().includes(approvedQ)
+        );
+      }
+      if (!items.length) {
+        list.innerHTML = approvedQ
+          ? '<div class="text-center text-muted py-5"><i class="fas fa-search fa-2x mb-2 d-block"></i>Aucun véhicule validé trouvé.</div>'
+          : '<div class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune visite.</div>';
+        return;
+      }
+      list.innerHTML = items.map(i => {
+        const checklistRows = VT_CHECKLIST_ITEMS.map(([key, label]) => {
+          const ok = i.checklist[key] === 'conforme';
+          return `<span class="badge ${ok ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'} me-1 mb-1">${escVt(label)} : ${ok ? 'Conforme' : 'Non conforme'}</span>`;
+        }).join('');
+
+        const actions = (VT_IS_REVIEWER && i.status === 'pending') ? `
+          <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-sm btn-success" onclick="vtApprove(${i.id})"><i class="fas fa-check me-1"></i>Valider</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="vtOpenReject(${i.id})"><i class="fas fa-times me-1"></i>Rejeter</button>
+          </div>` : '';
+
+        const reviewInfo = i.status !== 'pending' ? `
+          <div class="mt-2 small text-muted">
+            ${i.status === 'approved' ? 'Validée' : 'Rejetée'} par <strong>${escVt(i.reviewed_by)}</strong> le ${escVt(i.reviewed_at)}
+            ${i.review_comment ? `<br>Commentaire : ${escVt(i.review_comment)}` : ''}
+          </div>` : '';
+
+        const canPrint = VT_PRINT_BYPASS || i.smarttech_print_validated;
+        const receiptBtn = i.payment_status === 'paid' ? `
+            <a class="btn btn-sm btn-outline-secondary" href="/dgrtr/visite-technique/${i.id}/receipt">
+              <i class="fas fa-receipt me-1"></i>Imprimer le reçu
+            </a>` : '';
+
+        const rejectionLetter = (i.status === 'rejected') ? `
+          <div class="mt-2 d-flex gap-2 flex-wrap align-items-center">
+            <a class="btn btn-sm btn-outline-danger" href="/dgrtr/visite-technique/${i.id}/rejection-letter">
+              <i class="fas fa-file-lines me-1"></i>Imprimer la lettre de rejet
+            </a>
+            ${receiptBtn}
+          </div>` : '';
+        const attestation = (i.status === 'approved') ? `
+          <div class="mt-2 small">
+            <i class="fas fa-certificate text-success me-1"></i>Attestation valable jusqu'au <strong>${escVt(i.expiry_date_display)}</strong>
+            ${i.is_expired ? '<span class="badge bg-secondary ms-1">Expirée</span>' : ''}
+          </div>
+          <div class="mt-2 d-flex gap-2 flex-wrap align-items-center">
+            ${canPrint ? `
+            <a class="btn btn-sm btn-outline-primary" href="/dgrtr/visite-technique/${i.id}/print">
+              <i class="fas fa-print me-1"></i>Imprimer l'attestation
+            </a>` : i.payment_status !== 'paid' ? `
+            <span class="vt-badge vt-badge-pending"><i class="fas fa-hourglass-half"></i> En attente de paiement</span>` : `
+            <span class="vt-badge vt-badge-pending"><i class="fas fa-hourglass-half"></i> En attente de validation SmartTech</span>`}
+            ${receiptBtn}
+          </div>` : '';
+
+        const scoreBadge = VT_SHOW_SCORE ? `<span class="badge bg-primary-subtle text-primary ms-2">Note : ${i.score}/${i.score_max}</span>` : '';
+
+        return `
+        <div class="vt-card">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+              <strong>${escVt(i.license_plate)}</strong> — ${escVt(i.owner_name)}
+              <span class="text-muted small ms-2">${escVt(i.owner_island || '')}</span>
+              ${scoreBadge}
+            </div>
+            ${vtBadge(i.status)}
+          </div>
+          <div class="small text-muted mt-1">Visite effectuée par <strong>${escVt(i.inspected_by)}</strong> le ${escVt(i.inspected_at)}${i.inspector_name ? ` — Inspecteur : <strong>${escVt(i.inspector_name)}</strong>` : ''}</div>
+          <div class="mt-3">${checklistRows}</div>
+          ${i.observations ? `<div class="mt-2 small"><em>Observations :</em> ${escVt(i.observations)}</div>` : ''}
+          ${reviewInfo}
+          ${rejectionLetter}
+          ${attestation}
+          ${actions}
+        </div>`;
+      }).join('');
+    })
+    .catch(() => {
+      list.innerHTML = '<div class="text-center text-danger py-4">Erreur de chargement.</div>';
+    });
+}
+
+function vtApprove(id) {
+  if (!confirm("Valider cette visite technique ? Une attestation d'un an sera émise.")) return;
+  fetch(`/api/technical-inspections/${id}/approve`, { method: 'POST', credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => vtLoad())
+    .catch(d => alert(d.error || 'Erreur.'));
+}
+
+function vtOpenReject(id) {
+  vtRejectingId = id;
+  document.getElementById('vt-reject-comment').value = '';
+  new bootstrap.Modal(document.getElementById('vtRejectModal')).show();
+}
+
+document.getElementById('vt-reject-confirm-btn').addEventListener('click', function () {
+  if (!vtRejectingId) return;
+  const comment = document.getElementById('vt-reject-comment').value.trim();
+  fetch(`/api/technical-inspections/${vtRejectingId}/reject`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => {
+      bootstrap.Modal.getInstance(document.getElementById('vtRejectModal')).hide();
+      vtRejectingId = null;
+      vtLoad();
+    })
+    .catch(d => alert(d.error || 'Erreur.'));
+});
+
+vtLoad();
+</script>
+{% endblock %}

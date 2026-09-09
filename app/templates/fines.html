@@ -22,7 +22,7 @@
       </div>
     </div>
     <div class="col-12 col-md-6 text-end">
-      {% if current_user.is_authenticated and (current_user.is_admin or (current_user.role == 'judiciaire')) %}
+      {% if current_user.is_authenticated and (current_user.is_admin or current_user.role in ('judiciaire', 'policier')) %}
       <button class="btn btn-outline-primary me-3" type="button" data-bs-toggle="modal" data-bs-target="#fine-types-modal">
         <i class="fas fa-cog me-1"></i> Paramètres Amendes
       </button>

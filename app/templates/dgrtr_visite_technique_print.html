@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Attestation de visite technique — {{ vehicle.license_plate }}</title>
+<style>
+html { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f0f0f0;
+  font-family: Arial, Helvetica, sans-serif;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px; color: #111;
+}
+
+.toolbar { display: flex; gap: 10px; margin-bottom: 16px; }
+.btn { padding: 8px 22px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-print { background: #1a56db; color: #fff; }
+.btn-print:hover { background: #1240a0; }
+.btn-back { background: #fff; color: #374151; border: 1px solid #d1d5db; text-decoration: none; display: inline-flex; align-items: center; }
+.btn-back:hover { background: #f9fafb; }
+
+@media print {
+  body { background: #fff; padding: 0; }
+  .toolbar { display: none; }
+  .card { box-shadow: none; border-color: #000; }
+  @page { size: A5 landscape; margin: 8mm; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <a href="javascript:history.back()" class="btn btn-back">&#8592; Retour</a>
+  <button class="btn btn-print" onclick="window.print()">&#128424; Imprimer</button>
+</div>
+
+{% include '_visite_technique_card.html' %}
+
+</body>
+</html>

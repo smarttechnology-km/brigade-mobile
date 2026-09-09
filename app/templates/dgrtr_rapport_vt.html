@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Rapport Cartes Grises{% endblock %}
+{% block title %}Rapport Visite Technique{% endblock %}
 {% block content %}
 
 <style>
@@ -23,10 +23,10 @@
   <!-- Header -->
   <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
-      <h2 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Rapport — Cartes Grises</h2>
+      <h2 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Rapport — Visite Technique</h2>
       <small class="text-muted" id="island-label">Évolution mensuelle et statistiques</small>
     </div>
-    <a href="/dgrtr/cartes-grises" class="btn btn-outline-secondary btn-sm">
+    <a href="/dgrtr/recettes" class="btn btn-outline-secondary btn-sm">
       <i class="fas fa-arrow-left me-2"></i>Retour
     </a>
   </div>
@@ -35,16 +35,16 @@
   <div class="row g-3 mb-4" id="summary-row">
     <div class="col-6 col-lg-3">
       <div class="stat-card" style="border-top:4px solid #6366f1;">
-        <div class="stat-lbl">Total émises</div>
+        <div class="stat-lbl">Total rendez-vous</div>
         <div class="stat-num" id="s-total">—</div>
         <div class="stat-sub">Depuis le début</div>
       </div>
     </div>
     <div class="col-6 col-lg-3">
       <div class="stat-card" style="border-top:4px solid #10b981;">
-        <div class="stat-lbl">Signées (total)</div>
-        <div class="stat-num" id="s-signed">—</div>
-        <div class="stat-sub" id="s-signed-pct">—</div>
+        <div class="stat-lbl">Payés (total)</div>
+        <div class="stat-num" id="s-payees">—</div>
+        <div class="stat-sub" id="s-payees-pct">—</div>
       </div>
     </div>
     <div class="col-6 col-lg-3">
@@ -56,9 +56,9 @@
     </div>
     <div class="col-6 col-lg-3">
       <div class="stat-card" style="border-top:4px solid #f59e0b;">
-        <div class="stat-lbl">En attente</div>
+        <div class="stat-lbl">En attente de paiement</div>
         <div class="stat-num" id="s-pending">—</div>
-        <div class="stat-sub">À signer</div>
+        <div class="stat-sub">À régler</div>
       </div>
     </div>
   </div>
@@ -81,7 +81,7 @@
   <div class="row g-3 mb-4">
     <div class="col-md-5">
       <div class="chart-card h-100">
-        <div class="chart-ttl">Répartition par type de véhicule</div>
+        <div class="chart-ttl">Répartition par canal de paiement</div>
         <div style="position:relative;height:230px;">
           <canvas id="type-chart"></canvas>
         </div>
@@ -89,7 +89,7 @@
     </div>
     <div class="col-md-7">
       <div class="chart-card h-100">
-        <div class="chart-ttl">Créées vs Signées par mois</div>
+        <div class="chart-ttl">Créés vs Payés par mois</div>
         <div style="position:relative;height:230px;">
           <canvas id="compare-chart"></canvas>
         </div>
@@ -105,10 +105,10 @@
         <thead>
           <tr>
             <th>Mois</th>
-            <th class="text-center">Créées</th>
-            <th class="text-center">Signées</th>
+            <th class="text-center">Créés</th>
+            <th class="text-center">Payés</th>
             <th class="text-center">Taux</th>
-            <th>Évolution signées</th>
+            <th>Évolution payés</th>
           </tr>
         </thead>
         <tbody id="month-tbody">
@@ -153,18 +153,18 @@ function setPeriod(n) {
 function renderSummary(d) {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerHTML = v; };
   set('s-total',   d.totals.total);
-  set('s-signed',  d.totals.signee);
-  const pct = d.totals.total > 0 ? Math.round(d.totals.signee / d.totals.total * 100) : 0;
-  set('s-signed-pct', `${pct}% du total`);
-  set('s-this-month', d.this_month.signees ?? 0);
-  set('s-this-month-trend', trend(d.this_month.signees ?? 0, d.last_month.signees ?? 0) + ' vs mois dernier');
+  set('s-payees',  d.totals.payees);
+  const pct = d.totals.total > 0 ? Math.round(d.totals.payees / d.totals.total * 100) : 0;
+  set('s-payees-pct', `${pct}% du total`);
+  set('s-this-month', d.this_month.payees ?? 0);
+  set('s-this-month-trend', trend(d.this_month.payees ?? 0, d.last_month.payees ?? 0) + ' vs mois dernier');
   set('s-pending',  d.totals.en_attente);
 }
 
 function renderMainChart(d) {
   const slice  = d.monthly.slice(-_period);
   const labels = slice.map(m => fmtLabel(m.key));
-  const vals   = slice.map(m => m.signees);
+  const vals   = slice.map(m => m.payees);
 
   const ctx = document.getElementById('main-chart').getContext('2d');
   if (_mainChart) _mainChart.destroy();
@@ -173,7 +173,7 @@ function renderMainChart(d) {
     data: {
       labels,
       datasets: [{
-        label: 'Cartes signées',
+        label: 'Visites payées',
         data: vals,
         backgroundColor: 'rgba(16,185,129,0.75)',
         borderColor: '#10b981',
@@ -193,10 +193,10 @@ function renderMainChart(d) {
 }
 
 function renderTypeChart(d) {
-  if (!d.vehicle_types.length) return;
-  const COLORS = ['#6366f1','#10b981','#f59e0b','#3b82f6','#ef4444','#8b5cf6','#14b8a6','#f97316'];
-  const labels = d.vehicle_types.map(x => x.type);
-  const vals   = d.vehicle_types.map(x => x.count);
+  if (!d.channels.length) return;
+  const COLORS = ['#0ea5e9','#a855f7','#f59e0b','#10b981'];
+  const labels = d.channels.map(x => x.type);
+  const vals   = d.channels.map(x => x.count);
   const ctx = document.getElementById('type-chart').getContext('2d');
   new Chart(ctx, {
     type: 'doughnut',
@@ -223,14 +223,14 @@ function renderCompareChart(d) {
       labels,
       datasets: [
         {
-          label: 'Créées',
+          label: 'Créés',
           data: slice.map(m => m.crees),
           borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)',
           fill: true, tension: 0.3, pointRadius: 3,
         },
         {
-          label: 'Signées',
-          data: slice.map(m => m.signees),
+          label: 'Payés',
+          data: slice.map(m => m.payees),
           borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)',
           fill: true, tension: 0.3, pointRadius: 3,
         }
@@ -250,29 +250,29 @@ function renderCompareChart(d) {
 function renderTable(d) {
   const rows = d.monthly.slice().reverse();
   const tbody = document.getElementById('month-tbody');
-  if (!rows.some(m => m.crees > 0 || m.signees > 0)) {
+  if (!rows.some(m => m.crees > 0 || m.payees > 0)) {
     tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Aucune donnée disponible</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((m, i) => {
     const prev  = rows[i + 1];
-    const taux  = m.crees > 0 ? Math.round(m.signees / m.crees * 100) : '—';
+    const taux  = m.crees > 0 ? Math.round(m.payees / m.crees * 100) : '—';
     const tauxBadge = taux !== '—'
       ? `<span class="badge" style="background:${taux >= 80 ? '#dcfce7;color:#15803d' : taux >= 50 ? '#fef3c7;color:#92400e' : '#fee2e2;color:#991b1b'}">${taux}%</span>`
       : '<span class="text-muted">—</span>';
-    if (m.crees === 0 && m.signees === 0) return '';
+    if (m.crees === 0 && m.payees === 0) return '';
     return `<tr>
       <td class="fw-semibold">${fmtLabel(m.key)}</td>
       <td class="text-center">${m.crees}</td>
-      <td class="text-center fw-bold" style="color:#10b981;">${m.signees}</td>
+      <td class="text-center fw-bold" style="color:#10b981;">${m.payees}</td>
       <td class="text-center">${tauxBadge}</td>
-      <td>${trend(m.signees, prev ? prev.signees : 0)}</td>
+      <td>${trend(m.payees, prev ? prev.payees : 0)}</td>
     </tr>`;
   }).join('');
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  fetch('/api/dgrtr/rapport-cg')
+  fetch('/api/dgrtr/rapport-vt')
     .then(r => r.json())
     .then(data => {
       _data = data;

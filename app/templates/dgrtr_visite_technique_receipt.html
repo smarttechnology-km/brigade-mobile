@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Reçu de paiement — Visite technique — {{ vehicle.license_plate }}</title>
+<style>
+html { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f0f0f0;
+  font-family: Arial, Helvetica, sans-serif;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px; color: #111;
+}
+
+.toolbar { display: flex; gap: 10px; margin-bottom: 16px; }
+.btn { padding: 8px 22px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-print { background: #1a56db; color: #fff; }
+.btn-print:hover { background: #1240a0; }
+.btn-back { background: #fff; color: #374151; border: 1px solid #d1d5db; text-decoration: none; display: inline-flex; align-items: center; }
+.btn-back:hover { background: #f9fafb; }
+
+.rc-card {
+  width: 190mm;
+  min-height: 140mm;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1.5px solid #111;
+  border-radius: 5px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+  color: #111;
+}
+
+.rc-header {
+  background: #fff;
+  color: #111;
+  border-bottom: 2px solid #111;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 22px;
+}
+.rc-header-left { display: flex; align-items: center; gap: 12px; }
+.rc-header-left img { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; }
+.rc-org-name { font-size: 12px; font-weight: 800; letter-spacing: .02em; line-height: 1.3; }
+.rc-org-sub  { font-size: 8.5px; color: #444; margin-top: 3px; }
+.rc-header-right { text-align: right; }
+.rc-doc-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+.rc-doc-num   { font-size: 9px; color: #444; margin-top: 3px; }
+.rc-status-pill { display: inline-block; margin-top: 6px; font-size: 9px; font-weight: 800; padding: 2px 10px; border: 1.5px solid #111; text-transform: uppercase; letter-spacing: .03em; }
+
+.rc-amount { text-align: center; padding: 20px 22px; border-bottom: 1px solid #ccc; }
+.rc-amount-label { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #444; margin-bottom: 4px; }
+.rc-amount-value { font-size: 30px; font-weight: 800; color: #111; }
+
+.rc-body { padding: 18px 22px; font-size: 11px; border-bottom: 1px solid #ccc; }
+.rc-body b { color: #111; }
+.rc-cols { display: flex; gap: 28px; }
+.rc-col { flex: 1; line-height: 1.95; }
+.rc-col h6 { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: #111; font-weight: 800; margin-bottom: 6px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+
+.rc-footer { display: flex; align-items: flex-end; justify-content: space-between; padding: 18px 22px; margin-top: auto; border-top: 1px solid #ccc; }
+.rc-footer-left { font-size: 9.5px; color: #555; }
+.rc-sig { text-align: center; }
+.rc-sig .sig-title { font-size: 8px; color: #888; text-align: center; text-transform: uppercase; margin-bottom: 6px; }
+.rc-sig .sig-line { height: 40px; width: 150px; border-bottom: 1px solid #999; margin: 0 auto 4px; }
+.rc-sig .sig-name { font-size: 10px; font-weight: 700; }
+.rc-serial { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 800; color: #111; }
+
+.rc-notice { margin: 0 22px 14px; padding: 10px 14px; border: 1.5px solid #111; border-radius: 6px; font-size: 10px; line-height: 1.6; }
+
+.rc-legal { font-size: 8px; color: #888; font-style: italic; padding: 0 22px 10px; border-top: 1px solid #eee; padding-top: 6px; margin-top: 4px; }
+
+@media print {
+  body { background: #fff; padding: 0; }
+  .toolbar { display: none; }
+  .rc-card { box-shadow: none; border-color: #000; }
+  @page { size: A4; margin: 10mm; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <a href="javascript:history.back()" class="btn btn-back">&#8592; Retour</a>
+  <button class="btn btn-print" onclick="window.print()">&#128424; Imprimer</button>
+</div>
+
+<div class="rc-card">
+
+  <div class="rc-header">
+    <div class="rc-header-left">
+      <img src="/static/img/logo_comores.png" alt="Union des Comores">
+      <div>
+        <div class="rc-org-name">DIRECTION GENERALE DES ROUTES<br>ET DES TRANSPORTS ROUTIERS</div>
+        <div class="rc-org-sub">Union des Comores — Unité, Solidarité, Développement</div>
+      </div>
+    </div>
+    <div class="rc-header-right">
+      <div class="rc-doc-title">Reçu de Paiement</div>
+      <div class="rc-doc-num">N° VT-{{ '%05d' | format(insp.id) }}</div>
+      <span class="rc-status-pill">{{ 'Payé — Visite rejetée' if insp.status == 'rejected' else 'Payé' }}</span>
+    </div>
+  </div>
+
+  <div class="rc-amount">
+    <div class="rc-amount-label">Montant payé</div>
+    <div class="rc-amount-value">{{ ('%.0f'|format(insp.price_kmf|float)) if insp.price_kmf is not none else '—' }} KMF</div>
+  </div>
+
+  <div class="rc-body">
+    <div class="rc-cols">
+      <div class="rc-col">
+        <h6>Véhicule / Propriétaire</h6>
+        <div><b>Immatriculation :</b> {{ vehicle.license_plate if vehicle else '—' }}</div>
+        <div><b>Propriétaire :</b> {{ vehicle.owner_name if vehicle else '—' }}</div>
+        <div><b>Île :</b> {{ vehicle.owner_island if vehicle and vehicle.owner_island else '—' }}</div>
+      </div>
+      <div class="rc-col">
+        <h6>Détails du paiement</h6>
+        <div><b>Payé par :</b> {{ insp.paid_by or '—' }}</div>
+        <div><b>Mode :</b>
+          {% if insp.payment_channel == 'app_citoyen' %}App Citoyen (Huri Money)
+          {% elif insp.payment_channel == 'agent_huri_money' %}Agent Mobile Money
+          {% else %}{{ insp.payment_channel or '—' }}{% endif %}
+        </div>
+        <div><b>Payé le :</b> {{ insp.paid_at.strftime('%d/%m/%Y %H:%M') if insp.paid_at else '—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% if insp.status == 'rejected' and free_revisit_deadline %}
+  <div class="rc-notice">
+    Cette visite a été <b>rejetée</b>. Ce paiement reste valable pour une nouvelle visite technique
+    <b>gratuite</b> jusqu'au <b>{{ free_revisit_deadline.strftime('%d/%m/%Y') }}</b>. Passé ce délai, un
+    nouveau paiement sera requis.
+  </div>
+  {% endif %}
+
+  <div class="rc-footer">
+    <div class="rc-footer-left">
+      Visite effectuée le<br><strong>{{ insp.inspected_at.strftime('%d/%m/%Y %H:%M') if insp.inspected_at else '—' }}</strong>
+    </div>
+    <div class="rc-sig">
+      <div class="sig-title">Signature de l'agent</div>
+      <div class="sig-line"></div>
+      <div class="sig-name">{{ current_user.username }}</div>
+    </div>
+    <div class="rc-serial">{{ '%05d' | format(vehicle.id) }}</div>
+  </div>
+
+  <div class="rc-legal">Ce reçu atteste du paiement de la visite technique décrite ci-dessus. L'attestation officielle sera délivrée une fois la validation SmartTech effectuée.</div>
+
+</div>
+
+</body>
+</html>

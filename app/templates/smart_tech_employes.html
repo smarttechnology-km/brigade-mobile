@@ -189,11 +189,17 @@
 {% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
+            <span class="nav-badge" id="nav-gv-badge" style="{{ '' if gv_pending_count > 0 else 'display:none;' }}">{{ gv_pending_count }}</span>
         </a>
         {% endif %}
 {% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
+        </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-clipboard-check"></i></span>Visite Technique
         </a>
         {% endif %}
 {% if current_user.role in ['admin', 'employe'] %}
