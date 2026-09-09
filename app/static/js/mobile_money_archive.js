@@ -1,4 +1,4 @@
-let archiveDataCache = { direct_paid_fines: [], vignette_archive: [], cg_archive: [], totals: {} };
+let archiveDataCache = { direct_paid_fines: [], vignette_archive: [], cg_archive: [], vt_archive: [], totals: {} };
 
 function applyPeriod(period) {
     const startInput = document.getElementById('archive-start-date');
@@ -81,9 +81,11 @@ function loadArchiveData() {
     const fineBody = document.getElementById('archive-fines-tbody');
     const vignetteBody = document.getElementById('archive-vignettes-tbody');
     const cgBody = document.getElementById('archive-cg-tbody');
+    const vtBody = document.getElementById('archive-vt-tbody');
     if (fineBody) fineBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>';
     if (vignetteBody) vignetteBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>';
     if (cgBody) cgBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>';
+    if (vtBody) vtBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>';
 
     fetch(url, { credentials: 'same-origin' })
         .then(function (r) {
@@ -91,7 +93,7 @@ function loadArchiveData() {
             return r.json();
         })
         .then(function (data) {
-            archiveDataCache = data || { direct_paid_fines: [], vignette_archive: [], cg_archive: [], totals: {} };
+            archiveDataCache = data || { direct_paid_fines: [], vignette_archive: [], cg_archive: [], vt_archive: [], totals: {} };
             renderArchiveTables();
             updateSummaryCards();
         })
@@ -100,6 +102,7 @@ function loadArchiveData() {
             if (fineBody) fineBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
             if (vignetteBody) vignetteBody.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
             if (cgBody) cgBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
+            if (vtBody) vtBody.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">Erreur lors du chargement</td></tr>';
         });
 }
 
@@ -108,6 +111,7 @@ function renderArchiveTables() {
     const fineBody = document.getElementById('archive-fines-tbody');
     const vignetteBody = document.getElementById('archive-vignettes-tbody');
     const cgBody = document.getElementById('archive-cg-tbody');
+    const vtBody = document.getElementById('archive-vt-tbody');
 
     const fines = (archiveDataCache.direct_paid_fines || []).filter(function (item) {
         if (!search) return true;
@@ -124,6 +128,12 @@ function renderArchiveTables() {
     const cgs = (archiveDataCache.cg_archive || []).filter(function (item) {
         if (!search) return true;
         return [item.license_plate, item.owner_name, item.owner_island]
+            .some(function (field) { return String(field || '').toLowerCase().includes(search); });
+    });
+
+    const vts = (archiveDataCache.vt_archive || []).filter(function (item) {
+        if (!search) return true;
+        return [item.license_plate, item.owner_name, item.owner_island, item.paid_by]
             .some(function (field) { return String(field || '').toLowerCase().includes(search); });
     });
 
@@ -186,6 +196,29 @@ function renderArchiveTables() {
             }).join('');
         }
     }
+
+    if (vtBody) {
+        if (!vts.length) {
+            vtBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Aucune visite technique payée trouvée</td></tr>';
+        } else {
+            vtBody.innerHTML = vts.map(function (item, idx) {
+                var channelBadge = item.channel === 'app_citoyen'
+                    ? '<span class="badge bg-primary-subtle text-primary">App Citoyen</span>'
+                    : '<span class="badge bg-secondary-subtle text-secondary">Agent Huri Money</span>';
+                return '<tr>' +
+                    '<td>' + (idx + 1) + '</td>' +
+                    '<td><strong>' + escapeHtml(item.license_plate || '-') + '</strong></td>' +
+                    '<td>' + escapeHtml(item.owner_name || '-') + '</td>' +
+                    '<td>' + escapeHtml(item.owner_island || '-') + '</td>' +
+                    '<td>' + escapeHtml(item.appointment_date || '-') + '</td>' +
+                    '<td>' + escapeHtml(item.appointment_time || '-') + '</td>' +
+                    '<td class="text-end fw-semibold text-info">' + formatKMF(item.amount) + '</td>' +
+                    '<td>' + channelBadge + '</td>' +
+                    '<td>' + escapeHtml(item.paid_by || '-') + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+    }
 }
 
 function updateSummaryCards() {
@@ -198,6 +231,8 @@ function updateSummaryCards() {
     document.getElementById('archive-cg-total').textContent = formatKMF(totals.cg_total);
     document.getElementById('archive-penalty-total').textContent = formatKMF(totals.vignette_penalties_total);
     document.getElementById('archive-included-fines-total').textContent = formatKMF(totals.vignette_included_fines_total);
+    document.getElementById('archive-vt-count').textContent = totals.vt_count || 0;
+    document.getElementById('archive-vt-total').textContent = formatKMF(totals.vt_total);
 }
 
 function formatKMF(amount) {

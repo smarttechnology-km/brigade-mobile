@@ -789,6 +789,7 @@ function _setSaveBlocked(blocked) {
 }
 
 function _applyVehicleToggleMode(isNouveau) {
+    const cgSection        = document.getElementById('cg-extra-section');
     const cgPendingBadge   = document.getElementById('cg-pending-badge');
     const cgPendingAlert   = document.getElementById('cg-pending-alert');
     const fieldVignette    = document.getElementById('field-vignette-expiry');
@@ -800,6 +801,10 @@ function _applyVehicleToggleMode(isNouveau) {
     const plateInput       = document.getElementById('license_plate');
     const label            = document.getElementById('toggle-nouveau-label');
     const desc             = document.getElementById('toggle-nouveau-desc');
+
+    // A vehicle already existing (with its own carte grise) doesn't need the
+    // provisional-carte-grise questionnaire at all.
+    if (cgSection) cgSection.classList.toggle('d-none', !isNouveau);
 
     if (isNouveau) {
         if (cgPendingBadge) cgPendingBadge.style.display = '';

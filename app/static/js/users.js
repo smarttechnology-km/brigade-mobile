@@ -89,6 +89,9 @@ function updateCountryRegionVisibility(){
     const countrySection = document.getElementById('country-section');
     const regionSection = document.getElementById('region-section');
     const dgrtrTypeSection = document.getElementById('dgrtr-type-section');
+    const webAccessSection = document.getElementById('web-access-section');
+
+    if(webAccessSection) webAccessSection.style.display = (role === 'policier') ? '' : 'none';
 
     if(role === 'administrateur'){
         countrySection.style.display = 'none';
@@ -273,6 +276,7 @@ function openNewUserModal(){
     document.getElementById('u-password-confirm').value='';
     document.getElementById('u-role').value='policier';
     document.getElementById('u-active').checked = true;
+    document.getElementById('u-web-access').checked = true;
     document.getElementById('user-error').textContent='';
     updateCountryRegionVisibility(); // Update visibility based on role
     updateRegions(); // Update region options
@@ -306,6 +310,7 @@ function openEditUser(id){
     document.getElementById('u-password-confirm').value = '';
     document.getElementById('u-role').value = u.role || 'policier';
     document.getElementById('u-active').checked = !!u.is_active;
+    document.getElementById('u-web-access').checked = u.web_access_enabled !== false;
     document.getElementById('user-error').textContent='';
     updateCountryRegionVisibility();
     if(u.role === 'dgrtr'){
@@ -414,6 +419,9 @@ function saveUser(){
         if(role === 'policier' || role === 'agent_impot'){
             payload.country = country;
             payload.region = region;
+            if(role === 'policier'){
+                payload.web_access_enabled = !!document.getElementById('u-web-access').checked;
+            }
         } else if(role === 'judiciaire'){
             payload.country = country;
             payload.region = '';
