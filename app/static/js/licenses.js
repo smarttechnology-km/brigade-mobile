@@ -166,9 +166,9 @@
                 if (d.key !== _lastKey) { _lastKey = d.key; loadLicenses(false); loadStats(); loadTabCounts(); }
             }).catch(() => {});
     }
-    setInterval(checkUpdates, 5000);
-    setInterval(loadStats, 30000);
-    setInterval(loadTabCounts, 15000);
+    setInterval(checkUpdates, 20000);
+    setInterval(loadStats, 90000);
+    setInterval(loadTabCounts, 60000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdates(); });
 
     /* ── Filters ── */
@@ -1573,6 +1573,7 @@
 
     /* ── Stats ── */
     function loadTabCounts() {
+        if (document.hidden) return;
         const q      = encodeURIComponent(searchInput.value.trim());
         const status = encodeURIComponent(statusFilter.value);
         const type   = encodeURIComponent(typeFilter.value);
@@ -1590,6 +1591,7 @@
     }
 
     function loadStats() {
+        if (document.hidden) return;
         fetch('/api/licenses/stats', { credentials: 'same-origin' })
             .then(r => {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
