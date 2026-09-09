@@ -183,11 +183,12 @@ def send_expiry_notifications():
     app = get_app()
     with app.app_context():
         try:
-            from app.models import VehicleOwner
+            from app.models import VehicleOwner, TechnicalInspection
             from app.push_notifications import (
                 send_vignette_expiry_notification,
                 send_vignette_renewal_notification,
                 send_insurance_expiry_notification,
+                send_technical_inspection_expiry_notification,
             )
             from app.timezone_utils import ensure_comoros
 
@@ -219,6 +220,15 @@ def send_expiry_notifications():
 
             VIGNETTE_THRESHOLDS = {30, 7, 1, 0}
             INSURANCE_THRESHOLDS = {30, 7, 1, 0}
+            TECHNICAL_INSPECTION_THRESHOLDS = {30, 7, 1}
+
+            # Latest approved technical inspection per vehicle, batched to avoid N+1
+            latest_vt_by_vehicle = {}
+            for insp in (TechnicalInspection.query
+                         .filter(TechnicalInspection.vehicle_id.in_(vehicle_ids), TechnicalInspection.status == 'approved')
+                         .order_by(TechnicalInspection.issued_at.desc())
+                         .all()):
+                latest_vt_by_vehicle.setdefault(insp.vehicle_id, insp)
 
             notified = 0
             for vehicle in vehicles:
@@ -255,12 +265,73 @@ def send_expiry_notifications():
                     except Exception as e:
                         logger.warning(f"Insurance expiry notif failed for {vehicle.license_plate}: {e}")
 
+                # --- Technical inspection notifications ---
+                latest_vt = latest_vt_by_vehicle.get(vehicle.id)
+                if latest_vt and latest_vt.expiry_date:
+                    try:
+                        days_until = (latest_vt.expiry_date - today).days
+                        if days_until in TECHNICAL_INSPECTION_THRESHOLDS:
+                            send_technical_inspection_expiry_notification(vehicle, days_until)
+                            notified += 1
+                            logger.info(f"Technical inspection expiry notif → {vehicle.license_plate} (days={days_until})")
+                    except Exception as e:
+                        logger.warning(f"Technical inspection expiry notif failed for {vehicle.license_plate}: {e}")
+
             logger.info(f"Expiry notifications job complete — {notified} notification(s) sent")
 
         except Exception as e:
             logger.error(f"Error in send_expiry_notifications: {e}")
             import traceback
             traceback.print_exc()
+
+
+def send_technical_inspection_appointment_reminders():
+    """
+    Runs every 10 minutes. Sends a push notification to the owner of any vehicle
+    with a confirmed technical-inspection appointment starting within the next 2
+    hours, exactly once per appointment (tracked via reminder_sent).
+    """
+    app = get_app()
+    with app.app_context():
+        try:
+            from datetime import datetime, time as dtime
+            from app.models import TechnicalInspectionAppointment
+            from app.push_notifications import send_technical_inspection_appointment_reminder
+            from app.timezone_utils import COMOROS_TZ
+
+            now = now_comoros()
+            window_end = now + timedelta(hours=2)
+
+            candidates = TechnicalInspectionAppointment.query.filter(
+                TechnicalInspectionAppointment.status == 'confirmed',
+                TechnicalInspectionAppointment.reminder_sent == False,
+                TechnicalInspectionAppointment.appointment_date >= now.date(),
+                TechnicalInspectionAppointment.appointment_date <= window_end.date(),
+            ).all()
+
+            sent_count = 0
+            for appt in candidates:
+                try:
+                    hh, mm = map(int, appt.appointment_time.split(':'))
+                except (ValueError, AttributeError, TypeError):
+                    continue
+                appt_dt = datetime.combine(appt.appointment_date, dtime(hh, mm), tzinfo=COMOROS_TZ)
+                if not (now < appt_dt <= window_end):
+                    continue
+                if not appt.vehicle:
+                    continue
+                result = send_technical_inspection_appointment_reminder(appt.vehicle, appt.appointment_time)
+                if result.get('success'):
+                    appt.reminder_sent = True
+                    sent_count += 1
+
+            if sent_count:
+                db.session.commit()
+                logger.info(f"Sent {sent_count} technical inspection appointment reminder(s)")
+
+        except Exception as e:
+            logger.error(f"Error in send_technical_inspection_appointment_reminders: {e}")
+            db.session.rollback()
 
 
 def apply_fine_late_rates():

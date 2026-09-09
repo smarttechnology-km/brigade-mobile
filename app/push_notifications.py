@@ -88,6 +88,23 @@ def send_insurance_expiry_notification(vehicle, days_until):
     })
 
 
+def send_technical_inspection_expiry_notification(vehicle, days_until):
+    """Notify owner that their technical-inspection attestation is expiring."""
+    plate = vehicle.license_plate
+    if days_until == 0:
+        title = '🚨 Visite technique expire aujourd\'hui'
+        body = f"L'attestation de visite technique de votre véhicule {plate} expire aujourd'hui. Prenez rendez-vous pour une nouvelle visite."
+    else:
+        title = f'⚠️ Visite technique expire dans {days_until} jour{"s" if days_until > 1 else ""}'
+        body = f"L'attestation de visite technique de votre véhicule {plate} expire dans {days_until} jour{'s' if days_until > 1 else ''}. Pensez à la renouveler."
+    return _send_to_vehicle(vehicle, title, body, {
+        'type': 'technical_inspection_expiry_soon',
+        'vehicle_id': vehicle.id,
+        'license_plate': plate,
+        'days_until': days_until,
+    })
+
+
 def send_alert_broadcast_notification(alert):
     """Notify every citizen app user that a new public alert was published.
 
@@ -258,6 +275,28 @@ def send_fine_push_notification(vehicle, fine):
         return {'success': False, 'message': str(error)}
 
 
+def send_warning_notification(vehicle, warning):
+    """Notify the vehicle owner that an officer issued a warning (element found
+    non-compliant after the technical inspection)."""
+    try:
+        title = '⚠️ Avertissement véhicule'
+        body = f"Un agent a signalé un problème sur votre véhicule {vehicle.license_plate} : {warning.get('item_label')}."
+        if warning.get('description'):
+            body += f" {warning['description']}"
+        success = _send_to_vehicle(vehicle, title, body, {
+            'type': 'vehicle_warning',
+            'warning_id': warning.get('id'),
+            'vehicle_id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'item_key': warning.get('item_key'),
+            'item_label': warning.get('item_label'),
+        })
+        return {'success': success}
+    except Exception as error:
+        print(f"❌ Exception in send_warning_notification: {error}")
+        return {'success': False, 'message': str(error)}
+
+
 def send_point_reduction_notification(license, points_deducted, points_after, reason_label):
     """Notify the citizen who registered this license that points were deducted."""
     try:
@@ -282,6 +321,18 @@ def send_point_reduction_notification(license, points_deducted, points_after, re
     except Exception as error:
         print(f"❌ Exception in send_point_reduction_notification: {error}")
         return {'success': False, 'message': str(error)}
+
+
+def send_technical_inspection_appointment_reminder(vehicle, appointment_time_display):
+    """Notify the owner 2 hours before their booked technical-inspection appointment."""
+    plate = vehicle.license_plate
+    title = '⏰ Rappel visite technique'
+    body = f"Votre rendez-vous de visite technique pour {plate} est à {appointment_time_display} (dans 2 heures)."
+    return _send_to_vehicle(vehicle, title, body, {
+        'type': 'technical_inspection_appointment_reminder',
+        'vehicle_id': vehicle.id,
+        'license_plate': plate,
+    })
 
 
 def send_point_reset_notification(license, points_after):

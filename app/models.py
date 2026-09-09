@@ -32,6 +32,9 @@ class User(UserMixin, db.Model):
     region = db.Column(db.String(100), nullable=True)  # Region based on country
     dgrtr_type = db.Column(db.String(30), nullable=True)  # 'employe' | 'directeur_technique' | 'directeur_general'
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # Policier accounts only: when False, blocks login on the web dashboard while
+    # leaving mobile app login (a separate JWT flow) untouched.
+    web_access_enabled = db.Column(db.Boolean, nullable=False, default=True)
     session_version = db.Column(db.Integer, nullable=False, default=0)  # Incremented on each login to invalidate old tokens
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
@@ -310,6 +313,327 @@ class VehicleEditRequest(db.Model):
             'reviewed_by': self.reviewed_by,
             'reviewed_at': self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else None,
             'review_comment': self.review_comment,
+        }
+
+
+TECHNICAL_INSPECTION_ITEMS = [
+    ('freins', 'Freins'),
+    ('pneus', 'Pneus'),
+    ('eclairage', 'Éclairage / Signalisation'),
+    ('direction', 'Direction'),
+    ('suspension', 'Suspension'),
+    ('carrosserie', 'Carrosserie / Châssis'),
+    ('pollution', 'Pollution / Émissions'),
+    ('klaxon', 'Klaxon'),
+    ('essuie_glaces', 'Essuie-glaces'),
+    ('ceintures', 'Ceintures de sécurité'),
+    ('retroviseurs', 'Rétroviseurs'),
+    ('plaque', "Plaque d'immatriculation"),
+]
+
+TECHNICAL_INSPECTION_SCORE_MAX = 60
+
+
+class TechnicalInspection(db.Model):
+    """A judiciaire's vehicle technical-inspection report, pending directeur_regional validation.
+    Once approved, it stands as a 1-year technical-inspection attestation."""
+    __tablename__ = 'technical_inspections'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+
+    checklist = db.Column(db.Text, nullable=False)  # JSON: {item_key: 'conforme'/'non_conforme'}
+    observations = db.Column(db.Text)
+
+    # Name of the inspector (from TechnicalInspectionInspector) who performed the
+    # physical/visual verification, selected by the judiciaire when filling the report.
+    inspector_name = db.Column(db.String(150), nullable=True)
+
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending / approved / rejected
+
+    inspected_by = db.Column(db.String(100), nullable=False)
+    inspected_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    reviewed_by = db.Column(db.String(100), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    review_comment = db.Column(db.Text, nullable=True)
+
+    issued_at = db.Column(db.DateTime, nullable=True)
+    expiry_date = db.Column(db.Date, nullable=True)
+
+    # SmartTech must validate before the attestation print button is enabled.
+    smarttech_print_validated = db.Column(db.Boolean, nullable=False, default=False)
+    smarttech_validated_at = db.Column(db.DateTime, nullable=True)
+    smarttech_validated_by = db.Column(db.String(100), nullable=True)
+
+    # Payment now happens AFTER approval (not at appointment booking). The
+    # attestation requires BOTH smarttech_print_validated AND payment_status='paid'.
+    payment_status = db.Column(db.String(20), nullable=False, default='unpaid')  # unpaid / paid
+    price_kmf = db.Column(db.Numeric(10, 2), nullable=True)
+    payment_channel = db.Column(db.String(20), nullable=True)  # app_citoyen / agent_huri_money
+    paid_by = db.Column(db.String(100), nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=True)
+
+    vehicle = db.relationship('Vehicle', backref=db.backref('technical_inspections', lazy='dynamic'))
+
+    @property
+    def score(self):
+        """Score out of TECHNICAL_INSPECTION_SCORE_MAX: one equal share per conforme item."""
+        checklist = json.loads(self.checklist) if self.checklist else {}
+        if not TECHNICAL_INSPECTION_ITEMS:
+            return 0
+        conforme_count = sum(1 for v in checklist.values() if v == 'conforme')
+        return round(conforme_count / len(TECHNICAL_INSPECTION_ITEMS) * TECHNICAL_INSPECTION_SCORE_MAX)
+
+    def to_dict(self):
+        checklist = json.loads(self.checklist) if self.checklist else {}
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'license_plate': self.vehicle.license_plate if self.vehicle else None,
+            'owner_name': self.vehicle.owner_name if self.vehicle else None,
+            'owner_island': self.vehicle.owner_island if self.vehicle else None,
+            'checklist': checklist,
+            'has_non_conforme': any(v == 'non_conforme' for v in checklist.values()),
+            'score': self.score,
+            'score_max': TECHNICAL_INSPECTION_SCORE_MAX,
+            'observations': self.observations or '',
+            'inspector_name': self.inspector_name,
+            'status': self.status,
+            'inspected_by': self.inspected_by,
+            'inspected_at': self.inspected_at.strftime('%d/%m/%Y %H:%M') if self.inspected_at else None,
+            'reviewed_by': self.reviewed_by,
+            'reviewed_at': self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else None,
+            'review_comment': self.review_comment,
+            'issued_at': self.issued_at.strftime('%d/%m/%Y') if self.issued_at else None,
+            'expiry_date': self.expiry_date.strftime('%Y-%m-%d') if self.expiry_date else None,
+            'expiry_date_display': self.expiry_date.strftime('%d/%m/%Y') if self.expiry_date else None,
+            'is_expired': bool(self.expiry_date and self.expiry_date < now_comoros().date()),
+            'smarttech_print_validated': bool(self.smarttech_print_validated),
+            'smarttech_validated_at': self.smarttech_validated_at.strftime('%d/%m/%Y %H:%M') if self.smarttech_validated_at else None,
+            'smarttech_validated_by': self.smarttech_validated_by,
+            'payment_status': self.payment_status,
+            'is_paid': self.payment_status == 'paid',
+            'pending_payment': bool(self.status == 'approved' and self.payment_status != 'paid'),
+            'price_kmf': float(self.price_kmf) if self.price_kmf is not None else None,
+            'payment_channel': self.payment_channel,
+            'paid_by': self.paid_by,
+            'paid_at': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else None,
+        }
+
+
+class TechnicalInspectionInspector(db.Model):
+    """A named inspector (no login) registered by a directeur_regional, who can be
+    selected on a technical-inspection report as having performed the physical/visual
+    verification. Simple reference list — no auth, no role."""
+    __tablename__ = 'technical_inspection_inspectors'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    phone = db.Column(db.String(30), nullable=True)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_by = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'phone': self.phone,
+            'active': bool(self.active),
+        }
+
+
+class TechnicalInspectionDraft(db.Model):
+    """Marks that the physical/visual verification sheet has already been printed
+    for a vehicle (inspector chosen, step 1 done) so re-opening the report later —
+    even after leaving and re-searching the vehicle — resumes at the checklist step
+    instead of asking to print again.
+
+    Payment now happens at THIS stage — before the checklist is filled in — via the
+    citizen app or a mobile-money agent, same as before but moved earlier in the
+    circuit. The checklist step is blocked until payment_status='paid'. Cleared once
+    the report is actually submitted (its payment fields are copied onto the new
+    TechnicalInspection first, so the paid record survives)."""
+    __tablename__ = 'technical_inspection_drafts'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, unique=True)
+    inspector_name = db.Column(db.String(150), nullable=False)
+    created_by = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    payment_status = db.Column(db.String(20), nullable=False, default='unpaid')  # unpaid / paid
+    price_kmf = db.Column(db.Numeric(10, 2), nullable=True)
+    payment_channel = db.Column(db.String(20), nullable=True)  # app_citoyen / agent_huri_money / free_reinspection
+    paid_by = db.Column(db.String(100), nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=True)
+
+    vehicle = db.relationship('Vehicle', backref=db.backref('technical_inspection_draft', uselist=False))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'license_plate': self.vehicle.license_plate if self.vehicle else None,
+            'owner_name': self.vehicle.owner_name if self.vehicle else None,
+            'owner_island': self.vehicle.owner_island if self.vehicle else None,
+            'inspector_name': self.inspector_name,
+            'created_by': self.created_by,
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else None,
+            'payment_status': self.payment_status,
+            'is_paid': self.payment_status == 'paid',
+            'price_kmf': float(self.price_kmf) if self.price_kmf is not None else None,
+            'payment_channel': self.payment_channel,
+            'paid_by': self.paid_by,
+            'paid_at': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else None,
+        }
+
+
+class VehicleWarning(db.Model):
+    """A police-issued warning noting that a vehicle element failed after its
+    technical inspection was approved (e.g. a headlight later found broken).
+    Purely informational for other officers scanning the vehicle — never
+    modifies the original TechnicalInspection checklist."""
+    __tablename__ = 'vehicle_warnings'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+
+    item_key = db.Column(db.String(50), nullable=False)  # matches TECHNICAL_INSPECTION_ITEMS keys
+    description = db.Column(db.Text, nullable=True)
+
+    issued_by = db.Column(db.String(100), nullable=False)
+    issued_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    # Step 1 — an officer at the vehicle submits repair evidence (photo/note).
+    # This alone does NOT clear the warning yet.
+    repair_submitted_by = db.Column(db.String(100), nullable=True)
+    repair_submitted_at = db.Column(db.DateTime, nullable=True)
+    resolution_note = db.Column(db.Text, nullable=True)
+    resolution_photo_filename = db.Column(db.String(255), nullable=True)
+
+    # Step 2 — a reviewing officer checks the submitted evidence on the
+    # Avertissements page and validates it. Only then does the warning
+    # disappear from the vehicle detail screen and the citizen dashboard.
+    resolved_by = db.Column(db.String(100), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+
+    vehicle = db.relationship('Vehicle', backref=db.backref('warnings', lazy='dynamic'))
+
+    def to_dict(self):
+        item_label = dict(TECHNICAL_INSPECTION_ITEMS).get(self.item_key, self.item_key)
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'license_plate': self.vehicle.license_plate if self.vehicle else None,
+            'owner_name': self.vehicle.owner_name if self.vehicle else None,
+            'owner_island': self.vehicle.owner_island if self.vehicle else None,
+            'track_token': self.vehicle.track_token if self.vehicle else None,
+            'item_key': self.item_key,
+            'item_label': item_label,
+            'description': self.description or '',
+            'issued_by': self.issued_by,
+            'issued_at': self.issued_at.strftime('%d/%m/%Y %H:%M') if self.issued_at else None,
+            'repair_submitted_by': self.repair_submitted_by,
+            'repair_submitted_at': self.repair_submitted_at.strftime('%d/%m/%Y %H:%M') if self.repair_submitted_at else None,
+            'resolution_note': self.resolution_note or '',
+            'resolution_photo_url': _cloud_url(self.resolution_photo_filename, 'warning_photos'),
+            'resolved_by': self.resolved_by,
+            'resolved_at': self.resolved_at.strftime('%d/%m/%Y %H:%M') if self.resolved_at else None,
+            'pending_validation': bool(self.repair_submitted_at and not self.resolved_at),
+        }
+
+
+TECHNICAL_INSPECTION_VEHICLE_TYPES = [
+    ('voiture', 'Voiture'), ('pickup', 'Pick up'), ('moto', 'Moto'), ('camion', 'Camion'),
+    ('minibus', 'Minibus'), ('bus', 'Bus'), ('ambulance', 'Ambulance'), ('suv', 'SUV'),
+]
+
+TECHNICAL_INSPECTION_USAGE_TYPES = [
+    ('Personnelle', 'Personnelle'), ('Taxi', 'Taxi'), ('Transport public', 'Transport public'),
+    ('Location', 'Location'), ('Véhicule de service', 'Véhicule de service'),
+    ('Véhicule utilitaire', 'Véhicule utilitaire'), ('Transport scolaire', 'Transport scolaire'),
+    ('Transport touristique', 'Transport touristique'), ('Auto-école', 'Auto-école'),
+]
+
+
+class TechnicalInspectionRate(db.Model):
+    """Technical-inspection price, keyed by vehicle type and usage type (NULL = 'toutes')."""
+    __tablename__ = 'technical_inspection_rates'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_type = db.Column(db.String(50), nullable=True)
+    usage_type = db.Column(db.String(50), nullable=True)
+    price_kmf = db.Column(db.Numeric(10, 2), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_type': self.vehicle_type,
+            'usage_type': self.usage_type,
+            'price_kmf': float(self.price_kmf) if self.price_kmf is not None else 0.0,
+            'is_active': bool(self.is_active),
+            'updated_at': self.updated_at.strftime('%d/%m/%Y %H:%M') if self.updated_at else None,
+        }
+
+
+TECHNICAL_INSPECTION_APPOINTMENT_SLOTS = [
+    '08:30', '09:30', '10:30', '11:30', '12:30', '13:30', '14:30', '15:30', '16:30',
+]
+
+TECHNICAL_INSPECTION_APPOINTMENT_SLOT_CAPACITY = 5
+
+
+class TechnicalInspectionAppointment(db.Model):
+    """A booked slot reservation for a technical inspection visit. The citizen pays
+    for the visit in-app at booking time (channel='app_citoyen'); once paid_at is
+    set, the eventual TechnicalInspectionDraft created when a judiciaire assigns an
+    inspector is automatically marked paid too, skipping the payment step."""
+    __tablename__ = 'technical_inspection_appointments'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+
+    appointment_date = db.Column(db.Date, nullable=False)
+    appointment_time = db.Column(db.String(5), nullable=False)  # 'HH:MM'
+
+    price_kmf = db.Column(db.Numeric(10, 2), nullable=False, default=0)  # frozen at booking time
+    status = db.Column(db.String(20), nullable=False, default='confirmed')  # pending_payment / confirmed / cancelled
+
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id'), nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=True)  # set once paid in-app (or immediately for a free re-visit)
+
+    # 'app_citoyen' (booked by the citizen through the mobile app) or
+    # 'judiciaire_agence' (walk-in citizen, registered in person by a judiciaire)
+    channel = db.Column(db.String(20), nullable=False, default='app_citoyen')
+    recorded_by = db.Column(db.String(100), nullable=True)  # judiciaire username, when channel is judiciaire_agence
+
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+
+    # Set once the "2 hours before" push reminder has been sent, to avoid duplicates.
+    reminder_sent = db.Column(db.Boolean, nullable=False, default=False)
+
+    vehicle = db.relationship('Vehicle', backref=db.backref('technical_inspection_appointments', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'license_plate': self.vehicle.license_plate if self.vehicle else None,
+            'owner_name': self.vehicle.owner_name if self.vehicle else None,
+            'owner_island': self.vehicle.owner_island if self.vehicle else None,
+            'appointment_date': self.appointment_date.strftime('%Y-%m-%d') if self.appointment_date else None,
+            'appointment_date_display': self.appointment_date.strftime('%d/%m/%Y') if self.appointment_date else None,
+            'appointment_time': self.appointment_time,
+            'price_kmf': float(self.price_kmf) if self.price_kmf is not None else 0.0,
+            'status': self.status,
+            'payment_id': self.payment_id,
+            'is_paid': bool(self.paid_at),
+            'paid_at': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else None,
+            'channel': self.channel,
+            'channel_display': 'App Citoyen' if self.channel == 'app_citoyen' else 'Judiciaire (agence)',
+            'recorded_by': self.recorded_by,
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else None,
         }
 
 
@@ -1507,6 +1831,9 @@ class HuriDestinationSetting(db.Model):
     permis_phone      = db.Column(db.String(20), nullable=True)
     permis_phone_updated_at = db.Column(db.DateTime, nullable=True)
     permis_phone_updated_by = db.Column(db.String(80), nullable=True)
+    visite_technique_phone      = db.Column(db.String(20), nullable=True)
+    visite_technique_phone_updated_at = db.Column(db.DateTime, nullable=True)
+    visite_technique_phone_updated_by = db.Column(db.String(80), nullable=True)
 
     @staticmethod
     def get():
@@ -1524,6 +1851,7 @@ class HuriDestinationSetting(db.Model):
             'qr_renewal': self.qr_renewal_phone,
             'carte_grise': self.carte_grise_phone,
             'permis': self.permis_phone,
+            'visite_technique': self.visite_technique_phone,
         }.get(payment_type)
 
     def to_dict(self):
@@ -1545,6 +1873,9 @@ class HuriDestinationSetting(db.Model):
             'permis_phone': self.permis_phone or '',
             'permis_phone_updated_at': fmt(self.permis_phone_updated_at),
             'permis_phone_updated_by': self.permis_phone_updated_by,
+            'visite_technique_phone': self.visite_technique_phone or '',
+            'visite_technique_phone_updated_at': fmt(self.visite_technique_phone_updated_at),
+            'visite_technique_phone_updated_by': self.visite_technique_phone_updated_by,
         }
 
 

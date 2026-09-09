@@ -269,6 +269,56 @@ def api_track(token):
                 pass
     vehicle_dict['has_attestation_template'] = _has_tpl
 
+    # Attach technical inspection (Visite Technique) status
+    from app.models import TechnicalInspection, TechnicalInspectionDraft, TECHNICAL_INSPECTION_SCORE_MAX
+    _latest_vt = (TechnicalInspection.query
+                  .filter_by(vehicle_id=vehicle.id, status='approved')
+                  .order_by(TechnicalInspection.issued_at.desc())
+                  .first())
+    _vt_not_expired = bool(_latest_vt and _latest_vt.expiry_date and _latest_vt.expiry_date >= now_comoros().date())
+    _vt_paid = bool(_latest_vt and _latest_vt.payment_status == 'paid')
+
+    # Payment now happens BEFORE the report (once the inspector is assigned), tracked
+    # on the draft — not after approval. Kept the legacy post-approval-unpaid check too
+    # as a fallback for any historical/edge-case record.
+    _draft = TechnicalInspectionDraft.query.filter_by(vehicle_id=vehicle.id).first()
+    _draft_unpaid = bool(_draft and _draft.payment_status != 'paid')
+    _legacy_pending_payment = bool(_latest_vt and _vt_not_expired and not _vt_paid and not _draft_unpaid)
+    _pending_payment = bool(_draft_unpaid or _legacy_pending_payment)
+
+    # Any inspection cycle (pending, rejected, or otherwise) more recent than the
+    # currently-approved one supersedes it — the old attestation, even if still
+    # within its 1-year validity, must stop being shown as "currently valid" so the
+    # app doesn't display a stale checkmark (or a stale "SmartTech validated" state)
+    # once a newer visit has started (and possibly already been rejected).
+    _newer_cycle = (TechnicalInspection.query
+                    .filter_by(vehicle_id=vehicle.id)
+                    .filter(TechnicalInspection.inspected_at > _latest_vt.inspected_at)
+                    .order_by(TechnicalInspection.inspected_at.desc())
+                    .first()) if _latest_vt else None
+    _pending_vt = _newer_cycle if (_newer_cycle and _newer_cycle.status == 'pending') else None
+
+    _new_cycle_in_progress = bool(_draft or _newer_cycle)
+    _pending_dr_validation = bool(_pending_vt and not _draft)
+
+    vehicle_dict['technical_inspection'] = {
+        'expiry_date': _latest_vt.expiry_date.isoformat() if _latest_vt and _latest_vt.expiry_date else None,
+        'score': _latest_vt.score if _latest_vt else None,
+        'score_max': TECHNICAL_INSPECTION_SCORE_MAX,
+        'is_valid': bool(_vt_not_expired and _latest_vt.smarttech_print_validated and _vt_paid and not _new_cycle_in_progress) if _latest_vt else False,
+        'pending_smarttech_validation': bool(_latest_vt and _vt_not_expired and not _latest_vt.smarttech_print_validated and not _pending_payment and not _new_cycle_in_progress),
+        'pending_payment': _pending_payment,
+        'pending_dr_validation': _pending_dr_validation,
+    } if (_latest_vt or _draft or _pending_vt) else None
+
+    # Attach active warnings (element found non-compliant after inspection)
+    from app.models import VehicleWarning
+    warnings = (VehicleWarning.query
+                .filter_by(vehicle_id=vehicle.id, resolved_at=None)
+                .order_by(VehicleWarning.issued_at.desc())
+                .all())
+    vehicle_dict['warnings'] = [w.to_dict() for w in warnings]
+
     return jsonify({"vehicle": vehicle_dict, "fines": fines})
 
 
@@ -2015,16 +2065,16 @@ def api_users_list():
 @api_bp.route('/users/policiers', methods=['GET'])
 @login_required
 def api_policiers_list():
-    """Get list of policiers - accessible to admin and judiciaire
-    If judiciaire, filters by their country. If admin, shows all."""
-    # Allow admin and judiciaire to access this endpoint
-    if not (current_user.is_admin or current_user.role == 'judiciaire'):
+    """Get list of policiers - accessible to admin, judiciaire and policier.
+    If judiciaire or policier, filters by their country. If admin, shows all."""
+    # Allow admin, judiciaire and policier to access this endpoint
+    if not (current_user.is_admin or current_user.role in ('judiciaire', 'policier')):
         return jsonify({'error': 'Unauthorized'}), 403
-    
+
     query = User.query.filter(User.role == 'policier')
-    
-    # If user is judiciaire, filter by their country
-    if current_user.role == 'judiciaire' and current_user.country:
+
+    # If user is judiciaire or policier, filter by their country
+    if current_user.role in ('judiciaire', 'policier') and current_user.country:
         query = query.filter(User.country == current_user.country)
     
     users = query.order_by(User.username).all()
@@ -5975,6 +6025,191 @@ window.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
     return Response(html, mimetype='text/html; charset=utf-8')
 
 
+@api_bp.route('/vehicles/<int:vehicle_id>/technical-inspection-attestation-html', methods=['GET'])
+@jwt_required()
+def get_technical_inspection_attestation_html(vehicle_id):
+    """Return the technical-inspection (Visite Technique) attestation HTML for the
+    mobile police app WebView — same document as the citizen app / web print."""
+    from flask import Response, render_template
+    from app.models import TechnicalInspection, CarteGriseSetting, TECHNICAL_INSPECTION_ITEMS, TECHNICAL_INSPECTION_SCORE_MAX
+
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    insp = (TechnicalInspection.query
+            .filter_by(vehicle_id=vehicle.id, status='approved', smarttech_print_validated=True, payment_status='paid')
+            .order_by(TechnicalInspection.issued_at.desc())
+            .first())
+    if not insp:
+        pending_payment = (TechnicalInspection.query
+                            .filter_by(vehicle_id=vehicle.id, status='approved', payment_status='unpaid')
+                            .first())
+        if pending_payment:
+            return jsonify({'error': "Le paiement de la visite technique doit être effectué avant de pouvoir consulter l'attestation."}), 404
+        pending_validation = (TechnicalInspection.query
+                              .filter_by(vehicle_id=vehicle.id, status='approved', smarttech_print_validated=False, payment_status='paid')
+                              .first())
+        if pending_validation:
+            return jsonify({'error': "Cette attestation est en attente de validation par SmartTech avant de pouvoir être consultée."}), 404
+        return jsonify({'error': "Aucune attestation de visite technique disponible pour ce véhicule."}), 404
+
+    island = vehicle.owner_island or 'Grande Comore'
+    cg_settings = CarteGriseSetting.get(island)
+
+    vehicle_qr_data_uri = None
+    if vehicle.track_token:
+        try:
+            import qrcode, io, base64 as _b64
+            _qr = qrcode.QRCode(box_size=5, border=2)
+            _qr.add_data(f'VEHICLE_TRACK:{vehicle.track_token}')
+            _qr.make(fit=True)
+            _img = _qr.make_image(fill_color='black', back_color='white')
+            _buf = io.BytesIO()
+            _img.save(_buf, format='PNG')
+            vehicle_qr_data_uri = 'data:image/png;base64,' + _b64.b64encode(_buf.getvalue()).decode()
+        except Exception:
+            pass
+
+    html = render_template('citizen_visite_technique_attestation.html',
+                           vehicle=vehicle, insp=insp,
+                           cg_settings=cg_settings,
+                           now_comoros=now_comoros,
+                           checklist_items=TECHNICAL_INSPECTION_ITEMS,
+                           checklist_result=json.loads(insp.checklist) if insp.checklist else {},
+                           score_max=TECHNICAL_INSPECTION_SCORE_MAX,
+                           vehicle_qr_data_uri=vehicle_qr_data_uri)
+    return Response(html, mimetype='text/html; charset=utf-8')
+
+
+# ── Vehicle Warnings (Avertissements) ────────────────────────────────────────
+
+@api_bp.route('/vehicles/<int:vehicle_id>/warnings', methods=['GET', 'POST'])
+@jwt_required()
+def vehicle_warnings(vehicle_id):
+    """List or create warnings for a vehicle element found non-compliant after
+    its technical inspection was approved (e.g. a headlight later found broken).
+    Never touches the TechnicalInspection checklist — this is a separate,
+    purely informational record for other officers scanning the vehicle."""
+    from app.models import VehicleWarning, TECHNICAL_INSPECTION_ITEMS
+
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    if request.method == 'GET':
+        warnings = (VehicleWarning.query
+                    .filter_by(vehicle_id=vehicle.id, resolved_at=None)
+                    .order_by(VehicleWarning.issued_at.desc())
+                    .all())
+        return jsonify([w.to_dict() for w in warnings])
+
+    data = request.get_json() or {}
+    item_key = (data.get('item_key') or '').strip()
+    valid_keys = {k for k, _ in TECHNICAL_INSPECTION_ITEMS}
+    if item_key not in valid_keys:
+        return jsonify({"error": "Élément invalide."}), 400
+
+    already_warned = VehicleWarning.query.filter_by(vehicle_id=vehicle.id, item_key=item_key, resolved_at=None).first()
+    if already_warned:
+        return jsonify({"error": "Cet élément a déjà un avertissement actif pour ce véhicule."}), 400
+
+    warning = VehicleWarning(
+        vehicle_id=vehicle.id,
+        item_key=item_key,
+        description=(data.get('description') or '').strip() or None,
+        issued_by=user.username,
+    )
+    db.session.add(warning)
+    db.session.commit()
+
+    try:
+        from app.push_notifications import send_warning_notification
+        send_warning_notification(vehicle, warning.to_dict())
+    except Exception as e:
+        print(f"Warning: could not send push notification for warning {warning.id}: {e}")
+
+    return jsonify({"success": True, "warning": warning.to_dict()}), 201
+
+
+@api_bp.route('/vehicles/<int:vehicle_id>/warnings/<int:warning_id>/resolve', methods=['POST'])
+@jwt_required()
+def resolve_vehicle_warning(vehicle_id, warning_id):
+    """An officer at the vehicle submits evidence (mandatory photo, optional note)
+    that the element was repaired. This does NOT clear the warning yet — it stays
+    visible on the vehicle detail screen and citizen dashboard until a reviewing
+    officer checks the evidence and validates it from the Avertissements page."""
+    import os, uuid
+    from werkzeug.utils import secure_filename
+    from app.models import VehicleWarning
+
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+
+    warning = VehicleWarning.query.filter_by(id=warning_id, vehicle_id=vehicle_id).first_or_404()
+    if warning.resolved_at:
+        return jsonify({"error": "Cet avertissement est déjà résolu."}), 400
+    if warning.repair_submitted_at:
+        return jsonify({"error": "Une confirmation de réparation est déjà en attente de validation pour cet avertissement."}), 400
+
+    note = (request.form.get('note') or '').strip()
+
+    photo_filename = None
+    photo_url_direct = request.form.get('photo_url')
+    if photo_url_direct and photo_url_direct.startswith('https://'):
+        photo_filename = photo_url_direct
+    else:
+        photo_file = request.files.get('photo')
+        if not photo_file or not photo_file.filename:
+            return jsonify({"error": "Une photo de la réparation est requise."}), 400
+        if photo_file and photo_file.filename:
+            if not photo_file.content_type.startswith('image/'):
+                return jsonify({"error": "Fichier image invalide."}), 400
+            from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload
+            if is_cloudinary_enabled():
+                photo_filename = cloud_upload(photo_file, 'warning_photos')
+            else:
+                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'warning_photos')
+                os.makedirs(upload_dir, exist_ok=True)
+                ext = secure_filename(photo_file.filename).rsplit('.', 1)[-1] if '.' in photo_file.filename else 'jpg'
+                photo_filename = f"{uuid.uuid4()}.{ext}"
+                photo_file.save(os.path.join(upload_dir, photo_filename))
+
+    warning.repair_submitted_by = user.username
+    warning.repair_submitted_at = now_comoros()
+    warning.resolution_note = note or None
+    warning.resolution_photo_filename = photo_filename
+    db.session.commit()
+    return jsonify({"success": True, "warning": warning.to_dict()})
+
+
+@api_bp.route('/warnings', methods=['GET'])
+@jwt_required()
+def list_warnings():
+    """List recent vehicle warnings, scoped to the officer's island like other patrol lists."""
+    from app.models import VehicleWarning
+
+    uid = get_jwt_identity()
+    user = User.query.get(int(uid))
+    if not user or user.role not in ['policier', 'administrateur']:
+        return jsonify({"error": "Forbidden"}), 403
+
+    query = VehicleWarning.query.filter_by(resolved_at=None).join(Vehicle)
+    if user.role == 'policier' and user.country:
+        query = query.filter(Vehicle.owner_island == user.country)
+
+    warnings = query.order_by(VehicleWarning.issued_at.desc()).limit(200).all()
+    return jsonify([w.to_dict() for w in warnings])
+
+
 # ── Cloudinary direct-upload signature ───────────────────────────────────────
 
 @api_bp.route('/cloudinary-signature', methods=['GET'])
@@ -5993,7 +6228,7 @@ def cloudinary_signature():
     import time, hashlib
 
     folder = request.args.get('folder', 'misc')
-    allowed = {'fine_photos', 'photo_submissions', 'identity_documents', 'license_photos', 'signatures', 'vehicle_transfers'}
+    allowed = {'fine_photos', 'photo_submissions', 'identity_documents', 'license_photos', 'signatures', 'vehicle_transfers', 'warning_photos'}
     if folder not in allowed:
         return jsonify({'error': 'Invalid folder'}), 400
 

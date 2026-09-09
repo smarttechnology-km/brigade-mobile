@@ -9,7 +9,7 @@ import random
 import string
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Blueprint, request, jsonify, current_app, Response
+from flask import Blueprint, request, jsonify, current_app, Response, render_template
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from app.models import db, Vehicle, User, VehicleOwner, Fine, VehicleTransfer, DriverLicense, PointReductionHistory
 from app.sms_service import SMSService
@@ -1281,3 +1281,263 @@ window.addEventListener('message', function(e) {{ _applyLogo(e.data); }});
 </html>"""
 
     return Response(html, mimetype='text/html; charset=utf-8')
+
+
+@citizen_auth_bp.route('/my-technical-inspection-attestation-html', methods=['GET'])
+@jwt_required()
+def citizen_technical_inspection_attestation_html():
+    """Return self-contained technical-inspection attestation HTML for the citizen's own vehicle."""
+    from app.models import TechnicalInspection, CarteGriseSetting, TECHNICAL_INSPECTION_ITEMS, TECHNICAL_INSPECTION_SCORE_MAX
+
+    identity = get_jwt_identity()
+    vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
+    if not vehicle_id:
+        return jsonify({'error': 'Compte non identifié'}), 401
+
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    insp = (TechnicalInspection.query
+            .filter_by(vehicle_id=vehicle.id, status='approved', smarttech_print_validated=True, payment_status='paid')
+            .order_by(TechnicalInspection.issued_at.desc())
+            .first())
+    if not insp:
+        pending_payment = (TechnicalInspection.query
+                            .filter_by(vehicle_id=vehicle.id, status='approved', payment_status='unpaid')
+                            .first())
+        if pending_payment:
+            return jsonify({'error': "Le paiement de la visite technique doit être effectué avant de pouvoir consulter l'attestation."}), 404
+        pending_validation = (TechnicalInspection.query
+                              .filter_by(vehicle_id=vehicle.id, status='approved', smarttech_print_validated=False, payment_status='paid')
+                              .first())
+        if pending_validation:
+            return jsonify({'error': "Votre attestation est en attente de validation par SmartTech avant de pouvoir être consultée."}), 404
+        return jsonify({'error': "Aucune attestation de visite technique disponible pour ce véhicule."}), 404
+
+    island = vehicle.owner_island or 'Grande Comore'
+    cg_settings = CarteGriseSetting.get(island)
+
+    vehicle_qr_data_uri = None
+    if vehicle.track_token:
+        try:
+            import qrcode, io, base64 as _b64
+            _qr = qrcode.QRCode(box_size=5, border=2)
+            _qr.add_data(f'VEHICLE_TRACK:{vehicle.track_token}')
+            _qr.make(fit=True)
+            _img = _qr.make_image(fill_color='black', back_color='white')
+            _buf = io.BytesIO()
+            _img.save(_buf, format='PNG')
+            vehicle_qr_data_uri = 'data:image/png;base64,' + _b64.b64encode(_buf.getvalue()).decode()
+        except Exception:
+            pass
+
+    html = render_template('citizen_visite_technique_attestation.html',
+                           vehicle=vehicle, insp=insp,
+                           cg_settings=cg_settings,
+                           now_comoros=now_comoros,
+                           checklist_items=TECHNICAL_INSPECTION_ITEMS,
+                           checklist_result=json.loads(insp.checklist) if insp.checklist else {},
+                           score_max=TECHNICAL_INSPECTION_SCORE_MAX,
+                           vehicle_qr_data_uri=vehicle_qr_data_uri)
+    return Response(html, mimetype='text/html; charset=utf-8')
+
+
+@citizen_auth_bp.route('/technical-inspection-appointments/price', methods=['GET'])
+@jwt_required()
+def citizen_technical_inspection_appointment_price():
+    """Preview the technical-inspection price for the citizen's own vehicle, before
+    booking — free (no price shown) when the vehicle qualifies for a free re-visit
+    following a rejection within the last month."""
+    from app.models import TECHNICAL_INSPECTION_APPOINTMENT_SLOTS
+    from app.mobile_pay import _get_technical_inspection_price
+    from app.routes import _free_reinspection_source
+
+    identity = get_jwt_identity()
+    vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
+    if not vehicle_id:
+        return jsonify({'error': 'Compte non identifié'}), 401
+
+    vehicle = Vehicle.query.get_or_404(int(vehicle_id))
+    free_source = _free_reinspection_source(int(vehicle_id))
+    if free_source:
+        from dateutil.relativedelta import relativedelta
+        free_deadline = free_source.reviewed_at + relativedelta(months=1)
+        return jsonify({
+            'price_kmf': 0,
+            'is_free': True,
+            'free_reason': f"Nouvelle visite gratuite (suite au rejet du {free_source.reviewed_at.strftime('%d/%m/%Y')}, déjà payée)",
+            'free_until': free_deadline.strftime('%d/%m/%Y'),
+            'slots': TECHNICAL_INSPECTION_APPOINTMENT_SLOTS,
+        })
+    price = _get_technical_inspection_price(vehicle)
+    return jsonify({'price_kmf': price, 'is_free': False, 'slots': TECHNICAL_INSPECTION_APPOINTMENT_SLOTS})
+
+
+@citizen_auth_bp.route('/technical-inspection-appointments/my', methods=['GET'])
+@jwt_required()
+def citizen_list_technical_inspection_appointments():
+    from app.models import TechnicalInspectionAppointment
+    identity = get_jwt_identity()
+    vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
+    if not vehicle_id:
+        return jsonify({'error': 'Compte non identifié'}), 401
+
+    appointments = (TechnicalInspectionAppointment.query
+                    .filter_by(vehicle_id=int(vehicle_id))
+                    .order_by(TechnicalInspectionAppointment.created_at.desc())
+                    .all())
+    return jsonify([a.to_dict() for a in appointments])
+
+
+@citizen_auth_bp.route('/technical-inspection-appointments', methods=['POST'])
+@jwt_required()
+def citizen_create_technical_inspection_appointment():
+    from app.models import TechnicalInspectionAppointment, TECHNICAL_INSPECTION_APPOINTMENT_SLOTS, TECHNICAL_INSPECTION_APPOINTMENT_SLOT_CAPACITY
+    from app.mobile_pay import _get_technical_inspection_price
+
+    identity = get_jwt_identity()
+    vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
+    if not vehicle_id:
+        return jsonify({'error': 'Compte non identifié'}), 401
+
+    vehicle = Vehicle.query.get_or_404(int(vehicle_id))
+
+    existing = TechnicalInspectionAppointment.query.filter(
+        TechnicalInspectionAppointment.vehicle_id == vehicle.id,
+        TechnicalInspectionAppointment.status.in_(['confirmed', 'pending_payment'])
+    ).first()
+    if existing:
+        return jsonify({'error': 'Vous avez déjà un rendez-vous en cours pour ce véhicule.'}), 400
+
+    data = request.get_json() or {}
+    date_str = (data.get('appointment_date') or '').strip()
+    time_str = (data.get('appointment_time') or '').strip()
+
+    try:
+        appointment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Date invalide.'}), 400
+
+    if appointment_date.weekday() > 4:
+        return jsonify({'error': 'Les rendez-vous sont disponibles du lundi au vendredi uniquement.'}), 400
+
+    today = now_comoros().date()
+    if appointment_date < today:
+        return jsonify({'error': 'La date choisie est déjà passée.'}), 400
+
+    if time_str not in TECHNICAL_INSPECTION_APPOINTMENT_SLOTS:
+        return jsonify({'error': 'Créneau horaire invalide.'}), 400
+
+    if appointment_date == today:
+        now_time = now_comoros().strftime('%H:%M')
+        if time_str <= now_time:
+            return jsonify({'error': "Ce créneau est déjà passé pour aujourd'hui."}), 400
+
+    slot_count = TechnicalInspectionAppointment.query.filter(
+        TechnicalInspectionAppointment.appointment_date == appointment_date,
+        TechnicalInspectionAppointment.appointment_time == time_str,
+        TechnicalInspectionAppointment.status == 'confirmed'
+    ).count()
+    if slot_count >= TECHNICAL_INSPECTION_APPOINTMENT_SLOT_CAPACITY:
+        return jsonify({'error': 'Ce créneau est complet (5 véhicules maximum). Veuillez choisir un autre horaire.'}), 400
+
+    # Payment happens in-app right after booking (see /pay/create,
+    # payment_type='technical_inspection_appointment'). The slot is only reserved
+    # as 'confirmed' once payment succeeds — until then it sits as
+    # 'pending_payment', so an abandoned/cancelled payment never leaves a
+    # confirmed-looking appointment behind. Skipped entirely for a free re-visit.
+    from app.routes import _free_reinspection_source
+    free_source = _free_reinspection_source(vehicle.id)
+    appointment = TechnicalInspectionAppointment(
+        vehicle_id=vehicle.id,
+        appointment_date=appointment_date,
+        appointment_time=time_str,
+        status='confirmed' if free_source else 'pending_payment',
+        channel='app_citoyen',
+        price_kmf=0 if free_source else _get_technical_inspection_price(vehicle),
+        paid_at=now_comoros() if free_source else None,
+    )
+    db.session.add(appointment)
+    db.session.commit()
+    return jsonify(appointment.to_dict()), 201
+
+
+@citizen_auth_bp.route('/technical-inspection-appointments/<int:appointment_id>', methods=['PUT'])
+@jwt_required()
+def citizen_update_technical_inspection_appointment(appointment_id):
+    from app.models import TechnicalInspectionAppointment, TECHNICAL_INSPECTION_APPOINTMENT_SLOTS, TECHNICAL_INSPECTION_APPOINTMENT_SLOT_CAPACITY
+
+    identity = get_jwt_identity()
+    vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
+    if not vehicle_id:
+        return jsonify({'error': 'Compte non identifié'}), 401
+
+    appointment = TechnicalInspectionAppointment.query.get_or_404(appointment_id)
+    if appointment.vehicle_id != int(vehicle_id):
+        return jsonify({'error': 'Accès refusé'}), 403
+    if appointment.status not in ('confirmed', 'pending_payment'):
+        return jsonify({'error': 'Ce rendez-vous ne peut plus être modifié.'}), 400
+
+    data = request.get_json() or {}
+    date_str = (data.get('appointment_date') or '').strip()
+    time_str = (data.get('appointment_time') or '').strip()
+
+    try:
+        appointment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Date invalide.'}), 400
+
+    if appointment_date.weekday() > 4:
+        return jsonify({'error': 'Les rendez-vous sont disponibles du lundi au vendredi uniquement.'}), 400
+
+    today = now_comoros().date()
+    if appointment_date < today:
+        return jsonify({'error': 'La date choisie est déjà passée.'}), 400
+
+    if time_str not in TECHNICAL_INSPECTION_APPOINTMENT_SLOTS:
+        return jsonify({'error': 'Créneau horaire invalide.'}), 400
+
+    if appointment_date == today:
+        now_time = now_comoros().strftime('%H:%M')
+        if time_str <= now_time:
+            return jsonify({'error': "Ce créneau est déjà passé pour aujourd'hui."}), 400
+
+    if (appointment_date, time_str) != (appointment.appointment_date, appointment.appointment_time):
+        slot_count = TechnicalInspectionAppointment.query.filter(
+            TechnicalInspectionAppointment.appointment_date == appointment_date,
+            TechnicalInspectionAppointment.appointment_time == time_str,
+            TechnicalInspectionAppointment.status == 'confirmed',
+            TechnicalInspectionAppointment.id != appointment.id
+        ).count()
+        if slot_count >= TECHNICAL_INSPECTION_APPOINTMENT_SLOT_CAPACITY:
+            return jsonify({'error': 'Ce créneau est complet (5 véhicules maximum). Veuillez choisir un autre horaire.'}), 400
+
+    appointment.appointment_date = appointment_date
+    appointment.appointment_time = time_str
+    appointment.updated_at = now_comoros()
+    db.session.commit()
+    return jsonify(appointment.to_dict())
+
+
+@citizen_auth_bp.route('/technical-inspection-appointments/<int:appointment_id>/cancel', methods=['POST'])
+@jwt_required()
+def citizen_cancel_technical_inspection_appointment(appointment_id):
+    from app.models import TechnicalInspectionAppointment
+
+    identity = get_jwt_identity()
+    vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
+    if not vehicle_id:
+        return jsonify({'error': 'Compte non identifié'}), 401
+
+    appointment = TechnicalInspectionAppointment.query.get_or_404(appointment_id)
+    if appointment.vehicle_id != int(vehicle_id):
+        return jsonify({'error': 'Accès refusé'}), 403
+    if appointment.status == 'confirmed':
+        return jsonify({'error': 'Ce rendez-vous est déjà payé et ne peut plus être annulé.'}), 400
+    if appointment.status != 'pending_payment':
+        return jsonify({'error': 'Ce rendez-vous ne peut plus être annulé.'}), 400
+
+    appointment.status = 'cancelled'
+    appointment.cancelled_at = now_comoros()
+    appointment.updated_at = now_comoros()
+    db.session.commit()
+    return jsonify(appointment.to_dict())

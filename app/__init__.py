@@ -199,7 +199,7 @@ def create_app():
         tasks_set_app(app)
 
         # Add the exoneration task to run every hour
-        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_late_rates
+        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_late_rates, send_technical_inspection_appointment_reminders
         scheduler.add_job(
             func=process_exonerated_fines,
             trigger=IntervalTrigger(hours=1),
@@ -241,6 +241,15 @@ def create_app():
             trigger=CronTrigger(hour=9, minute=0),
             id='apply_fine_late_rates',
             name='Apply late-rate percentage increases to unpaid fines daily at 09:00 AM',
+            replace_existing=True
+        )
+
+        # Send a push reminder 2 hours before a confirmed technical-inspection appointment
+        scheduler.add_job(
+            func=send_technical_inspection_appointment_reminders,
+            trigger=IntervalTrigger(minutes=10),
+            id='send_technical_inspection_appointment_reminders',
+            name='Send technical inspection appointment reminders 2 hours before',
             replace_existing=True
         )
 
@@ -288,6 +297,11 @@ def create_app():
                                 text("ALTER TABLE users ADD COLUMN dgrtr_type VARCHAR(30)")
                             )
                             logger.info("Added missing users.dgrtr_type column for SQLite compatibility")
+                        if 'web_access_enabled' not in existing_columns:
+                            conn.execute(
+                                text("ALTER TABLE users ADD COLUMN web_access_enabled BOOLEAN NOT NULL DEFAULT 1")
+                            )
+                            logger.info("Added missing users.web_access_enabled column for SQLite compatibility")
 
                     vehicle_owners_table_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicle_owners'")
@@ -365,6 +379,103 @@ def create_app():
                                 conn.execute(text("ALTER TABLE payments ADD COLUMN destination_phone VARCHAR(20)"))
                                 logger.info("Added missing payments.destination_phone column")
 
+                        # Patch technical_inspection_appointments table (payment channel tracking)
+                        vt_appt_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='technical_inspection_appointments'")
+                        ).first() is not None
+                        if vt_appt_table_exists:
+                            vt_appt_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(technical_inspection_appointments)")).fetchall()}
+                            if 'channel' not in vt_appt_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_appointments ADD COLUMN channel VARCHAR(20) DEFAULT 'app_citoyen'"))
+                                logger.info("Added missing technical_inspection_appointments.channel column")
+                            if 'recorded_by' not in vt_appt_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_appointments ADD COLUMN recorded_by VARCHAR(100)"))
+                                logger.info("Added missing technical_inspection_appointments.recorded_by column")
+                            if 'reminder_sent' not in vt_appt_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_appointments ADD COLUMN reminder_sent BOOLEAN NOT NULL DEFAULT 0"))
+                                logger.info("Added missing technical_inspection_appointments.reminder_sent column")
+
+                        # Patch technical_inspections table (SmartTech print validation)
+                        vt_insp_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='technical_inspections'")
+                        ).first() is not None
+                        if vt_insp_table_exists:
+                            vt_insp_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(technical_inspections)")).fetchall()}
+                            if 'smarttech_print_validated' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN smarttech_print_validated BOOLEAN NOT NULL DEFAULT 0"))
+                                logger.info("Added missing technical_inspections.smarttech_print_validated column")
+                            if 'smarttech_validated_at' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN smarttech_validated_at DATETIME"))
+                                logger.info("Added missing technical_inspections.smarttech_validated_at column")
+                            if 'smarttech_validated_by' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN smarttech_validated_by VARCHAR(100)"))
+                                logger.info("Added missing technical_inspections.smarttech_validated_by column")
+                            if 'payment_status' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid'"))
+                                logger.info("Added missing technical_inspections.payment_status column")
+                            if 'price_kmf' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN price_kmf NUMERIC(10,2)"))
+                                logger.info("Added missing technical_inspections.price_kmf column")
+                            if 'payment_channel' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN payment_channel VARCHAR(20)"))
+                                logger.info("Added missing technical_inspections.payment_channel column")
+                            if 'paid_by' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN paid_by VARCHAR(100)"))
+                                logger.info("Added missing technical_inspections.paid_by column")
+                            if 'paid_at' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN paid_at DATETIME"))
+                                logger.info("Added missing technical_inspections.paid_at column")
+                            if 'inspector_name' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN inspector_name VARCHAR(150)"))
+                                logger.info("Added missing technical_inspections.inspector_name column")
+
+                        # Patch technical_inspection_drafts table (pre-report payment)
+                        vt_draft_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='technical_inspection_drafts'")
+                        ).first() is not None
+                        if vt_draft_table_exists:
+                            vt_draft_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(technical_inspection_drafts)")).fetchall()}
+                            if 'payment_status' not in vt_draft_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_drafts ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid'"))
+                                logger.info("Added missing technical_inspection_drafts.payment_status column")
+                            if 'price_kmf' not in vt_draft_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_drafts ADD COLUMN price_kmf NUMERIC(10,2)"))
+                                logger.info("Added missing technical_inspection_drafts.price_kmf column")
+                            if 'payment_channel' not in vt_draft_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_drafts ADD COLUMN payment_channel VARCHAR(20)"))
+                                logger.info("Added missing technical_inspection_drafts.payment_channel column")
+                            if 'paid_by' not in vt_draft_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_drafts ADD COLUMN paid_by VARCHAR(100)"))
+                                logger.info("Added missing technical_inspection_drafts.paid_by column")
+                            if 'paid_at' not in vt_draft_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_drafts ADD COLUMN paid_at DATETIME"))
+                                logger.info("Added missing technical_inspection_drafts.paid_at column")
+
+                        # Patch vehicle_warnings table (officer resolution tracking)
+                        veh_warn_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicle_warnings'")
+                        ).first() is not None
+                        if veh_warn_table_exists:
+                            veh_warn_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(vehicle_warnings)")).fetchall()}
+                            if 'resolved_by' not in veh_warn_columns:
+                                conn.execute(text("ALTER TABLE vehicle_warnings ADD COLUMN resolved_by VARCHAR(100)"))
+                                logger.info("Added missing vehicle_warnings.resolved_by column")
+                            if 'resolved_at' not in veh_warn_columns:
+                                conn.execute(text("ALTER TABLE vehicle_warnings ADD COLUMN resolved_at DATETIME"))
+                                logger.info("Added missing vehicle_warnings.resolved_at column")
+                            if 'resolution_note' not in veh_warn_columns:
+                                conn.execute(text("ALTER TABLE vehicle_warnings ADD COLUMN resolution_note TEXT"))
+                                logger.info("Added missing vehicle_warnings.resolution_note column")
+                            if 'resolution_photo_filename' not in veh_warn_columns:
+                                conn.execute(text("ALTER TABLE vehicle_warnings ADD COLUMN resolution_photo_filename VARCHAR(255)"))
+                                logger.info("Added missing vehicle_warnings.resolution_photo_filename column")
+                            if 'repair_submitted_by' not in veh_warn_columns:
+                                conn.execute(text("ALTER TABLE vehicle_warnings ADD COLUMN repair_submitted_by VARCHAR(100)"))
+                                logger.info("Added missing vehicle_warnings.repair_submitted_by column")
+                            if 'repair_submitted_at' not in veh_warn_columns:
+                                conn.execute(text("ALTER TABLE vehicle_warnings ADD COLUMN repair_submitted_at DATETIME"))
+                                logger.info("Added missing vehicle_warnings.repair_submitted_at column")
+
                         # Patch huri_destination_settings table (per-field update tracking)
                         huri_dest_table_exists = conn.execute(
                             text("SELECT name FROM sqlite_master WHERE type='table' AND name='huri_destination_settings'")
@@ -384,6 +495,9 @@ def create_app():
                                 'permis_phone': "ALTER TABLE huri_destination_settings ADD COLUMN permis_phone VARCHAR(20)",
                                 'permis_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN permis_phone_updated_at DATETIME",
                                 'permis_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN permis_phone_updated_by VARCHAR(80)",
+                                'visite_technique_phone': "ALTER TABLE huri_destination_settings ADD COLUMN visite_technique_phone VARCHAR(20)",
+                                'visite_technique_phone_updated_at': "ALTER TABLE huri_destination_settings ADD COLUMN visite_technique_phone_updated_at DATETIME",
+                                'visite_technique_phone_updated_by': "ALTER TABLE huri_destination_settings ADD COLUMN visite_technique_phone_updated_by VARCHAR(80)",
                             }
                             for column_name, alter_sql in huri_dest_column_definitions.items():
                                 if column_name not in huri_dest_columns:
@@ -719,6 +833,7 @@ def create_app():
                         # users
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0",
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS dgrtr_type VARCHAR(30)",
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS web_access_enabled BOOLEAN NOT NULL DEFAULT TRUE",
                         # vehicle_owners
                         "ALTER TABLE vehicle_owners ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0",
                         "ALTER TABLE vehicle_owners ADD COLUMN IF NOT EXISTS current_device_id VARCHAR(128)",
@@ -728,6 +843,33 @@ def create_app():
                         "ALTER TABLE fines ADD COLUMN IF NOT EXISTS photo_filename VARCHAR(255)",
                         # payments
                         "ALTER TABLE payments ADD COLUMN IF NOT EXISTS destination_phone VARCHAR(20)",
+                        # technical_inspection_appointments
+                        "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS channel VARCHAR(20) DEFAULT 'app_citoyen'",
+                        "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS recorded_by VARCHAR(100)",
+                        "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE",
+                        # technical_inspections
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS smarttech_print_validated BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS smarttech_validated_at TIMESTAMP",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS smarttech_validated_by VARCHAR(100)",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid'",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS price_kmf NUMERIC(10,2)",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS payment_channel VARCHAR(20)",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS paid_by VARCHAR(100)",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS inspector_name VARCHAR(150)",
+                        # technical_inspection_drafts
+                        "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid'",
+                        "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS price_kmf NUMERIC(10,2)",
+                        "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS payment_channel VARCHAR(20)",
+                        "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS paid_by VARCHAR(100)",
+                        "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
+                        # vehicle_warnings
+                        "ALTER TABLE vehicle_warnings ADD COLUMN IF NOT EXISTS resolved_by VARCHAR(100)",
+                        "ALTER TABLE vehicle_warnings ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",
+                        "ALTER TABLE vehicle_warnings ADD COLUMN IF NOT EXISTS resolution_note TEXT",
+                        "ALTER TABLE vehicle_warnings ADD COLUMN IF NOT EXISTS resolution_photo_filename VARCHAR(255)",
+                        "ALTER TABLE vehicle_warnings ADD COLUMN IF NOT EXISTS repair_submitted_by VARCHAR(100)",
+                        "ALTER TABLE vehicle_warnings ADD COLUMN IF NOT EXISTS repair_submitted_at TIMESTAMP",
                         # huri_destination_settings
                         "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS fine_phone_updated_at TIMESTAMP",
                         "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS fine_phone_updated_by VARCHAR(80)",
@@ -741,6 +883,9 @@ def create_app():
                         "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS permis_phone VARCHAR(20)",
                         "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS permis_phone_updated_at TIMESTAMP",
                         "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS permis_phone_updated_by VARCHAR(80)",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS visite_technique_phone VARCHAR(20)",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS visite_technique_phone_updated_at TIMESTAMP",
+                        "ALTER TABLE huri_destination_settings ADD COLUMN IF NOT EXISTS visite_technique_phone_updated_by VARCHAR(80)",
                         # vehicle_insurance_assignments
                         "ALTER TABLE vehicle_insurance_assignments ADD COLUMN IF NOT EXISTS driver_license_numbers TEXT",
                         # insurance_accounts

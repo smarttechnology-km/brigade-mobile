@@ -152,6 +152,44 @@ def _get_vignette_rate_breakdown(vehicle):
         return None
 
 
+def _get_technical_inspection_price(vehicle):
+    """Resolve the technical-inspection price for a vehicle from TechnicalInspectionRate,
+    preferring the most specific match (exact vehicle_type + usage_type over wildcards)."""
+    if not vehicle:
+        return 0.0
+    try:
+        from app.models import TechnicalInspectionRate
+
+        query = TechnicalInspectionRate.query.filter(TechnicalInspectionRate.is_active == True)
+
+        if vehicle.vehicle_type:
+            query = query.filter((TechnicalInspectionRate.vehicle_type == vehicle.vehicle_type) | (TechnicalInspectionRate.vehicle_type.is_(None)))
+        else:
+            query = query.filter(TechnicalInspectionRate.vehicle_type.is_(None))
+
+        if vehicle.usage_type:
+            query = query.filter((TechnicalInspectionRate.usage_type == vehicle.usage_type) | (TechnicalInspectionRate.usage_type.is_(None)))
+        else:
+            query = query.filter(TechnicalInspectionRate.usage_type.is_(None))
+
+        rates = query.all()
+        if not rates:
+            return 0.0
+
+        def specificity_score(rate):
+            score = 0
+            if rate.vehicle_type is not None:
+                score += 10
+            if rate.usage_type is not None:
+                score += 10
+            return score
+
+        rates.sort(key=specificity_score, reverse=True)
+        return float(rates[0].price_kmf) if rates[0].price_kmf else 0.0
+    except Exception:
+        return 0.0
+
+
 def _calculate_penalty_amount(days_late):
     """
     Calculate penalty amount based on days late using configured penalty rates.
@@ -332,6 +370,57 @@ def lookup():
                 pass
     vehicle_payload['has_attestation_template'] = _has_tpl
 
+    from app.models import TechnicalInspection, TechnicalInspectionDraft, TECHNICAL_INSPECTION_SCORE_MAX
+    _latest_vt = (TechnicalInspection.query
+                  .filter_by(vehicle_id=vehicle.id, status='approved')
+                  .order_by(TechnicalInspection.issued_at.desc())
+                  .first())
+    _vt_not_expired = bool(_latest_vt and _latest_vt.expiry_date and _latest_vt.expiry_date >= now.date())
+    _vt_paid = bool(_latest_vt and _latest_vt.payment_status == 'paid')
+
+    # Payment now happens BEFORE the report (once the inspector is assigned), tracked
+    # on the draft — not after approval. Kept the legacy post-approval-unpaid check too
+    # as a fallback for any historical/edge-case record.
+    _draft = TechnicalInspectionDraft.query.filter_by(vehicle_id=vehicle.id).first()
+    _draft_unpaid = bool(_draft and _draft.payment_status != 'paid')
+    _legacy_pending_payment = bool(_latest_vt and _vt_not_expired and not _vt_paid and not _draft_unpaid)
+    _pending_payment = bool(_draft_unpaid or _legacy_pending_payment)
+
+    # Any inspection cycle (pending, rejected, or otherwise) more recent than the
+    # currently-approved one supersedes it — the old attestation, even if still
+    # within its 1-year validity, must stop being shown as "currently valid" so the
+    # app doesn't display a stale checkmark (or a stale "SmartTech validated" state)
+    # once a newer visit has started (and possibly already been rejected).
+    _newer_cycle = (TechnicalInspection.query
+                    .filter_by(vehicle_id=vehicle.id)
+                    .filter(TechnicalInspection.inspected_at > _latest_vt.inspected_at)
+                    .order_by(TechnicalInspection.inspected_at.desc())
+                    .first()) if _latest_vt else None
+    _pending_vt = _newer_cycle if (_newer_cycle and _newer_cycle.status == 'pending') else None
+
+    _new_cycle_in_progress = bool(_draft or _newer_cycle)
+    _pending_dr_validation = bool(_pending_vt and not _draft)
+
+    vehicle_payload['technical_inspection'] = {
+        'expiry_date': _latest_vt.expiry_date.isoformat() if _latest_vt and _latest_vt.expiry_date else None,
+        'score': _latest_vt.score if _latest_vt else None,
+        'score_max': TECHNICAL_INSPECTION_SCORE_MAX,
+        'is_valid': bool(_vt_not_expired and _latest_vt.smarttech_print_validated and _vt_paid and not _new_cycle_in_progress) if _latest_vt else False,
+        'pending_smarttech_validation': bool(_latest_vt and _vt_not_expired and not _latest_vt.smarttech_print_validated and not _pending_payment and not _new_cycle_in_progress),
+        'pending_payment': _pending_payment,
+        'pending_dr_validation': _pending_dr_validation,
+        'price_kmf': (float(_draft.price_kmf) if (_draft_unpaid and _draft.price_kmf is not None) else _get_technical_inspection_price(vehicle)) if _pending_payment else None,
+        'inspection_id': _latest_vt.id if _legacy_pending_payment else None,
+    } if (_latest_vt or _draft or _pending_vt) else None
+
+    from app.models import VehicleWarning
+    vehicle_payload['warnings'] = [
+        w.to_dict() for w in (VehicleWarning.query
+                               .filter_by(vehicle_id=vehicle.id, resolved_at=None)
+                               .order_by(VehicleWarning.issued_at.desc())
+                               .all())
+    ]
+
     qr_expiry = ensure_comoros(vehicle.qr_code_expiry) if vehicle.qr_code_expiry else None
     qr_status = 'none'
     if qr_expiry:
@@ -343,8 +432,11 @@ def lookup():
             qr_status = 'active'
     qr_renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
 
+    # QR fee: always charged when adding a first vignette (vehicle has none yet),
+    # otherwise only if the QR code was never activated.
+    is_new_vignette = vehicle.vignette_expiry is None
     needs_qr_activation = vehicle.qr_code_expiry is None
-    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if needs_qr_activation else 0.0
+    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if (is_new_vignette or needs_qr_activation) else 0.0
 
     return jsonify({
         'vehicle': vehicle_payload,
@@ -398,8 +490,11 @@ def _build_vignette_payment_payload(vehicle, requested_expiry=None):
     unpaid_fines_ids = [f.id for f in unpaid_fines]
     unpaid_fines_amount = float(sum(float(f.amount or 0.0) for f in unpaid_fines))
 
+    # QR fee: always charged when adding a first vignette (vehicle has none yet),
+    # otherwise only if the QR code was never activated.
+    is_new_vignette = vehicle.vignette_expiry is None
     needs_qr_activation = vehicle.qr_code_expiry is None
-    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if needs_qr_activation else 0.0
+    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if (is_new_vignette or needs_qr_activation) else 0.0
 
     total_amount = round(vignette_price + annual_ds_amount + penalty_amount + unpaid_fines_amount + qr_activation_price, 2)
     payload = {
@@ -414,6 +509,7 @@ def _build_vignette_payment_payload(vehicle, requested_expiry=None):
         'penalty_amount': penalty_amount,
         'fine_ids': unpaid_fines_ids,
         'fines_amount': unpaid_fines_amount,
+        'is_new_vignette': is_new_vignette,
         'qr_activation_price': qr_activation_price,
         'total_amount': total_amount,
     }
@@ -539,6 +635,163 @@ def create_payment():
             'currency': 'KMF',
             'status': 'pending',
             'payment_type': 'qr_renewal',
+            'vehicle': vehicle.to_dict(),
+        })
+
+    if payment_type == 'technical_inspection':
+        from app.models import TechnicalInspection
+
+        insp_id = data.get('inspection_id')
+        if not insp_id:
+            return jsonify({'error': 'inspection_id is required for technical inspection payments'}), 400
+
+        insp = TechnicalInspection.query.get(insp_id)
+        if not insp:
+            return jsonify({'error': 'Technical inspection not found'}), 404
+        if insp.status != 'approved':
+            return jsonify({'error': "Cette visite technique n'est pas encore validée."}), 400
+        if insp.payment_status == 'paid':
+            return jsonify({'error': 'Cette visite technique est déjà payée.'}), 400
+
+        vehicle = insp.vehicle
+        amount = _get_technical_inspection_price(vehicle)
+        payload = {
+            'type': 'technical_inspection_payment_request',
+            'payment_type': 'technical_inspection',
+            'inspection_id': insp.id,
+            'vehicle_id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name,
+            'amount': amount,
+        }
+
+        payment = Payment(
+            amount=amount,
+            currency='KMF',
+            status='pending',
+            license_plate=vehicle.license_plate,
+            owner_name=vehicle.owner_name,
+            payer_name=payer_name,
+            payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('visite_technique'),
+            fines=json.dumps(payload)
+        )
+        db.session.add(payment)
+        db.session.commit()
+
+        checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
+
+        return jsonify({
+            'payment_id': payment.id,
+            'checkout_url': checkout_url,
+            'amount': round(amount, 2),
+            'currency': 'KMF',
+            'status': 'pending',
+            'payment_type': 'technical_inspection',
+            'vehicle': vehicle.to_dict(),
+            'inspection': insp.to_dict(),
+        })
+
+    if payment_type == 'technical_inspection_draft':
+        from app.models import TechnicalInspectionDraft
+
+        vehicle_id = data.get('vehicle_id')
+        if not vehicle_id:
+            return jsonify({'error': 'vehicle_id is required for technical inspection draft payments'}), 400
+
+        draft = TechnicalInspectionDraft.query.filter_by(vehicle_id=vehicle_id).first()
+        if not draft:
+            return jsonify({'error': "Aucune visite technique en attente de paiement pour ce véhicule."}), 404
+        if draft.payment_status == 'paid':
+            return jsonify({'error': 'Cette visite technique est déjà payée.'}), 400
+
+        vehicle = draft.vehicle
+        amount = float(draft.price_kmf) if draft.price_kmf is not None else _get_technical_inspection_price(vehicle)
+        payload = {
+            'type': 'technical_inspection_draft_payment_request',
+            'payment_type': 'technical_inspection_draft',
+            'vehicle_id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name,
+            'amount': amount,
+        }
+
+        payment = Payment(
+            amount=amount,
+            currency='KMF',
+            status='pending',
+            license_plate=vehicle.license_plate,
+            owner_name=vehicle.owner_name,
+            payer_name=payer_name,
+            payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('visite_technique'),
+            fines=json.dumps(payload)
+        )
+        db.session.add(payment)
+        db.session.commit()
+
+        checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
+
+        return jsonify({
+            'payment_id': payment.id,
+            'checkout_url': checkout_url,
+            'amount': round(amount, 2),
+            'currency': 'KMF',
+            'status': 'pending',
+            'payment_type': 'technical_inspection_draft',
+            'vehicle': vehicle.to_dict(),
+        })
+
+    if payment_type == 'technical_inspection_appointment':
+        from app.models import TechnicalInspectionAppointment
+
+        appointment_id = data.get('appointment_id')
+        if not appointment_id:
+            return jsonify({'error': 'appointment_id is required for technical inspection appointment payments'}), 400
+
+        appointment = TechnicalInspectionAppointment.query.get(appointment_id)
+        if not appointment:
+            return jsonify({'error': 'Appointment not found'}), 404
+        if appointment.status not in ('confirmed', 'pending_payment'):
+            return jsonify({'error': 'Ce rendez-vous n\'est plus actif.'}), 400
+        if appointment.paid_at:
+            return jsonify({'error': 'Ce rendez-vous est déjà payé.'}), 400
+
+        vehicle = appointment.vehicle
+        amount = float(appointment.price_kmf) if appointment.price_kmf else _get_technical_inspection_price(vehicle)
+        payload = {
+            'type': 'technical_inspection_appointment_payment_request',
+            'payment_type': 'technical_inspection_appointment',
+            'appointment_id': appointment.id,
+            'vehicle_id': vehicle.id,
+            'license_plate': vehicle.license_plate,
+            'owner_name': vehicle.owner_name,
+            'amount': amount,
+        }
+
+        payment = Payment(
+            amount=amount,
+            currency='KMF',
+            status='pending',
+            license_plate=vehicle.license_plate,
+            owner_name=vehicle.owner_name,
+            payer_name=payer_name,
+            payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('visite_technique'),
+            fines=json.dumps(payload)
+        )
+        db.session.add(payment)
+        db.session.commit()
+
+        checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
+
+        return jsonify({
+            'payment_id': payment.id,
+            'checkout_url': checkout_url,
+            'amount': round(amount, 2),
+            'currency': 'KMF',
+            'status': 'pending',
+            'payment_type': 'technical_inspection_appointment',
             'vehicle': vehicle.to_dict(),
         })
 
@@ -683,6 +936,7 @@ def webhook():
             vehicle = Vehicle.query.get(int(vehicle_id)) if vehicle_id else None
             if vehicle:
                 payment_time = payment.paid_at or now_comoros()
+                is_new_vignette = vehicle.vignette_expiry is None
                 try:
                     requested_expiry = datetime.fromisoformat(fine_payload.get('requested_expiry')) if fine_payload.get('requested_expiry') else None
                 except Exception:
@@ -705,10 +959,27 @@ def webhook():
                 vehicle.vignette_last_paid_vignette_amount = float(fine_payload.get('vignette_price') or 0.0) + float(fine_payload.get('annual_ds_amount') or 0.0)
                 vehicle.vignette_last_paid_penalty_amount = float(fine_payload.get('penalty_amount') or 0.0)
                 vehicle.vignette_last_paid_fines_amount = float(fine_payload.get('fines_amount') or 0.0)
+                vehicle.vignette_last_paid_qr_amount = float(fine_payload.get('qr_activation_price') or 0.0)
                 vehicle.vignette_last_paid_total_amount = float(payment.amount or 0.0)
                 vehicle.vignette_payment_requested_at = None
                 vehicle.vignette_payment_requested_by = None
                 vehicle.vignette_payment_requested_expiry = None
+
+                # Adding a vignette for the first time: the QR code now tracks the
+                # vignette's expiry date, and its activation fee (bundled in the
+                # total above) is recorded as a SmartTech QR payment.
+                qr_activation_price = float(fine_payload.get('qr_activation_price') or 0.0)
+                if is_new_vignette and qr_activation_price > 0:
+                    vehicle.qr_code_generated_at = payment_time
+                    vehicle.qr_code_expiry = requested_expiry
+                    db.session.add(QRCodePayment(
+                        vehicle_id=vehicle.id,
+                        payment_type='activation',
+                        amount=qr_activation_price,
+                        status='paid',
+                        paid_at=payment_time,
+                        recorded_by=citizen_label,
+                    ))
 
                 db.session.add(VehicleHistory(
                     vehicle_id=vehicle.id,
@@ -749,6 +1020,65 @@ def webhook():
                     action='Renouvellement QR Code via mobile citoyen',
                     officer='App Mobile',
                     notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF | Nouvelle expiration: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
+                ))
+                db.session.commit()
+        elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'technical_inspection_payment_request':
+            from app.models import TechnicalInspection
+            insp_id = fine_payload.get('inspection_id')
+            insp = TechnicalInspection.query.get(int(insp_id)) if insp_id else None
+            if insp and insp.status == 'approved' and insp.payment_status != 'paid':
+                payment_time = payment.paid_at or now_comoros()
+                citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
+                insp.payment_status = 'paid'
+                insp.price_kmf = float(payment.amount or 0.0)
+                insp.payment_channel = 'app_citoyen'
+                insp.paid_by = citizen_label
+                insp.paid_at = payment_time
+
+                db.session.add(VehicleHistory(
+                    vehicle_id=insp.vehicle_id,
+                    action='Visite technique payée via mobile citoyen',
+                    officer='App Mobile',
+                    notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF (par {citizen_label})"
+                ))
+                db.session.commit()
+        elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'technical_inspection_draft_payment_request':
+            from app.models import TechnicalInspectionDraft
+            vehicle_id = fine_payload.get('vehicle_id')
+            draft = TechnicalInspectionDraft.query.filter_by(vehicle_id=int(vehicle_id)).first() if vehicle_id else None
+            if draft and draft.payment_status != 'paid':
+                payment_time = payment.paid_at or now_comoros()
+                citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
+                draft.payment_status = 'paid'
+                draft.price_kmf = float(payment.amount or 0.0)
+                draft.payment_channel = 'app_citoyen'
+                draft.paid_by = citizen_label
+                draft.paid_at = payment_time
+
+                db.session.add(VehicleHistory(
+                    vehicle_id=draft.vehicle_id,
+                    action='Visite technique payée via mobile citoyen',
+                    officer='App Mobile',
+                    notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF (par {citizen_label})"
+                ))
+                db.session.commit()
+        elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'technical_inspection_appointment_payment_request':
+            from app.models import TechnicalInspectionAppointment
+            appointment_id = fine_payload.get('appointment_id')
+            appointment = TechnicalInspectionAppointment.query.get(int(appointment_id)) if appointment_id else None
+            if appointment and not appointment.paid_at:
+                payment_time = payment.paid_at or now_comoros()
+                citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
+                appointment.status = 'confirmed'
+                appointment.price_kmf = float(payment.amount or 0.0)
+                appointment.payment_id = payment.id
+                appointment.paid_at = payment_time
+
+                db.session.add(VehicleHistory(
+                    vehicle_id=appointment.vehicle_id,
+                    action='Rendez-vous de visite technique payé via mobile citoyen',
+                    officer='App Mobile',
+                    notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF (par {citizen_label})"
                 ))
                 db.session.commit()
         else:
@@ -812,6 +1142,18 @@ def get_receipt(payment_id):
             payment_type = 'qr_renewal'
             vehicle = Vehicle.query.get(payload.get('vehicle_id')) if payload.get('vehicle_id') else None
             fine_ids = []
+        elif isinstance(payload, dict) and payload.get('type') == 'technical_inspection_payment_request':
+            payment_type = 'technical_inspection'
+            vehicle = Vehicle.query.get(payload.get('vehicle_id')) if payload.get('vehicle_id') else None
+            fine_ids = []
+        elif isinstance(payload, dict) and payload.get('type') == 'technical_inspection_draft_payment_request':
+            payment_type = 'technical_inspection'
+            vehicle = Vehicle.query.get(payload.get('vehicle_id')) if payload.get('vehicle_id') else None
+            fine_ids = []
+        elif isinstance(payload, dict) and payload.get('type') == 'technical_inspection_appointment_payment_request':
+            payment_type = 'technical_inspection'
+            vehicle = Vehicle.query.get(payload.get('vehicle_id')) if payload.get('vehicle_id') else None
+            fine_ids = []
         else:
             fine_ids = payload if isinstance(payload, list) else []
 
@@ -836,8 +1178,23 @@ def get_receipt(payment_id):
     except Exception:
         payload = []
 
+    inspection = None
+    appointment = None
+    if payment_type == 'technical_inspection':
+        try:
+            from app.models import TechnicalInspection, TechnicalInspectionAppointment
+            insp = TechnicalInspection.query.filter_by(vehicle_id=vehicle.id, payment_status='paid').order_by(TechnicalInspection.paid_at.desc()).first() if vehicle else None
+            if insp:
+                inspection = insp.to_dict()
+            appt = TechnicalInspectionAppointment.query.filter_by(payment_id=p.id).first()
+            if appt:
+                appointment = appt.to_dict()
+        except Exception:
+            inspection = None
+            appointment = None
+
     # Generate receipt number
-    receipt_prefix = 'VGN' if payment_type == 'vignette' else 'QRR' if payment_type == 'qr_renewal' else 'RCP'
+    receipt_prefix = 'VGN' if payment_type == 'vignette' else 'QRR' if payment_type == 'qr_renewal' else 'VTA' if payment_type == 'technical_inspection' else 'RCP'
     receipt_number = f'{receipt_prefix}-{p.id}-{int(p.created_at.timestamp())}'
     
     return jsonify({
@@ -858,6 +1215,8 @@ def get_receipt(payment_id):
         'fines_count': len(fines_details),
         'fines_details': fines_details,
         'vignette_quote': vignette_quote,
+        'inspection': inspection,
+        'appointment': appointment,
     })
 
 

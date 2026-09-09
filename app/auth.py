@@ -67,6 +67,10 @@ def login():
                 flash('Ce compte est désactivé. Contactez un administrateur.', 'danger')
                 return render_template('login.html')
 
+            if user.role == 'policier' and not getattr(user, 'web_access_enabled', True):
+                flash("Ce compte n'a accès qu'à l'application mobile.", 'danger')
+                return render_template('login.html')
+
             login_user(user)
             
             # Log user login

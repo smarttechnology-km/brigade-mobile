@@ -1217,6 +1217,60 @@ def api_mm_cg_confirm_payment(cg_id):
     return jsonify({'success': True, 'carte_grise': cg.to_dict()})
 
 
+@main_bp.route('/mobile-money-visite-technique')
+@roles_required('mobile_money_agent')
+def mobile_money_visite_technique_page():
+    """Page for mobile money agents to collect payment for technical inspections,
+    before the judiciaire fills in the checklist (inspector already assigned)."""
+    return render_template('mobile_money_visite_technique.html')
+
+
+@main_bp.route('/api/mobile-money/visite-technique/pending', methods=['GET'])
+@roles_required('mobile_money_agent')
+def api_mm_visite_technique_pending():
+    """Technical inspection drafts (inspector assigned) still awaiting payment."""
+    from app.models import TechnicalInspectionDraft
+    q = request.args.get('q', '').strip()
+    query = (TechnicalInspectionDraft.query
+             .filter_by(payment_status='unpaid')
+             .join(Vehicle))
+    if q:
+        query = query.filter(
+            db.or_(
+                Vehicle.license_plate.ilike(f'%{q}%'),
+                Vehicle.owner_name.ilike(f'%{q}%'),
+            )
+        )
+    drafts = query.order_by(TechnicalInspectionDraft.created_at.asc()).all()
+    from app.mobile_pay import _get_technical_inspection_price
+    results = []
+    for draft in drafts:
+        d = draft.to_dict()
+        d['price_kmf'] = draft.price_kmf if draft.price_kmf is not None else _get_technical_inspection_price(draft.vehicle)
+        results.append(d)
+    return jsonify(results)
+
+
+@main_bp.route('/api/mobile-money/visite-technique/<int:draft_id>/confirm-payment', methods=['POST'])
+@roles_required('mobile_money_agent')
+def api_mm_confirm_visite_technique_payment(draft_id):
+    """Collect payment in person for a technical inspection draft (before the checklist)."""
+    from app.models import TechnicalInspectionDraft
+    from app.mobile_pay import _get_technical_inspection_price
+
+    draft = TechnicalInspectionDraft.query.get_or_404(draft_id)
+    if draft.payment_status == 'paid':
+        return jsonify({'error': 'Cette visite technique est déjà payée.'}), 400
+
+    draft.payment_status = 'paid'
+    draft.price_kmf = draft.price_kmf if draft.price_kmf is not None else _get_technical_inspection_price(draft.vehicle)
+    draft.payment_channel = 'agent_huri_money'
+    draft.paid_by = current_user.username
+    draft.paid_at = now_comoros()
+    db.session.commit()
+    return jsonify(draft.to_dict())
+
+
 @main_bp.route('/mobile-money-archive')
 @roles_required('mobile_money_agent')
 def mobile_money_archive_page():
@@ -1621,6 +1675,57 @@ def recherche_page():
     return render_template('recherche.html')
 
 
+@main_bp.route('/avertissements')
+@roles_required('administrateur', 'policier')
+def avertissements_page():
+    """Page listant les avertissements véhicule (éléments constatés non conformes après la visite technique)."""
+    return render_template('avertissements.html')
+
+
+@main_bp.route('/api/avertissements')
+@roles_required('administrateur', 'policier')
+def api_avertissements():
+    from app.models import VehicleWarning
+    q = request.args.get('q', '').strip()
+    archived = request.args.get('archived', '').strip() == '1'
+
+    query = VehicleWarning.query.join(Vehicle)
+    if archived:
+        query = query.filter(VehicleWarning.resolved_at.isnot(None))
+    else:
+        query = query.filter(VehicleWarning.resolved_at.is_(None))
+    if q:
+        query = query.filter(
+            db.or_(
+                Vehicle.license_plate.ilike(f'%{q}%'),
+                Vehicle.owner_name.ilike(f'%{q}%'),
+            )
+        )
+    query = apply_island_filter(query, Vehicle.owner_island)
+    order_col = VehicleWarning.resolved_at if archived else VehicleWarning.issued_at
+    warnings = query.order_by(order_col.desc()).limit(300).all()
+    return jsonify([w.to_dict() for w in warnings])
+
+
+@main_bp.route('/api/avertissements/<int:warning_id>/validate', methods=['POST'])
+@roles_required('administrateur', 'policier')
+def api_avertissement_validate(warning_id):
+    """A reviewing officer checks the submitted repair evidence (photo/note) and
+    validates it — only then does the warning disappear from the vehicle detail
+    screen (mobile) and the citizen dashboard."""
+    from app.models import VehicleWarning
+    warning = VehicleWarning.query.get_or_404(warning_id)
+    if warning.resolved_at:
+        return jsonify({'error': 'Cet avertissement est déjà validé.'}), 400
+    if not warning.repair_submitted_at:
+        return jsonify({'error': 'Aucune confirmation de réparation à valider pour cet avertissement.'}), 400
+
+    warning.resolved_by = current_user.username
+    warning.resolved_at = now_comoros()
+    db.session.commit()
+    return jsonify({'success': True, 'warning': warning.to_dict()})
+
+
 @vehicle_bp.route('/stats', methods=['GET'])
 @login_required
 def get_vehicle_stats():
@@ -1990,32 +2095,36 @@ def create_vehicle():
     
     db.session.commit()
 
-    # Create CarteGrise record with complementary fields from payload
-    try:
-        from app.models import CarteGrise as _CG
-        from datetime import datetime as _cg_dt
-        _s = lambda k: (data.get(k) or '').strip()
-        cg = _CG.query.filter_by(vehicle_id=vehicle.id).first()
-        if cg is None:
-            cg = _CG(vehicle_id=vehicle.id, status='brouillon',
-                     created_by=getattr(current_user, 'username', ''))
-            db.session.add(cg)
-        cg.carrosserie             = _s('carrosserie') or None
-        cg.places_assises          = _s('places_assises') or None
-        cg.poids_total_autorise    = _s('poids_total_autorise') or None
-        cg.poids_a_vide            = _s('poids_a_vide') or None
-        cg.charge_utile_ptc        = _s('charge_utile_ptc') or None
-        cg.profession_proprietaire = _s('profession_proprietaire') or None
-        cg.observation             = _s('observation') or None
-        raw_de = _s('date_emission')
-        if raw_de:
-            try:
-                cg.date_emission = _cg_dt.strptime(raw_de, '%Y-%m-%d').date()
-            except Exception:
-                pass
-        db.session.commit()
-    except Exception as e:
-        print(f'Warning: CarteGrise creation failed for vehicle {vehicle.id}: {e}')
+    # Create a provisional CarteGrise record only for vehicles added as "Nouveau
+    # véhicule" (qr_pending_approval, pending SmartDev validation). A vehicle
+    # added as "Véhicule existant" already has its own carte grise and must not
+    # show up in the Cartes Grises Provisoires workflow.
+    if vehicle.qr_pending_approval:
+        try:
+            from app.models import CarteGrise as _CG
+            from datetime import datetime as _cg_dt
+            _s = lambda k: (data.get(k) or '').strip()
+            cg = _CG.query.filter_by(vehicle_id=vehicle.id).first()
+            if cg is None:
+                cg = _CG(vehicle_id=vehicle.id, status='brouillon',
+                         created_by=getattr(current_user, 'username', ''))
+                db.session.add(cg)
+            cg.carrosserie             = _s('carrosserie') or None
+            cg.places_assises          = _s('places_assises') or None
+            cg.poids_total_autorise    = _s('poids_total_autorise') or None
+            cg.poids_a_vide            = _s('poids_a_vide') or None
+            cg.charge_utile_ptc        = _s('charge_utile_ptc') or None
+            cg.profession_proprietaire = _s('profession_proprietaire') or None
+            cg.observation             = _s('observation') or None
+            raw_de = _s('date_emission')
+            if raw_de:
+                try:
+                    cg.date_emission = _cg_dt.strptime(raw_de, '%Y-%m-%d').date()
+                except Exception:
+                    pass
+            db.session.commit()
+        except Exception as e:
+            print(f'Warning: CarteGrise creation failed for vehicle {vehicle.id}: {e}')
 
     if vehicle.owner_phone:
         _sync_vehicle_owner_link(vehicle)
@@ -3157,8 +3266,16 @@ def public_track(token):
     except Exception:
         history_items = []
     
+    from app.models import TechnicalInspection, TECHNICAL_INSPECTION_SCORE_MAX
+    latest_inspection = (TechnicalInspection.query
+                         .filter_by(vehicle_id=vehicle.id, status='approved')
+                         .order_by(TechnicalInspection.issued_at.desc())
+                         .first())
+
     # Pass Comoros-aware now function for expiry calculations in template
-    return render_template('track.html', vehicle=vehicle, history=history_items, unpaid_count=unpaid_count, now=now_comoros)
+    return render_template('track.html', vehicle=vehicle, history=history_items, unpaid_count=unpaid_count,
+                           now=now_comoros, latest_inspection=latest_inspection,
+                           technical_inspection_score_max=TECHNICAL_INSPECTION_SCORE_MAX)
 
 
 @main_bp.route('/payments')
@@ -3695,6 +3812,7 @@ def api_users_list():
             'region': getattr(u, 'region', '') or '',
             'dgrtr_type': getattr(u, 'dgrtr_type', '') or '',
             'is_active': bool(getattr(u, 'is_active', True)),
+            'web_access_enabled': bool(getattr(u, 'web_access_enabled', True)),
             'created_at': u.created_at.strftime('%Y-%m-%d %H:%M')
         })
     return jsonify(out)
@@ -3732,6 +3850,7 @@ def api_users_create():
     u.region = region
     u.dgrtr_type = data.get('dgrtr_type') or None
     u.is_active = bool(is_active)
+    u.web_access_enabled = bool(data.get('web_access_enabled', True))
     u.set_password(password)
     # if role is administrateur mark is_admin True for backwards compatibility
     if role == 'administrateur':
@@ -3771,6 +3890,8 @@ def api_users_update(user_id):
             u.is_admin = False
     if 'is_active' in data:
         u.is_active = bool(data.get('is_active'))
+    if 'web_access_enabled' in data:
+        u.web_access_enabled = bool(data.get('web_access_enabled'))
     if 'dgrtr_type' in data:
         u.dgrtr_type = data.get('dgrtr_type') or None
     if 'password' in data and data.get('password'):
@@ -4494,6 +4615,603 @@ def dgrtr_vehicle_edit_requests_page():
     if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_regional':
         abort(403)
     return render_template('dgrtr_vehicle_edit_requests.html')
+
+
+# ─────────────────────────────────────────────────────────────
+#  Visite Technique (judiciaire → directeur régional)
+# ─────────────────────────────────────────────────────────────
+
+def _is_visite_technique_reviewer():
+    """directeur_regional only (dgrtr) — the only role that may validate/reject technical inspections."""
+    return current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'
+
+
+def _can_view_visite_technique():
+    """administrateur and dgrtr (directeur_regional / directeur_general) can view the page; judiciaire is handled separately."""
+    return current_user.role == 'administrateur' or (
+        current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) in ('directeur_regional', 'directeur_general')
+    )
+
+
+@main_bp.route('/api/technical-inspection-inspectors', methods=['GET'])
+@login_required
+def list_technical_inspection_inspectors():
+    """Judiciaire (to pick one on the report form) and administrateur/DR/DG (management) may list."""
+    from app.models import TechnicalInspectionInspector
+    if not (current_user.role == 'judiciaire' or _can_view_visite_technique()):
+        return jsonify({'error': 'Accès refusé'}), 403
+    query = TechnicalInspectionInspector.query
+    if not (request.args.get('all') == '1' and _is_visite_technique_reviewer()):
+        query = query.filter_by(active=True)
+    inspectors = query.order_by(TechnicalInspectionInspector.name.asc()).all()
+    return jsonify([i.to_dict() for i in inspectors])
+
+
+@main_bp.route('/api/technical-inspection-inspectors', methods=['POST'])
+@login_required
+def create_technical_inspection_inspector():
+    """directeur_regional only — registers an inspector who performs physical/visual checks."""
+    from app.models import TechnicalInspectionInspector
+    if not _is_visite_technique_reviewer():
+        return jsonify({'error': 'Réservé au directeur régional'}), 403
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Le nom est requis.'}), 400
+    inspector = TechnicalInspectionInspector(
+        name=name,
+        phone=(data.get('phone') or '').strip() or None,
+        created_by=current_user.username,
+    )
+    db.session.add(inspector)
+    db.session.commit()
+    return jsonify(inspector.to_dict()), 201
+
+
+@main_bp.route('/api/technical-inspection-inspectors/<int:inspector_id>/toggle', methods=['POST'])
+@login_required
+def toggle_technical_inspection_inspector(inspector_id):
+    """directeur_regional only — activate/deactivate an inspector (hidden from the report dropdown when inactive)."""
+    from app.models import TechnicalInspectionInspector
+    if not _is_visite_technique_reviewer():
+        return jsonify({'error': 'Réservé au directeur régional'}), 403
+    inspector = TechnicalInspectionInspector.query.get_or_404(inspector_id)
+    inspector.active = not inspector.active
+    db.session.commit()
+    return jsonify(inspector.to_dict())
+
+
+@vehicle_bp.route('/<int:vehicle_id>/technical-inspections', methods=['POST'])
+@login_required
+def create_technical_inspection(vehicle_id):
+    from app.models import TechnicalInspection, TECHNICAL_INSPECTION_ITEMS
+    if current_user.role != 'judiciaire':
+        return jsonify({'error': 'Réservé aux judiciaires'}), 403
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+
+    existing = TechnicalInspection.query.filter_by(vehicle_id=vehicle_id, status='pending').first()
+    if existing:
+        return jsonify({'error': 'Une visite technique est déjà en attente de validation pour ce véhicule.'}), 400
+
+    data = request.get_json() or {}
+    raw_checklist = data.get('checklist') or {}
+    valid_keys = {k for k, _ in TECHNICAL_INSPECTION_ITEMS}
+    checklist = {k: v for k, v in raw_checklist.items() if k in valid_keys and v in ('conforme', 'non_conforme')}
+
+    if len(checklist) != len(valid_keys):
+        return jsonify({'error': 'Veuillez renseigner tous les points de contrôle.'}), 400
+
+    inspector_name = (data.get('inspector_name') or '').strip()
+    if not inspector_name:
+        return jsonify({'error': "Veuillez sélectionner l'inspecteur ayant effectué la vérification physique et visuelle."}), 400
+
+    from app.models import TechnicalInspectionDraft
+    draft = TechnicalInspectionDraft.query.filter_by(vehicle_id=vehicle_id).first()
+    if not draft or draft.payment_status != 'paid':
+        return jsonify({'error': "Le paiement de la visite technique doit être effectué avant de soumettre le rapport."}), 400
+
+    insp = TechnicalInspection(
+        vehicle_id=vehicle_id,
+        checklist=json.dumps(checklist),
+        observations=(data.get('observations') or '').strip(),
+        inspector_name=inspector_name,
+        inspected_by=current_user.username,
+        payment_status=draft.payment_status,
+        price_kmf=draft.price_kmf,
+        payment_channel=draft.payment_channel,
+        paid_by=draft.paid_by,
+        paid_at=draft.paid_at,
+    )
+    db.session.add(insp)
+
+    # A fresh technical inspection re-checks every element, so any earlier
+    # "avertissement" (element found damaged after a previous inspection) is
+    # now superseded — resolve them for this vehicle (kept as history, not deleted).
+    from app.models import VehicleWarning
+    for w in VehicleWarning.query.filter_by(vehicle_id=vehicle_id, resolved_at=None).all():
+        w.resolved_by = f'Nouvelle visite technique ({current_user.username})'
+        w.resolved_at = now_comoros()
+
+    TechnicalInspectionDraft.query.filter_by(vehicle_id=vehicle_id).delete()
+
+    db.session.commit()
+    return jsonify(insp.to_dict()), 201
+
+
+@main_bp.route('/api/vehicles/<int:vehicle_id>/technical-inspection-draft', methods=['GET'])
+@login_required
+def get_technical_inspection_draft(vehicle_id):
+    """Whether the physical/visual verification sheet was already printed for this
+    vehicle (step 1 done) — used to resume the report directly at the checklist step."""
+    from app.models import TechnicalInspectionDraft
+    if current_user.role != 'judiciaire':
+        return jsonify({'error': 'Réservé aux judiciaires'}), 403
+    draft = TechnicalInspectionDraft.query.filter_by(vehicle_id=vehicle_id).first()
+    return jsonify(draft.to_dict() if draft else None)
+
+
+def _free_reinspection_source(vehicle_id):
+    """If the vehicle's most recent technical inspection was rejected, was paid, and
+    was reviewed within the last month, the next visit is free (already paid for).
+    Returns that TechnicalInspection, or None."""
+    from app.models import TechnicalInspection
+    from dateutil.relativedelta import relativedelta
+    last = (TechnicalInspection.query
+            .filter_by(vehicle_id=vehicle_id)
+            .order_by(TechnicalInspection.inspected_at.desc())
+            .first())
+    if not last or last.status != 'rejected' or last.payment_status != 'paid' or not last.reviewed_at:
+        return None
+    if last.reviewed_at < now_comoros().replace(tzinfo=None) - relativedelta(months=1):
+        return None
+    return last
+
+
+def _appointment_prepaid_source(vehicle_id):
+    """If the citizen already paid for their appointment in-app at booking time,
+    and no report has been created since that payment, the upcoming visit is
+    already paid for. Returns that TechnicalInspectionAppointment, or None."""
+    from app.models import TechnicalInspectionAppointment, TechnicalInspection
+    appt = (TechnicalInspectionAppointment.query
+            .filter_by(vehicle_id=vehicle_id, status='confirmed')
+            .filter(TechnicalInspectionAppointment.paid_at.isnot(None))
+            .order_by(TechnicalInspectionAppointment.paid_at.desc())
+            .first())
+    if not appt:
+        return None
+    already_used = TechnicalInspection.query.filter(
+        TechnicalInspection.vehicle_id == vehicle_id,
+        TechnicalInspection.inspected_at >= appt.paid_at
+    ).first()
+    if already_used:
+        return None
+    return appt
+
+
+@main_bp.route('/api/vehicles/<int:vehicle_id>/technical-inspection-draft', methods=['POST'])
+@login_required
+def save_technical_inspection_draft(vehicle_id):
+    """Called right after printing the verification sheet, so the chosen inspector
+    and the fact printing is done survive if the judiciaire leaves and re-searches
+    the vehicle later. Payment is now required at THIS stage — before the checklist
+    step — unless the vehicle qualifies for a free re-visit (previous rejection,
+    already paid, within the last month)."""
+    from app.models import TechnicalInspectionDraft
+    from app.mobile_pay import _get_technical_inspection_price
+    if current_user.role != 'judiciaire':
+        return jsonify({'error': 'Réservé aux judiciaires'}), 403
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    check_island_access(vehicle.owner_island)
+
+    inspector_name = (request.get_json(silent=True) or {}).get('inspector_name', '').strip()
+    if not inspector_name:
+        return jsonify({'error': "Inspecteur requis."}), 400
+
+    draft = TechnicalInspectionDraft.query.filter_by(vehicle_id=vehicle_id).first()
+    if draft:
+        draft.inspector_name = inspector_name
+        draft.created_by = current_user.username
+        draft.created_at = now_comoros()
+    else:
+        draft = TechnicalInspectionDraft(
+            vehicle_id=vehicle_id,
+            inspector_name=inspector_name,
+            created_by=current_user.username,
+        )
+        free_source = _free_reinspection_source(vehicle_id)
+        prepaid_appt = _appointment_prepaid_source(vehicle_id) if not free_source else None
+        if free_source:
+            from dateutil.relativedelta import relativedelta
+            free_deadline = free_source.reviewed_at + relativedelta(months=1)
+            draft.payment_status = 'paid'
+            draft.payment_channel = 'free_reinspection'
+            draft.price_kmf = 0
+            draft.paid_by = (
+                f"Revisite gratuite (rejet du {free_source.reviewed_at.strftime('%d/%m/%Y')}, "
+                f"gratuite jusqu'au {free_deadline.strftime('%d/%m/%Y')})"
+            )
+            draft.paid_at = now_comoros()
+        elif prepaid_appt:
+            draft.payment_status = 'paid'
+            draft.payment_channel = 'app_citoyen'
+            draft.price_kmf = prepaid_appt.price_kmf
+            draft.paid_by = "Payé à la prise de rendez-vous (App Citoyen)"
+            draft.paid_at = prepaid_appt.paid_at
+        else:
+            draft.price_kmf = _get_technical_inspection_price(vehicle)
+        db.session.add(draft)
+    db.session.commit()
+    return jsonify(draft.to_dict()), 201
+
+
+@main_bp.route('/api/technical-inspections', methods=['GET'])
+@login_required
+def list_technical_inspections():
+    from app.models import TechnicalInspection
+    role = current_user.role
+
+    if role == 'judiciaire':
+        query = TechnicalInspection.query.filter_by(inspected_by=current_user.username)
+    elif _can_view_visite_technique():
+        query = TechnicalInspection.query
+        if role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+            query = query.join(Vehicle).filter(Vehicle.owner_island == current_user.country)
+    else:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    status_filter = request.args.get('status')
+    if status_filter:
+        query = query.filter(TechnicalInspection.status == status_filter)
+
+    inspections = query.order_by(TechnicalInspection.inspected_at.desc()).all()
+    return jsonify([i.to_dict() for i in inspections])
+
+
+@main_bp.route('/api/technical-inspections/count-pending', methods=['GET'])
+@login_required
+def count_pending_technical_inspections():
+    from app.models import TechnicalInspection
+    if not _is_visite_technique_reviewer():
+        return jsonify({'pending_count': 0})
+    query = TechnicalInspection.query.filter_by(status='pending')
+    if current_user.country:
+        query = query.join(Vehicle).filter(Vehicle.owner_island == current_user.country)
+    return jsonify({'pending_count': query.count()})
+
+
+@main_bp.route('/api/technical-inspections/<int:insp_id>/approve', methods=['POST'])
+@login_required
+def approve_technical_inspection(insp_id):
+    from app.models import TechnicalInspection
+    from dateutil.relativedelta import relativedelta
+    if not _is_visite_technique_reviewer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    insp = TechnicalInspection.query.get_or_404(insp_id)
+    if insp.status != 'pending':
+        return jsonify({'error': "Cette visite n'est plus en attente."}), 400
+    vehicle = insp.vehicle
+    if current_user.country and vehicle.owner_island != current_user.country:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    now = now_comoros()
+    insp.status = 'approved'
+    insp.reviewed_by = current_user.username
+    insp.reviewed_at = now
+    insp.issued_at = now
+    insp.expiry_date = now.date() + relativedelta(years=1)
+
+    db.session.add(VehicleHistory(
+        vehicle_id=vehicle.id,
+        action='Visite technique validée',
+        officer=current_user.username,
+        notes=f"Visite réalisée par {insp.inspected_by}, validée par {current_user.username}. Attestation valable jusqu'au {insp.expiry_date.strftime('%d/%m/%Y')}."
+    ))
+    db.session.commit()
+    return jsonify(insp.to_dict())
+
+
+@main_bp.route('/api/technical-inspections/<int:insp_id>/reject', methods=['POST'])
+@login_required
+def reject_technical_inspection(insp_id):
+    from app.models import TechnicalInspection, TechnicalInspectionAppointment
+    if not _is_visite_technique_reviewer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    insp = TechnicalInspection.query.get_or_404(insp_id)
+    if insp.status != 'pending':
+        return jsonify({'error': "Cette visite n'est plus en attente."}), 400
+    vehicle = insp.vehicle
+    if current_user.country and vehicle.owner_island != current_user.country:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    data = request.get_json(silent=True) or {}
+    insp.status = 'rejected'
+    insp.reviewed_by = current_user.username
+    insp.reviewed_at = now_comoros()
+    insp.review_comment = (data.get('comment') or '').strip()
+
+    # Free up the appointment slot that led to this rejected visit, so the citizen app
+    # shows the booking form again instead of a dead-end "confirmed" appointment.
+    appointment = (TechnicalInspectionAppointment.query
+                   .filter(TechnicalInspectionAppointment.vehicle_id == vehicle.id,
+                           TechnicalInspectionAppointment.status == 'confirmed',
+                           TechnicalInspectionAppointment.paid_at <= insp.inspected_at)
+                   .order_by(TechnicalInspectionAppointment.paid_at.desc())
+                   .first())
+    if appointment:
+        appointment.status = 'cancelled'
+        appointment.cancelled_at = now_comoros()
+        appointment.updated_at = now_comoros()
+
+    db.session.commit()
+    return jsonify(insp.to_dict())
+
+
+@main_bp.route('/api/technical-inspection-appointments', methods=['GET'])
+@login_required
+def list_technical_inspection_appointments():
+    from app.models import TechnicalInspectionAppointment, TechnicalInspection
+    role = current_user.role
+
+    if role == 'judiciaire':
+        pass
+    elif not _can_view_visite_technique():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    query = TechnicalInspectionAppointment.query.join(Vehicle)
+    if role in ('judiciaire', 'dgrtr') and getattr(current_user, 'country', None):
+        if role == 'judiciaire' or (role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional'):
+            query = query.filter(Vehicle.owner_island == current_user.country)
+
+    status_filter = request.args.get('status')
+    if status_filter:
+        query = query.filter(TechnicalInspectionAppointment.status == status_filter)
+    else:
+        # Unpaid (pending_payment) appointments aren't real bookings yet — only
+        # show confirmed (paid) ones to the judiciaire/DR by default.
+        query = query.filter(TechnicalInspectionAppointment.status == 'confirmed')
+
+    q = request.args.get('q', '').strip()
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Vehicle.license_plate.ilike(like), Vehicle.owner_name.ilike(like)))
+
+    appointments = query.order_by(
+        TechnicalInspectionAppointment.appointment_date.asc(),
+        TechnicalInspectionAppointment.appointment_time.asc()
+    ).all()
+
+    # Once a judiciaire has actually submitted a technical-inspection report for this
+    # vehicle (pending/approved/rejected) since the appointment was booked, it moves to
+    # the other tabs — stop showing it as a pending "Prise de rendez-vous" entry.
+    visible = []
+    for appt in appointments:
+        since = appt.paid_at or appt.created_at
+        already_visited = TechnicalInspection.query.filter(
+            TechnicalInspection.vehicle_id == appt.vehicle_id,
+            TechnicalInspection.status.in_(['pending', 'approved', 'rejected']),
+            TechnicalInspection.inspected_at >= since
+        ).first()
+        if not already_visited:
+            visible.append(appt)
+
+    return jsonify([a.to_dict() for a in visible])
+
+
+@main_bp.route('/dgrtr/visite-technique')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def visite_technique_page():
+    from app.models import TECHNICAL_INSPECTION_ITEMS
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
+        abort(403)
+    return render_template('dgrtr_visite_technique.html',
+                           checklist_items=TECHNICAL_INSPECTION_ITEMS,
+                           is_reviewer=_is_visite_technique_reviewer(),
+                           can_create=(current_user.role == 'judiciaire'))
+
+
+@main_bp.route('/dgrtr/visite-technique/<int:insp_id>/print')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def visite_technique_print(insp_id):
+    from app.models import TechnicalInspection, CarteGriseSetting, TECHNICAL_INSPECTION_ITEMS, TECHNICAL_INSPECTION_SCORE_MAX
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
+        abort(403)
+    insp = TechnicalInspection.query.get_or_404(insp_id)
+    if insp.status != 'approved':
+        abort(403)
+    if not insp.smarttech_print_validated:
+        abort(403)
+    if insp.payment_status != 'paid':
+        abort(403)
+    vehicle = insp.vehicle
+    if current_user.role == 'judiciaire':
+        check_island_access(vehicle.owner_island)
+    elif current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+        if vehicle.owner_island != current_user.country:
+            abort(403)
+
+    island = vehicle.owner_island or 'Grande Comore'
+    cg_settings = CarteGriseSetting.get(island)
+
+    vehicle_qr_data_uri = None
+    if vehicle.track_token:
+        try:
+            import qrcode, io, base64 as _b64
+            _qr = qrcode.QRCode(box_size=5, border=2)
+            _qr.add_data(f'VEHICLE_TRACK:{vehicle.track_token}')
+            _qr.make(fit=True)
+            _img = _qr.make_image(fill_color='black', back_color='white')
+            _buf = io.BytesIO()
+            _img.save(_buf, format='PNG')
+            vehicle_qr_data_uri = 'data:image/png;base64,' + _b64.b64encode(_buf.getvalue()).decode()
+        except Exception:
+            pass
+
+    return render_template('dgrtr_visite_technique_print.html',
+                           vehicle=vehicle, insp=insp,
+                           cg_settings=cg_settings,
+                           now_comoros=now_comoros,
+                           checklist_items=TECHNICAL_INSPECTION_ITEMS,
+                           checklist_result=json.loads(insp.checklist) if insp.checklist else {},
+                           score_max=TECHNICAL_INSPECTION_SCORE_MAX,
+                           vehicle_qr_data_uri=vehicle_qr_data_uri)
+
+
+@main_bp.route('/dgrtr/visite-technique/<int:insp_id>/receipt')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def visite_technique_receipt(insp_id):
+    """Payment receipt — available as soon as the visit is paid, even before
+    SmartTech has validated printing of the attestation itself, and also for a
+    rejected visit (the payment still covers the free re-visit within 1 month)."""
+    from app.models import TechnicalInspection
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
+        abort(403)
+    insp = TechnicalInspection.query.get_or_404(insp_id)
+    if insp.status not in ('approved', 'rejected'):
+        abort(403)
+    if insp.payment_status != 'paid':
+        abort(403)
+    vehicle = insp.vehicle
+    if current_user.role == 'judiciaire':
+        check_island_access(vehicle.owner_island)
+    elif current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+        if vehicle.owner_island != current_user.country:
+            abort(403)
+
+    free_revisit_deadline = None
+    if insp.status == 'rejected' and insp.reviewed_at:
+        from dateutil.relativedelta import relativedelta
+        free_revisit_deadline = insp.reviewed_at + relativedelta(months=1)
+
+    return render_template('dgrtr_visite_technique_receipt.html', vehicle=vehicle, insp=insp,
+                           free_revisit_deadline=free_revisit_deadline)
+
+
+@main_bp.route('/dgrtr/visite-technique/<int:insp_id>/rejection-letter')
+@roles_required('administrateur', 'judiciaire', 'dgrtr')
+def visite_technique_rejection_letter(insp_id):
+    """Lists the non-conforme items and the 1-month deadline to fix them and
+    return for a free re-inspection (already paid for)."""
+    from app.models import TechnicalInspection, TECHNICAL_INSPECTION_ITEMS, TECHNICAL_INSPECTION_SCORE_MAX, CarteGriseSetting
+    from dateutil.relativedelta import relativedelta
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
+        abort(403)
+    insp = TechnicalInspection.query.get_or_404(insp_id)
+    if insp.status != 'rejected':
+        abort(403)
+    vehicle = insp.vehicle
+    if current_user.role == 'judiciaire':
+        check_island_access(vehicle.owner_island)
+    elif current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+        if vehicle.owner_island != current_user.country:
+            abort(403)
+
+    checklist_result = json.loads(insp.checklist) if insp.checklist else {}
+    non_conforme_items = [label for key, label in TECHNICAL_INSPECTION_ITEMS if checklist_result.get(key) == 'non_conforme']
+    deadline = (insp.reviewed_at + relativedelta(months=1)) if insp.reviewed_at else None
+
+    island = vehicle.owner_island or 'Grande Comore'
+    cg_settings = CarteGriseSetting.get(island)
+
+    return render_template('dgrtr_visite_technique_rejection_letter.html',
+                           vehicle=vehicle, insp=insp,
+                           checklist_items=TECHNICAL_INSPECTION_ITEMS,
+                           checklist_result=checklist_result,
+                           score_max=TECHNICAL_INSPECTION_SCORE_MAX,
+                           non_conforme_items=non_conforme_items,
+                           deadline=deadline,
+                           cg_settings=cg_settings)
+
+
+def _is_visite_technique_settings_admin():
+    """administrateur and dgrtr directeur_regional may manage technical-inspection prices."""
+    return current_user.role == 'administrateur' or (
+        current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'
+    )
+
+
+@main_bp.route('/dgrtr/parametres-visite-technique')
+@roles_required('administrateur', 'dgrtr')
+def visite_technique_settings_page():
+    from app.models import TECHNICAL_INSPECTION_VEHICLE_TYPES, TECHNICAL_INSPECTION_USAGE_TYPES
+    if not _is_visite_technique_settings_admin():
+        abort(403)
+    return render_template('dgrtr_parametres_visite_technique.html',
+                           vehicle_types=TECHNICAL_INSPECTION_VEHICLE_TYPES,
+                           usage_types=TECHNICAL_INSPECTION_USAGE_TYPES)
+
+
+@main_bp.route('/api/technical-inspection-rates', methods=['GET'])
+@login_required
+def list_technical_inspection_rates():
+    from app.models import TechnicalInspectionRate
+    if not _is_visite_technique_settings_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+    rates = TechnicalInspectionRate.query.order_by(
+        TechnicalInspectionRate.vehicle_type.asc(), TechnicalInspectionRate.usage_type.asc()
+    ).all()
+    return jsonify([r.to_dict() for r in rates])
+
+
+@main_bp.route('/api/technical-inspection-rates', methods=['POST'])
+@login_required
+def create_technical_inspection_rate():
+    from app.models import TechnicalInspectionRate
+    if not _is_visite_technique_settings_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+    data = request.get_json() or {}
+    vehicle_type = (data.get('vehicle_type') or '').strip() or None
+    usage_type = (data.get('usage_type') or '').strip() or None
+    try:
+        price_kmf = float(data.get('price_kmf'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Prix invalide'}), 400
+    if price_kmf < 0:
+        return jsonify({'error': 'Prix invalide'}), 400
+
+    existing = TechnicalInspectionRate.query.filter_by(vehicle_type=vehicle_type, usage_type=usage_type).first()
+    if existing:
+        return jsonify({'error': 'Un tarif existe déjà pour cette combinaison.'}), 400
+
+    rate = TechnicalInspectionRate(vehicle_type=vehicle_type, usage_type=usage_type, price_kmf=price_kmf)
+    db.session.add(rate)
+    db.session.commit()
+    return jsonify(rate.to_dict()), 201
+
+
+@main_bp.route('/api/technical-inspection-rates/<int:rate_id>', methods=['PUT'])
+@login_required
+def update_technical_inspection_rate(rate_id):
+    from app.models import TechnicalInspectionRate
+    if not _is_visite_technique_settings_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+    rate = TechnicalInspectionRate.query.get_or_404(rate_id)
+    data = request.get_json() or {}
+    if 'price_kmf' in data:
+        try:
+            price_kmf = float(data.get('price_kmf'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Prix invalide'}), 400
+        if price_kmf < 0:
+            return jsonify({'error': 'Prix invalide'}), 400
+        rate.price_kmf = price_kmf
+    if 'is_active' in data:
+        rate.is_active = bool(data.get('is_active'))
+    rate.updated_at = now_comoros()
+    db.session.commit()
+    return jsonify(rate.to_dict())
+
+
+@main_bp.route('/api/technical-inspection-rates/<int:rate_id>', methods=['DELETE'])
+@login_required
+def delete_technical_inspection_rate(rate_id):
+    from app.models import TechnicalInspectionRate
+    if not _is_visite_technique_settings_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+    rate = TechnicalInspectionRate.query.get_or_404(rate_id)
+    db.session.delete(rate)
+    db.session.commit()
+    return jsonify({'success': True})
 
 
 @main_bp.route('/dgrtr/demandes-modification-permis')
@@ -5311,14 +6029,16 @@ def get_vignette_vehicles():
 
         payment_approved = bool(getattr(vehicle, 'vignette_payment_approved', False))
 
-        # QR activation price: use stored amount after approval, live calculation before
+        # QR activation price: use stored amount after approval, live calculation before.
+        # Always charged when adding a first vignette; otherwise only if QR never activated.
         from app.models import SmartTechSetting
         if payment_approved:
             qr_activation_price = float(getattr(vehicle, 'vignette_last_paid_qr_amount', 0.0) or 0.0)
             needs_qr_activation = False
         else:
+            is_new_vignette = (vignette_status == 'pending')
             needs_qr_activation = vehicle.qr_code_expiry is None
-            qr_activation_price = int(SmartTechSetting.get('qr_activation_price', 5000)) if needs_qr_activation else 0
+            qr_activation_price = int(SmartTechSetting.get('qr_activation_price', 5000)) if (is_new_vignette or needs_qr_activation) else 0
         vehicle_data['qr_activation_price'] = qr_activation_price
         vehicle_data['needs_qr_activation'] = needs_qr_activation
 
@@ -5414,7 +6134,8 @@ def approve_vignette_payment(vehicle_id):
 
     # Finalize the requested expiry date when this was a payment request for a vehicle
     # without vignette. For expired renewals, keep the renewal date equal to the approved date.
-    if requested_expiry and not current_expiry:
+    is_new_vignette = bool(requested_expiry and not current_expiry)
+    if is_new_vignette:
         vehicle.vignette_expiry = requested_expiry
     elif early_renewal:
         # Citizen paid ahead of expiry during the open renewal window: extend the
@@ -5431,12 +6152,12 @@ def approve_vignette_payment(vehicle_id):
     unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
     unpaid_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
 
-    # QR activation: include price for vehicles that have never been activated
+    # QR fee: always charged when adding a first vignette, otherwise only if the
+    # QR code was never activated.
     from app.models import SmartTechSetting, QRCodePayment
     needs_qr_activation = vehicle.qr_code_expiry is None
-    qr_activation_price = 0.0
-    if needs_qr_activation:
-        qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000)
+    charge_qr = is_new_vignette or needs_qr_activation
+    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if charge_qr else 0.0
 
     total_amount = vignette_price + penalty_amount + unpaid_fines_amount + qr_activation_price
 
@@ -5452,9 +6173,14 @@ def approve_vignette_payment(vehicle_id):
     vehicle.vignette_payment_requested_by = None
     vehicle.vignette_payment_requested_expiry = None
 
-    # Generate QR code and record activation payment if this is the first activation
-    if needs_qr_activation:
-        vehicle.generate_qr_code_with_expiry()
+    # Activate/sync the QR code and record its payment whenever a QR fee was charged.
+    if charge_qr:
+        if is_new_vignette:
+            # Adding a vignette: the QR code now tracks the vignette's expiry date.
+            vehicle.qr_code_generated_at = now_time
+            vehicle.qr_code_expiry = vehicle.vignette_expiry
+        elif needs_qr_activation:
+            vehicle.generate_qr_code_with_expiry()
         db.session.add(QRCodePayment(
             vehicle_id=vehicle.id,
             payment_type='activation',
@@ -5507,7 +6233,7 @@ def approve_vignette_payment(vehicle_id):
     db.session.add(payment_record)
 
     history_notes = f"Mode: {payment_method} | Montant total: {round(total_amount, 2)} KMF | Amendes payées: {unpaid_fines_count}"
-    if needs_qr_activation:
+    if charge_qr:
         history_notes += f" | Activation QR: {round(qr_activation_price, 2)} KMF"
     db.session.add(VehicleHistory(
         vehicle_id=vehicle.id,
@@ -5662,10 +6388,10 @@ def get_vignette_vehicles_without():
         vignette_price = calculate_vignette_price(vehicle)
         vehicle_data['vignette_price'] = vignette_price
 
-        # QR activation price: added once for vehicles that have never been activated
+        # QR activation price: always charged when adding a vignette for the first time.
         from app.models import SmartTechSetting
         needs_qr_activation = vehicle.qr_code_expiry is None
-        qr_activation_price = int(SmartTechSetting.get('qr_activation_price', 5000)) if needs_qr_activation else 0
+        qr_activation_price = int(SmartTechSetting.get('qr_activation_price', 5000))
         vehicle_data['qr_activation_price'] = qr_activation_price
         vehicle_data['needs_qr_activation'] = needs_qr_activation
 
@@ -6209,6 +6935,36 @@ def get_mobile_money_archive():
         })
         cg_total += amount
 
+    # Visites techniques payées (rendez-vous confirmés — app citoyen ou agent Huri Money)
+    from app.models import TechnicalInspectionAppointment
+    vt_filters = [TechnicalInspectionAppointment.status == 'confirmed']
+    if start_date:
+        vt_filters.append(TechnicalInspectionAppointment.paid_at >= start_date)
+    if end_date:
+        vt_filters.append(TechnicalInspectionAppointment.paid_at <= end_date)
+    vt_query = TechnicalInspectionAppointment.query.filter(*vt_filters).join(Vehicle)
+    if user_country:
+        vt_query = vt_query.filter(Vehicle.owner_island == user_country)
+
+    vt_archive = []
+    vt_total = 0.0
+    for appt in vt_query.order_by(TechnicalInspectionAppointment.paid_at.desc()).all():
+        v = appt.vehicle
+        amount = float(appt.price_kmf or 0.0)
+        vt_archive.append({
+            'id': appt.id,
+            'license_plate': v.license_plate if v else '-',
+            'owner_name': v.owner_name if v else '-',
+            'owner_island': v.owner_island if v else '-',
+            'appointment_date': appt.appointment_date.strftime('%d/%m/%Y') if appt.appointment_date else '-',
+            'appointment_time': appt.appointment_time,
+            'amount': amount,
+            'paid_at': appt.paid_at.isoformat() if appt.paid_at else None,
+            'channel': appt.channel,
+            'paid_by': 'App Citoyen' if appt.channel == 'app_citoyen' else (appt.recorded_by or 'Agent Huri Money'),
+        })
+        vt_total += amount
+
     return jsonify({
         'start_date': start_date.isoformat() if start_date else None,
         'end_date': end_date.isoformat() if end_date else None,
@@ -6221,11 +6977,14 @@ def get_mobile_money_archive():
             'vignette_included_fines_total': round(vignette_included_fines, 2),
             'cg_count': len(cg_archive),
             'cg_total': round(cg_total, 2),
-            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines + cg_total, 2),
+            'vt_count': len(vt_archive),
+            'vt_total': round(vt_total, 2),
+            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines + cg_total + vt_total, 2),
         },
         'direct_paid_fines': direct_paid_fines,
         'vignette_archive': vignette_archive,
         'cg_archive': cg_archive,
+        'vt_archive': vt_archive,
     })
 
 
@@ -7127,6 +7886,7 @@ _PAYMENT_PHONE_FIELD_LABELS = {
     'vignette_phone': 'Vignette',
     'carte_grise_phone': 'Carte grise',
     'permis_phone': 'Permis de conduire',
+    'visite_technique_phone': 'Visite technique',
 }
 
 
@@ -7148,7 +7908,7 @@ def update_payment_settings():
     setting = HuriDestinationSetting.get()
     username = current_user.username if current_user.is_authenticated else None
 
-    known_fields = ('fine_phone', 'vignette_phone', 'carte_grise_phone', 'permis_phone')
+    known_fields = ('fine_phone', 'vignette_phone', 'carte_grise_phone', 'permis_phone', 'visite_technique_phone')
     field = next((f for f in known_fields if f in data), None)
     if not field:
         return jsonify({'error': 'Aucun champ à modifier.'}), 400
@@ -7242,7 +8002,7 @@ def confirm_payment_settings_change():
 def get_payment_settings_history():
     from app.models import HuriDestinationPhoneHistory
     field = request.args.get('field', '').strip()
-    if field not in ('fine_phone', 'vignette_phone', 'qr_renewal_phone', 'carte_grise_phone', 'permis_phone'):
+    if field not in ('fine_phone', 'vignette_phone', 'qr_renewal_phone', 'carte_grise_phone', 'permis_phone', 'visite_technique_phone'):
         return jsonify({'error': 'Champ invalide'}), 400
     entries = (HuriDestinationPhoneHistory.query
                .filter_by(field=field)
@@ -7411,6 +8171,14 @@ def _require_dr_only():
         abort(403)
 
 
+def _block_directeur_general():
+    """Directeur général is excluded from the Cartes Grises management page and its reports
+    (rapport CG, rapport VT) — those stay directeur_regional-only. DG keeps the combined
+    Recettes page (read-only revenue figures)."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general':
+        abort(403)
+
+
 def _require_dgrtr_staff():
     """Block directeur_regional from DGRTR-internal pages (dashboard, licences, stats, etc.)."""
     if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional':
@@ -7420,6 +8188,7 @@ def _require_dgrtr_staff():
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_cartes_grises():
     _require_cg_access()
+    _block_directeur_general()
     return render_template('dgrtr_cartes_grises.html')
 
 
@@ -7427,6 +8196,7 @@ def dgrtr_cartes_grises():
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_carte_grise_print(vehicle_id):
     _require_cg_access()
+    _block_directeur_general()
     from app.models import Vehicle, CarteGrise, CarteGriseSetting
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     cg = CarteGrise.query.filter_by(vehicle_id=vehicle_id).first()
@@ -7473,6 +8243,7 @@ def dgrtr_parametres_cg():
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_cg_search():
     _require_cg_access()
+    _block_directeur_general()
     from app.models import Vehicle, CarteGrise
     q = request.args.get('q', '').strip()
     query = Vehicle.query.filter(Vehicle.qr_pending_approval == False)
@@ -7514,6 +8285,7 @@ def dgrtr_cg_search():
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_cg_vehicle(vehicle_id):
     _require_cg_access()
+    _block_directeur_general()
     from app.models import Vehicle, CarteGrise
     from datetime import date
     vehicle = Vehicle.query.get_or_404(vehicle_id)
@@ -7585,6 +8357,7 @@ def dgrtr_cg_vehicle(vehicle_id):
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_cg_request_signature(vehicle_id):
     _require_cg_access()
+    _block_directeur_general()
     from app.models import CarteGrise, Vehicle
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     cg = vehicle.carte_grise
@@ -7614,8 +8387,8 @@ def dgrtr_cg_request_signature(vehicle_id):
 @main_bp.route('/api/dgrtr/cartes-grises/<int:vehicle_id>/sign', methods=['POST'])
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_cg_sign(vehicle_id):
-    # Only DG, DT, DR can sign — not employe
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'employe':
+    # Only DT, DR can sign — not employe, not directeur_general
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) in ('employe', 'directeur_general'):
         return jsonify({'error': 'Accès refusé'}), 403
     from app.models import CarteGrise, Vehicle
     vehicle = Vehicle.query.get_or_404(vehicle_id)
@@ -7645,6 +8418,7 @@ def dgrtr_cg_sign(vehicle_id):
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_cg_stats():
     _require_cg_access()
+    _block_directeur_general()
     from app.models import CarteGrise, Vehicle
     from sqlalchemy import func
     base_q = CarteGrise.query.join(Vehicle)
@@ -7660,6 +8434,7 @@ def dgrtr_cg_stats():
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_rapport_cg_api():
     _require_cg_access()
+    _block_directeur_general()
     from app.models import CarteGrise, Vehicle
     from collections import defaultdict
     from datetime import date, timedelta
@@ -7712,7 +8487,72 @@ def dgrtr_rapport_cg_api():
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_rapport_cg():
     _require_cg_access()
+    _block_directeur_general()
     return render_template('dgrtr_rapport_cg.html')
+
+
+@main_bp.route('/api/dgrtr/rapport-vt')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_rapport_vt_api():
+    _require_cg_access()
+    _block_directeur_general()
+    from app.models import TechnicalInspection, Vehicle
+    from collections import defaultdict
+    from datetime import date, timedelta
+
+    base_q = TechnicalInspection.query.join(Vehicle)
+    base_q = apply_island_filter(base_q, Vehicle.owner_island)
+    insps = base_q.all()
+
+    monthly = defaultdict(lambda: {'crees': 0, 'payees': 0})
+    channels = defaultdict(int)
+
+    for insp in insps:
+        if insp.inspected_at:
+            monthly[insp.inspected_at.strftime('%Y-%m')]['crees'] += 1
+        if insp.payment_status == 'paid' and insp.paid_at:
+            monthly[insp.paid_at.strftime('%Y-%m')]['payees'] += 1
+            channels[insp.payment_channel or 'agent_huri_money'] += 1
+
+    today = date.today()
+    months_out = []
+    for i in range(17, -1, -1):
+        d = today.replace(day=1)
+        for _ in range(i):
+            d = (d - timedelta(days=1)).replace(day=1)
+        key = d.strftime('%Y-%m')
+        months_out.append({
+            'key': key,
+            'label': d.strftime('%m/%Y'),
+            'crees':  monthly[key]['crees'],
+            'payees': monthly[key]['payees'],
+        })
+
+    this_month = today.strftime('%Y-%m')
+    last_month = ((today.replace(day=1)) - timedelta(days=1)).strftime('%Y-%m')
+
+    total         = len(insps)
+    total_payees  = sum(1 for insp in insps if insp.payment_status == 'paid')
+    total_pending = sum(1 for insp in insps if insp.status == 'approved' and insp.payment_status != 'paid')
+
+    CHANNEL_LABELS = {'app_citoyen': 'App Citoyen', 'agent_huri_money': 'Agent Huri Money'}
+    channel_rows = [{'type': CHANNEL_LABELS.get(k, k), 'count': v} for k, v in sorted(channels.items(), key=lambda x: -x[1])]
+
+    return jsonify({
+        'monthly': months_out,
+        'channels': channel_rows,
+        'totals': {'total': total, 'payees': total_payees, 'en_attente': total_pending},
+        'this_month': monthly[this_month],
+        'last_month': monthly[last_month],
+    })
+
+
+@main_bp.route('/dgrtr/rapport-vt')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_rapport_vt():
+    _require_cg_access()
+    _block_directeur_general()
+    return render_template('dgrtr_rapport_vt.html')
 
 
 @main_bp.route('/dgrtr/recettes-cg')
@@ -7779,11 +8619,127 @@ def dgrtr_recettes_cg_api():
     })
 
 
+@main_bp.route('/dgrtr/recettes')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_recettes_page():
+    """Combined revenue page (Carte Grise + Visite Technique) — visible to directeur régional AND directeur général."""
+    _require_cg_access()
+    return render_template('dgrtr_recettes.html')
+
+
+@main_bp.route('/api/dgrtr/recettes/carte-grise')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_recettes_cg_v2_api():
+    """Same Carte Grise revenue data as /api/dgrtr/recettes-cg, but open to directeur général too."""
+    _require_cg_access()
+    from app.models import CarteGrise, Vehicle
+    from datetime import date, datetime, timedelta
+    date_from = request.args.get('date_from')
+    date_to   = request.args.get('date_to')
+
+    q = CarteGrise.query.filter_by(status='signee').join(Vehicle)
+    q = apply_island_filter(q, Vehicle.owner_island)
+    if date_from:
+        try:
+            q = q.filter(CarteGrise.signed_at >= datetime.combine(date.fromisoformat(date_from), datetime.min.time()))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            q = q.filter(CarteGrise.signed_at < datetime.combine(date.fromisoformat(date_to) + timedelta(days=1), datetime.min.time()))
+        except ValueError:
+            pass
+
+    cgs = q.order_by(CarteGrise.signed_at.desc()).all()
+    total_montant  = sum(c.prix for c in cgs if c.prix is not None)
+    total_droit    = sum(3000 for c in cgs if c.prix is not None)
+    total_chevaux  = sum((c.nombre_chevaux or 0) * 1000 for c in cgs)
+
+    rows = []
+    for c in cgs:
+        v = c.vehicle
+        rows.append({
+            'id': c.id,
+            'vehicle_id': v.id,
+            'license_plate': v.license_plate,
+            'owner_name': v.owner_name or '',
+            'civilite': c.civilite or '',
+            'signed_at': c.signed_at.strftime('%d/%m/%Y') if c.signed_at else '',
+            'date_emission': c.date_emission.strftime('%d/%m/%Y') if c.date_emission else '',
+            'prix': c.prix if c.prix is not None else None,
+            'nombre_chevaux': c.nombre_chevaux if c.nombre_chevaux is not None else None,
+        })
+    return jsonify({
+        'count': len(cgs),
+        'total_montant': total_montant,
+        'total_droit': total_droit,
+        'total_chevaux': total_chevaux,
+        'rows': rows,
+    })
+
+
+@main_bp.route('/api/dgrtr/recettes/visite-technique')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_recettes_vt_api():
+    """Visite Technique revenue — paid technical inspections, split by payment channel."""
+    _require_cg_access()
+    from app.models import TechnicalInspection, Vehicle
+    from datetime import date, datetime, timedelta
+    date_from = request.args.get('date_from')
+    date_to   = request.args.get('date_to')
+
+    q = TechnicalInspection.query.filter_by(payment_status='paid').join(Vehicle)
+    q = apply_island_filter(q, Vehicle.owner_island)
+    if date_from:
+        try:
+            q = q.filter(TechnicalInspection.paid_at >= datetime.combine(date.fromisoformat(date_from), datetime.min.time()))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            q = q.filter(TechnicalInspection.paid_at < datetime.combine(date.fromisoformat(date_to) + timedelta(days=1), datetime.min.time()))
+        except ValueError:
+            pass
+
+    insps = q.order_by(TechnicalInspection.paid_at.desc()).all()
+    total_montant = sum(float(i.price_kmf or 0) for i in insps)
+    app_citoyen_insps = [i for i in insps if i.payment_channel == 'app_citoyen']
+    agent_insps = [i for i in insps if i.payment_channel != 'app_citoyen']
+    total_app_citoyen = sum(float(i.price_kmf or 0) for i in app_citoyen_insps)
+    total_agent = sum(float(i.price_kmf or 0) for i in agent_insps)
+
+    rows = []
+    for i in insps:
+        v = i.vehicle
+        rows.append({
+            'id': i.id,
+            'vehicle_id': v.id if v else None,
+            'license_plate': v.license_plate if v else '',
+            'owner_name': v.owner_name if v else '',
+            'inspected_at': i.inspected_at.strftime('%d/%m/%Y') if i.inspected_at else '',
+            'paid_at': i.paid_at.strftime('%d/%m/%Y %H:%M') if i.paid_at else '',
+            'price_kmf': float(i.price_kmf) if i.price_kmf is not None else None,
+            'channel': i.payment_channel,
+            'channel_display': 'App Citoyen' if i.payment_channel == 'app_citoyen' else 'Agent Huri Money',
+            'recorded_by': i.paid_by or '',
+        })
+    return jsonify({
+        'count': len(insps),
+        'total_montant': total_montant,
+        'count_app_citoyen': len(app_citoyen_insps),
+        'total_app_citoyen': total_app_citoyen,
+        'count_agent': len(agent_insps),
+        'total_agent': total_agent,
+        'rows': rows,
+    })
+
+
 @main_bp.route('/api/dgrtr/cartes-grises/stream')
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def dgrtr_cg_stream():
     """SSE stream: pushes events when a new en_attente or signee carte grise appears."""
     _require_cg_access()
+    _block_directeur_general()
     from flask import Response, stream_with_context
     from app.models import CarteGrise, Vehicle
     import time, json as _json
@@ -7842,6 +8798,7 @@ def dgrtr_cg_stream():
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_cg_pending():
     _require_cg_access()
+    _block_directeur_general()
     from app.models import CarteGrise, Vehicle
     query = CarteGrise.query.filter_by(status='en_attente').join(Vehicle)
     query = apply_island_filter(query, Vehicle.owner_island)
