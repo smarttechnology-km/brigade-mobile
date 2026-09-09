@@ -248,6 +248,7 @@
             </script>
             <script>
                 function updatePhotoCount() {
+                    if (document.hidden) return;
                     fetch('/api/photo-submissions/count-pending')
                         .then(r => r.json())
                         .then(data => {
@@ -261,10 +262,11 @@
                         .catch(() => {});
                 }
                 document.addEventListener('DOMContentLoaded', updatePhotoCount);
-                setInterval(updatePhotoCount, 30000);
+                setInterval(updatePhotoCount, 90000);
             </script>
             <script>
                 function updateVerCount() {
+                    if (document.hidden) return;
                     const badge = document.getElementById('ver-count-badge');
                     if (!badge) return;
                     fetch('/api/vehicle-edit-requests/count-pending')
@@ -277,10 +279,11 @@
                         .catch(() => {});
                 }
                 document.addEventListener('DOMContentLoaded', updateVerCount);
-                setInterval(updateVerCount, 30000);
+                setInterval(updateVerCount, 90000);
             </script>
             <script>
                 function updateLerCount() {
+                    if (document.hidden) return;
                     const badge = document.getElementById('ler-count-badge');
                     if (!badge) return;
                     fetch('/api/license-edit-requests/count-pending')
@@ -293,10 +296,11 @@
                         .catch(() => {});
                 }
                 document.addEventListener('DOMContentLoaded', updateLerCount);
-                setInterval(updateLerCount, 30000);
+                setInterval(updateLerCount, 90000);
             </script>
             <script>
                 function updateDossierSigCount() {
+                    if (document.hidden) return;
                     const badge = document.getElementById('dossier-sig-count-badge');
                     if (!badge) return;
                     fetch('/api/dossiers-permis/count-pending-signature')
@@ -309,10 +313,11 @@
                         .catch(() => {});
                 }
                 document.addEventListener('DOMContentLoaded', updateDossierSigCount);
-                setInterval(updateDossierSigCount, 30000);
+                setInterval(updateDossierSigCount, 90000);
             </script>
             <script>
                 function updateVtCount() {
+                    if (document.hidden) return;
                     const badge = document.getElementById('vt-count-badge');
                     if (!badge) return;
                     fetch('/api/technical-inspections/count-pending')
@@ -325,7 +330,7 @@
                         .catch(() => {});
                 }
                 document.addEventListener('DOMContentLoaded', updateVtCount);
-                setInterval(updateVtCount, 30000);
+                setInterval(updateVtCount, 90000);
             </script>
             {% else %}
             <a class="nav-link text-white mt-3" href="/auth/login"><i class="fas fa-sign-in-alt me-2"></i> Se connecter</a>
