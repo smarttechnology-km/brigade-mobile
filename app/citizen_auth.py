@@ -12,6 +12,7 @@ from functools import wraps
 from flask import Blueprint, request, jsonify, current_app, Response, render_template
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from app.models import db, Vehicle, User, VehicleOwner, Fine, VehicleTransfer, DriverLicense, PointReductionHistory
+from app import limiter
 from app.sms_service import SMSService
 from app.push_notifications import send_expo_push_notification
 from app.timezone_utils import now_comoros
@@ -106,6 +107,7 @@ def check_days_until_expiry(expiry_date_str):
         return None
 
 @citizen_auth_bp.route('/register', methods=['POST'])
+@limiter.limit('5/minute')
 def register():
     """
     First step: User provides license_plate, VIN, and phone
@@ -210,6 +212,7 @@ def debug_otp():
         return jsonify({'error': str(e)}), 500
 
 @citizen_auth_bp.route('/mobile-login', methods=['POST'])
+@limiter.limit('5/minute')
 def login():
     """
     Login endpoint: User provides phone number
@@ -289,6 +292,7 @@ def login():
         print(f"Login error: {e}")
 
 @citizen_auth_bp.route('/verify-otp', methods=['POST'])
+@limiter.limit('10/minute')
 def verify_otp():
     """
     Second step: User provides OTP to complete registration/login
@@ -389,6 +393,7 @@ def verify_otp():
         return jsonify({'error': str(e)}), 500
 
 @citizen_auth_bp.route('/verify-login-otp', methods=['POST'])
+@limiter.limit('10/minute')
 def verify_login_otp():
     """
     Verify OTP for login (existing account)
@@ -737,6 +742,7 @@ def unregister_push_token():
 
 @citizen_auth_bp.route('/delete-account/request-otp', methods=['POST'])
 @jwt_required()
+@limiter.limit('5/minute')
 def request_delete_account_otp():
     """Send an OTP to confirm citizen account deletion."""
     try:
@@ -785,6 +791,7 @@ def request_delete_account_otp():
 
 @citizen_auth_bp.route('/delete-account/confirm-otp', methods=['POST'])
 @jwt_required()
+@limiter.limit('10/minute')
 def confirm_delete_account_otp():
     """Verify OTP and permanently delete the citizen account link."""
     try:

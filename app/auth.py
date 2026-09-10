@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from app.models import User, InsuranceAccount
-from app import db, login_manager
+from app import db, login_manager, limiter
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -38,6 +38,7 @@ def load_user(user_id):
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit('10/minute', methods=['POST'])
 def login():
     if current_user.is_authenticated:
         # Redirect to appropriate dashboard based on user type

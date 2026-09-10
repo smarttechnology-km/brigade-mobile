@@ -4,6 +4,8 @@ from flask_login import LoginManager
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -22,6 +24,12 @@ logger = logging.getLogger(__name__)
 db = SQLAlchemy()
 login_manager = LoginManager()
 scheduler = BackgroundScheduler()
+
+# In-memory storage — correctly enforced as long as the app runs as a single
+# gunicorn worker/process (current Render config). If workers or instances are
+# ever scaled beyond 1, switch storage_uri to a shared Redis instance, or the
+# limits will be tracked separately per process and under-enforce.
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 def create_app():
     app = Flask(__name__)
@@ -72,8 +80,18 @@ def create_app():
     app.register_blueprint(mobile_pay_bp)
     app.register_blueprint(smart_tech_bp)
 
-    # Enable CORS for API endpoints during development (restrict in production)
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # CORS: restrict to known app origins. Native mobile HTTP clients (axios in
+    # mobile/ and mobile-citizen/) aren't subject to CORS at all — this only
+    # gates browser-based JS running on some other domain from calling the API.
+    _allowed_origins = [o.strip() for o in os.environ.get(
+        'CORS_ALLOWED_ORIGINS', 'https://brigade-mobile.onrender.com'
+    ).split(',') if o.strip()]
+    if os.environ.get('FLASK_ENV') != 'production':
+        _allowed_origins += ['http://localhost:5001', 'http://127.0.0.1:5001']
+    CORS(app, resources={r"/api/*": {"origins": _allowed_origins}})
+
+    # Rate limiting on auth-sensitive endpoints (see app/auth.py, app/citizen_auth.py)
+    limiter.init_app(app)
 
     # Initialize JWT
     jwt = JWTManager()
