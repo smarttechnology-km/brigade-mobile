@@ -517,9 +517,40 @@
     }
 
     /* ── Init ── */
+    var _vtPollTimer = null;
+    function vtPollTick() {
+        if (document.hidden) return;
+        fetch('/smart-tech/api/licences/requests/stats')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d) return;
+                const lb = document.getElementById('nav-lic-badge');
+                if (lb) { lb.textContent = d.pending_count; lb.style.display = d.pending_count > 0 ? '' : 'none'; }
+                const gb = document.getElementById('nav-gv-badge');
+                if (gb) { gb.textContent = d.gv_pending_count; gb.style.display = d.gv_pending_count > 0 ? '' : 'none'; }
+                if (d.vt_pending_count > 0) {
+                    loadPendingVt();
+                    loadValidated(true);
+                }
+                /* Rien en attente (Licences + Visite Technique) : on arrête les requêtes
+                   automatiques. Reprend au prochain chargement de page ou retour d'onglet. */
+                if (d.pending_count === 0 && d.vt_pending_count === 0) {
+                    if (_vtPollTimer) { clearInterval(_vtPollTimer); _vtPollTimer = null; }
+                } else if (!_vtPollTimer) {
+                    _vtPollTimer = setInterval(vtPollTick, 25000);
+                }
+            })
+            .catch(() => {});
+    }
+
     loadPendingVt();
     loadValidated(false);
-    setInterval(function() { loadPendingVt(); loadValidated(true); }, 8000);
+    vtPollTick();
+    _vtPollTimer = setInterval(vtPollTick, 25000);
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) { loadPendingVt(); loadValidated(true); vtPollTick(); }
+    });
+    window.addEventListener('focus', vtPollTick);
 })();
 </script>
 </body>

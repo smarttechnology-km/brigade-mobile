@@ -212,6 +212,7 @@
 {% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-clipboard-check"></i></span>Visite Technique
+            <span class="nav-badge" id="nav-vt-badge" style="{{ '' if vt_pending_count > 0 else 'display:none;' }}">{{ vt_pending_count }}</span>
         </a>
         {% endif %}
 {% if current_user.role in ['admin', 'employe'] %}
@@ -913,19 +914,32 @@
 
 <script>
 (function(){
+    var _pollLicBadgeTimer = null;
     function pollLicBadge(){
+        if (document.hidden) return;
         fetch("/smart-tech/api/licences/requests/stats")
             .then(function(r){return r.ok?r.json():null;})
             .then(function(d){
                 if(!d)return;
                 var b=document.getElementById("nav-lic-badge");
-                if(!b)return;
-                b.textContent=d.pending_count;
-                b.style.display=d.pending_count>0?"":"none";
+                if(b){ b.textContent=d.pending_count; b.style.display=d.pending_count>0?"":"none"; }
+                var vb=document.getElementById("nav-vt-badge");
+                if(vb){ vb.textContent=d.vt_pending_count; vb.style.display=d.vt_pending_count>0?"":"none"; }
+                var gb=document.getElementById("nav-gv-badge");
+                if(gb){ gb.textContent=d.gv_pending_count; gb.style.display=d.gv_pending_count>0?"":"none"; }
+                /* Rien en attente (Licences + Visite Technique) : on arrête les requêtes
+                   automatiques. Reprend au prochain chargement de page ou retour d'onglet. */
+                if (d.pending_count === 0 && d.vt_pending_count === 0) {
+                    if (_pollLicBadgeTimer) { clearInterval(_pollLicBadgeTimer); _pollLicBadgeTimer = null; }
+                } else if (!_pollLicBadgeTimer) {
+                    _pollLicBadgeTimer = setInterval(pollLicBadge, 60000);
+                }
             }).catch(function(){});
     }
     pollLicBadge();
-    setInterval(pollLicBadge,5000);
+    _pollLicBadgeTimer = setInterval(pollLicBadge,60000);
+    document.addEventListener('visibilitychange', function() { if (!document.hidden) pollLicBadge(); });
+    window.addEventListener('focus', pollLicBadge);
 })();
 </script>
 </body>

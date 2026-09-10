@@ -138,6 +138,7 @@
             <tbody id="pending-tbody"></tbody>
           </table>
         </div>
+        <div id="pending-pagination"></div>
       </div>
 
       <!-- En attente d'impression -->
@@ -164,6 +165,7 @@
             <tbody id="validated-tbody"></tbody>
           </table>
         </div>
+        <div id="validated-pagination"></div>
       </div>
 
       <!-- Imprimées -->
@@ -190,6 +192,7 @@
             <tbody id="printed-tbody"></tbody>
           </table>
         </div>
+        <div id="printed-pagination"></div>
       </div>
 
     </div>
@@ -198,14 +201,9 @@
 </div>
 
 <script>
-let allData = [];
-
-function extractDateKey(dtStr) {
-  if (!dtStr) return '';
-  const [datePart] = dtStr.split(' ');
-  const [d, m, y]  = datePart.split('/');
-  return `${y}-${m}-${d}`;
-}
+const PER_PAGE = 100;
+const STATUS_OF = { pending: 'pending', validated: 'validated', printed: 'printed' };
+let currentPage = { pending: 1, validated: 1, printed: 1 };
 
 function renderPendingRow(r) {
   return `<tr id="pending-row-${r.id}">
@@ -228,17 +226,8 @@ function cancelPrintRequest(reqId) {
     .then(r => r.json())
     .then(d => {
       if (d.ok) {
-        const row = document.getElementById('pending-row-' + reqId);
-        if (row) row.remove();
-        // Met à jour le compteur
-        const tbody = document.getElementById('pending-tbody');
-        const count = tbody ? tbody.querySelectorAll('tr').length : 0;
-        document.getElementById('stat-pending').textContent  = count;
-        document.getElementById('badge-pending').textContent = count;
-        if (count === 0) {
-          document.getElementById('pending-empty').classList.remove('d-none');
-          document.getElementById('pending-table').classList.add('d-none');
-        }
+        loadCounts();
+        loadTab('pending', currentPage.pending);
       } else {
         alert(d.error || 'Erreur lors de l\'annulation.');
       }
@@ -273,6 +262,8 @@ function renderPrintedRow(r) {
   </tr>`;
 }
 
+const RENDER_FNS = { pending: renderPendingRow, validated: renderValidatedRow, printed: renderPrintedRow };
+
 function setSection(prefix, rows, renderFn) {
   const loading = document.getElementById(prefix + '-loading');
   const empty   = document.getElementById(prefix + '-empty');
@@ -289,35 +280,80 @@ function setSection(prefix, rows, renderFn) {
   }
 }
 
-function render(data) {
-  const pending   = data.filter(r => r.status === 'pending');
-  const validated = data.filter(r => r.status === 'validated');
-  const printed   = data.filter(r => r.status === 'printed');
+function renderPagination(prefix, page, pages, total) {
+  const el = document.getElementById(prefix + '-pagination');
+  if (!el) return;
+  if (pages <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="d-flex justify-content-between align-items-center py-2 px-3 border-top">
+      <span class="small text-muted">${total} résultat${total > 1 ? 's' : ''} — page ${page}/${pages}</span>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" ${page <= 1 ? 'disabled' : ''} onclick="loadTab('${prefix}', ${page - 1})">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <button class="btn btn-outline-secondary" ${page >= pages ? 'disabled' : ''} onclick="loadTab('${prefix}', ${page + 1})">
+          <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+    </div>`;
+}
 
-  document.getElementById('stat-pending').textContent    = pending.length;
-  document.getElementById('stat-validated').textContent  = validated.length;
-  document.getElementById('stat-printed').textContent    = printed.length;
-  document.getElementById('badge-pending').textContent   = pending.length;
-  document.getElementById('badge-validated').textContent = validated.length;
-  document.getElementById('badge-printed').textContent   = printed.length;
+function dateParams() {
+  const from = document.getElementById('date-from').value;
+  const to   = document.getElementById('date-to').value;
+  const params = new URLSearchParams();
+  if (from) params.set('date_from', from);
+  if (to)   params.set('date_to', to);
+  return params;
+}
 
-  setSection('pending',   pending,   renderPendingRow);
-  setSection('validated', validated, renderValidatedRow);
-  setSection('printed',   printed,   renderPrintedRow);
+function loadCounts() {
+  fetch('/api/licenses/print-requests/counts?' + dateParams().toString(), { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : { pending: 0, validated: 0, printed: 0 })
+    .then(c => {
+      document.getElementById('stat-pending').textContent    = c.pending;
+      document.getElementById('stat-validated').textContent  = c.validated;
+      document.getElementById('stat-printed').textContent    = c.printed;
+      document.getElementById('badge-pending').textContent   = c.pending;
+      document.getElementById('badge-validated').textContent = c.validated;
+      document.getElementById('badge-printed').textContent   = c.printed;
+    })
+    .catch(() => {});
+}
+
+function loadTab(prefix, page) {
+  currentPage[prefix] = page;
+  document.getElementById(prefix + '-loading').classList.remove('d-none');
+  document.getElementById(prefix + '-empty').classList.add('d-none');
+  document.getElementById(prefix + '-table').classList.add('d-none');
+
+  const params = dateParams();
+  params.set('status', STATUS_OF[prefix]);
+  params.set('page', page);
+  params.set('per_page', PER_PAGE);
+
+  fetch('/api/licenses/print-requests?' + params.toString(), { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : { items: [], total: 0, page: 1, pages: 1 })
+    .then(d => {
+      setSection(prefix, d.items || [], RENDER_FNS[prefix]);
+      renderPagination(prefix, d.page || page, d.pages || 1, d.total || 0);
+    })
+    .catch(() => {
+      document.getElementById(prefix + '-loading').innerHTML =
+        '<div class="text-danger py-3 text-center">Erreur de chargement</div>';
+    });
+}
+
+function loadAll() {
+  loadCounts();
+  loadTab('pending', currentPage.pending);
+  loadTab('validated', currentPage.validated);
+  loadTab('printed', currentPage.printed);
 }
 
 function applyFilter() {
-  const from = document.getElementById('date-from').value;
-  const to   = document.getElementById('date-to').value;
-  if (!from && !to) { render(allData); return; }
-  const filtered = allData.filter(r => {
-    const key = extractDateKey(r.requested_at);
-    if (!key) return false;
-    if (from && key < from) return false;
-    if (to   && key > to)   return false;
-    return true;
-  });
-  render(filtered);
+  currentPage = { pending: 1, validated: 1, printed: 1 };
+  loadAll();
 }
 
 function toInputDate(d) {
@@ -336,24 +372,6 @@ function resetToLastMonth() {
   applyFilter();
 }
 
-function loadAll() {
-  ['pending', 'validated', 'printed'].forEach(p => {
-    document.getElementById(p + '-loading').classList.remove('d-none');
-    document.getElementById(p + '-empty').classList.add('d-none');
-    document.getElementById(p + '-table').classList.add('d-none');
-  });
-
-  fetch('/api/licenses/print-requests', {credentials: 'same-origin'})
-    .then(r => r.ok ? r.json() : [])
-    .then(data => { allData = data; applyFilter(); })
-    .catch(() => {
-      document.getElementById('pending-loading').innerHTML =
-        '<div class="text-danger py-3 text-center">Erreur de chargement</div>';
-      document.getElementById('validated-loading').innerHTML = '';
-      document.getElementById('printed-loading').innerHTML = '';
-    });
-}
-
 (function init() {
   const today    = new Date();
   const monthAgo = new Date(today);
@@ -361,9 +379,6 @@ function loadAll() {
   document.getElementById('date-from').value = toInputDate(monthAgo);
   document.getElementById('date-to').value   = toInputDate(today);
   loadAll();
-
-  document.addEventListener('visibilitychange', function() { if (!document.hidden) loadAll(); });
-  window.addEventListener('focus', loadAll);
 })();
 </script>
 {% endblock %}

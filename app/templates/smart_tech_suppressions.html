@@ -137,6 +137,7 @@
 {% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-clipboard-check"></i></span>Visite Technique
+            <span class="nav-badge" id="nav-vt-badge" style="{{ '' if vt_pending_count > 0 else 'display:none;' }}">{{ vt_pending_count }}</span>
         </a>
         {% endif %}
         {% if current_user.role in ['admin', 'employe'] %}

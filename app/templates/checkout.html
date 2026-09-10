@@ -317,6 +317,7 @@
     
     <script>
         const paymentId = {{ payment_id }};
+        const confirmToken = {{ confirm_token | tojson }};
         
         /**
          * Validates Comoros phone numbers
@@ -387,6 +388,7 @@
                     },
                     body: JSON.stringify({
                         local_payment_id: paymentId,
+                        confirm_token: confirmToken,
                         status: 'paid',
                         huri_payment_id: 'HURI_SIM_' + Date.now(),
                         phone_number: phoneNumber

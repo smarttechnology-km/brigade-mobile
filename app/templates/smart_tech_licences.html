@@ -357,6 +357,7 @@
 {% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-clipboard-check"></i></span>Visite Technique
+            <span class="nav-badge" id="nav-vt-badge" style="{{ '' if vt_pending_count > 0 else 'display:none;' }}">{{ vt_pending_count }}</span>
         </a>
         {% endif %}
 {% if current_user.role in ['admin', 'employe'] %}
@@ -809,8 +810,10 @@
     }
     setInterval(updateLiveBadge, 1000);
 
-    /* ── Change-detection : poll stats every 3 s (endpoint existant) ── */
+    /* ── Change-detection : poll stats (endpoint existant) ── */
     var _licLastKey = null;
+    var _licPollTimer = null;
+    var _licSafetyTimer = null;
 
     function updateNavBadge(count) {
         var b = document.getElementById('nav-lic-badge');
@@ -826,16 +829,35 @@
             .then(function(d) {
                 if (!d) return;
                 updateNavBadge(d.pending_count);
+                var vb = document.getElementById('nav-vt-badge');
+                if (vb) { vb.textContent = d.vt_pending_count; vb.style.display = d.vt_pending_count > 0 ? '' : 'none'; }
+                var gb = document.getElementById('nav-gv-badge');
+                if (gb) { gb.textContent = d.gv_pending_count; gb.style.display = d.gv_pending_count > 0 ? '' : 'none'; }
                 var key = d.pending_count + '|' + d.printed_total;
-                if (_licLastKey === null) { _licLastKey = key; return; }
-                if (key !== _licLastKey) {
+                if (_licLastKey === null) { _licLastKey = key; }
+                else if (key !== _licLastKey) {
                     _licLastKey = key;
                     loadRequests();
                     {% if current_user.role in ['admin', 'employe'] %}loadStats(); loadHistory();{% endif %}
                     lastRefresh = Date.now();
                 }
+                /* Rien en attente (Licences + Visite Technique) : on arrête les requêtes
+                   automatiques. Reprend au prochain chargement de page ou retour d'onglet. */
+                if (d.pending_count === 0 && d.vt_pending_count === 0) {
+                    if (_licPollTimer) { clearInterval(_licPollTimer); _licPollTimer = null; }
+                    if (_licSafetyTimer) { clearInterval(_licSafetyTimer); _licSafetyTimer = null; }
+                } else {
+                    if (!_licPollTimer) { _licPollTimer = setInterval(checkLicUpdates, 15000); }
+                    if (!_licSafetyTimer) { _licSafetyTimer = setInterval(licSafetyRefresh, 60000); }
+                }
             })
             .catch(function() {});
+    }
+
+    function licSafetyRefresh() {
+        loadRequests();
+        lastRefresh = Date.now();
+        {% if current_user.role == 'admin' %}loadStats();{% endif %}
     }
 
     /* ── Init ── */
@@ -845,12 +867,10 @@
     loadRequests();
     lastRefresh = Date.now();
     checkLicUpdates(); /* initialise la clé et le badge immédiatement */
-    setInterval(checkLicUpdates, 3000);
-    setInterval(function() {
-        loadRequests();
-        lastRefresh = Date.now();
-        {% if current_user.role == 'admin' %}loadStats();{% endif %}
-    }, 30000); /* safety-net */
+    _licPollTimer = setInterval(checkLicUpdates, 15000);
+    _licSafetyTimer = setInterval(licSafetyRefresh, 60000);
+    document.addEventListener('visibilitychange', function() { if (!document.hidden) checkLicUpdates(); });
+    window.addEventListener('focus', checkLicUpdates);
     document.addEventListener('visibilitychange', function() { if (!document.hidden) checkLicUpdates(); });
     window.addEventListener('focus', function() { loadRequests(); lastRefresh = Date.now(); });
 
