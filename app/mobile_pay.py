@@ -573,6 +573,7 @@ def create_payment():
 
         return jsonify({
             'payment_id': payment.id,
+            'confirm_token': payment.confirm_token,
             'checkout_url': checkout_url,
             'amount': round(total, 2),
             'currency': 'KMF',
@@ -630,6 +631,7 @@ def create_payment():
 
         return jsonify({
             'payment_id': payment.id,
+            'confirm_token': payment.confirm_token,
             'checkout_url': checkout_url,
             'amount': round(amount, 2),
             'currency': 'KMF',
@@ -683,6 +685,7 @@ def create_payment():
 
         return jsonify({
             'payment_id': payment.id,
+            'confirm_token': payment.confirm_token,
             'checkout_url': checkout_url,
             'amount': round(amount, 2),
             'currency': 'KMF',
@@ -734,6 +737,7 @@ def create_payment():
 
         return jsonify({
             'payment_id': payment.id,
+            'confirm_token': payment.confirm_token,
             'checkout_url': checkout_url,
             'amount': round(amount, 2),
             'currency': 'KMF',
@@ -787,6 +791,7 @@ def create_payment():
 
         return jsonify({
             'payment_id': payment.id,
+            'confirm_token': payment.confirm_token,
             'checkout_url': checkout_url,
             'amount': round(amount, 2),
             'currency': 'KMF',
@@ -834,7 +839,8 @@ def create_payment():
     checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
 
     return jsonify({
-        'payment_id': payment.id, 
+        'payment_id': payment.id,
+        'confirm_token': payment.confirm_token,
         'checkout_url': checkout_url,
         'amount': round(float(total), 2),
         'currency': 'KMF',
@@ -893,13 +899,18 @@ def check_balance():
 def webhook():
     """Webhook receiver for Huri Money. This is a stub that accepts a POST and
     marks payment as paid if `payment_id` and `status=paid` are present in payload.
-    Proper verification will be added once Huri webhook secret is provided.
+    Proper verification (Huri's own signature) will be added once that
+    integration is wired up. Until then, `confirm_token` — a per-payment secret
+    only ever handed to the client that created this specific payment via
+    /pay/create — is required to prove the caller isn't just guessing/enumerating
+    someone else's payment id to mark it paid without actually paying.
     """
     data = request.get_json() or {}
     huri_id = data.get('huri_payment_id')
     status = data.get('status')
     local_payment_id = data.get('local_payment_id')
     phone_number = data.get('phone_number')
+    confirm_token = data.get('confirm_token')
 
     if not local_payment_id:
         return jsonify({'error': 'Missing local_payment_id'}), 400
@@ -917,6 +928,9 @@ def webhook():
 
     if not payment:
         return jsonify({'error': 'Payment not found'}), 404
+
+    if not payment.confirm_token or confirm_token != payment.confirm_token:
+        return jsonify({'error': 'Invalid or missing confirm_token'}), 401
 
     if status == 'paid':
         payment.status = 'paid'
@@ -1104,9 +1118,10 @@ def checkout_page(payment_id):
     
     # Format amount with thousand separators
     amount_formatted = f"{p.amount:,.0f}"
-    
+
     return render_template('checkout.html',
                           payment_id=p.id,
+                          confirm_token=p.confirm_token,
                           amount=amount_formatted,
                           license_plate=p.license_plate or 'N/A',
                           owner_name=p.owner_name or 'N/A',
@@ -1856,7 +1871,8 @@ def confirm_payment():
     Updates fine statuses to 'paid' in the database.
     """
     data = request.get_json() or {}
-    payment_id = data.get('paymentId')
+    payment_id = data.get('paymentId') or data.get('payment_id')
+    confirm_token = data.get('confirmToken') or data.get('confirm_token')
 
     if not payment_id:
         return jsonify({'error': 'Missing paymentId'}), 400
@@ -1868,7 +1884,10 @@ def confirm_payment():
     except (ValueError, TypeError):
         # paymentId might be a string like "PAY_123456", try exact match
         payment = Payment.query.filter_by(id=payment_id).first()
-    
+
+    if payment and (not payment.confirm_token or confirm_token != payment.confirm_token):
+        return jsonify({'error': 'Invalid or missing confirmToken'}), 401
+
     if not payment:
         # Payment not found - could be in mock mode
         # Return success anyway since mock is handling it locally

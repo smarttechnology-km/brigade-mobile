@@ -20,7 +20,12 @@ def inject_licences_pending_count():
     except Exception:
         deletion_pending = 0
     try:
-        vt_pending = _vti_q().filter_by(status='approved', smarttech_print_validated=False, payment_status='paid').count()
+        from app.models import TechnicalInspection
+        vt_pending = _vti_q().filter(
+            TechnicalInspection.status == 'approved',
+            TechnicalInspection.smarttech_print_validated == False,
+            TechnicalInspection.payment_status == 'paid',
+        ).count()
     except Exception:
         vt_pending = 0
     try:
@@ -2190,13 +2195,28 @@ def api_licences_requests_stats():
     ).count()
     printed_total   = _lpr_q().filter(LicensePrintRequest.status == 'printed').count()
     cancelled_total = _lpr_q().filter(LicensePrintRequest.status == 'cancelled').count()
+    try:
+        from app.models import TechnicalInspection
+        vt_pending = _vti_q().filter(
+            TechnicalInspection.status == 'approved',
+            TechnicalInspection.smarttech_print_validated == False,
+            TechnicalInspection.payment_status == 'paid',
+        ).count()
+    except Exception:
+        vt_pending = 0
+    try:
+        gv_pending = _vq().filter_by(qr_pending_approval=True).count()
+    except Exception:
+        gv_pending = 0
 
     return jsonify({
-        'pending_count':   pending_count,
-        'printed_today':   printed_today,
-        'printed_month':   printed_month,
-        'printed_total':   printed_total,
-        'cancelled_total': cancelled_total,
+        'pending_count':    pending_count,
+        'printed_today':    printed_today,
+        'printed_month':    printed_month,
+        'printed_total':    printed_total,
+        'cancelled_total':  cancelled_total,
+        'vt_pending_count': vt_pending,
+        'gv_pending_count': gv_pending,
     })
 
 

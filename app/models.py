@@ -217,6 +217,11 @@ class Vehicle(db.Model):
         }
 
 
+def _generate_confirm_token():
+    import secrets
+    return secrets.token_urlsafe(24)
+
+
 class Payment(db.Model):
     __tablename__ = 'payments'
     id = db.Column(db.Integer, primary_key=True)
@@ -224,6 +229,12 @@ class Payment(db.Model):
     currency = db.Column(db.String(10), nullable=False, default='USD')
     status = db.Column(db.String(30), nullable=False, default='pending')
     huri_payment_id = db.Column(db.String(128), nullable=True)
+    # Per-payment secret returned only to the client that created this payment.
+    # /pay/webhook and /pay/confirm require it to match — without it, anyone
+    # who guesses/enumerates a payment id could mark someone else's fine/vignette/
+    # inspection as paid without actually paying (there is no real Huri Money
+    # signature check yet, since that integration isn't wired up).
+    confirm_token = db.Column(db.String(64), nullable=True, default=_generate_confirm_token)
     phone_number = db.Column(db.String(20), nullable=True)
     destination_phone = db.Column(db.String(20), nullable=True)  # Huri Money account this payment's revenue is routed to (per payment type)
     license_plate = db.Column(db.String(50), nullable=False)
@@ -1577,6 +1588,22 @@ class DriverLicense(db.Model):
         if not self.expiry_date:
             return False
         return self.expiry_date < now_comoros().date()
+
+    def missing_required_fields_for_print(self):
+        """Fields required for a valid biometric card print. Used to block an
+        automatic print request from being created for an incomplete license
+        (e.g. missing photo) rather than sending SmartTech a card that can't
+        actually be printed properly."""
+        missing = []
+        if not self.photo_filename:
+            missing.append('photo')
+        if not (self.holder_firstname or '').strip():
+            missing.append('prénom')
+        if not self.date_of_birth:
+            missing.append('date de naissance')
+        if not (self.categories or '').strip():
+            missing.append('catégories')
+        return missing
 
     def to_dict(self):
         try:

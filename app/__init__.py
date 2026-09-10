@@ -396,6 +396,9 @@ def create_app():
                             if 'destination_phone' not in payment_columns:
                                 conn.execute(text("ALTER TABLE payments ADD COLUMN destination_phone VARCHAR(20)"))
                                 logger.info("Added missing payments.destination_phone column")
+                            if 'confirm_token' not in payment_columns:
+                                conn.execute(text("ALTER TABLE payments ADD COLUMN confirm_token VARCHAR(64)"))
+                                logger.info("Added missing payments.confirm_token column")
 
                         # Patch technical_inspection_appointments table (payment channel tracking)
                         vt_appt_table_exists = conn.execute(
@@ -861,6 +864,7 @@ def create_app():
                         "ALTER TABLE fines ADD COLUMN IF NOT EXISTS photo_filename VARCHAR(255)",
                         # payments
                         "ALTER TABLE payments ADD COLUMN IF NOT EXISTS destination_phone VARCHAR(20)",
+                        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS confirm_token VARCHAR(64)",
                         # technical_inspection_appointments
                         "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS channel VARCHAR(20) DEFAULT 'app_citoyen'",
                         "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS recorded_by VARCHAR(100)",

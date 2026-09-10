@@ -4021,19 +4021,25 @@ def api_licenses_create():
                 pass
     db.session.add(lic)
     db.session.flush()
-    from app.models import SmartTechSetting
-    pr = LicensePrintRequest(
-        license_id   = lic.id,
-        requested_by = current_user.username,
-        status       = 'pending',
-        unit_price   = float(SmartTechSetting.get('license_print_price', 0)),
-    )
-    db.session.add(pr)
+    missing = lic.missing_required_fields_for_print()
+    if not missing:
+        from app.models import SmartTechSetting
+        pr = LicensePrintRequest(
+            license_id   = lic.id,
+            requested_by = current_user.username,
+            status       = 'pending',
+            unit_price   = float(SmartTechSetting.get('license_print_price', 0)),
+        )
+        db.session.add(pr)
     db.session.commit()
 
     log_user_history(current_user, 'Permis créé', f'Permis {num} - {name}')
 
-    return jsonify(lic.to_dict()), 201
+    result = lic.to_dict()
+    result['print_request_created'] = not missing
+    if missing:
+        result['print_request_missing'] = missing
+    return jsonify(result), 201
 
 
 @api_bp.route('/licenses/<int:license_id>', methods=['GET'])
@@ -4309,11 +4315,12 @@ def api_licenses_update(license_id):
         lic.smarttech_validated_at    = None
         lic.smarttech_validated_by    = None
 
-        # Crée une demande d'impression si aucune n'est déjà en attente
+        # Crée une demande d'impression si aucune n'est déjà en attente,
+        # et seulement si le permis a toutes les données requises (photo, etc.)
         existing_pending = LicensePrintRequest.query.filter_by(
             license_id=lic.id, status='pending'
         ).first()
-        if not existing_pending:
+        if not existing_pending and not lic.missing_required_fields_for_print():
             db.session.add(LicensePrintRequest(
                 license_id=lic.id,
                 requested_by=current_user.username,
@@ -4479,7 +4486,7 @@ def approve_license_edit_request(req_id):
 
     # Auto-request a print, same as a direct edit in api_licenses_update
     existing_pending = LicensePrintRequest.query.filter_by(license_id=lic.id, status='pending').first()
-    if not existing_pending:
+    if not existing_pending and not lic.missing_required_fields_for_print():
         db.session.add(LicensePrintRequest(
             license_id=lic.id,
             requested_by=current_user.username,
@@ -4670,6 +4677,10 @@ def api_license_print_request_create(license_id):
     if existing:
         return jsonify({'error': 'Une demande d\'impression est déjà en attente pour ce permis.'}), 409
 
+    missing = lic.missing_required_fields_for_print()
+    if missing:
+        return jsonify({'error': f"Impossible de créer la demande d'impression : données manquantes ({', '.join(missing)})."}), 400
+
     req = LicensePrintRequest(
         license_id=lic.id,
         requested_by=current_user.username,
@@ -4735,8 +4746,44 @@ def api_license_mark_printed(license_id):
 def api_license_print_requests_pending_count():
     if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
+    _auto_cancel_incomplete_pending_print_requests()
     count = LicensePrintRequest.query.filter_by(status='pending').count()
     return jsonify({'count': count})
+
+
+def _auto_cancel_incomplete_pending_print_requests():
+    """Silently cancel any pending print request whose license is missing
+    required data (photo, prénom, date de naissance, catégories) — covers
+    requests created before missing_required_fields_for_print() existed, or
+    licenses later edited to drop a required field. No log_user_history entry:
+    this is a data-consistency correction, not an admin action."""
+    pending = LicensePrintRequest.query.filter_by(status='pending').all()
+    changed = False
+    for r in pending:
+        lic = r.license
+        if lic and lic.missing_required_fields_for_print():
+            r.status = 'cancelled'
+            changed = True
+    if changed:
+        db.session.commit()
+
+
+def _license_print_requests_base_query():
+    _auto_cancel_incomplete_pending_print_requests()
+    q = LicensePrintRequest.query
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    if date_from:
+        try:
+            q = q.filter(LicensePrintRequest.requested_at >= datetime.strptime(date_from, '%Y-%m-%d'))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            q = q.filter(LicensePrintRequest.requested_at < datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1))
+        except ValueError:
+            pass
+    return q
 
 
 @api_bp.route('/licenses/print-requests', methods=['GET'])
@@ -4745,11 +4792,40 @@ def api_license_print_requests_all():
     if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
     status_filter = request.args.get('status')
-    q = LicensePrintRequest.query
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = min(200, max(1, request.args.get('per_page', 100, type=int)))
+
+    q = _license_print_requests_base_query()
     if status_filter:
         q = q.filter_by(status=status_filter)
-    reqs = q.order_by(LicensePrintRequest.requested_at.desc()).all()
-    return jsonify([r.to_dict() for r in reqs])
+    q = q.order_by(LicensePrintRequest.requested_at.desc())
+
+    total = q.count()
+    reqs = q.offset((page - 1) * per_page).limit(per_page).all()
+    return jsonify({
+        'items': [r.to_dict() for r in reqs],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': max(1, (total + per_page - 1) // per_page),
+    })
+
+
+@api_bp.route('/licenses/print-requests/counts', methods=['GET'])
+@login_required
+def api_license_print_requests_counts():
+    """Counts per status (pending/validated/printed), respecting the date filter —
+    used to keep the stat cards/tab badges accurate without fetching every row."""
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    q = _license_print_requests_base_query()
+    rows = q.with_entities(LicensePrintRequest.status, db.func.count(LicensePrintRequest.id)).group_by(LicensePrintRequest.status).all()
+    counts = {status: count for status, count in rows}
+    return jsonify({
+        'pending': counts.get('pending', 0),
+        'validated': counts.get('validated', 0),
+        'printed': counts.get('printed', 0),
+    })
 
 
 # ── Alertes (accidents, recherches de véhicule, travaux...) ──────────────────
@@ -5566,14 +5642,16 @@ def validate_dossier_step6(dossier_id):
     db.session.add(lic)
     db.session.flush()
 
-    from app.models import SmartTechSetting
-    pr = LicensePrintRequest(
-        license_id   = lic.id,
-        requested_by = current_user.username,
-        status       = 'pending',
-        unit_price   = float(SmartTechSetting.get('license_print_price', 0)),
-    )
-    db.session.add(pr)
+    missing = lic.missing_required_fields_for_print()
+    if not missing:
+        from app.models import SmartTechSetting
+        pr = LicensePrintRequest(
+            license_id   = lic.id,
+            requested_by = current_user.username,
+            status       = 'pending',
+            unit_price   = float(SmartTechSetting.get('license_print_price', 0)),
+        )
+        db.session.add(pr)
 
     d.license_id          = lic.id
     d.step6_validated_at  = now_comoros()
@@ -5581,7 +5659,11 @@ def validate_dossier_step6(dossier_id):
     d.current_step        = 6
     d.status              = 'complet'
     db.session.commit()
-    return jsonify({'dossier': d.to_dict(), 'license_id': lic.id, 'license_number': lic.license_number})
+    result = {'dossier': d.to_dict(), 'license_id': lic.id, 'license_number': lic.license_number}
+    result['print_request_created'] = not missing
+    if missing:
+        result['print_request_missing'] = missing
+    return jsonify(result)
 
 
 @api_bp.route('/dossiers-permis/<int:dossier_id>/reject', methods=['POST'])
