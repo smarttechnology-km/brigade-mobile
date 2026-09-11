@@ -4208,7 +4208,7 @@ def update_vehicle(vehicle_id):
     from app.models import VehicleHistory
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     check_island_access(vehicle.owner_island)
-    if current_user.role == 'judiciaire':
+    if getattr(current_user, 'role', None) == 'judiciaire':
         return jsonify({
             'error': "Les judiciaires ne peuvent plus modifier un véhicule directement. "
                      "Utilisez « Proposer une modification » — le directeur régional doit valider le changement."

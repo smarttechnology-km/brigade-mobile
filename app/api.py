@@ -3978,6 +3978,8 @@ def api_licenses_list():
 def api_licenses_create():
     if not (current_user.is_admin or getattr(current_user, 'role', '') in ('administrateur', 'judiciaire', 'dgrtr')):
         return jsonify({'error': 'Accès refusé'}), 403
+    if getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) in ('directeur_regional', 'directeur_general'):
+        return jsonify({'error': 'Accès refusé'}), 403
     data = request.get_json() or {}
     num = (data.get('license_number') or '').strip().upper()
     name = (data.get('holder_name') or '').strip()
@@ -4825,6 +4827,70 @@ def api_license_print_requests_counts():
         'pending': counts.get('pending', 0),
         'validated': counts.get('validated', 0),
         'printed': counts.get('printed', 0),
+    })
+
+
+def _is_license_dg_or_admin():
+    return current_user.is_admin or (
+        getattr(current_user, 'role', '') == 'dgrtr'
+        and getattr(current_user, 'dgrtr_type', None) == 'directeur_general'
+    )
+
+
+@api_bp.route('/licenses/performance', methods=['GET'])
+@login_required
+def api_licenses_performance():
+    """Nombre de permis créés par employé DGRTR sur une période — réservé au
+    directeur général et à l'administrateur (bouton "Performant" côté page Licences)."""
+    if not _is_license_dg_or_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    if not date_from and not date_to:
+        today = now_comoros().date()
+        date_from = date_to = today.isoformat()
+
+    q = db.session.query(
+        DriverLicense.created_by,
+        db.func.count(DriverLicense.id),
+    )
+    if date_from:
+        try:
+            q = q.filter(DriverLicense.created_at >= datetime.strptime(date_from, '%Y-%m-%d'))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            q = q.filter(DriverLicense.created_at < datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1))
+        except ValueError:
+            pass
+    rows = q.group_by(DriverLicense.created_by).all()
+
+    usernames = [r[0] for r in rows if r[0]]
+    users_by_username = {
+        u.username: u for u in User.query.filter(User.username.in_(usernames)).all()
+    } if usernames else {}
+
+    results = []
+    for username, count in rows:
+        if not username:
+            continue
+        u = users_by_username.get(username)
+        results.append({
+            'username': username,
+            'full_name': (u.full_name if u and u.full_name else username),
+            'role': u.role if u else None,
+            'dgrtr_type': u.dgrtr_type if u else None,
+            'count': count,
+        })
+    results.sort(key=lambda r: r['count'], reverse=True)
+
+    return jsonify({
+        'date_from': date_from,
+        'date_to': date_to,
+        'results': results,
+        'total': sum(r['count'] for r in results),
     })
 
 
