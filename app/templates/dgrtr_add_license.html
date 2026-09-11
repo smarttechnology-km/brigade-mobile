@@ -76,16 +76,16 @@
     <h6 class="text-muted text-uppercase" style="font-size:0.72rem;letter-spacing:.5px;">Informations personnelles</h6>
     <div class="row g-3 mb-3">
       <div class="col-md-4">
-        <label class="form-label">Date de naissance</label>
-        <input type="date" id="f-date_of_birth" class="form-control">
+        <label class="form-label">Date de naissance <span class="text-danger">*</span></label>
+        <input type="date" id="f-date_of_birth" class="form-control" required>
       </div>
       <div class="col-md-4">
-        <label class="form-label">Lieu de naissance</label>
-        <input type="text" id="f-lieu_naissance" class="form-control text-uppercase" placeholder="Ville, pays…">
+        <label class="form-label">Lieu de naissance <span class="text-danger">*</span></label>
+        <input type="text" id="f-lieu_naissance" class="form-control text-uppercase" placeholder="Ville, pays…" required>
       </div>
       <div class="col-md-4">
-        <label class="form-label">Sexe</label>
-        <select id="f-sexe" class="form-select">
+        <label class="form-label">Sexe <span class="text-danger">*</span></label>
+        <select id="f-sexe" class="form-select" required>
           <option value="">— Sélectionner —</option>
           <option value="masculin">Masculin</option>
           <option value="feminin">Féminin</option>
@@ -118,8 +118,8 @@
         <input type="text" id="f-nin" class="form-control" placeholder="Ex : 12345678">
       </div>
       <div class="col-md-4">
-        <label class="form-label">Île</label>
-        <select id="f-holder_island" class="form-select">
+        <label class="form-label">Île <span class="text-danger">*</span></label>
+        <select id="f-holder_island" class="form-select" required>
           <option value="">— Sélectionner —</option>
           <option value="Grande Comore">Grande Comore</option>
           <option value="Anjouan">Anjouan</option>
@@ -153,16 +153,16 @@
         </select>
       </div>
       <div class="col-md-4">
-        <label class="form-label" id="issue-date-label">Date de début</label>
-        <input type="date" id="f-issue_date" class="form-control">
+        <label class="form-label" id="issue-date-label">Date de début <span class="text-danger">*</span></label>
+        <input type="date" id="f-issue_date" class="form-control" required>
       </div>
       <div class="col-md-4" id="expiry-date-wrap" style="display:none;">
         <label class="form-label" id="expiry-date-label">Jusqu'au</label>
         <input type="date" id="f-expiry_date" class="form-control">
       </div>
       <div class="col-12">
-        <label class="form-label">Centre d'immatriculation</label>
-        <select id="f-centre_immatriculation" class="form-select">
+        <label class="form-label">Centre d'immatriculation <span class="text-danger">*</span></label>
+        <select id="f-centre_immatriculation" class="form-select" required>
           <option value="">— Sélectionner un centre —</option>
           <option value="Centre de Moroni">Centre de Moroni</option>
           <option value="Centre de Mutsamudu">Centre de Mutsamudu</option>
@@ -350,7 +350,7 @@ function onTypePermisChange() {
   var lbl = document.getElementById('issue-date-label');
   var expLbl = document.getElementById('expiry-date-label');
   if (wrap) wrap.style.display = '';
-  if (lbl) lbl.textContent = isTemp ? 'Depuis le' : 'Date de début';
+  if (lbl) lbl.innerHTML = (isTemp ? 'Depuis le' : 'Date de début') + ' <span class="text-danger">*</span>';
   if (expLbl) expLbl.textContent = isTemp ? "Jusqu'au" : 'Date de validité';
   autoFillExpiry();
 }
@@ -448,6 +448,18 @@ async function saveLicenseDgrtr() {
 
   if (!payload.license_number || !payload.holder_firstname) {
     showAlert('Numéro de permis et nom de famille obligatoires.', 'danger');
+    return;
+  }
+
+  var missingRequired = [];
+  if (!payload.holder_island)          missingRequired.push('Île');
+  if (!payload.issue_date)             missingRequired.push('Date de début');
+  if (!payload.centre_immatriculation) missingRequired.push("Centre d'immatriculation");
+  if (!payload.date_of_birth)          missingRequired.push('Date de naissance');
+  if (!payload.lieu_naissance)         missingRequired.push('Lieu de naissance');
+  if (!payload.sexe)                   missingRequired.push('Sexe');
+  if (missingRequired.length) {
+    showAlert('Champs obligatoires manquants : ' + missingRequired.join(', ') + '.', 'danger');
     return;
   }
 

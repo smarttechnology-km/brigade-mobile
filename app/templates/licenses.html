@@ -21,12 +21,19 @@
         <i class="fas fa-cog me-2"></i>Paramètres
       </button>
       {% endif %}
+      {% if current_user.role == 'administrateur' or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_general') %}
+      <button class="btn btn-outline-success" onclick="openPerformanceModal()" title="Performances journalières des employés">
+        <i class="fas fa-chart-line me-2"></i>Performant
+      </button>
+      {% endif %}
       <a href="{{ url_for('main.license_print_requests_page') }}" class="btn btn-outline-warning" id="btn-demandes-impression-nav">
         <i class="fas fa-paper-plane me-2"></i>Demandes
       </a>
+      {% if not (current_user.role == 'dgrtr' and current_user.dgrtr_type in ('directeur_regional', 'directeur_general')) %}
       <button class="btn btn-primary" onclick="openAddModal()">
         <i class="fas fa-plus me-2"></i>Ajouter un permis
       </button>
+      {% endif %}
     </div>
   </div>
 
@@ -878,6 +885,55 @@
         <button type="button" class="btn btn-primary" onclick="confirmCrop()">
           <i class="fas fa-check me-1"></i>Confirmer le recadrage
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Performance modal -->
+<div class="modal fade" id="performanceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-chart-line me-2"></i>Performances des employés DGRTR</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+          <div>
+            <label class="form-label small mb-1">Du</label>
+            <input type="date" id="perf-date-from" class="form-control form-control-sm">
+          </div>
+          <div>
+            <label class="form-label small mb-1">Au</label>
+            <input type="date" id="perf-date-to" class="form-control form-control-sm">
+          </div>
+          <button class="btn btn-sm btn-outline-primary" onclick="loadPerformance()">
+            <i class="fas fa-search me-1"></i>Filtrer
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="setPerformanceToday()">Aujourd'hui</button>
+          <button class="btn btn-sm btn-outline-success ms-auto" onclick="printPerformance()">
+            <i class="fas fa-print me-1"></i>Imprimer
+          </button>
+        </div>
+        <div id="performance-loading" class="text-center text-muted py-4">
+          <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+        </div>
+        <div id="performance-content" style="display:none;">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Employé</th>
+                  <th class="text-end">Permis ajoutés</th>
+                </tr>
+              </thead>
+              <tbody id="performance-tbody"></tbody>
+            </table>
+          </div>
+          <div class="text-end text-muted small mt-2" id="performance-total"></div>
+        </div>
       </div>
     </div>
   </div>
