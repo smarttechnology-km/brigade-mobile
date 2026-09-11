@@ -1612,6 +1612,109 @@
             .catch(e => console.error('[licenses] stats error:', e));
     }
 
+    /* ── Performance des employés DGRTR ── */
+    let _perfModal = null;
+    let _perfLastData = null;
+
+    function toInputDate(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+    }
+
+    window.setPerformanceToday = function () {
+        const today = toInputDate(new Date());
+        document.getElementById('perf-date-from').value = today;
+        document.getElementById('perf-date-to').value = today;
+        loadPerformance();
+    };
+
+    window.openPerformanceModal = function () {
+        if (!_perfModal) {
+            _perfModal = new bootstrap.Modal(document.getElementById('performanceModal'));
+        }
+        const today = toInputDate(new Date());
+        if (!document.getElementById('perf-date-from').value) {
+            document.getElementById('perf-date-from').value = today;
+            document.getElementById('perf-date-to').value = today;
+        }
+        _perfModal.show();
+        loadPerformance();
+    };
+
+    window.loadPerformance = function () {
+        const from = document.getElementById('perf-date-from').value;
+        const to   = document.getElementById('perf-date-to').value;
+        document.getElementById('performance-loading').style.display = '';
+        document.getElementById('performance-content').style.display = 'none';
+        const params = new URLSearchParams();
+        if (from) params.set('date_from', from);
+        if (to)   params.set('date_to', to);
+        fetch('/api/licenses/performance?' + params.toString(), { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : Promise.reject(r))
+            .then(d => {
+                _perfLastData = d;
+                const tbody = document.getElementById('performance-tbody');
+                if (!d.results.length) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Aucun permis ajouté sur cette période.</td></tr>';
+                } else {
+                    tbody.innerHTML = d.results.map((r, i) => `<tr>
+                        <td>${i + 1}</td>
+                        <td>${escapeHtml(r.full_name)}</td>
+                        <td class="text-end fw-bold">${r.count}</td>
+                    </tr>`).join('');
+                }
+                document.getElementById('performance-total').textContent = `Total : ${d.total} permis ajoutés`;
+                document.getElementById('performance-loading').style.display = 'none';
+                document.getElementById('performance-content').style.display = '';
+            })
+            .catch(() => {
+                document.getElementById('performance-loading').innerHTML =
+                    '<div class="text-danger py-3 text-center">Erreur de chargement</div>';
+            });
+    };
+
+    window.printPerformance = function () {
+        if (!_perfLastData) return;
+        const d = _perfLastData;
+        const period = (d.date_from === d.date_to) ? d.date_from : `${d.date_from} au ${d.date_to}`;
+        const rows = d.results.map((r, i) => `<tr>
+            <td>${i + 1}</td>
+            <td>${escapeHtml(r.full_name)}</td>
+            <td style="text-align:right;font-weight:bold;">${r.count}</td>
+        </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:#888;">Aucun permis ajouté sur cette période.</td></tr>';
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html><head><title>Performances DGRTR</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
+                h2 { margin-bottom: 2px; }
+                p.sub { color: #666; margin-top: 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+                th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 0.9rem; }
+                th { background: #f0f0f0; text-align: left; }
+                tfoot td { font-weight: bold; }
+            </style>
+            </head><body>
+            <h2>Performances journalières — Employés DGRTR</h2>
+            <p class="sub">Période : ${escapeHtml(period)} — Nombre de permis ajoutés par employé</p>
+            <table>
+                <thead><tr><th>#</th><th>Employé</th><th style="text-align:right;">Permis ajoutés</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot><tr><td colspan="2">Total</td><td style="text-align:right;">${d.total}</td></tr></tfoot>
+            </table>
+            </body></html>
+        `);
+        win.document.close();
+        win.focus();
+        win.print();
+    };
+
+    function escapeHtml(s) {
+        return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     /* ── Init ── */
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => { loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts(); setupReasonIconPicker(); });
