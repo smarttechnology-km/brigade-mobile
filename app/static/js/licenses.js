@@ -13,6 +13,11 @@
     const tbody        = document.getElementById('licenses-tbody');
 
     /* ── Helpers ── */
+    function canManagePoints() {
+        return window.CURRENT_USER_ROLE === 'administrateur'
+            || (window.CURRENT_USER_ROLE === 'dgrtr'
+                && ['directeur_general', 'directeur_technique'].includes(window.CURRENT_USER_DGRTR_TYPE || ''));
+    }
     function esc(s) {
         return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
@@ -120,9 +125,9 @@
                     <button class="btn btn-sm btn-outline-primary" title="Détails" onclick="viewLicense(${l.id})"><i class="fas fa-eye"></i></button>
                     <button class="btn btn-sm btn-outline-warning" title="Modifier" onclick="editLicense(${l.id})"><i class="fas fa-edit"></i></button>
                     ${l.status === 'revoque'
-                        ? (window.CURRENT_USER_ROLE === 'administrateur'
+                        ? (canManagePoints()
                             ? `<button class="btn btn-sm btn-outline-success" title="Réinitialiser les points" onclick="resetPoints(${l.id}, '${esc(l.license_number)}')"><i class="fas fa-redo"></i></button>`
-                            : `<button class="btn btn-sm btn-outline-secondary" title="Réservé à l'administrateur" disabled><i class="fas fa-lock"></i></button>`)
+                            : `<button class="btn btn-sm btn-outline-secondary" title="Réservé à l'administrateur / directeur" disabled><i class="fas fa-lock"></i></button>`)
                         : `<button class="btn btn-sm btn-outline-danger" title="Réduire les points" onclick="openReductionModal(${l.id}, '${esc(l.license_number)}', ${l.points ?? 0})"><i class="fas fa-minus-circle"></i></button>`
                     }
                     ${l.print_status !== 'printed' ? `<button class="btn btn-sm btn-outline-danger" title="Supprimer" onclick="deleteLicense(${l.id}, '${esc(l.license_number)}')"><i class="fas fa-trash"></i></button>` : ''}
@@ -1262,7 +1267,10 @@
         if (onHistory) {
             window.open(`/licenses/${_currentLicense.id}/print-history?temporaire=1`, '_blank');
         } else {
-            window.open(`/licenses/${_currentLicense.id}/print`, '_blank');
+            // The A4 paper printout is always a provisional document pending the
+            // SmartTech biometric card — always shows as "temporaire" with the
+            // temp-validity duration, regardless of the license's stored type.
+            window.open(`/licenses/${_currentLicense.id}/print?temporaire=1`, '_blank');
         }
     };
 
@@ -1381,7 +1389,7 @@
                             <div class="text-muted mb-1">Points</div>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 ${pointsBadge(l.points)}
-                                ${l.status === 'suspendu' && window.CURRENT_USER_ROLE === 'administrateur'
+                                ${l.status === 'suspendu' && canManagePoints()
                                     ? `<button class="btn btn-sm btn-outline-success" onclick="renewLicensePoints(${l.id})"><i class="fas fa-redo me-1"></i>Renouveler les points</button>`
                                     : ''}
                             </div>
@@ -1467,7 +1475,7 @@
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(rows => {
                 if (!rows.length) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Aucun historique d\'impression.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Aucun historique d\'impression.</td></tr>';
                     return;
                 }
                 const statusBadge = s => {
@@ -1477,8 +1485,12 @@
                     if (s === 'cancelled') return '<span class="badge bg-secondary">Annulé</span>';
                     return `<span class="badge bg-secondary">${esc(s)}</span>`;
                 };
+                const typeBadge = t => t === 'temporaire'
+                    ? '<span class="badge bg-warning text-dark">Temporaire</span>'
+                    : '<span class="badge bg-success">Permanent</span>';
                 tbody.innerHTML = rows.map(r => `
                     <tr>
+                        <td>${typeBadge(r.type_permis)}</td>
                         <td class="text-muted small">${esc(r.requested_at || '—')}</td>
                         <td>${esc(r.requested_by || '—')}</td>
                         <td>${r.smarttech_validated_by ? `<span class="badge bg-info text-dark">${esc(r.smarttech_validated_by)}</span>` : '<span class="text-muted">—</span>'}</td>
@@ -1488,7 +1500,7 @@
                     </tr>`).join('');
             })
             .catch(() => {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Erreur de chargement.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Erreur de chargement.</td></tr>';
             });
     };
 
