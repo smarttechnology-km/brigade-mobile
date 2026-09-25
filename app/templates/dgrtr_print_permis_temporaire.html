@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Imprimer un permis temporaire — DGRTR{% endblock %}
+
+{% block content %}
+<style>
+.pt-result-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 14px 18px; transition: box-shadow .15s, border-color .15s;
+}
+.pt-result-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.09); border-color: #3b82f6; }
+.pt-field { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed #e8edf5; }
+.pt-field:last-child { border-bottom: none; }
+.pt-field-label { color: #6b7280; font-size: 0.85rem; }
+.pt-field-value { font-weight: 600; text-align: right; }
+</style>
+
+<div class="container-fluid py-4 px-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-id-card me-2"></i>Imprimer un permis temporaire</h2>
+      <small class="text-muted">Recherchez un permis pour consulter ses informations et imprimer l'attestation provisoire</small>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="d-flex gap-2 mb-3 align-items-center flex-wrap">
+    <input type="search" id="pt-search" class="form-control" style="max-width:420px;"
+      placeholder="N° de permis, nom, téléphone, NIN…">
+  </div>
+
+  <div id="pt-results"></div>
+</div>
+
+<!-- Detail / print modal -->
+<div class="modal fade" id="ptDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-id-card me-2"></i>Détails du permis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="pt-detail-body"><div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" id="pt-print-btn" class="btn btn-primary">
+          <i class="fas fa-print me-1"></i>Imprimer l'attestation provisoire
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  function esc(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  let _searchTimer = null;
+  document.getElementById('pt-search').addEventListener('input', function () {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(ptSearch, 300);
+  });
+
+  function ptSearch() {
+    const q = document.getElementById('pt-search').value.trim();
+    const results = document.getElementById('pt-results');
+    if (!q) { results.innerHTML = ''; return; }
+    results.innerHTML = '<div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Recherche…</div>';
+    fetch(`/api/licenses?q=${encodeURIComponent(q)}&page=1`, { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(data => {
+        const items = data.items || [];
+        if (!items.length) {
+          results.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-id-card fa-2x mb-2 d-block"></i>Aucun permis trouvé.</div>';
+          return;
+        }
+        results.innerHTML = items.map(l => `
+          <div class="pt-result-card mb-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+              ${l.photo_url ? `<img src="${esc(l.photo_url)}" style="width:44px;height:52px;object-fit:cover;border-radius:6px;">` : '<div class="d-flex align-items-center justify-content-center bg-light rounded" style="width:44px;height:52px;"><i class="fas fa-user text-muted"></i></div>'}
+              <div>
+                <strong>${esc(l.license_number)}</strong> — ${esc(l.holder_firstname)} ${esc(l.holder_name)}
+                <div class="small text-muted">${esc(l.holder_island || '—')}${l.holder_phone ? ' · ' + esc(l.holder_phone) : ''}${l.categories ? ' · ' + esc(l.categories) : ''}</div>
+              </div>
+            </div>
+            <button class="btn btn-outline-primary btn-sm" onclick="ptOpenDetail(${l.id})">
+              <i class="fas fa-eye me-1"></i>Voir & imprimer
+            </button>
+          </div>`).join('');
+      })
+      .catch(() => { results.innerHTML = '<div class="text-center text-danger py-4">Erreur de recherche.</div>'; });
+  }
+
+  const STATUS_LABELS = { actif: 'Actif', suspendu: 'Suspendu', revoque: 'Révoqué', expire: 'Expiré' };
+
+  window.ptOpenDetail = function (licId) {
+    const body = document.getElementById('pt-detail-body');
+    body.innerHTML = '<div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+    document.getElementById('pt-print-btn').onclick = function () {
+      window.open(`/licenses/${licId}/print?temporaire=1`, '_blank');
+    };
+    new bootstrap.Modal(document.getElementById('ptDetailModal')).show();
+
+    fetch(`/api/licenses/${licId}`, { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(l => {
+        const fullName = esc((l.holder_firstname ? l.holder_firstname + ' ' : '') + l.holder_name);
+        const cats = (l.categories || '').split(',').map(c => c.trim()).filter(Boolean);
+        body.innerHTML = `
+          <div class="d-flex align-items-center gap-3 mb-3">
+            ${l.photo_url ? `<img src="${esc(l.photo_url)}" style="width:70px;height:84px;object-fit:cover;border-radius:8px;border:2px solid #e8edf5;">` : '<div class="d-flex align-items-center justify-content-center bg-light rounded" style="width:70px;height:84px;"><i class="fas fa-user text-muted fa-2x"></i></div>'}
+            <div>
+              <div class="fw-bold fs-5">${fullName}</div>
+              <div class="text-muted small">${esc(l.license_number)}</div>
+            </div>
+          </div>
+          <div class="pt-field"><span class="pt-field-label">Île</span><span class="pt-field-value">${esc(l.holder_island || '—')}</span></div>
+          <div class="pt-field"><span class="pt-field-label">Téléphone</span><span class="pt-field-value">${esc(l.holder_phone || '—')}</span></div>
+          <div class="pt-field"><span class="pt-field-label">NIN</span><span class="pt-field-value">${esc(l.nin || '—')}</span></div>
+          <div class="pt-field"><span class="pt-field-label">Catégories</span><span class="pt-field-value">${cats.length ? esc(cats.join(', ')) : '—'}</span></div>
+          <div class="pt-field"><span class="pt-field-label">Statut</span><span class="pt-field-value">${STATUS_LABELS[l.status] || esc(l.status || '—')}</span></div>
+        `;
+      })
+      .catch(() => { body.innerHTML = '<div class="text-center text-danger py-3">Impossible de charger ce permis.</div>'; });
+  };
+})();
+</script>
+{% endblock %}

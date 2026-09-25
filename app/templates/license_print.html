@@ -19,7 +19,13 @@
     .document { max-width: 780px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.12); position: relative; }
 
     /* ── Header band ── */
-    .doc-header { background: linear-gradient(135deg, #1a3a6c 0%, #1a56db 100%); color: #fff; padding: 22px 28px; display: flex; align-items: center; justify-content: space-between; }
+    .doc-header { background: linear-gradient(135deg, #1a3a6c 0%, #1a56db 100%); color: #fff; padding: 22px 28px; }
+    .doc-header-row { display: flex; align-items: center; justify-content: space-between; }
+    .doc-subheader {
+      color: #1a3a6c; text-align: center; padding: 9px 16px;
+      font-size: 16px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      position: relative; z-index: 1;
+    }
     .doc-header-left { display: flex; align-items: center; gap: 14px; }
     .doc-header-flag-wrap { display: inline-flex; isolation: isolate; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
     .doc-header-flag { width: 62px; height: 42px; object-fit: cover; display: block; mix-blend-mode: screen; }
@@ -111,18 +117,29 @@
     .doc-footer-left { font-size: 10px; color: #9ca3af; }
     .doc-footer-right { font-size: 10px; color: #b91c1c; font-weight: 600; text-align: right; }
 
+    @page { size: A4; margin: 0; }
+
     @media print {
       body { background: #fff; padding: 0; }
       .toolbar { display: none; }
-      .document { box-shadow: none; border-radius: 0; max-width: 100%; }
-      .doc-body { padding: 16px 28px; }
-      .identity { margin-bottom: 16px; }
-      .sections { gap: 14px; }
-      .section { padding: 12px 16px; }
-      .cats-section { margin-top: 14px; }
-      .signature-section { margin-top: 14px; page-break-inside: avoid; break-inside: avoid; }
-      .doc-body { padding-bottom: 70px; }
-      .doc-footer { position: fixed; left: 0; bottom: 0; width: 100%; }
+      .document {
+        box-shadow: none; border-radius: 0; max-width: 100%; margin: 0;
+        display: flex; flex-direction: column; min-height: 100vh;
+      }
+      .doc-header { padding: 14px 28px; }
+      .doc-subheader { padding: 6px 16px; font-size: 15px; }
+      .doc-body { padding: 14px 28px; flex: 1 0 auto; }
+      .identity { margin-bottom: 14px; }
+      .identity-photo img, .identity-photo .photo-placeholder { width: 95px; height: 112px; }
+      .sections { gap: 12px; }
+      .section { padding: 10px 18px; }
+      .section-title { margin-bottom: 7px; padding-bottom: 5px; }
+      .field { padding: 3px 0; }
+      .cats-section { margin-top: 10px; }
+      .cats-table thead th { padding: 0 10px 3px; }
+      .cats-table tbody td { padding: 2px 10px; }
+      .signature-section { margin-top: 12px; page-break-inside: avoid; break-inside: avoid; }
+      .doc-footer { padding: 8px 28px; }
     }
   </style>
 </head>
@@ -142,21 +159,27 @@
 
   <!-- Header -->
   <div class="doc-header">
-    <div class="doc-header-left">
-      <span class="doc-header-flag-wrap"><img class="doc-header-flag" src="/static/img/logo_comores_flag.png" alt="Drapeau Comores"></span>
-      <div class="doc-header-text">
-        <h1>UNION DES COMORES</h1>
-        <p>Permis de Conduire</p>
+    <div class="doc-header-row">
+      <div class="doc-header-left">
+        <span class="doc-header-flag-wrap"><img class="doc-header-flag" src="/static/img/logo_comores_flag.png" alt="Drapeau Comores"></span>
+        <div class="doc-header-text">
+          <h1>UNION DES COMORES</h1>
+          <p>Permis de Conduire</p>
+        </div>
+      </div>
+      <div class="doc-header-stars">
+        <span>★</span><span>★</span><span>★</span><span>★</span>
+      </div>
+      <div class="doc-header-arabic" dir="rtl">
+        <span>جمهورية القمر المتحدة</span><br>
+        <span>رخصة قيادة</span>
       </div>
     </div>
-    <div class="doc-header-stars">
-      <span>★</span><span>★</span><span>★</span><span>★</span>
-    </div>
-    <div class="doc-header-arabic" dir="rtl">
-      <span>جمهورية القمر المتحدة</span><br>
-      <span>رخصة قيادة</span>
-    </div>
   </div>
+
+  {% if force_temporaire or lic.type_permis == 'temporaire' %}
+  <div class="doc-subheader">Attestation Provisoire du Permis de Conduire</div>
+  {% endif %}
 
   <!-- Body -->
   <div class="doc-body">
@@ -210,11 +233,11 @@
       <div class="section">
         <div class="section-title">Détails du permis</div>
         <div class="field">
-          <span class="field-label">{{ 'Depuis le' if lic.type_permis == 'temporaire' else 'Date de début' }}</span>
-          <span class="field-value">{{ lic.issue_date.strftime('%d/%m/%Y') if lic.issue_date else '—' }}</span>
+          <span class="field-label">{{ 'Depuis le' if (force_temporaire or lic.type_permis == 'temporaire') else 'Date de début' }}</span>
+          <span class="field-value">{{ display_issue_date.strftime('%d/%m/%Y') if display_issue_date else '—' }}</span>
         </div>
         {% if force_temporaire or lic.type_permis == 'temporaire' %}
-        {% set display_expiry = lic.expiry_date or computed_expiry %}
+        {% set display_expiry = computed_expiry if force_temporaire else (lic.expiry_date or computed_expiry) %}
         <div class="field"><span class="field-label">Jusqu'au</span><span class="field-value">{{ display_expiry.strftime('%d/%m/%Y') if display_expiry else '—' }}</span></div>
         {% endif %}
         <div class="field"><span class="field-label">Centre d'immatriculation</span><span class="field-value">{{ lic.centre_immatriculation or '—' }}</span></div>
@@ -266,13 +289,13 @@
     <!-- Signature -->
     <div class="signature-section">
       <div class="signature-block">
-        {% if settings.directeur_signature_filename %}
-          <img class="signature-img" src="{{ settings.directeur_signature_url }}" alt="Signature">
+        {% if signer_signature_url %}
+          <img class="signature-img" src="{{ signer_signature_url }}" alt="Signature">
         {% else %}
           <div class="signature-line"></div>
         {% endif %}
-        <div class="signature-name">{{ settings.directeur_general_name or '—' }}</div>
-        <div class="signature-title">Directeur Général des Routes et Transports Routiers</div>
+        <div class="signature-name">{{ signer_name or '—' }}</div>
+        <div class="signature-title">{{ signer_title }}</div>
       </div>
     </div>
 

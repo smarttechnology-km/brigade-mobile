@@ -450,7 +450,7 @@
 
 <div class="toolbar">
   <button class="btn btn-back" onclick="history.back()">← Retour</button>
-  {% if photo_b64 %}
+  {% if photo_b64 or lic.photo_url %}
   <button class="btn btn-print" onclick="doPrint()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="6 9 6 2 18 2 18 9"/>

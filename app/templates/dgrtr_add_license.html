@@ -41,22 +41,18 @@
       </div>
       <div class="col">
         <div class="row g-2">
-          <div class="col-md-6">
+          <div class="col-md-12">
             <label class="form-label fw-semibold">Numéro de permis <span class="text-danger">*</span></label>
             <input type="text" id="f-license_number" class="form-control text-uppercase" placeholder="Ex : PC-2024-00123" required>
           </div>
-          <div class="col-md-4">
-            <label class="form-label fw-semibold">Statut</label>
-            <select id="f-status" class="form-select">
+          <div class="d-none">
+            <select id="f-status">
               <option value="actif">Actif</option>
               <option value="suspendu">Suspendu</option>
               <option value="revoque">Révoqué</option>
               <option value="expire">Expiré</option>
             </select>
-          </div>
-          <div class="col-md-2">
-            <label class="form-label fw-semibold">Points</label>
-            <input type="number" id="f-points" class="form-control" min="0" max="20" value="12">
+            <input type="number" id="f-points" min="0" max="20" value="12">
           </div>
           <div class="col-md-6">
             <label class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
@@ -364,6 +360,11 @@ function onCategoryToggle(cat) {
     var idInput = document.getElementById('cat-identifiant-' + cat);
     if (idInput && !idInput.value.trim()) {
       idInput.value = document.getElementById('f-license_number').value || '';
+    }
+    // Date d'obtention par défaut = Date de début, modifiable ensuite.
+    var dateInput = document.getElementById('cat-date-' + cat);
+    if (dateInput && !dateInput.value) {
+      dateInput.value = document.getElementById('f-issue_date').value || '';
     }
     autoFillCategoryExpiration(cat);
   } else {

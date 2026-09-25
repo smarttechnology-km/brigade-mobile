@@ -83,6 +83,19 @@
         }
         .requests-banner-title { font-size: 0.9rem; font-weight: 700; color: var(--st-yellow); display: flex; align-items: center; gap: 8px; }
         .requests-count { background: var(--st-yellow); color: #000; border-radius: 20px; font-size: 0.7rem; font-weight: 800; padding: 0.2em 0.7em; }
+
+        /* ── Tabs (same pattern as the Rapport page) ── */
+        .badge-count{display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.08);border-radius:20px;font-size:.7rem;color:rgba(255,255,255,0.5);padding:.1em .55em;margin-left:.4rem;}
+        .detail-tabs{display:flex;flex-wrap:nowrap;list-style:none;padding:0;margin:0;border-bottom:none;overflow-x:auto;}
+        .detail-tabs .nav-link{color:rgba(255,255,255,0.5);border:none;border-bottom:2px solid transparent;background:none;border-radius:0;padding:.6rem .7rem;font-size:.78rem;transition:color .15s,background .15s,border-color .15s;white-space:nowrap;gap:5px!important;}
+        .detail-tabs .nav-link.active{color:#fff;border-bottom-color:var(--st-cyan);background:rgba(0,212,255,0.05);}
+        .detail-tabs .nav-link:hover:not(.active){color:rgba(255,255,255,0.8);background:rgba(255,255,255,0.04);}
+        .detail-tabs::-webkit-scrollbar{display:none;}
+        .detail-tabs{-ms-overflow-style:none;scrollbar-width:none;}
+        html[data-theme="light"] .badge-count{background:rgba(0,0,0,0.06);color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .detail-tabs .nav-link{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .detail-tabs .nav-link.active{color:#0095b3;border-bottom-color:#0095b3;background:rgba(0,149,179,0.06);}
+        html[data-theme="light"] .detail-tabs .nav-link:hover:not(.active){color:rgba(0,0,0,0.7);background:rgba(0,0,0,0.04);}
         .requests-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; padding: 1.2rem; }
         .request-card {
             background: rgba(255,255,255,0.03); border: 1px solid rgba(240,180,41,0.2);
@@ -468,21 +481,45 @@
     </div>
     {% endif %}
 
-    <!-- ── Section 1 : Demandes en attente ── -->
-    <div class="requests-banner" id="requests-section">
-        <div class="requests-banner-header">
-            <div class="requests-banner-title">
-                <i class="fas fa-bell"></i>
-                Demandes d'impression en attente
-                <span class="requests-count" id="req-count">0</span>
-            </div>
-            <div class="hist-search-wrap">
-                <i class="fas fa-search hist-search-icon"></i>
-                <input type="text" id="req-search" placeholder="Nom, permis, agent…" oninput="filterRequests()" class="hist-search-input">
-            </div>
+    <!-- ── Section 1 : Demandes en attente / En attente d'impression (onglets) ── -->
+    <div class="st-section">
+        <div style="border-bottom:1px solid var(--st-border);">
+            <ul class="nav detail-tabs" id="lic-requests-nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-lic-pending" type="button" role="tab">
+                        <i class="fas fa-bell" style="color:var(--st-yellow);"></i>
+                        Demandes d'impression en attente
+                        <span class="badge-count" id="req-count">0</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-lic-awaiting-print" type="button" role="tab">
+                        <i class="fas fa-print" style="color:var(--st-cyan);"></i>
+                        En attente d'impression
+                        <span class="badge-count" id="awaiting-print-count">0</span>
+                    </button>
+                </li>
+            </ul>
         </div>
-        <div id="requests-grid" class="requests-grid">
-            <div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+        <div class="tab-content">
+            <div class="tab-pane show active" id="tab-lic-pending" role="tabpanel" style="padding:1rem 1.4rem;">
+                <div class="hist-search-wrap" style="margin:0 0 0.75rem;">
+                    <i class="fas fa-search hist-search-icon"></i>
+                    <input type="text" id="req-search" placeholder="Nom, permis, agent…" oninput="filterRequests()" class="hist-search-input">
+                </div>
+                <div id="requests-grid" class="requests-grid">
+                    <div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+                </div>
+            </div>
+            <div class="tab-pane" id="tab-lic-awaiting-print" role="tabpanel" style="padding:1rem 1.4rem;">
+                <div class="hist-search-wrap" style="margin:0 0 0.75rem;">
+                    <i class="fas fa-search hist-search-icon"></i>
+                    <input type="text" id="awaiting-print-search" placeholder="Nom, permis, agent…" oninput="filterAwaitingPrint()" class="hist-search-input">
+                </div>
+                <div id="awaiting-print-grid" class="requests-grid">
+                    <div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -610,6 +647,72 @@
             });
     };
 
+    /* ── En attente d'impression (validées, pas encore imprimées) ── */
+    let _awaitingPrintData = [];
+
+    function renderAwaitingPrint(reqs) {
+        const grid = document.getElementById('awaiting-print-grid');
+        if (!reqs.length) {
+            grid.innerHTML = _awaitingPrintData.length
+                ? '<div class="requests-empty"><i class="fas fa-search me-2"></i>Aucun résultat pour cette recherche.</div>'
+                : '<div class="requests-empty"><i class="fas fa-check-circle me-2"></i>Aucun permis en attente d\'impression.</div>';
+            return;
+        }
+        grid.innerHTML = reqs.map(r => {
+            const fullName = esc((r.holder_firstname ? r.holder_firstname + ' ' : '') + r.holder_name);
+            const photo = (r.photo_url || r.photo_filename)
+                ? `<img class="request-photo" src="${r.photo_url || '/uploads/license_photos/' + esc(r.photo_filename)}" alt="">`
+                : `<div class="request-photo-empty"><i class="fas fa-user"></i></div>`;
+            return `
+            <div class="request-card" id="awaiting-print-card-${r.id}">
+                <div class="request-card-header">
+                    ${photo}
+                    <div class="request-info">
+                        <div class="request-name">${fullName}</div>
+                        <div class="request-num">${esc(r.license_number)}</div>
+                        <div class="request-meta">
+                            <i class="fas fa-check me-1"></i>Validé par <strong>${esc(r.smarttech_validated_by)}</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="request-actions">
+                    <a href="/smart-tech/licences/${r.license_id}/card" target="_blank" class="btn-print-card" style="flex:1;justify-content:center;">
+                        <i class="fas fa-print"></i> Imprimer
+                    </a>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    window.filterAwaitingPrint = function () {
+        const q = (document.getElementById('awaiting-print-search').value || '').toLowerCase().trim();
+        if (!q) { renderAwaitingPrint(_awaitingPrintData); return; }
+        renderAwaitingPrint(_awaitingPrintData.filter(r => {
+            const fullName = ((r.holder_firstname || '') + ' ' + r.holder_name).toLowerCase();
+            return fullName.includes(q)
+                || (r.license_number || '').toLowerCase().includes(q)
+                || (r.smarttech_validated_by || '').toLowerCase().includes(q);
+        }));
+    };
+
+    window.loadAwaitingPrint = function () {
+        if (!_awaitingPrintData.length) {
+            document.getElementById('awaiting-print-grid').innerHTML =
+                '<div class="requests-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+        }
+        fetch('/smart-tech/api/licences/requests/awaiting-print')
+            .then(r => r.ok ? r.json() : [])
+            .then(reqs => {
+                _awaitingPrintData = reqs;
+                document.getElementById('awaiting-print-count').textContent = reqs.length;
+                filterAwaitingPrint();
+            })
+            .catch(() => {
+                document.getElementById('awaiting-print-grid').innerHTML =
+                    '<div class="requests-empty"><i class="fas fa-exclamation-triangle me-2"></i>Erreur de chargement.</div>';
+            });
+    };
+
     window.validateRequest = function (reqId) {
         const btn = document.getElementById('btn-val-' + reqId);
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
@@ -619,21 +722,40 @@
             .then(({ ok, data }) => {
                 if (ok) {
                     const card = document.getElementById('req-card-' + reqId);
-                    if (card) {
-                        card.style.transition = 'opacity 0.3s, transform 0.3s';
-                        card.style.opacity = '0';
-                        card.style.transform = 'scale(0.95)';
-                        setTimeout(() => {
-                            card.remove(); updateReqCount(reqId);
-                            {% if current_user.role in ['admin', 'employe'] %}loadStats(); loadHistory();{% endif %}
-                        }, 320);
+                    const licenseId = data.request && data.request.license_id;
+                    const actions = card ? card.querySelector('.request-actions') : null;
+                    // Transform the card in place into an "Imprimer" action instead of
+                    // removing it — validate + print is meant to be one continuous flow.
+                    if (actions && licenseId) {
+                        actions.innerHTML = `
+                            <a href="/smart-tech/licences/${licenseId}/card" target="_blank" class="btn-print-card" style="flex:1;justify-content:center;">
+                                <i class="fas fa-print"></i> Imprimer
+                            </a>
+                            <button class="btn-cancel-req" title="Fermer" onclick="dismissValidatedCard(${reqId})">
+                                <i class="fas fa-times"></i>
+                            </button>`;
+                    } else if (card) {
+                        card.remove();
                     }
+                    _pendingReqData = _pendingReqData.filter(r => r.id !== reqId);
+                    document.getElementById('req-count').textContent = _pendingReqData.length;
+                    loadAwaitingPrint();
+                    {% if current_user.role in ['admin', 'employe'] %}loadStats(); loadHistory();{% endif %}
                 } else {
                     alert(data.error || 'Erreur.');
                     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Valider'; }
                 }
             })
             .catch(() => { alert('Erreur réseau.'); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Valider'; } });
+    };
+
+    window.dismissValidatedCard = function (reqId) {
+        const card = document.getElementById('req-card-' + reqId);
+        if (card) {
+            card.style.transition = 'opacity 0.3s';
+            card.style.opacity = '0';
+            setTimeout(() => card.remove(), 300);
+        }
     };
 
     window.cancelRequest = function (reqId) {
@@ -729,7 +851,9 @@
                     : `<div style="width:36px;height:44px;border-radius:5px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:1.1rem;"><i class="fas fa-user"></i></div>`;
                 const statusBadge = r.status === 'printed'
                     ? `<span style="font-size:0.72rem;background:rgba(16,185,129,0.2);color:#10b981;padding:2px 8px;border-radius:12px;"><i class="fas fa-print me-1"></i>Imprimé</span>`
-                    : `<span style="font-size:0.72rem;background:rgba(59,130,246,0.2);color:#3b82f6;padding:2px 8px;border-radius:12px;"><i class="fas fa-check me-1"></i>Validé</span>`;
+                    : `<a href="/smart-tech/licences/${r.license_id}/card" target="_blank" class="btn-print-card">
+                         <i class="fas fa-print"></i>Imprimer
+                       </a>`;
                 return `<tr>
                     <td>${photo}</td>
                     <td><span class="hist-num">${esc(r.license_number)}</span></td>
@@ -838,6 +962,7 @@
                 else if (key !== _licLastKey) {
                     _licLastKey = key;
                     loadRequests();
+                    loadAwaitingPrint();
                     {% if current_user.role in ['admin', 'employe'] %}loadStats(); loadHistory();{% endif %}
                     lastRefresh = Date.now();
                 }
@@ -855,7 +980,9 @@
     }
 
     function licSafetyRefresh() {
+        if (document.hidden) return;
         loadRequests();
+        loadAwaitingPrint();
         lastRefresh = Date.now();
         {% if current_user.role == 'admin' %}loadStats();{% endif %}
     }
@@ -865,6 +992,7 @@
     loadStats();
     {% endif %}
     loadRequests();
+    loadAwaitingPrint();
     lastRefresh = Date.now();
     checkLicUpdates(); /* initialise la clé et le badge immédiatement */
     _licPollTimer = setInterval(checkLicUpdates, 15000);
@@ -872,7 +1000,7 @@
     document.addEventListener('visibilitychange', function() { if (!document.hidden) checkLicUpdates(); });
     window.addEventListener('focus', checkLicUpdates);
     document.addEventListener('visibilitychange', function() { if (!document.hidden) checkLicUpdates(); });
-    window.addEventListener('focus', function() { loadRequests(); lastRefresh = Date.now(); });
+    window.addEventListener('focus', function() { loadRequests(); loadAwaitingPrint(); lastRefresh = Date.now(); });
 
     /* ── Mobile sidebar ── */
     window.openSidebar  = () => { document.querySelector('.st-sidebar').classList.add('mob-open'); document.getElementById('mob-overlay').classList.add('active'); };

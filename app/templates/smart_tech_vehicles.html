@@ -778,7 +778,7 @@
             .catch(function () {});
     }
     setInterval(checkForUpdates, 15000);
-    setInterval(refreshTable, 60000);
+    setInterval(function() { if (!document.hidden) refreshTable(); }, 60000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) checkForUpdates(); });
     window.addEventListener('focus', refreshTable);
 

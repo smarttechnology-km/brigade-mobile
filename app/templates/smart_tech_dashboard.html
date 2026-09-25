@@ -716,7 +716,7 @@
     }
 
     setInterval(checkForUpdates, 15000);
-    setInterval(refreshAll, 60000); /* safety-net */
+    setInterval(function() { if (!document.hidden) refreshAll(); }, 60000); /* safety-net */
     document.addEventListener('visibilitychange', function() { if (!document.hidden) { checkForUpdates(); } });
     window.addEventListener('focus', function() { refreshAll(); });
 })();
