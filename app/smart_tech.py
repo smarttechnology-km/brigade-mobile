@@ -2220,27 +2220,45 @@ def api_licences_requests_stats():
     })
 
 
+@smart_tech_bp.route('/api/licences/requests/awaiting-print')
+@smart_tech_required
+def api_licences_requests_awaiting_print():
+    """Validated (not yet printed) requests — a persistent worklist, not date-limited,
+    so a request validated days ago still shows up here until it's actually printed."""
+    from app.models import DriverLicense
+    reqs = (_lpr_q()
+            .filter(LicensePrintRequest.status == 'validated')
+            .order_by(DriverLicense.smarttech_validated_at.asc())
+            .all())
+    return jsonify([r.to_dict() for r in reqs])
+
+
 @smart_tech_bp.route('/api/licences/requests/history')
 @smart_tech_required
 def api_licences_requests_history():
-    """All validated (+ printed) requests, newest first. Supports ?from=dd/mm/yyyy&to=dd/mm/yyyy."""
+    """All validated (+ printed) requests, newest first. Supports ?from=dd/mm/yyyy&to=dd/mm/yyyy.
+
+    Filters/sorts by the date each row actually belongs to: printed_at for a
+    printed request, the license's smarttech_validated_at otherwise — a request
+    validated long ago but printed today must still show up under "today"."""
     from datetime import datetime, timedelta
     from app.models import DriverLicense
+    event_date = db.func.coalesce(LicensePrintRequest.printed_at, DriverLicense.smarttech_validated_at)
     q = _lpr_q().filter(LicensePrintRequest.status.in_(['validated', 'printed']))
     date_from = request.args.get('from')
     date_to   = request.args.get('to')
     if date_from:
         try:
-            q = q.filter(DriverLicense.smarttech_validated_at >= datetime.strptime(date_from, '%d/%m/%Y'))
+            q = q.filter(event_date >= datetime.strptime(date_from, '%d/%m/%Y'))
         except ValueError:
             pass
     if date_to:
         try:
             end = datetime.strptime(date_to, '%d/%m/%Y') + timedelta(days=1)
-            q = q.filter(DriverLicense.smarttech_validated_at < end)
+            q = q.filter(event_date < end)
         except ValueError:
             pass
-    reqs = q.order_by(DriverLicense.smarttech_validated_at.desc()).all()
+    reqs = q.order_by(event_date.desc()).all()
     return jsonify([r.to_dict() for r in reqs])
 
 
@@ -3027,12 +3045,15 @@ def api_rapport_mensuel_licences():
 
     unit_price = float(SmartTechSetting.get('license_print_price', 0))
 
+    # A request validated one month can be printed the next — count it under
+    # the month it was actually printed, not the (earlier) validation month.
+    event_date = db.func.coalesce(LicensePrintRequest.printed_at, DriverLicense.smarttech_validated_at)
     q = (_lpr_q()
          .filter(LicensePrintRequest.status.in_(['validated', 'printed']))
-         .filter(DriverLicense.smarttech_validated_at >= month_start)
-         .filter(DriverLicense.smarttech_validated_at < month_end))
+         .filter(event_date >= month_start)
+         .filter(event_date < month_end))
 
-    reqs = q.order_by(DriverLicense.smarttech_validated_at.asc()).all()
+    reqs = q.order_by(event_date.asc()).all()
 
     ISLANDS = ['Grande Comore', 'Anjouan', 'Moheli']
 

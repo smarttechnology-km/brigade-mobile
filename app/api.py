@@ -3730,7 +3730,12 @@ def api_licenses_reduce_points(license_id):
 @api_bp.route('/licenses/<int:license_id>/reset-points', methods=['POST'])
 @login_required
 def api_licenses_reset_points(license_id):
-    if not hasattr(current_user, 'role') or current_user.role != 'administrateur':
+    is_admin = hasattr(current_user, 'role') and current_user.role == 'administrateur'
+    is_dgrtr_manager = (
+        hasattr(current_user, 'role') and current_user.role == 'dgrtr'
+        and getattr(current_user, 'dgrtr_type', None) in ('directeur_technique', 'directeur_general')
+    )
+    if not (is_admin or is_dgrtr_manager):
         return jsonify({'error': 'Forbidden'}), 403
     lic = DriverLicense.query.get_or_404(license_id)
     err = check_island_access(lic.holder_island)
@@ -3882,16 +3887,21 @@ def api_licenses_list():
 
     query = apply_island_filter(DriverLicense.query, DriverLicense.holder_island, force_country=country)
     if search:
-        term  = f'%{search}%'
-        query = query.filter(
-            db.or_(
-                DriverLicense.license_number.ilike(term),
-                DriverLicense.holder_name.ilike(term),
-                DriverLicense.holder_firstname.ilike(term),
-                DriverLicense.holder_phone.ilike(term),
-                DriverLicense.nin.ilike(term),
+        # Match each word separately (AND across words, OR across fields) so a
+        # full "Prénom Nom" (or "Nom Prénom") search works — holder_name and
+        # holder_firstname are two separate columns, so searching the whole
+        # phrase against either one alone would never match.
+        for word in search.split():
+            term = f'%{word}%'
+            query = query.filter(
+                db.or_(
+                    DriverLicense.license_number.ilike(term),
+                    DriverLicense.holder_name.ilike(term),
+                    DriverLicense.holder_firstname.ilike(term),
+                    DriverLicense.holder_phone.ilike(term),
+                    DriverLicense.nin.ilike(term),
+                )
             )
-        )
     if status_f:
         query = query.filter(DriverLicense.status == status_f)
     if type_f:
@@ -4723,21 +4733,28 @@ def api_license_print_request_cancel(req_id):
 @api_bp.route('/licenses/<int:license_id>/mark-printed', methods=['POST'])
 @login_required
 def api_license_mark_printed(license_id):
-    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'judiciaire', 'dgrtr'):
+    is_dgrtr_staff = hasattr(current_user, 'role') and current_user.role in ('administrateur', 'judiciaire', 'dgrtr')
+    is_smart_tech  = getattr(current_user, 'is_smart_tech', False)
+    if not (is_dgrtr_staff or is_smart_tech):
         return jsonify({'error': 'Accès refusé'}), 403
-    req = LicensePrintRequest.query.filter_by(
-        license_id=license_id, status='validated'
-    ).order_by(LicensePrintRequest.requested_at.desc()).first()
-    if not req:
+    # A license can end up with more than one 'validated' request (re-validated
+    # after an edit, duplicate manual requests, etc.) — printing the card
+    # resolves all of them at once instead of leaving stale duplicates behind.
+    reqs = LicensePrintRequest.query.filter_by(license_id=license_id, status='validated').all()
+    if not reqs:
         return jsonify({'ok': True})  # already printed or no request
     from app.timezone_utils import now_comoros
-    req.status     = 'printed'
-    req.printed_by = current_user.username
-    req.printed_at = now_comoros()
+    now = now_comoros()
+    for req in reqs:
+        req.status     = 'printed'
+        req.printed_by = current_user.username
+        req.printed_at = now
     db.session.commit()
 
+    # log_user_history writes against the `users` table FK — skip it for
+    # SmartTechAccount actors (a different table) rather than mis-link it.
     lic = DriverLicense.query.get(license_id)
-    if lic:
+    if lic and is_dgrtr_staff:
         log_user_history(current_user, 'Permis marqué imprimé', f'Permis {lic.license_number} - {lic.holder_name}')
 
     return jsonify({'ok': True})

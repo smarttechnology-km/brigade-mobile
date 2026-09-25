@@ -1489,19 +1489,44 @@ def license_print(license_id):
     lic = DriverLicense.query.get_or_404(license_id)
     settings = LicenseSetting.get()
     force_temporaire = request.args.get('temporaire') == '1'
+    is_temporaire_display = force_temporaire or lic.type_permis == 'temporaire'
     computed_expiry = None
-    if not lic.expiry_date and lic.issue_date:
-        if force_temporaire or lic.type_permis == 'temporaire':
-            computed_expiry = lic.issue_date + relativedelta(months=(settings.temp_validity_months or 12))
-        else:
-            computed_expiry = lic.issue_date + relativedelta(years=(settings.permanent_validity_years or 10))
-    main_expiry = lic.expiry_date or computed_expiry
+    display_issue_date = lic.issue_date
+    if is_temporaire_display:
+        # The provisional A4 attestation's validity runs from the day it's
+        # printed (not the license's original issue date) for the temp duration.
+        from app.timezone_utils import now_comoros
+        display_issue_date = now_comoros().date()
+        computed_expiry = display_issue_date + relativedelta(months=(settings.temp_validity_months or 12))
+    elif not lic.expiry_date and lic.issue_date:
+        computed_expiry = lic.issue_date + relativedelta(years=(settings.permanent_validity_years or 10))
+    main_expiry = computed_expiry if is_temporaire_display else (lic.expiry_date or computed_expiry)
     computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     category_details = parse_category_details(lic)
+
+    # A directeur_regional printing a temporary attestation signs it under
+    # their own name/signature — reusing the same per-island signature
+    # already configured in "Paramètres — Cartes Grises" rather than a
+    # separate upload. Falls back to the DG's settings otherwise.
+    signer_name = settings.directeur_general_name
+    signer_signature_url = settings.directeur_signature_url
+    signer_title = 'Directeur Général des Routes et Transports Routiers'
+    if (is_temporaire_display and getattr(current_user, 'role', '') == 'dgrtr'
+            and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'):
+        from app.models import CarteGriseSetting
+        cg_settings = CarteGriseSetting.get(current_user.country or 'Grande Comore')
+        if cg_settings.signature_filename:
+            signer_name = cg_settings.directeur_nom or current_user.full_name or current_user.username
+            signer_signature_url = cg_settings.signature_url
+            signer_title = 'Directeur Régional des Routes et Transports Routiers'
+
     return render_template('license_print.html', lic=lic, settings=settings,
                            force_temporaire=force_temporaire, computed_expiry=computed_expiry,
+                           display_issue_date=display_issue_date,
                            computed_cat_expiries=computed_cat_expiries,
-                           category_details=category_details)
+                           category_details=category_details,
+                           signer_name=signer_name, signer_signature_url=signer_signature_url,
+                           signer_title=signer_title)
 
 
 @main_bp.route('/licenses/<int:license_id>/print-folded')
@@ -1605,7 +1630,9 @@ def license_print_card(license_id):
     main_expiry = lic.expiry_date or computed_expiry
     computed_cat_expiries = compute_category_expiries(lic, settings, main_expiry)
     category_details = parse_category_details(lic)
-    readonly = request.args.get('readonly') == '1'
+    # DGRTR/admin only consult the card here — SmartTech is the one that
+    # validates and prints it (and marks it printed) from their own dashboard.
+    readonly = True
     holder_cats = [c.strip() for c in (lic.categories or '').split(',') if c.strip()]
     template = 'license_card_militaire.html' if 'M' in holder_cats else 'license_card.html'
     photo_b64 = _photo_to_b64(lic.photo_url)
@@ -2842,13 +2869,10 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         return jsonify({'error': 'PDF generation not available'}), 500
     
     try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import cm
-        from reportlab.lib.enums import TA_CENTER
-
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import mm
+        from reportlab.lib.colors import HexColor, white
+        from reportlab.lib.utils import ImageReader
 
         # Générer QR code avec numéro d'immatriculation intégré
         _island_codes = {'Grande Comore': 'NG', 'Anjouan': 'ND', 'Moheli': 'MW'}
@@ -2857,56 +2881,45 @@ def get_vehicle_qrcode_pdf(vehicle_id):
         qr_buf = io.BytesIO()
         qr_img.save(qr_buf, format='PNG')
         qr_buf.seek(0)
+        qr_reader = ImageReader(qr_buf)
 
         pdf_buf = io.BytesIO()
-        card_size = (10*cm, 10*cm)
-        doc = SimpleDocTemplate(
-            pdf_buf, pagesize=card_size,
-            topMargin=0.4*cm, bottomMargin=0.35*cm,
-            leftMargin=0.4*cm, rightMargin=0.4*cm
-        )
-        styles = getSampleStyleSheet()
+        PAGE = 50 * mm
+        c = canvas.Canvas(pdf_buf, pagesize=(PAGE, PAGE))
+        blue = HexColor('#003399')
 
-        footer_style = ParagraphStyle(
-            'QRFooter', parent=styles['Normal'],
-            fontSize=7, textColor=colors.HexColor('#555555'),
-            alignment=TA_CENTER, fontName='Helvetica-Oblique', leading=9,
-        )
-        qr_big = RLImage(qr_buf, width=8.0*cm, height=8.0*cm)
-        qr_band = Table([[qr_big]], colWidths=[9.2*cm], rowHeights=[8.28*cm])
-        qr_band.setStyle(TableStyle([
-            ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
-            ('BACKGROUND',    (0,0), (-1,-1), colors.white),
-            ('TOPPADDING',    (0,0), (-1,-1), 4),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-        ]))
+        header_h = 6 * mm
+        footer_h = 6 * mm
 
-        footer_band = Table(
-            [[Paragraph('Brigade Mobile — Comores', footer_style)]],
-            colWidths=[9.2*cm], rowHeights=[0.46*cm]
-        )
-        footer_band.setStyle(TableStyle([
-            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#eef2ff')),
-            ('TOPPADDING',    (0,0), (-1,-1), 3),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ]))
+        # Header band: "SIGVA"
+        c.setFillColor(blue)
+        c.rect(0, PAGE - header_h, PAGE, header_h, stroke=0, fill=1)
+        c.setFillColor(white)
+        c.setFont('Helvetica-Bold', 12)
+        c.drawCentredString(PAGE / 2, PAGE - header_h / 2 - 12 * 0.35, 'SIGVA')
 
-        card = Table(
-            [[qr_band], [footer_band]],
-            colWidths=[9.2*cm],
-            rowHeights=[8.28*cm, 0.46*cm],
-        )
-        card.setStyle(TableStyle([
-            ('BOX',           (0,0), (-1,-1), 1.5, colors.HexColor('#003399')),
-            ('NOSPLIT',       (0,0), (-1,-1)),
-            ('TOPPADDING',    (0,0), (-1,-1), 0),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-            ('LEFTPADDING',   (0,0), (-1,-1), 0),
-            ('RIGHTPADDING',  (0,0), (-1,-1), 0),
-        ]))
+        # Footer band: "BRIGADE MOBILE"
+        c.setFillColor(blue)
+        c.rect(0, 0, PAGE, footer_h, stroke=0, fill=1)
+        c.setFillColor(white)
+        c.setFont('Helvetica-Bold', 7)
+        c.drawCentredString(PAGE / 2, footer_h / 2 - 7 * 0.35, 'BRIGADE MOBILE')
 
-        doc.build([card])
+        # QR fills the full remaining space between the two bands
+        margin_side = 2 * mm
+        avail_h = PAGE - header_h - footer_h
+        qr_size = min(PAGE - 2 * margin_side, avail_h - 2 * mm)
+        qr_x = (PAGE - qr_size) / 2
+        qr_y = footer_h + (avail_h - qr_size) / 2
+        c.drawImage(qr_reader, qr_x, qr_y, width=qr_size, height=qr_size, preserveAspectRatio=True, mask='auto')
+
+        # Thin outer border
+        c.setStrokeColor(blue)
+        c.setLineWidth(1)
+        c.rect(0.5, 0.5, PAGE - 1, PAGE - 1, stroke=1, fill=0)
+
+        c.showPage()
+        c.save()
         pdf_buf.seek(0)
 
         return send_file(pdf_buf, mimetype='application/pdf', download_name=f'qrcode_{vehicle.track_token[:8]}.pdf')
@@ -5228,6 +5241,14 @@ def dgrtr_search_permis_page():
     if getattr(current_user, 'dgrtr_type', None) != 'employe':
         abort(403)
     return render_template('dgrtr_search_permis.html')
+
+
+@main_bp.route('/dgrtr/imprimer-permis-temporaire')
+@roles_required('dgrtr')
+def dgrtr_print_permis_temporaire_page():
+    if getattr(current_user, 'dgrtr_type', None) != 'directeur_regional':
+        abort(403)
+    return render_template('dgrtr_print_permis_temporaire.html')
 
 
 @vehicle_bp.route('/<int:vehicle_id>', methods=['DELETE'])
