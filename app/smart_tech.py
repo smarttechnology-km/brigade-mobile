@@ -881,19 +881,35 @@ def _serialize_pending_qr_vehicles(vehicles):
     return rows
 
 
+def _paginate_pending_qr_query(query):
+    """Shared pagination + search for the two "pending QR" endpoints —
+    same page/per_page/X-Total-* header contract as /api/vehicles/query."""
+    q = request.args.get('q', type=str)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Vehicle.license_plate.ilike(like), Vehicle.owner_name.ilike(like)))
+
+    query = query.order_by(Vehicle.created_at.desc())
+    page = max(request.args.get('page', 1, type=int) or 1, 1)
+    per_page = min(max(request.args.get('per_page', 50, type=int) or 50, 1), 200)
+    total = query.order_by(None).count()
+    vehicles = query.limit(per_page).offset((page - 1) * per_page).all()
+
+    rows = _serialize_pending_qr_vehicles(vehicles)
+    resp = jsonify({'vehicles': rows, 'count': total})
+    resp.headers['X-Total-Count'] = str(total)
+    resp.headers['X-Page'] = str(page)
+    resp.headers['X-Per-Page'] = str(per_page)
+    resp.headers['X-Total-Pages'] = str(max(1, (total + per_page - 1) // per_page))
+    return resp
+
+
 @smart_tech_bp.route('/api/pending-qr-vehicles')
 @smart_tech_required
 def api_pending_qr_vehicles():
     """Return vehicles awaiting SmartTech QR activation approval."""
-    vehicles = (
-        _vq()
-        .filter_by(qr_pending_approval=True)
-        .order_by(Vehicle.created_at.desc())
-        .limit(500)
-        .all()
-    )
-    rows = _serialize_pending_qr_vehicles(vehicles)
-    return jsonify({'vehicles': rows, 'count': len(rows)})
+    query = _vq().filter_by(qr_pending_approval=True)
+    return _paginate_pending_qr_query(query)
 
 
 @smart_tech_bp.route('/api/pending-qr-print-vehicles')
@@ -903,16 +919,8 @@ def api_pending_qr_print_vehicles():
     "véhicule existant") but whose QR code has never been activated/printed
     — and therefore never paid for. Separate from api_pending_qr_vehicles,
     which is for brand-new vehicles awaiting the carte-grise approval step."""
-    vehicles = (
-        _vq()
-        .filter_by(qr_pending_approval=False)
-        .filter(Vehicle.qr_code_expiry.is_(None))
-        .order_by(Vehicle.created_at.desc())
-        .limit(500)
-        .all()
-    )
-    rows = _serialize_pending_qr_vehicles(vehicles)
-    return jsonify({'vehicles': rows, 'count': len(rows)})
+    query = _vq().filter_by(qr_pending_approval=False).filter(Vehicle.qr_code_expiry.is_(None))
+    return _paginate_pending_qr_query(query)
 
 
 @smart_tech_bp.route('/api/last-update')
