@@ -375,11 +375,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!d) return;
                     const key = d.last_update + '|' + d.total;
                     if (_lastKey === null) { _lastKey = key; return; }
-                    if (key !== _lastKey) { _lastKey = key; loadVehicles(); }
+                    if (key !== _lastKey) { _lastKey = key; fetchVehiclesPage(); refreshVehicleTabCounts(); }
                 })
                 .catch(() => {});
         }
-        setInterval(_checkVehicleUpdates, 5000);
+        // Was 5000ms — with thousands of vehicles now imported, that meant every
+        // open tab re-fetched the entire (unpaginated) vehicle list up to 12x/min.
+        // 60s matches the same pattern already used on the SmartTech pages.
+        setInterval(_checkVehicleUpdates, 60000);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) _checkVehicleUpdates(); });
         
         // Load insurances for the vehicle form
@@ -421,7 +424,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.querySelectorAll('#vehicle-status-tabs .nav-link').forEach(b => b.classList.remove('active'));
                 this.classList.add('active');
                 activeVehicleTab = this.getAttribute('data-tab');
-                applyTabFilter();
+                currentPageVehicles = 1;
+                fetchVehiclesPage();
             });
         });
     }
@@ -571,107 +575,92 @@ document.addEventListener('DOMContentLoaded', function() {
     }catch(e){ console.error(e); }
 });
 
-function loadVehicles() {
-    console.log('loadVehicles called');
-    
-    // Build query parameters based on current filter values
+// ── Server-side pagination ──
+// The vehicle list is no longer fetched in full and sliced client-side (that
+// meant loading every vehicle — thousands of them after the bulk import —
+// on every page load and every 60s poll). Search/tab/country filters and
+// pagination are now all sent to the server; only the current page's rows
+// (and a handful of aggregate counts) ever come back.
+
+function _buildVehicleQueryParams() {
     const params = new URLSearchParams();
-    
-    // Get search query
     const searchInput = document.getElementById('vehicle-search');
     if (searchInput && searchInput.value.trim()) {
         params.append('q', searchInput.value.trim());
     }
-    
-    // Get country filter
     const countryFilter = document.getElementById('country-filter');
     if (countryFilter && countryFilter.value) {
         params.append('country', countryFilter.value);
     }
-    
-    const url = params.toString() ? `/api/vehicles/query?${params.toString()}` : '/api/vehicles/query';
-    
-    fetch(url, { credentials: 'same-origin' })
-        .then(r => {
-            console.log('Response status:', r.status);
-            if (!r.ok) {
-                console.error('Erreur HTTP:', r.status);
-                throw new Error(`HTTP ${r.status}`);
-            }
-            return r.json();
+    if (activeVehicleTab === 'pending') {
+        params.append('pending', '1');
+    } else if (activeVehicleTab && activeVehicleTab !== 'all') {
+        params.append('status', activeVehicleTab);
+    }
+    return params;
+}
+
+function loadVehicles() {
+    currentPageVehicles = 1;
+    fetchVehiclesPage();
+    refreshVehicleTabCounts();
+}
+
+function refreshVehicleTabCounts() {
+    const params = _buildVehicleQueryParams();
+    params.delete('status');
+    params.delete('pending');
+    fetch(`/api/vehicles/counts?${params.toString()}`, { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : null)
+        .then(counts => {
+            if (!counts) return;
+            const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+            set('tab-count-all', counts.all);
+            set('tab-count-active', counts.active);
+            set('tab-count-inactive', counts.inactive);
+            set('tab-count-suspended', counts.suspended);
+            set('tab-count-pending', counts.pending);
         })
-        .then(data => {
-            console.log('Data received from API:', data);
-            vehiclesCache = data || [];
-            console.log('vehiclesCache updated with ' + vehiclesCache.length + ' vehicles');
-            renderVehiclesTable(vehiclesCache);
+        .catch(() => {});
+}
+
+function fetchVehiclesPage() {
+    const tbody = document.getElementById('vehicles-tbody');
+    if (!tbody) return; // not on a page with the vehicles table
+
+    const params = _buildVehicleQueryParams();
+    params.set('page', currentPageVehicles);
+    params.set('per_page', VEHICLES_PER_PAGE);
+
+    fetch(`/api/vehicles/query?${params.toString()}`, { credentials: 'same-origin' })
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const total = parseInt(r.headers.get('X-Total-Count') || '0', 10);
+            const totalPages = parseInt(r.headers.get('X-Total-Pages') || '1', 10);
+            return r.json().then(data => ({ data, total, totalPages }));
+        })
+        .then(({ data, total, totalPages }) => {
+            renderVehiclesPage(data || [], total, totalPages);
         })
         .catch(err => {
             console.error('Erreur chargement véhicules:', err);
-            const tbody = document.getElementById('vehicles-tbody');
-            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erreur lors du chargement. Vérifiez votre connexion.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erreur lors du chargement. Vérifiez votre connexion.</td></tr>';
         });
 }
 
-function updateTabCounts(all) {
-    const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
-    set('tab-count-all',       all.length);
-    set('tab-count-active',    all.filter(v => !v.qr_pending_approval && v.status === 'active').length);
-    set('tab-count-inactive',  all.filter(v => !v.qr_pending_approval && v.status === 'inactive').length);
-    set('tab-count-suspended', all.filter(v => !v.qr_pending_approval && v.status === 'suspended').length);
-    set('tab-count-pending',   all.filter(v => v.qr_pending_approval).length);
-}
-
-function applyTabFilter() {
-    const all = vehiclesCache || [];
-    let filtered;
-    if (activeVehicleTab === 'pending') {
-        filtered = all.filter(v => v.qr_pending_approval);
-    } else if (activeVehicleTab === 'active') {
-        filtered = all.filter(v => !v.qr_pending_approval && v.status === 'active');
-    } else if (activeVehicleTab === 'inactive') {
-        filtered = all.filter(v => !v.qr_pending_approval && v.status === 'inactive');
-    } else if (activeVehicleTab === 'suspended') {
-        filtered = all.filter(v => !v.qr_pending_approval && v.status === 'suspended');
-    } else {
-        filtered = all;
-    }
-    currentVehiclesDisplayed = filtered;
-    currentPageVehicles = 1;
-    displayVehiclesPage();
-}
-
-function renderVehiclesTable(vehicles) {
-    updateTabCounts(vehicles || []);
-    applyTabFilter();
-}
-
-function displayVehiclesPage() {
-    const vehicles = currentVehiclesDisplayed;
+function renderVehiclesPage(vehicles, total, totalPages) {
     const tbody = document.getElementById('vehicles-tbody');
-    if (!tbody) {
-        console.error('ERROR: #vehicles-tbody not found in DOM');
-        return;
-    }
-    
-    if (!vehicles || vehicles.length === 0) {
+    if (!tbody) return;
+
+    if (!vehicles.length) {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun véhicule</td></tr>';
-        updatePaginationInfo(0, 0, 0);
+        updatePaginationInfo(0, 0, 0, currentPageVehicles, totalPages || 1);
+        updatePaginationButtons(currentPageVehicles, totalPages || 1);
         return;
     }
-    
-    console.log('displayVehiclesPage: ' + vehicles.length + ' vehicles total, page ' + currentPageVehicles);
-    
-    // Calculate pagination
-    const totalPages = Math.ceil(vehicles.length / VEHICLES_PER_PAGE);
+
     const startIdx = (currentPageVehicles - 1) * VEHICLES_PER_PAGE;
-    const endIdx = Math.min(startIdx + VEHICLES_PER_PAGE, vehicles.length);
-    const vehiclesOnPage = vehicles.slice(startIdx, endIdx);
-    
-    console.log('Displaying vehicles ' + startIdx + ' to ' + endIdx);
-    
-    // Render table rows
-    tbody.innerHTML = vehiclesOnPage.map((v, i) => `
+    tbody.innerHTML = vehicles.map((v, i) => `
         <tr>
             <td>${startIdx + i + 1}</td>
             <td><strong>${v.license_plate}</strong></td>
@@ -690,9 +679,8 @@ function displayVehiclesPage() {
             </td>
         </tr>
     `).join('');
-    
-    // Update pagination info
-    updatePaginationInfo(startIdx + 1, endIdx, vehicles.length, currentPageVehicles, totalPages);
+
+    updatePaginationInfo(startIdx + 1, startIdx + vehicles.length, total, currentPageVehicles, totalPages);
     updatePaginationButtons(currentPageVehicles, totalPages);
 }
 
@@ -701,13 +689,13 @@ function updatePaginationInfo(start, end, total, currentPage, totalPages) {
     const endEl = document.getElementById('pagination-end');
     const totalEl = document.getElementById('pagination-total');
     const pageInfoEl = document.getElementById('page-info');
-    
+
     if (startEl && endEl && totalEl) {
         startEl.textContent = total === 0 ? 0 : start;
         endEl.textContent = end;
         totalEl.textContent = total;
     }
-    
+
     if (pageInfoEl && currentPage && totalPages) {
         pageInfoEl.textContent = `Page ${currentPage} sur ${totalPages}`;
     }
@@ -716,7 +704,7 @@ function updatePaginationInfo(start, end, total, currentPage, totalPages) {
 function updatePaginationButtons(currentPage, totalPages) {
     const prevBtn = document.querySelector('#pagination-controls li:first-child a');
     const nextBtn = document.querySelector('#pagination-controls li:last-child a');
-    
+
     if (prevBtn) {
         if (currentPage <= 1) {
             prevBtn.parentElement.classList.add('disabled');
@@ -724,7 +712,7 @@ function updatePaginationButtons(currentPage, totalPages) {
             prevBtn.parentElement.classList.remove('disabled');
         }
     }
-    
+
     if (nextBtn) {
         if (currentPage >= totalPages) {
             nextBtn.parentElement.classList.add('disabled');
@@ -737,44 +725,21 @@ function updatePaginationButtons(currentPage, totalPages) {
 function goToPreviousPage() {
     if (currentPageVehicles > 1) {
         currentPageVehicles--;
-        displayVehiclesPage();
+        fetchVehiclesPage();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 }
 
 function goToNextPage() {
-    const totalPages = Math.ceil(currentVehiclesDisplayed.length / VEHICLES_PER_PAGE);
-    if (currentPageVehicles < totalPages) {
-        currentPageVehicles++;
-        displayVehiclesPage();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    currentPageVehicles++;
+    fetchVehiclesPage();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function filterAndRenderVehicles(query){
-    if(!query){
-        renderVehiclesTable(vehiclesCache);
-        return;
-    }
-    const q = query.toLowerCase();
-    const filtered = vehiclesCache.filter(v => {
-        return (v.license_plate && v.license_plate.toLowerCase().includes(q)) ||
-               (v.owner_name && v.owner_name.toLowerCase().includes(q)) ||
-               (v.vehicle_type && v.vehicle_type.toLowerCase().includes(q)) ||
-               (v.vin && v.vin.toLowerCase().includes(q));
-    });
-    // update counts on the full filtered set, then apply tab
-    updateTabCounts(filtered);
-    const tab = activeVehicleTab;
-    let tabFiltered;
-    if (tab === 'pending') tabFiltered = filtered.filter(v => v.qr_pending_approval);
-    else if (tab === 'active') tabFiltered = filtered.filter(v => !v.qr_pending_approval && v.status === 'active');
-    else if (tab === 'inactive') tabFiltered = filtered.filter(v => !v.qr_pending_approval && v.status === 'inactive');
-    else if (tab === 'suspended') tabFiltered = filtered.filter(v => !v.qr_pending_approval && v.status === 'suspended');
-    else tabFiltered = filtered;
-    currentVehiclesDisplayed = tabFiltered;
-    currentPageVehicles = 1;
-    displayVehiclesPage();
+function filterAndRenderVehicles(query) {
+    // Search is now server-side (part of _buildVehicleQueryParams) — just
+    // re-fetch page 1 with the current search-box value.
+    loadVehicles();
 }
 
 function _setSaveBlocked(blocked) {
