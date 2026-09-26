@@ -452,6 +452,10 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="st-pagination" id="pagination-bar-pending">
+                    <span id="pagination-info-pending"></span>
+                    <div id="pagination-btns-pending" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                </div>
             </div>
 
             <!-- Onglet En attente d'impression QR Code (véhicules existants importés, jamais payés) -->
@@ -477,6 +481,10 @@
                             <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
                         </tbody>
                     </table>
+                </div>
+                <div class="st-pagination" id="pagination-bar-print">
+                    <span id="pagination-info-print"></span>
+                    <div id="pagination-btns-print" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
                 </div>
             </div>
         </div>
@@ -771,8 +779,12 @@
     const perPage = 50;
     let firstLoad = true;
 
-    /* ── Pending QR vehicles ── */
-    let _pendingQrData = [];
+    /* ── Pending QR vehicles (server-side paginated, same pattern as Actifs) ── */
+    let currentPagePending = 1;
+    let currentPagePrint = 1;
+    const pendingPerPage = 50;
+    let _pendingQrSearchTimer = null;
+    let _pendingQrPrintSearchTimer = null;
 
     function renderPendingQrRow(v) {
         return `<tr>
@@ -792,31 +804,40 @@
     }
 
     window.filterPendingQr = function() {
-        const q = (document.getElementById('pending-qr-search').value || '').toLowerCase().trim();
-        const tbody = document.getElementById('pending-qr-tbody');
-        const filtered = !q ? _pendingQrData : _pendingQrData.filter(v =>
-            (v.license_plate || '').toLowerCase().includes(q) || (v.owner_name || '').toLowerCase().includes(q));
-        if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">${_pendingQrData.length === 0 ? 'Aucun véhicule en attente' : 'Aucun résultat'}</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = filtered.map(renderPendingQrRow).join('');
+        clearTimeout(_pendingQrSearchTimer);
+        _pendingQrSearchTimer = setTimeout(function() {
+            currentPagePending = 1;
+            loadPendingQr();
+        }, 250);
     };
 
     function loadPendingQr() {
-        fetch('/smart-tech/api/pending-qr-vehicles', { credentials: 'same-origin' })
-            .then(r => r.json())
-            .then(data => {
-                _pendingQrData = data.vehicles || [];
-                document.getElementById('pending-badge').textContent = _pendingQrData.length;
-                filterPendingQr();
+        const q = (document.getElementById('pending-qr-search').value || '').trim();
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        params.set('page', currentPagePending);
+        params.set('per_page', pendingPerPage);
+
+        fetch(`/smart-tech/api/pending-qr-vehicles?${params.toString()}`, { credentials: 'same-origin' })
+            .then(r => {
+                const total = parseInt(r.headers.get('X-Total-Count') || '0', 10);
+                const pages = parseInt(r.headers.get('X-Total-Pages') || '1', 10);
+                return r.json().then(data => ({ data, total, pages }));
+            })
+            .then(({ data, total, pages }) => {
+                if (currentPagePending > pages) { currentPagePending = pages; loadPendingQr(); return; }
+                document.getElementById('pending-badge').textContent = total;
+                const vehicles = data.vehicles || [];
+                const tbody = document.getElementById('pending-qr-tbody');
+                tbody.innerHTML = vehicles.length
+                    ? vehicles.map(renderPendingQrRow).join('')
+                    : `<tr><td colspan="7" class="text-center text-muted py-3">${total === 0 ? 'Aucun véhicule en attente' : 'Aucun résultat'}</td></tr>`;
+                renderPendingPagination('pending', currentPagePending, pages, total);
             })
             .catch(() => {});
     }
 
     /* ── En attente d'impression QR Code (véhicules existants importés) ── */
-    let _pendingQrPrintData = [];
-
     function renderPendingQrPrintRow(v) {
         return `<tr>
                     <td><strong style="color:var(--st-cyan);font-family:monospace;">${esc(v.license_plate)}</strong></td>
@@ -835,27 +856,62 @@
     }
 
     window.filterPendingQrPrint = function() {
-        const q = (document.getElementById('pending-qr-print-search').value || '').toLowerCase().trim();
-        const tbody = document.getElementById('pending-qr-print-tbody');
-        const filtered = !q ? _pendingQrPrintData : _pendingQrPrintData.filter(v =>
-            (v.license_plate || '').toLowerCase().includes(q) || (v.owner_name || '').toLowerCase().includes(q));
-        if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">${_pendingQrPrintData.length === 0 ? 'Aucun véhicule en attente' : 'Aucun résultat'}</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = filtered.map(renderPendingQrPrintRow).join('');
+        clearTimeout(_pendingQrPrintSearchTimer);
+        _pendingQrPrintSearchTimer = setTimeout(function() {
+            currentPagePrint = 1;
+            loadPendingQrPrint();
+        }, 250);
     };
 
     function loadPendingQrPrint() {
-        fetch('/smart-tech/api/pending-qr-print-vehicles', { credentials: 'same-origin' })
-            .then(r => r.json())
-            .then(data => {
-                _pendingQrPrintData = data.vehicles || [];
-                document.getElementById('pending-print-badge').textContent = _pendingQrPrintData.length;
-                filterPendingQrPrint();
+        const q = (document.getElementById('pending-qr-print-search').value || '').trim();
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        params.set('page', currentPagePrint);
+        params.set('per_page', pendingPerPage);
+
+        fetch(`/smart-tech/api/pending-qr-print-vehicles?${params.toString()}`, { credentials: 'same-origin' })
+            .then(r => {
+                const total = parseInt(r.headers.get('X-Total-Count') || '0', 10);
+                const pages = parseInt(r.headers.get('X-Total-Pages') || '1', 10);
+                return r.json().then(data => ({ data, total, pages }));
+            })
+            .then(({ data, total, pages }) => {
+                if (currentPagePrint > pages) { currentPagePrint = pages; loadPendingQrPrint(); return; }
+                document.getElementById('pending-print-badge').textContent = total;
+                const vehicles = data.vehicles || [];
+                const tbody = document.getElementById('pending-qr-print-tbody');
+                tbody.innerHTML = vehicles.length
+                    ? vehicles.map(renderPendingQrPrintRow).join('')
+                    : `<tr><td colspan="7" class="text-center text-muted py-3">${total === 0 ? 'Aucun véhicule en attente' : 'Aucun résultat'}</td></tr>`;
+                renderPendingPagination('print', currentPagePrint, pages, total);
             })
             .catch(() => {});
     }
+
+    function renderPendingPagination(kind, page, pages, total) {
+        const info = document.getElementById(`pagination-info-${kind}`);
+        const btns = document.getElementById(`pagination-btns-${kind}`);
+        const start = total === 0 ? 0 : (page - 1) * pendingPerPage + 1;
+        const end = Math.min(page * pendingPerPage, total);
+        if (info) info.textContent = total === 0 ? '' : `${start}–${end} sur ${total}`;
+        if (!btns) return;
+        if (pages <= 1) { btns.innerHTML = ''; return; }
+        const goFn = kind === 'pending' ? 'goPagePending' : 'goPagePrint';
+        let html = `<a class="page-link${page===1?' disabled':''}" onclick="${goFn}(${page-1})">‹</a>`;
+        for (let p = 1; p <= pages; p++) {
+            if (pages > 7 && Math.abs(p - page) > 2 && p !== 1 && p !== pages) {
+                if (p === 2 || p === pages - 1) html += '<span style="padding:0.3rem 0.5rem;opacity:.4;">…</span>';
+                continue;
+            }
+            html += `<a class="page-link${p===page?' active':''}" onclick="${goFn}(${p})">${p}</a>`;
+        }
+        html += `<a class="page-link${page===pages?' disabled':''}" onclick="${goFn}(${page+1})">›</a>`;
+        btns.innerHTML = html;
+    }
+
+    window.goPagePending = function(p) { currentPagePending = p; loadPendingQr(); };
+    window.goPagePrint = function(p) { currentPagePrint = p; loadPendingQrPrint(); };
 
     window.activatePendingQR = async function(vid, plate, ownerName) {
         if (!confirm(`Activer le QR Code pour ${plate} — ${ownerName} ?\n\nCela enregistrera le paiement d'activation et rendra le véhicule pleinement opérationnel.`)) return;
