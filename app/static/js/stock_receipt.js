@@ -45,7 +45,7 @@ function printReceipt(sale) {
         '.receipt-footer .thanks { font-weight: 700; color: #0f3460; font-size: 13px; margin-bottom: 4px; }' +
         '.no-print { text-align: center; padding: 18px; }' +
         '.btn-print { background: #0f3460; color: #fff; border: none; padding: 10px 30px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600; }' +
-        '@media print { html, body { background: #fff; padding: 0; } .page { box-shadow: none; width: auto; min-height: 0; padding: 0; } .no-print { display: none; } }' +
+        '@media print { html, body { background: #fff; padding: 0; display: block; } .page { box-shadow: none; width: 100%; min-height: 0; padding: 0; } .no-print { display: none; } }' +
         '</style></head><body>' +
         '<div>' +
         '<div class="page">' +
