@@ -767,7 +767,6 @@
     window.closeSidebar = function() { document.getElementById('st-sidebar').classList.remove('mob-open'); document.getElementById('mob-overlay').classList.remove('active'); };
 
     /* ── State ── */
-    let allVehicles = [];
     let currentPage = 1;
     const perPage = 50;
     let firstLoad = true;
@@ -878,18 +877,37 @@
         }
     };
 
-    /* ── Load vehicles ── */
+    /* ── Load vehicles ──
+       Server-side pagination + filtering: with thousands of vehicles now
+       imported, fetching the full list on every load/60s-poll (into
+       allVehicles, then filtering/slicing client-side) was the main driver
+       of the CPU/RAM peaks on the 0.5 CPU / 512MB plan. Only the current
+       page is fetched now; search/type/status are sent as query params. */
     function loadVehicles(silent) {
         if (!silent) {
             document.getElementById('vehicles-tbody').innerHTML =
                 '<tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
         }
-        fetch('/api/vehicles/query', { credentials: 'same-origin' })
-            .then(r => r.json())
-            .then(data => {
-                if (firstLoad) { currentPage = 1; firstLoad = false; }
-                allVehicles = data || [];
-                renderTable();
+        const q      = (document.getElementById('search-input').value || '').trim();
+        const type   = document.getElementById('type-filter').value || '';
+        const status = document.getElementById('status-filter').value || '';
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (type) params.set('type', type);
+        if (status) params.set('status', status);
+        params.set('page', currentPage);
+        params.set('per_page', perPage);
+
+        fetch(`/api/vehicles/query?${params.toString()}`, { credentials: 'same-origin' })
+            .then(r => {
+                const total = parseInt(r.headers.get('X-Total-Count') || '0', 10);
+                const pages = parseInt(r.headers.get('X-Total-Pages') || '1', 10);
+                return r.json().then(data => ({ data, total, pages }));
+            })
+            .then(({ data, total, pages }) => {
+                firstLoad = false;
+                if (currentPage > pages) { currentPage = pages; loadVehicles(true); return; }
+                renderTable(data || [], total, pages);
                 const t = new Date();
                 document.getElementById('last-updated').textContent =
                     'Actualisé à ' + t.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
@@ -905,30 +923,11 @@
             });
     }
 
-    /* ── Filter ── */
-    function getFiltered() {
-        const q      = (document.getElementById('search-input').value || '').toLowerCase().trim();
-        const type   = (document.getElementById('type-filter').value || '').toLowerCase();
-        const status = document.getElementById('status-filter').value || '';
-        return allVehicles.filter(v => {
-            if (q && !((v.license_plate || '').toLowerCase().includes(q)) && !((v.owner_name || '').toLowerCase().includes(q))) return false;
-            if (type   && (v.vehicle_type || '').toLowerCase() !== type)   return false;
-            if (status && v.status !== status) return false;
-            return true;
-        });
-    }
-
-    window.filterTable = function() { currentPage = 1; renderTable(); };
+    window.filterTable = function() { currentPage = 1; loadVehicles(true); };
 
     /* ── Render table ── */
-    function renderTable() {
-        const filtered = getFiltered();
-        const total    = filtered.length;
-        const pages    = Math.max(1, Math.ceil(total / perPage));
-        if (currentPage > pages) currentPage = pages;
-        const start    = (currentPage - 1) * perPage;
-        const slice    = filtered.slice(start, start + perPage);
-
+    function renderTable(slice, total, pages) {
+        const start = (currentPage - 1) * perPage;
         document.getElementById('vehicles-count').textContent = total + ' véhicule' + (total !== 1 ? 's' : '');
 
         const tbody = document.getElementById('vehicles-tbody');
@@ -982,7 +981,7 @@
         btns.innerHTML = html;
     }
 
-    window.goPage = function(p) { currentPage = p; renderTable(); };
+    window.goPage = function(p) { currentPage = p; loadVehicles(true); };
 
     /* ── Status badge ── */
     function statusBadge(s) {
