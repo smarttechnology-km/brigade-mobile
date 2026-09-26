@@ -1151,10 +1151,10 @@ function saveVehicle() {
     const hiddenEl = document.getElementById('vehicle_type');
     let vehicleTypeValue = '';
     if(selectEl){
-        if(selectEl.value === 'other') vehicleTypeValue = otherEl ? otherEl.value.trim() : (hiddenEl ? hiddenEl.value.trim() : '');
+        if(selectEl.value === 'other') vehicleTypeValue = otherEl ? otherEl.value.trim().toUpperCase() : (hiddenEl ? hiddenEl.value.trim().toUpperCase() : '');
         else vehicleTypeValue = selectEl.value;
     } else if(hiddenEl){
-        vehicleTypeValue = hiddenEl.value.trim();
+        vehicleTypeValue = hiddenEl.value.trim().toUpperCase();
     }
 
     // compute usage type from select/other controls
@@ -1163,10 +1163,10 @@ function saveVehicle() {
     const usageHiddenEl = document.getElementById('usage_type');
     let usageTypeValue = '';
     if(usageSelectEl){
-        if(usageSelectEl.value === 'autre') usageTypeValue = usageOtherEl ? usageOtherEl.value.trim() : (usageHiddenEl ? usageHiddenEl.value.trim() : '');
+        if(usageSelectEl.value === 'autre') usageTypeValue = usageOtherEl ? usageOtherEl.value.trim().toUpperCase() : (usageHiddenEl ? usageHiddenEl.value.trim().toUpperCase() : '');
         else usageTypeValue = usageSelectEl.value;
     } else if(usageHiddenEl){
-        usageTypeValue = usageHiddenEl.value.trim();
+        usageTypeValue = usageHiddenEl.value.trim().toUpperCase();
     }
 
     // compute insurance company from select/other controls
@@ -1174,7 +1174,7 @@ function saveVehicle() {
     const insuranceOtherEl = document.getElementById('insurance_company_other');
     let insuranceCompanyValue = '';
     if(insuranceSelectEl){
-        if(insuranceSelectEl.value === 'Autre') insuranceCompanyValue = insuranceOtherEl ? insuranceOtherEl.value.trim() : '';
+        if(insuranceSelectEl.value === 'Autre') insuranceCompanyValue = insuranceOtherEl ? insuranceOtherEl.value.trim().toUpperCase() : '';
         else insuranceCompanyValue = insuranceSelectEl.value;
     }
 
@@ -1193,10 +1193,10 @@ function saveVehicle() {
             const fuelOtherEl = document.getElementById('fuel_type_other');
             const fuelHiddenEl = document.getElementById('fuel_type');
             if(fuelSelectEl){
-                if(fuelSelectEl.value === 'other') return fuelOtherEl ? fuelOtherEl.value.trim() : (fuelHiddenEl ? fuelHiddenEl.value.trim() : '');
+                if(fuelSelectEl.value === 'other') return fuelOtherEl ? fuelOtherEl.value.trim().toUpperCase() : (fuelHiddenEl ? fuelHiddenEl.value.trim().toUpperCase() : '');
                 return fuelSelectEl.value;
             }
-            return fuelHiddenEl ? fuelHiddenEl.value.trim() : '';
+            return fuelHiddenEl ? fuelHiddenEl.value.trim().toUpperCase() : '';
         })(),
         usage_type: usageTypeValue,
         color: document.getElementById('color').value.trim(),
@@ -1224,7 +1224,7 @@ function saveVehicle() {
             var wz = document.getElementById('work_zone');
             var wzOther = document.getElementById('work_zone_other');
             if(!wz) return undefined;
-            if(wz.value === 'Autre région') return wzOther ? wzOther.value.trim() : '';
+            if(wz.value === 'Autre région') return wzOther ? wzOther.value.trim().toUpperCase() : '';
             return wz.value;
         })()
     };
@@ -1247,6 +1247,14 @@ function saveVehicle() {
 
     // Include CG fields in the main payload so the PUT handler saves them atomically
     Object.assign(payload, cgPayload);
+
+    // Force uppercase on free-text fields (fixed dropdown values like
+    // vehicle_type/fuel_type/status codes are left untouched above).
+    ['license_plate', 'owner_name', 'owner_address', 'make', 'model', 'vin', 'color', 'notes',
+     'carrosserie', 'places_assises', 'poids_total_autorise', 'poids_a_vide', 'charge_utile_ptc',
+     'profession_proprietaire', 'observation'].forEach(function(k) {
+        if (typeof payload[k] === 'string') payload[k] = payload[k].toUpperCase();
+    });
 
     if (!vid) {
         const toggleEl = document.getElementById('toggle-nouveau-vehicule');
