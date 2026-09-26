@@ -1532,13 +1532,13 @@ def _compute_monthly_sales():
 
 
 @smart_tech_bp.route('/api/stock/sales/monthly', methods=['GET'])
-@st_admin_or_secretaire_required
+@st_admin_required
 def api_stock_sales_monthly():
     return jsonify({'months': _compute_monthly_sales()})
 
 
 @smart_tech_bp.route('/recettes-stock/mensuel')
-@st_admin_or_secretaire_required
+@st_admin_required
 def recettes_stock_mensuel_page():
     months = _compute_monthly_sales()
     total_revenue = sum(m['total'] for m in months)
@@ -1550,7 +1550,7 @@ def recettes_stock_mensuel_page():
 
 
 @smart_tech_bp.route('/recettes-stock/rapport/<month>')
-@st_admin_or_secretaire_required
+@st_admin_required
 def recettes_stock_rapport_page(month):
     from app.models import StockSale
     from datetime import datetime as _dt
