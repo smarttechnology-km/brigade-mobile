@@ -733,7 +733,7 @@ def dashboard():
     query = Vehicle.query
     if current_user.role == 'judiciaire' and current_user.country:
         query = query.filter(Vehicle.owner_island == current_user.country)
-    recent = query.order_by(Vehicle.created_at.desc()).limit(10).all()
+    recent = query.order_by(Vehicle.registration_date.desc()).limit(10).all()
     initial_vehicles = [v.to_dict() for v in recent]
     return render_template('dashboard.html', initial_vehicles=initial_vehicles)
 
@@ -1784,12 +1784,15 @@ def get_vehicle_stats():
 @vehicle_bp.route('/list', methods=['GET'])
 @login_required
 def get_vehicles_list():
-    """Retourner la liste des véhicules"""
+    """Retourner les véhicules les plus récents (Date d'Inscription) — utilisé
+    uniquement par le widget "Véhicules Enregistrés" du dashboard, qui n'en
+    affiche jamais que les 10 premiers. Limité côté serveur pour éviter de
+    charger tout le parc (des milliers de véhicules) juste pour ça."""
     country = request.args.get('country', type=str)  # New country filter for admin
 
     query = Vehicle.query
     query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
-    vehicles = query.order_by(Vehicle.created_at.desc()).all()
+    vehicles = query.order_by(Vehicle.registration_date.desc()).limit(10).all()
     return jsonify([v.to_dict() for v in vehicles])
 
 
@@ -1853,8 +1856,15 @@ def query_vehicles():
                 query = query.filter(Vehicle.owner_island == emp_island)
     if vtype:
         query = query.filter(Vehicle.vehicle_type == vtype)
-    if status:
+    # "pending" (En attente QR) is a status tab in its own right on the
+    # frontend, distinct from status=active/inactive/suspended — mirrors the
+    # semantics the client used to apply itself after fetching everything.
+    pending = request.args.get('pending', type=str)
+    if pending is not None and pending.lower() in ('1', 'true', 'yes'):
+        query = query.filter(Vehicle.qr_pending_approval == True)
+    elif status:
         query = query.filter(Vehicle.status == status)
+        query = query.filter(Vehicle.qr_pending_approval == False)
     if q:
         like = f"%{q}%"
         query = query.filter((Vehicle.license_plate.ilike(like)) | (Vehicle.owner_name.ilike(like)) | (Vehicle.vin.ilike(like)))
@@ -1897,8 +1907,71 @@ def query_vehicles():
         except Exception:
             pass
 
-    vehicles = query.order_by(Vehicle.registration_date.desc()).all()
+    query = query.order_by(Vehicle.registration_date.desc())
+
+    # Optional pagination: only kicks in when page/per_page are passed, so
+    # every existing caller that just wants the full filtered list (fines,
+    # exoneration, alerts, reports, mobile money, DGRTR...) keeps getting a
+    # plain JSON array exactly as before. The two heavy list pages (Véhicules,
+    # Gestion des Véhicules) pass these to avoid loading thousands of rows
+    # (and their full to_dict()) on every request/poll.
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', type=int)
+    if page or per_page:
+        page = max(page or 1, 1)
+        per_page = min(max(per_page or 50, 1), 200)
+        total = query.order_by(None).count()
+        vehicles = query.limit(per_page).offset((page - 1) * per_page).all()
+        resp = jsonify([v.to_dict() for v in vehicles])
+        resp.headers['X-Total-Count'] = str(total)
+        resp.headers['X-Page'] = str(page)
+        resp.headers['X-Per-Page'] = str(per_page)
+        resp.headers['X-Total-Pages'] = str(max(1, (total + per_page - 1) // per_page))
+        return resp
+
+    vehicles = query.all()
     return jsonify([v.to_dict() for v in vehicles])
+
+
+@vehicle_bp.route('/counts', methods=['GET'])
+@login_required
+def vehicles_counts():
+    """Status-tab counts (Tous/Actif/Inactif/Suspendu/En attente) for the main
+    Véhicules page — computed with cheap COUNT queries instead of requiring
+    the full vehicle list client-side now that /query is paginated."""
+    from sqlalchemy import func
+    q = request.args.get('q', type=str)
+    vtype = request.args.get('type', type=str)
+    country = request.args.get('country', type=str)
+
+    query = Vehicle.query
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
+    from app.models import SmartTechAccount
+    if isinstance(current_user, SmartTechAccount):
+        query = query.filter(Vehicle.qr_pending_approval == False)
+        query = query.filter(Vehicle.qr_code_expiry.isnot(None))
+        if current_user.role == 'employe':
+            emp_island = current_user.employee.island if current_user.employee else None
+            if emp_island:
+                query = query.filter(Vehicle.owner_island == emp_island)
+    if vtype:
+        query = query.filter(Vehicle.vehicle_type == vtype)
+    if q:
+        like = f"%{q}%"
+        query = query.filter((Vehicle.license_plate.ilike(like)) | (Vehicle.owner_name.ilike(like)) | (Vehicle.vin.ilike(like)))
+
+    rows = query.with_entities(
+        Vehicle.status, Vehicle.qr_pending_approval, func.count(Vehicle.id)
+    ).group_by(Vehicle.status, Vehicle.qr_pending_approval).all()
+
+    counts = {'all': 0, 'active': 0, 'inactive': 0, 'suspended': 0, 'pending': 0}
+    for status, pending, n in rows:
+        counts['all'] += n
+        if pending:
+            counts['pending'] += n
+        elif status in counts:
+            counts[status] += n
+    return jsonify(counts)
 
 
 @vehicle_bp.route('/export', methods=['GET'])
@@ -3425,6 +3498,10 @@ def public_track(token):
                 continue
             # Skip legacy no-op update rows where nothing actually changed
             if _is_noop_vehicle_update_history(h.action, h.notes):
+                continue
+            # Skip mobile QR scans — noise for this "Historique des actions"
+            # view, which is meant for actual actions taken on the vehicle.
+            if h.action == 'Scan mobile':
                 continue
             history_items.append({
                 'type': 'history',
