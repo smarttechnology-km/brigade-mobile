@@ -1494,6 +1494,68 @@ class Expense(db.Model):
         }
 
 
+class StockItem(db.Model):
+    """Smart Development sellable item catalog (name, unit price, quantity on hand)."""
+    __tablename__ = 'st_stock_items'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    name            = db.Column(db.String(150), nullable=False)
+    price           = db.Column(db.Float, nullable=False, default=0.0)
+    quantity        = db.Column(db.Integer, nullable=False, default=0)
+    alert_threshold = db.Column(db.Integer, nullable=False, default=5)
+    notes           = db.Column(db.Text, nullable=True)
+    created_at      = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    updated_at      = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
+    created_by      = db.Column(db.String(80), nullable=True)
+
+    @property
+    def is_low_stock(self):
+        return self.quantity <= self.alert_threshold
+
+    def to_dict(self):
+        return {
+            'id':              self.id,
+            'name':            self.name,
+            'price':           self.price,
+            'quantity':        self.quantity,
+            'alert_threshold': self.alert_threshold,
+            'is_low_stock':    self.is_low_stock,
+            'notes':           self.notes,
+            'created_at':      self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else None,
+            'created_by':      self.created_by,
+        }
+
+
+class StockSale(db.Model):
+    """A recorded sale of a StockItem — decrements stock and generates a receipt."""
+    __tablename__ = 'st_stock_sales'
+
+    id             = db.Column(db.Integer, primary_key=True)
+    stock_item_id  = db.Column(db.Integer, db.ForeignKey('st_stock_items.id'), nullable=False)
+    item_name      = db.Column(db.String(150), nullable=False)  # snapshot, survives item edits/deletion
+    quantity       = db.Column(db.Integer, nullable=False)
+    unit_price     = db.Column(db.Float, nullable=False)        # price at time of sale
+    total_amount   = db.Column(db.Float, nullable=False)
+    customer_name  = db.Column(db.String(150), nullable=True)
+    sold_at        = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    sold_by        = db.Column(db.String(80), nullable=True)
+
+    stock_item = db.relationship('StockItem', backref=db.backref('sales', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id':            self.id,
+            'stock_item_id': self.stock_item_id,
+            'item_name':     self.item_name,
+            'quantity':      self.quantity,
+            'unit_price':    self.unit_price,
+            'total_amount':  self.total_amount,
+            'customer_name': self.customer_name,
+            'sold_at':       self.sold_at.strftime('%d/%m/%Y %H:%M') if self.sold_at else None,
+            'sold_by':       self.sold_by,
+        }
+
+
 class SmartTechSetting(db.Model):
     """Key-value config store for Smart Development parameters."""
     __tablename__ = 'st_settings'

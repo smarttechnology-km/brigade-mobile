@@ -1843,8 +1843,10 @@ def query_vehicles():
     query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
     from app.models import SmartTechAccount
     if isinstance(current_user, SmartTechAccount):
-        # Pending vehicles are only shown in "En attente d'activation QR", never in the main table
+        # Pending vehicles are only shown in "En attente d'activation QR" /
+        # "En attente d'impression QR Code", never in the main "Actifs" table
         query = query.filter(Vehicle.qr_pending_approval == False)
+        query = query.filter(Vehicle.qr_code_expiry.isnot(None))
         if current_user.role == 'employe':
             emp_island = current_user.employee.island if current_user.employee else None
             if emp_island:
@@ -1895,7 +1897,7 @@ def query_vehicles():
         except Exception:
             pass
 
-    vehicles = query.order_by(Vehicle.created_at.desc()).all()
+    vehicles = query.order_by(Vehicle.registration_date.desc()).all()
     return jsonify([v.to_dict() for v in vehicles])
 
 
@@ -2170,6 +2172,182 @@ def create_vehicle():
         print(f'Error logging vehicle creation: {e}')
 
     return jsonify({'message': 'Vehicle created successfully', 'vehicle': vehicle.to_dict()}), 201
+
+
+@vehicle_bp.route('/import', methods=['POST'])
+@login_required
+def import_vehicles_csv():
+    """Import en masse de véhicules "existants" (Paramètres > Importer véhicules).
+
+    Chaque ligne devient un véhicule existant : pas de mise en attente
+    SmartDev/QR (qr_pending_approval=False), comme lors d'un ajout manuel
+    avec le toggle "Véhicule existant". Si le CSV fournit des colonnes
+    Carte Grise (places_assises, poids_total_autorise, poids_a_vide,
+    charge_utile_ptc, profession_proprietaire), un enregistrement CarteGrise
+    lié est aussi créé (statut 'brouillon', comme le fait
+    /vehicles/<id>/save-cg pour un ajout manuel).
+    """
+    from app.models import CarteGrise
+
+    if current_user.role != 'administrateur':
+        return jsonify({'error': 'Accès réservé aux administrateurs'}), 403
+
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return jsonify({'error': 'Aucun fichier fourni'}), 400
+
+    try:
+        raw = file.stream.read().decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return jsonify({'error': 'Encodage du fichier invalide (utilisez UTF-8)'}), 400
+
+    reader = csv.DictReader(io.StringIO(raw))
+    if not reader.fieldnames:
+        return jsonify({'error': 'Fichier CSV vide ou invalide'}), 400
+
+    field_map = {(name or '').strip().lower(): name for name in reader.fieldnames}
+
+    def get(row, name):
+        col = field_map.get(name)
+        return (row.get(col) or '').strip() if col else ''
+
+    existing_plates = {(p[0] or '').upper() for p in db.session.query(Vehicle.license_plate).all()}
+    seen_in_file = set()
+
+    imported = 0
+    total_rows = 0
+    skipped_duplicates = []
+    skipped_invalid = []
+
+    for i, row in enumerate(reader, start=2):  # line 1 is the header
+        total_rows += 1
+        plate = get(row, 'license_plate').upper()
+        owner_name = get(row, 'owner_name')
+        if not plate or not owner_name:
+            skipped_invalid.append({'ligne': i, 'raison': 'immatriculation ou propriétaire manquant'})
+            continue
+        if plate in existing_plates or plate in seen_in_file:
+            skipped_duplicates.append(plate)
+            continue
+        seen_in_file.add(plate)
+
+        registration_date = None
+        raw_date = get(row, 'registration_date')
+        if raw_date:
+            for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+                try:
+                    registration_date = datetime.strptime(raw_date, fmt)
+                    break
+                except ValueError:
+                    continue
+
+        nombre_chevaux = None
+        raw_chevaux = get(row, 'nombre_chevaux')
+        if raw_chevaux:
+            try:
+                nombre_chevaux = int(float(raw_chevaux))
+            except ValueError:
+                nombre_chevaux = None
+
+        # cv_class is normally auto-derived from nombre_chevaux client-side
+        # (cvClassFromChevaux() in vehicles.js) — mirror that here so an
+        # imported vehicle isn't left with a horsepower value that doesn't
+        # match its CV class.
+        cv_class = get(row, 'cv_class')
+        if not cv_class and nombre_chevaux is not None:
+            if nombre_chevaux <= 5:
+                cv_class = '0-5 CV'
+            elif nombre_chevaux <= 9:
+                cv_class = '6-9 CV'
+            elif nombre_chevaux <= 12:
+                cv_class = '10-12 CV'
+            else:
+                cv_class = '12 CV et +'
+
+        vehicle = Vehicle(
+            license_plate=plate,
+            owner_name=owner_name,
+            owner_phone=get(row, 'owner_phone'),
+            owner_island=get(row, 'owner_island'),
+            owner_address=get(row, 'owner_address'),
+            vehicle_type=get(row, 'vehicle_type') or 'Autre',
+            fuel_type=get(row, 'fuel_type'),
+            make=get(row, 'make'),
+            model=get(row, 'model'),
+            year=get(row, 'year'),
+            vin=get(row, 'vin'),
+            color=get(row, 'color'),
+            status=get(row, 'status') or 'active',
+            notes=get(row, 'notes'),
+            created_by=current_user.username,
+            nombre_chevaux=nombre_chevaux,
+            fiscal_class=get(row, 'fiscal_class') or None,
+            cv_class=cv_class or None,
+        )
+        vehicle.qr_pending_approval = False
+        if registration_date:
+            vehicle.registration_date = registration_date
+        # Deliberately do NOT activate the QR code here: an imported vehicle
+        # hasn't actually paid yet, so its QR code isn't printed yet either.
+        # It stays qr_code_expiry=None (shows "Activer QR" in Gestion des
+        # Véhicules, and in the "En attente d'impression QR Code" panel)
+        # until a SmartTech agent prints/activates it for real — that's the
+        # moment the activation fee is charged and recorded (QRCodePayment),
+        # which is what feeds "Rapport Journalier QR" and "Rapport".
+
+        db.session.add(vehicle)
+        db.session.flush()  # need vehicle.id for the CarteGrise link below
+        imported += 1
+
+        places_assises = get(row, 'places_assises')
+        poids_total_autorise = get(row, 'poids_total_autorise')
+        poids_a_vide = get(row, 'poids_a_vide')
+        charge_utile_ptc = get(row, 'charge_utile_ptc')
+        profession_proprietaire = get(row, 'profession_proprietaire')
+        if places_assises or poids_total_autorise or poids_a_vide or charge_utile_ptc or profession_proprietaire:
+            db.session.add(CarteGrise(
+                vehicle_id=vehicle.id,
+                status='brouillon',
+                created_by=current_user.username,
+                places_assises=places_assises or None,
+                poids_total_autorise=poids_total_autorise or None,
+                poids_a_vide=poids_a_vide or None,
+                charge_utile_ptc=charge_utile_ptc or None,
+                profession_proprietaire=profession_proprietaire or None,
+            ))
+
+        if vehicle.owner_phone:
+            try:
+                _sync_vehicle_owner_link(vehicle)
+            except Exception:
+                pass
+
+        if imported % 500 == 0:
+            db.session.commit()
+
+    db.session.commit()
+
+    try:
+        from app.models import UserHistory
+        db.session.add(UserHistory(
+            user_id=current_user.id,
+            action='Import de véhicules (CSV)',
+            details=f'{imported} véhicule(s) importé(s) sur {total_rows} ligne(s)'
+        ))
+        db.session.commit()
+    except Exception as e:
+        print(f'Error logging vehicle import: {e}')
+
+    return jsonify({
+        'total_rows': total_rows,
+        'imported': imported,
+        'skipped_duplicates': len(skipped_duplicates),
+        'duplicate_samples': skipped_duplicates[:20],
+        'skipped_invalid': len(skipped_invalid),
+        'invalid_samples': skipped_invalid[:20],
+    }), 200
+
+
 @vehicle_bp.route('/lookup-vin', methods=['GET'])
 @login_required
 def lookup_vehicle_by_vin():
@@ -3023,7 +3201,7 @@ def vehicle_sheet_pdf(vehicle_id):
         story.append(top_tbl)
         story.append(Spacer(1, 6))
 
-        # ── Section véhicule ──
+        # ── Section véhicule (+ carte grise, fusionnées) ──
         story.append(Paragraph('Informations du Véhicule', section_s))
         veh_data = [
             field('Type', vehicle.vehicle_type) + field("Type d'usage", vehicle.usage_type),
@@ -3032,6 +3210,17 @@ def vehicle_sheet_pdf(vehicle_id):
             field('Carburant', vehicle.fuel_type) + field('Classe fiscale', vehicle.fiscal_class),
             field('Classe CV', vehicle.cv_class) + field('VIN', vehicle.vin),
         ]
+
+        cg = vehicle.carte_grise
+        cg_has_data = cg and any([cg.carrosserie, cg.places_assises, cg.poids_total_autorise,
+                                   cg.poids_a_vide, cg.charge_utile_ptc, cg.profession_proprietaire])
+        if cg_has_data:
+            veh_data += [
+                field('Carrosserie', cg.carrosserie) + field('Places assises', cg.places_assises),
+                field('PTAC', cg.poids_total_autorise) + field('Poids à vide', cg.poids_a_vide),
+                field('Charge utile', cg.charge_utile_ptc) + field('Profession propriétaire', cg.profession_proprietaire),
+            ]
+
         veh_tbl = Table(veh_data, colWidths=[W*0.16, W*0.34, W*0.16, W*0.34])
         veh_tbl.setStyle(TableStyle([
             ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
@@ -3060,22 +3249,8 @@ def vehicle_sheet_pdf(vehicle_id):
         ]))
         story.append(own_tbl)
 
-        # ── Section assurance / vignette ──
-        story.append(Paragraph('Assurance & Vignette', section_s))
-        ins_data = [
-            field('Compagnie', vehicle.insurance_company) + field("Expiration assurance", date_fmt(vehicle.insurance_expiry)),
-            field('Expiration vignette', date_fmt(vehicle.vignette_expiry)) + field('Expiration QR Code', date_fmt(vehicle.qr_code_expiry)),
-        ]
-        ins_tbl = Table(ins_data, colWidths=[W*0.16, W*0.34, W*0.16, W*0.34])
-        ins_tbl.setStyle(TableStyle([
-            ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
-            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#dde')),
-            ('TOPPADDING',    (0,0), (-1,-1), 3),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-            ('LEFTPADDING',   (0,0), (-1,-1), 5),
-            ('RIGHTPADDING',  (0,0), (-1,-1), 5),
-        ]))
-        story.append(ins_tbl)
+        if cg_has_data and cg.observation:
+            story.append(Paragraph(f'Observation (Carte Grise) : {cg.observation}', ps('CGN', fontSize=8, textColor=colors.HexColor('#444'), spaceBefore=4)))
 
         if vehicle.notes:
             story.append(Paragraph('Notes', section_s))
@@ -5259,6 +5434,35 @@ def delete_vehicle(vehicle_id):
         return jsonify({'error': 'Seul un administrateur peut demander la suppression d\'un véhicule.'}), 403
 
     vehicle = Vehicle.query.get_or_404(vehicle_id)
+
+    # A vehicle still "En attente QR" was never validated/activated by
+    # SmartTech in the first place — nothing real (QR, carte grise) exists
+    # for it yet, so the admin can remove it outright instead of going
+    # through the SmartTech deletion-approval workflow.
+    if vehicle.qr_pending_approval:
+        from app.models import (VehicleHistory, VehicleOwner, Fine, QRCodePayment,
+                                 VehicleInsuranceAssignment, ExoneratedVehicle,
+                                 VehicleTransfer, CarteGrise, PhotoSubmission)
+        vid = vehicle.id
+        PhotoSubmission.query.filter_by(vehicle_id=vid).update({'vehicle_id': None})
+        VehicleHistory.query.filter_by(vehicle_id=vid).delete()
+        Fine.query.filter_by(vehicle_id=vid).delete()
+        QRCodePayment.query.filter_by(vehicle_id=vid).delete()
+        VehicleInsuranceAssignment.query.filter_by(vehicle_id=vid).delete()
+        ExoneratedVehicle.query.filter_by(vehicle_id=vid).delete()
+        VehicleTransfer.query.filter_by(vehicle_id=vid).delete()
+        from sqlalchemy import text
+        db.session.execute(text('DELETE FROM alert_vehicles WHERE vehicle_id = :vid'), {'vid': vid})
+        cg = CarteGrise.query.filter_by(vehicle_id=vid).first()
+        if cg:
+            db.session.delete(cg)
+        owner = VehicleOwner.query.filter_by(vehicle_id=vid).first()
+        if owner:
+            db.session.delete(owner)
+        db.session.flush()
+        db.session.delete(vehicle)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Véhicule supprimé (en attente QR, aucune validation SmartTech requise).'})
 
     # Block if a pending request already exists
     existing = DeletionRequest.query.filter_by(

@@ -879,6 +879,40 @@ def api_pending_qr_vehicles():
     return jsonify({'vehicles': rows, 'count': len(rows)})
 
 
+@smart_tech_bp.route('/api/pending-qr-print-vehicles')
+@smart_tech_required
+def api_pending_qr_print_vehicles():
+    """Vehicles that don't need SmartDev approval (e.g. imported as
+    "véhicule existant") but whose QR code has never been activated/printed
+    — and therefore never paid for. Separate from api_pending_qr_vehicles,
+    which is for brand-new vehicles awaiting the carte-grise approval step."""
+    vehicles = (
+        _vq()
+        .filter_by(qr_pending_approval=False)
+        .filter(Vehicle.qr_code_expiry.is_(None))
+        .order_by(Vehicle.created_at.desc())
+        .all()
+    )
+    rows = []
+    for v in vehicles:
+        cg = getattr(v, 'carte_grise', None)
+        rows.append({
+            'id': v.id,
+            'license_plate': v.license_plate or '',
+            'owner_name': v.owner_name or '',
+            'owner_island': v.owner_island or '',
+            'vehicle_type': v.vehicle_type or '',
+            'make': v.make or '',
+            'model': v.model or '',
+            'year': v.year or '',
+            'created_by': v.created_by or '',
+            'created_at': v.created_at.strftime('%d/%m/%Y %H:%M') if v.created_at else '',
+            'carrosserie': cg.carrosserie if cg and cg.carrosserie else '',
+            'places_assises': cg.places_assises if cg and cg.places_assises else '',
+        })
+    return jsonify({'vehicles': rows, 'count': len(rows)})
+
+
 @smart_tech_bp.route('/api/last-update')
 @smart_tech_required
 def api_last_update():
@@ -1347,6 +1381,249 @@ def api_expense_delete(exp_id):
     db.session.delete(exp)
     db.session.commit()
     return jsonify({'success': True})
+
+
+# ── Stock ───────────────────────────────────────────────────────────────────
+
+@smart_tech_bp.route('/stock')
+@st_admin_required
+def stock_page():
+    from app.models import StockItem
+    items = StockItem.query.order_by(StockItem.name).all()
+    return render_template('smart_tech_stock.html', items=items, count=len(items))
+
+
+@smart_tech_bp.route('/api/stock', methods=['GET'])
+@smart_tech_required
+def api_stock_list():
+    from app.models import StockItem
+    items = StockItem.query.order_by(StockItem.name).all()
+    return jsonify({
+        'items': [i.to_dict() for i in items],
+        'count': len(items),
+        'low_stock_count': sum(1 for i in items if i.is_low_stock),
+    })
+
+
+@smart_tech_bp.route('/api/stock', methods=['POST'])
+@st_admin_required
+def api_stock_create():
+    from app.models import StockItem
+    data  = request.get_json(silent=True) or {}
+    name  = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Le nom de l\'article est requis.'}), 400
+    try:
+        price = float(data.get('price') or 0)
+        quantity = int(data.get('quantity') or 0)
+        alert_threshold = int(data.get('alert_threshold') or 5)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Prix, quantité et seuil doivent être numériques.'}), 400
+
+    item = StockItem(
+        name=name, price=price, quantity=quantity, alert_threshold=alert_threshold,
+        notes=(data.get('notes') or '').strip() or None,
+        created_by=current_user.username,
+    )
+    db.session.add(item)
+    db.session.commit()
+    return jsonify({'success': True, 'item': item.to_dict()}), 201
+
+
+@smart_tech_bp.route('/api/stock/<int:item_id>', methods=['PUT'])
+@st_admin_required
+def api_stock_update(item_id):
+    from app.models import StockItem
+    item = StockItem.query.get_or_404(item_id)
+    data = request.get_json(silent=True) or {}
+    try:
+        if 'name' in data:
+            name = (data['name'] or '').strip()
+            if not name:
+                return jsonify({'error': 'Le nom de l\'article est requis.'}), 400
+            item.name = name
+        if 'price' in data:
+            item.price = float(data['price'] or 0)
+        if 'quantity' in data:
+            item.quantity = int(data['quantity'] or 0)
+        if 'alert_threshold' in data:
+            item.alert_threshold = int(data['alert_threshold'] or 0)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Prix, quantité et seuil doivent être numériques.'}), 400
+    if 'notes' in data:
+        item.notes = (data['notes'] or '').strip() or None
+    db.session.commit()
+    return jsonify({'success': True, 'item': item.to_dict()})
+
+
+@smart_tech_bp.route('/api/stock/<int:item_id>', methods=['DELETE'])
+@st_admin_required
+def api_stock_delete(item_id):
+    from app.models import StockItem, StockSale
+    item = StockItem.query.get_or_404(item_id)
+    if StockSale.query.filter_by(stock_item_id=item_id).first():
+        return jsonify({'error': 'Cet article a des ventes enregistrées et ne peut pas être supprimé.'}), 400
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# ── Recettes (ventes de stock) ─────────────────────────────────────────────────
+
+@smart_tech_bp.route('/recettes-stock')
+@st_admin_or_secretaire_required
+def recettes_stock_page():
+    from app.models import StockItem, StockSale
+    items = StockItem.query.order_by(StockItem.name).all()
+    sales = StockSale.query.order_by(StockSale.sold_at.desc()).limit(200).all()
+    total_revenue = sum(s.total_amount for s in sales)
+    return render_template(
+        'smart_tech_recettes_stock.html',
+        items=items, sales=sales,
+        total_revenue=total_revenue,
+        low_stock_count=sum(1 for i in items if i.is_low_stock),
+    )
+
+
+@smart_tech_bp.route('/api/stock/sales', methods=['GET'])
+@st_admin_or_secretaire_required
+def api_stock_sales_list():
+    from app.models import StockSale
+    sales = StockSale.query.order_by(StockSale.sold_at.desc()).limit(200).all()
+    total_revenue = sum(s.total_amount for s in sales)
+    return jsonify({
+        'sales': [s.to_dict() for s in sales],
+        'count': len(sales),
+        'total_revenue': round(total_revenue, 2),
+    })
+
+
+MONTH_LABELS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
+                   'août', 'septembre', 'octobre', 'novembre', 'décembre']
+
+
+def _month_label(year, month):
+    return f'{MONTH_LABELS_FR[month - 1].capitalize()} {year}'
+
+
+def _compute_monthly_sales():
+    from app.models import StockSale
+    sales = StockSale.query.all()
+    buckets = {}
+    for s in sales:
+        if not s.sold_at:
+            continue
+        key = (s.sold_at.year, s.sold_at.month)
+        b = buckets.setdefault(key, {'count': 0, 'total': 0.0})
+        b['count'] += 1
+        b['total'] += s.total_amount
+
+    months = [
+        {
+            'month': f'{y:04d}-{m:02d}',
+            'label': _month_label(y, m),
+            'count': b['count'],
+            'total': round(b['total'], 2),
+        }
+        for (y, m), b in buckets.items()
+    ]
+    months.sort(key=lambda x: x['month'], reverse=True)
+    return months
+
+
+@smart_tech_bp.route('/api/stock/sales/monthly', methods=['GET'])
+@st_admin_or_secretaire_required
+def api_stock_sales_monthly():
+    return jsonify({'months': _compute_monthly_sales()})
+
+
+@smart_tech_bp.route('/recettes-stock/mensuel')
+@st_admin_or_secretaire_required
+def recettes_stock_mensuel_page():
+    months = _compute_monthly_sales()
+    total_revenue = sum(m['total'] for m in months)
+    return render_template(
+        'smart_tech_recettes_stock_mensuel.html',
+        months=months,
+        total_revenue=total_revenue,
+    )
+
+
+@smart_tech_bp.route('/recettes-stock/rapport/<month>')
+@st_admin_or_secretaire_required
+def recettes_stock_rapport_page(month):
+    from app.models import StockSale
+    from datetime import datetime as _dt
+    try:
+        year, mon = (int(p) for p in month.split('-'))
+        start = _dt(year, mon, 1)
+        end = _dt(year + 1, 1, 1) if mon == 12 else _dt(year, mon + 1, 1)
+    except (ValueError, TypeError):
+        abort(404)
+
+    sales = (StockSale.query
+             .filter(StockSale.sold_at >= start, StockSale.sold_at < end)
+             .order_by(StockSale.sold_at.desc())
+             .all())
+    total_revenue = sum(s.total_amount for s in sales)
+    avg_sale = (total_revenue / len(sales)) if sales else 0.0
+
+    qty_by_item = {}
+    for s in sales:
+        qty_by_item[s.item_name] = qty_by_item.get(s.item_name, 0) + s.quantity
+    top_item = max(qty_by_item.items(), key=lambda kv: kv[1]) if qty_by_item else None
+
+    return render_template(
+        'smart_tech_recettes_stock_rapport.html',
+        sales=sales,
+        month=month,
+        month_label=_month_label(year, mon),
+        total_revenue=total_revenue,
+        avg_sale=avg_sale,
+        top_item_name=top_item[0] if top_item else None,
+        top_item_qty=top_item[1] if top_item else 0,
+    )
+
+
+@smart_tech_bp.route('/api/stock/sell', methods=['POST'])
+@st_admin_or_secretaire_required
+def api_stock_sell():
+    from app.models import StockItem, StockSale
+    data = request.get_json(silent=True) or {}
+    item_id = data.get('stock_item_id')
+    try:
+        quantity = int(data.get('quantity') or 0)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Quantité invalide.'}), 400
+
+    if not item_id or quantity <= 0:
+        return jsonify({'error': 'Article et quantité (> 0) requis.'}), 400
+
+    item = StockItem.query.get_or_404(item_id)
+    if quantity > item.quantity:
+        return jsonify({'error': f'Stock insuffisant — il ne reste que {item.quantity} unité(s) de "{item.name}".'}), 400
+
+    customer_name = (data.get('customer_name') or '').strip() or None
+    total_amount = round(item.price * quantity, 2)
+
+    item.quantity -= quantity
+    sale = StockSale(
+        stock_item_id=item.id,
+        item_name=item.name,
+        quantity=quantity,
+        unit_price=item.price,
+        total_amount=total_amount,
+        customer_name=customer_name,
+        sold_by=current_user.username,
+    )
+    db.session.add(sale)
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'sale': sale.to_dict(),
+        'remaining_quantity': item.quantity,
+        'is_low_stock': item.is_low_stock,
+    }), 201
 
 
 # ── Reports ─────────────────────────────────────────────────────────────────
