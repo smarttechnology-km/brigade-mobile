@@ -849,19 +849,21 @@ def api_vehicle_history(vehicle_id):
     })
 
 
-@smart_tech_bp.route('/api/pending-qr-vehicles')
-@smart_tech_required
-def api_pending_qr_vehicles():
-    """Return vehicles awaiting SmartTech QR activation approval."""
-    vehicles = (
-        _vq()
-        .filter_by(qr_pending_approval=True)
-        .order_by(Vehicle.created_at.desc())
-        .all()
-    )
+def _serialize_pending_qr_vehicles(vehicles):
+    """Batch-fetch CarteGrise rows in one query instead of lazy-loading
+    v.carte_grise per vehicle (that N+1 pattern is what made this endpoint
+    hang/time out in production once thousands of imported vehicles ended
+    up in these lists)."""
+    from app.models import CarteGrise
+    vehicle_ids = [v.id for v in vehicles]
+    cg_by_vehicle = {}
+    if vehicle_ids:
+        for cg in CarteGrise.query.filter(CarteGrise.vehicle_id.in_(vehicle_ids)).all():
+            cg_by_vehicle[cg.vehicle_id] = cg
+
     rows = []
     for v in vehicles:
-        cg = getattr(v, 'carte_grise', None)
+        cg = cg_by_vehicle.get(v.id)
         rows.append({
             'id': v.id,
             'license_plate': v.license_plate or '',
@@ -876,6 +878,21 @@ def api_pending_qr_vehicles():
             'carrosserie': cg.carrosserie if cg and cg.carrosserie else '',
             'places_assises': cg.places_assises if cg and cg.places_assises else '',
         })
+    return rows
+
+
+@smart_tech_bp.route('/api/pending-qr-vehicles')
+@smart_tech_required
+def api_pending_qr_vehicles():
+    """Return vehicles awaiting SmartTech QR activation approval."""
+    vehicles = (
+        _vq()
+        .filter_by(qr_pending_approval=True)
+        .order_by(Vehicle.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    rows = _serialize_pending_qr_vehicles(vehicles)
     return jsonify({'vehicles': rows, 'count': len(rows)})
 
 
@@ -891,25 +908,10 @@ def api_pending_qr_print_vehicles():
         .filter_by(qr_pending_approval=False)
         .filter(Vehicle.qr_code_expiry.is_(None))
         .order_by(Vehicle.created_at.desc())
+        .limit(500)
         .all()
     )
-    rows = []
-    for v in vehicles:
-        cg = getattr(v, 'carte_grise', None)
-        rows.append({
-            'id': v.id,
-            'license_plate': v.license_plate or '',
-            'owner_name': v.owner_name or '',
-            'owner_island': v.owner_island or '',
-            'vehicle_type': v.vehicle_type or '',
-            'make': v.make or '',
-            'model': v.model or '',
-            'year': v.year or '',
-            'created_by': v.created_by or '',
-            'created_at': v.created_at.strftime('%d/%m/%Y %H:%M') if v.created_at else '',
-            'carrosserie': cg.carrosserie if cg and cg.carrosserie else '',
-            'places_assises': cg.places_assises if cg and cg.places_assises else '',
-        })
+    rows = _serialize_pending_qr_vehicles(vehicles)
     return jsonify({'vehicles': rows, 'count': len(rows)})
 
 
