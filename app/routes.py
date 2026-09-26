@@ -2207,9 +2207,14 @@ def import_vehicles_csv():
 
     field_map = {(name or '').strip().lower(): name for name in reader.fieldnames}
 
-    def get(row, name):
+    def get(row, name, maxlen=None):
         col = field_map.get(name)
-        return (row.get(col) or '').strip() if col else ''
+        val = (row.get(col) or '').strip() if col else ''
+        # Defensive truncation to the Vehicle/CarteGrise column limit — a
+        # corrupted or overly long value here must never crash the whole
+        # import (it did in production: a legacy owner_name padded to 255
+        # chars overflowed the 100-char column and aborted the transaction).
+        return val[:maxlen] if maxlen else val
 
     existing_plates = {(p[0] or '').upper() for p in db.session.query(Vehicle.license_plate).all()}
     seen_in_file = set()
@@ -2221,8 +2226,8 @@ def import_vehicles_csv():
 
     for i, row in enumerate(reader, start=2):  # line 1 is the header
         total_rows += 1
-        plate = get(row, 'license_plate').upper()
-        owner_name = get(row, 'owner_name')
+        plate = get(row, 'license_plate', 20).upper()
+        owner_name = get(row, 'owner_name', 100)
         if not plate or not owner_name:
             skipped_invalid.append({'ligne': i, 'raison': 'immatriculation ou propriétaire manquant'})
             continue
@@ -2267,21 +2272,21 @@ def import_vehicles_csv():
         vehicle = Vehicle(
             license_plate=plate,
             owner_name=owner_name,
-            owner_phone=get(row, 'owner_phone'),
-            owner_island=get(row, 'owner_island'),
-            owner_address=get(row, 'owner_address'),
-            vehicle_type=get(row, 'vehicle_type') or 'Autre',
-            fuel_type=get(row, 'fuel_type'),
-            make=get(row, 'make'),
-            model=get(row, 'model'),
-            year=get(row, 'year'),
-            vin=get(row, 'vin'),
-            color=get(row, 'color'),
-            status=get(row, 'status') or 'active',
+            owner_phone=get(row, 'owner_phone', 15),
+            owner_island=get(row, 'owner_island', 50),
+            owner_address=get(row, 'owner_address', 255),
+            vehicle_type=(get(row, 'vehicle_type', 50) or 'Autre'),
+            fuel_type=get(row, 'fuel_type', 50),
+            make=get(row, 'make', 50),
+            model=get(row, 'model', 50),
+            year=get(row, 'year', 10),
+            vin=get(row, 'vin', 50),
+            color=get(row, 'color', 50),
+            status=(get(row, 'status', 20) or 'active'),
             notes=get(row, 'notes'),
             created_by=current_user.username,
             nombre_chevaux=nombre_chevaux,
-            fiscal_class=get(row, 'fiscal_class') or None,
+            fiscal_class=get(row, 'fiscal_class', 10) or None,
             cv_class=cv_class or None,
         )
         vehicle.qr_pending_approval = False
@@ -2299,11 +2304,11 @@ def import_vehicles_csv():
         db.session.flush()  # need vehicle.id for the CarteGrise link below
         imported += 1
 
-        places_assises = get(row, 'places_assises')
-        poids_total_autorise = get(row, 'poids_total_autorise')
-        poids_a_vide = get(row, 'poids_a_vide')
-        charge_utile_ptc = get(row, 'charge_utile_ptc')
-        profession_proprietaire = get(row, 'profession_proprietaire')
+        places_assises = get(row, 'places_assises', 20)
+        poids_total_autorise = get(row, 'poids_total_autorise', 50)
+        poids_a_vide = get(row, 'poids_a_vide', 50)
+        charge_utile_ptc = get(row, 'charge_utile_ptc', 50)
+        profession_proprietaire = get(row, 'profession_proprietaire', 150)
         if places_assises or poids_total_autorise or poids_a_vide or charge_utile_ptc or profession_proprietaire:
             db.session.add(CarteGrise(
                 vehicle_id=vehicle.id,
