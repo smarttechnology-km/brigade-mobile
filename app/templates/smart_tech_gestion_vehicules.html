@@ -205,6 +205,18 @@
         html[data-theme="light"] .pill-suspended { background: rgba(154,103,0,0.1); color: #9a6700; border-color: rgba(154,103,0,0.3); }
         html[data-theme="light"] .mob-menu-btn { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); color: rgba(0,0,0,0.6); }
         html[data-theme="light"] .mob-overlay { background: rgba(0,0,0,0.35); }
+
+        .badge-count{display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.08);border-radius:20px;font-size:.7rem;color:rgba(255,255,255,0.5);padding:.1em .55em;margin-left:.4rem;}
+        .detail-tabs{display:flex;flex-wrap:nowrap;list-style:none;padding:0;margin:0;border-bottom:none;overflow-x:auto;}
+        .detail-tabs .nav-link{color:rgba(255,255,255,0.5);border:none;border-bottom:2px solid transparent;background:none;border-radius:0;padding:.6rem .7rem;font-size:.78rem;transition:color .15s,background .15s,border-color .15s;white-space:nowrap;gap:5px!important;}
+        .detail-tabs .nav-link.active{color:#fff;border-bottom-color:var(--st-cyan);background:rgba(0,212,255,0.05);}
+        .detail-tabs .nav-link:hover:not(.active){color:rgba(255,255,255,0.8);background:rgba(255,255,255,0.04);}
+        .detail-tabs::-webkit-scrollbar{display:none;}
+        .detail-tabs{-ms-overflow-style:none;scrollbar-width:none;}
+        html[data-theme="light"] .badge-count{background:rgba(0,0,0,0.06);color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .detail-tabs .nav-link{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .detail-tabs .nav-link.active{color:#0095b3;border-bottom-color:#0095b3;background:rgba(0,149,179,0.06);}
+        html[data-theme="light"] .detail-tabs .nav-link:hover:not(.active){color:rgba(0,0,0,0.7);background:rgba(0,0,0,0.04);}
     </style>
     <script>(function(){ const t = localStorage.getItem('st_theme') || 'dark'; document.documentElement.setAttribute('data-theme', t); })();</script>
 </head>
@@ -262,6 +274,14 @@
         </a>
         <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stock_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-boxes-stacked"></i></span>Stock
+        </a>
+        {% endif %}
+        <a href="{{ url_for('smart_tech.recettes_stock_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-cash-register"></i></span>Recettes
         </a>
         {% endif %}
         {% if current_user.role == 'admin' %}
@@ -321,98 +341,144 @@
         </div>
     </div>
 
-    <!-- ── Pending QR Approval Banner ── -->
-    <div class="st-section" id="pending-qr-section" style="display:none;border-top:3px solid #f59e0b;margin-bottom:0.5rem;">
-        <div class="st-section-header" style="cursor:pointer;" onclick="togglePendingPanel()">
-            <div style="display:flex;align-items:center;gap:0.6rem;">
-                <i class="fas fa-clock" style="color:#f59e0b;"></i>
-                <strong style="color:#f59e0b;">Véhicules en attente d'activation QR</strong>
-                <span id="pending-badge" class="badge" style="background:#f59e0b;color:#000;font-size:0.7rem;">0</span>
-                <small class="text-muted" style="font-size:0.72rem;">Créés depuis l'espace administratif — cliquer pour voir</small>
-            </div>
-            <i class="fas fa-chevron-down" id="pending-chevron" style="color:var(--st-text-muted);transition:transform .2s;"></i>
-        </div>
-        <div id="pending-panel" style="display:none;padding:0 0.25rem 0.5rem;">
-            <div style="overflow-x:auto;">
-                <table class="table" style="font-size:0.82rem;">
-                    <thead>
-                        <tr>
-                            <th>Immatriculation</th>
-                            <th>Propriétaire</th>
-                            <th>Île</th>
-                            <th>Type</th>
-                            <th>Ajouté par</th>
-                            <th>Date</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pending-qr-tbody">
-                        <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toolbar -->
+    <!-- ── Onglets Véhicules ── -->
     <div class="st-section" style="overflow:visible;">
-        <div class="st-section-header">
-            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                <div class="st-toolbar">
-                    <div class="st-search-wrap">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="search-input" class="st-input st-search-input" placeholder="Immatriculation, propriétaire…" oninput="filterTable()">
+        <div style="padding:0 1rem;border-bottom:1px solid var(--st-border);">
+            <ul class="nav detail-tabs" id="veh-nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-veh-active" type="button" role="tab">
+                        <i class="fas fa-car"></i>Véhicules Actifs
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-veh-pending-qr" type="button" role="tab">
+                        <i class="fas fa-clock"></i>Véhicules en attente d'activation QR
+                        <span class="badge-count" id="pending-badge">0</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-veh-pending-print" type="button" role="tab">
+                        <i class="fas fa-print"></i>Véhicules en attente d'impression QR Code
+                        <span class="badge-count" id="pending-print-badge">0</span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="tab-content">
+            <!-- Onglet Véhicules Actifs -->
+            <div class="tab-pane show active" id="tab-veh-active" role="tabpanel">
+                <div class="st-section-header">
+                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                        <div class="st-toolbar">
+                            <div class="st-search-wrap">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="search-input" class="st-input st-search-input" placeholder="Immatriculation, propriétaire…" oninput="filterTable()">
+                            </div>
+                            <select id="type-filter" class="st-input" style="width:150px;" onchange="filterTable()">
+                                <option value="">Tous les types</option>
+                                <option value="voiture">Voiture</option>
+                                <option value="pickup">Pickup</option>
+                                <option value="moto">Moto</option>
+                                <option value="camion">Camion</option>
+                                <option value="minibus">Minibus</option>
+                                <option value="ambulance">Ambulance</option>
+                                <option value="suv">SUV</option>
+                            </select>
+                            <select id="status-filter" class="st-input" style="width:140px;" onchange="filterTable()">
+                                <option value="">Tous les statuts</option>
+                                <option value="active">Actif</option>
+                                <option value="suspended">Suspendu</option>
+                                <option value="inactive">Inactif</option>
+                            </select>
+                        </div>
+                        <span id="live-dot" title="Mise à jour automatique" style="display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--st-green);opacity:0.8;">
+                            <span id="pulse-dot" style="width:7px;height:7px;border-radius:50%;background:var(--st-green);display:inline-block;"></span>En direct
+                        </span>
                     </div>
-                    <select id="type-filter" class="st-input" style="width:150px;" onchange="filterTable()">
-                        <option value="">Tous les types</option>
-                        <option value="voiture">Voiture</option>
-                        <option value="pickup">Pickup</option>
-                        <option value="moto">Moto</option>
-                        <option value="camion">Camion</option>
-                        <option value="minibus">Minibus</option>
-                        <option value="ambulance">Ambulance</option>
-                        <option value="suv">SUV</option>
-                    </select>
-                    <select id="status-filter" class="st-input" style="width:140px;" onchange="filterTable()">
-                        <option value="">Tous les statuts</option>
-                        <option value="active">Actif</option>
-                        <option value="suspended">Suspendu</option>
-                        <option value="inactive">Inactif</option>
-                    </select>
+                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                        <span id="last-updated" class="text-muted" style="font-size:0.72rem;"></span>
+                        <span id="vehicles-count" class="text-muted" style="font-size:0.8rem;"></span>
+                    </div>
                 </div>
-                <span id="live-dot" title="Mise à jour automatique" style="display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--st-green);opacity:0.8;">
-                    <span id="pulse-dot" style="width:7px;height:7px;border-radius:50%;background:var(--st-green);display:inline-block;"></span>En direct
-                </span>
-            </div>
-            <div style="display:flex;align-items:center;gap:0.75rem;">
-                <span id="last-updated" class="text-muted" style="font-size:0.72rem;"></span>
-                <span id="vehicles-count" class="text-muted" style="font-size:0.8rem;"></span>
-            </div>
-        </div>
 
-        <!-- Table -->
-        <div style="overflow-x:auto;">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Immatriculation</th>
-                        <th>Propriétaire</th>
-                        <th>Type</th>
-                        <th>Statut</th>
-                        <th>Date d'enregistrement</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="vehicles-tbody">
-                    <tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
-                </tbody>
-            </table>
-        </div>
+                <!-- Table -->
+                <div style="overflow-x:auto;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Immatriculation</th>
+                                <th>Propriétaire</th>
+                                <th>Type</th>
+                                <th>Statut</th>
+                                <th>Date d'enregistrement</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vehicles-tbody">
+                            <tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
 
-        <div class="st-pagination" id="pagination-bar">
-            <span id="pagination-info"></span>
-            <div id="pagination-btns" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                <div class="st-pagination" id="pagination-bar">
+                    <span id="pagination-info"></span>
+                    <div id="pagination-btns" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                </div>
+            </div>
+
+            <!-- Onglet En attente d'activation QR (nouveaux véhicules, validation SmartDev) -->
+            <div class="tab-pane" id="tab-veh-pending-qr" role="tabpanel" style="padding:1rem 1.4rem;">
+                <div class="st-search-wrap" style="max-width:340px;margin-bottom:0.75rem;">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="pending-qr-search" class="st-input st-search-input" placeholder="Immatriculation, propriétaire…" oninput="filterPendingQr()">
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="font-size:0.82rem;">
+                        <thead>
+                            <tr>
+                                <th>Immatriculation</th>
+                                <th>Propriétaire</th>
+                                <th>Île</th>
+                                <th>Type</th>
+                                <th>Ajouté par</th>
+                                <th>Date</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-qr-tbody">
+                            <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Onglet En attente d'impression QR Code (véhicules existants importés, jamais payés) -->
+            <div class="tab-pane" id="tab-veh-pending-print" role="tabpanel" style="padding:1rem 1.4rem;">
+                <div class="st-search-wrap" style="max-width:340px;margin-bottom:0.75rem;">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="pending-qr-print-search" class="st-input st-search-input" placeholder="Immatriculation, propriétaire…" oninput="filterPendingQrPrint()">
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="font-size:0.82rem;">
+                        <thead>
+                            <tr>
+                                <th>Immatriculation</th>
+                                <th>Propriétaire</th>
+                                <th>Île</th>
+                                <th>Type</th>
+                                <th>Importé par</th>
+                                <th>Date</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-qr-print-tbody">
+                            <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -707,30 +773,10 @@
     let firstLoad = true;
 
     /* ── Pending QR vehicles ── */
-    let _pendingOpen = false;
+    let _pendingQrData = [];
 
-    window.togglePendingPanel = function() {
-        _pendingOpen = !_pendingOpen;
-        document.getElementById('pending-panel').style.display = _pendingOpen ? '' : 'none';
-        const chev = document.getElementById('pending-chevron');
-        if (chev) chev.style.transform = _pendingOpen ? 'rotate(180deg)' : '';
-    };
-
-    function loadPendingQr() {
-        fetch('/smart-tech/api/pending-qr-vehicles', { credentials: 'same-origin' })
-            .then(r => r.json())
-            .then(data => {
-                const section = document.getElementById('pending-qr-section');
-                const badge   = document.getElementById('pending-badge');
-                const tbody   = document.getElementById('pending-qr-tbody');
-                const count   = (data.vehicles || []).length;
-                badge.textContent = count;
-                section.style.display = count > 0 ? '' : 'none';
-                if (count === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Aucun véhicule en attente</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = data.vehicles.map(v => `<tr>
+    function renderPendingQrRow(v) {
+        return `<tr>
                     <td><strong style="color:var(--st-cyan);font-family:monospace;">${esc(v.license_plate)}</strong></td>
                     <td>${esc(v.owner_name)}</td>
                     <td>${esc(v.owner_island || '—')}</td>
@@ -743,11 +789,73 @@
                             <i class="fas fa-qrcode me-1"></i>Activer QR
                         </button>
                     </td>
-                </tr>`).join('');
+                </tr>`;
+    }
+
+    window.filterPendingQr = function() {
+        const q = (document.getElementById('pending-qr-search').value || '').toLowerCase().trim();
+        const tbody = document.getElementById('pending-qr-tbody');
+        const filtered = !q ? _pendingQrData : _pendingQrData.filter(v =>
+            (v.license_plate || '').toLowerCase().includes(q) || (v.owner_name || '').toLowerCase().includes(q));
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">${_pendingQrData.length === 0 ? 'Aucun véhicule en attente' : 'Aucun résultat'}</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = filtered.map(renderPendingQrRow).join('');
+    };
+
+    function loadPendingQr() {
+        fetch('/smart-tech/api/pending-qr-vehicles', { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                _pendingQrData = data.vehicles || [];
+                document.getElementById('pending-badge').textContent = _pendingQrData.length;
+                filterPendingQr();
             })
-            .catch(() => {
-                document.getElementById('pending-qr-section').style.display = 'none';
-            });
+            .catch(() => {});
+    }
+
+    /* ── En attente d'impression QR Code (véhicules existants importés) ── */
+    let _pendingQrPrintData = [];
+
+    function renderPendingQrPrintRow(v) {
+        return `<tr>
+                    <td><strong style="color:var(--st-cyan);font-family:monospace;">${esc(v.license_plate)}</strong></td>
+                    <td>${esc(v.owner_name)}</td>
+                    <td>${esc(v.owner_island || '—')}</td>
+                    <td>${esc(v.vehicle_type || '—')}${v.make ? ' · ' + esc(v.make) : ''}</td>
+                    <td class="text-muted">${esc(v.created_by || '—')}</td>
+                    <td class="text-muted" style="font-size:0.78rem;">${esc(v.created_at)}</td>
+                    <td>
+                        <button onclick="activatePendingQR(${v.id}, '${esc(v.license_plate)}', '${esc(v.owner_name)}')"
+                                class="btn-action btn-action-qr" style="font-size:0.78rem;">
+                            <i class="fas fa-qrcode me-1"></i>Activer QR
+                        </button>
+                    </td>
+                </tr>`;
+    }
+
+    window.filterPendingQrPrint = function() {
+        const q = (document.getElementById('pending-qr-print-search').value || '').toLowerCase().trim();
+        const tbody = document.getElementById('pending-qr-print-tbody');
+        const filtered = !q ? _pendingQrPrintData : _pendingQrPrintData.filter(v =>
+            (v.license_plate || '').toLowerCase().includes(q) || (v.owner_name || '').toLowerCase().includes(q));
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">${_pendingQrPrintData.length === 0 ? 'Aucun véhicule en attente' : 'Aucun résultat'}</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = filtered.map(renderPendingQrPrintRow).join('');
+    };
+
+    function loadPendingQrPrint() {
+        fetch('/smart-tech/api/pending-qr-print-vehicles', { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                _pendingQrPrintData = data.vehicles || [];
+                document.getElementById('pending-print-badge').textContent = _pendingQrPrintData.length;
+                filterPendingQrPrint();
+            })
+            .catch(() => {});
     }
 
     window.activatePendingQR = async function(vid, plate, ownerName) {
@@ -759,6 +867,7 @@
             const rd = await r.json().catch(() => ({}));
             if (r.ok) {
                 loadPendingQr();
+                loadPendingQrPrint();
                 loadVehicles(true);
                 showToast('QR Code activé avec succès !', 'success');
             } else {
@@ -1444,6 +1553,7 @@
     /* ── Init ── */
     loadVehicles(false);
     loadPendingQr();
+    loadPendingQrPrint();
 
     // Lightweight real-time sync: poll last-update every 5 s, full reload only on change
     let _lastKey = null;
@@ -1455,7 +1565,7 @@
                 if (!d) return;
                 const key = d.last_update + '|' + d.total;
                 if (_lastKey === null) { _lastKey = key; return; }
-                if (key !== _lastKey) { _lastKey = key; loadVehicles(true); loadPendingQr(); }
+                if (key !== _lastKey) { _lastKey = key; loadVehicles(true); loadPendingQr(); loadPendingQrPrint(); }
             })
             .catch(() => {});
     }

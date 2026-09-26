@@ -233,6 +233,14 @@
         <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
         </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stock_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-boxes-stacked"></i></span>Stock
+        </a>
+        {% endif %}
+        <a href="{{ url_for('smart_tech.recettes_stock_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-cash-register"></i></span>Recettes
+        </a>
         {% endif %}
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">

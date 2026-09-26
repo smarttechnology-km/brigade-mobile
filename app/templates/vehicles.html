@@ -17,7 +17,7 @@
         </button>
         {% endif %}
         {% if current_user.role == 'administrateur' or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_general') %}
-        <button id="btn-plate-settings" class="btn btn-outline-secondary" title="Paramètres immatriculation" data-bs-toggle="modal" data-bs-target="#plateSettingsModal">
+        <button id="btn-plate-settings" class="btn btn-outline-secondary" title="Paramètres" data-bs-toggle="modal" data-bs-target="#plateSettingsModal">
           <i class="fas fa-cog me-1"></i>Paramètres
         </button>
         {% endif %}
@@ -249,6 +249,13 @@
     </div>
   </div>
 </div>
+
+<style>
+#vehicleModal input[type="text"],
+#vehicleModal textarea {
+  text-transform: uppercase;
+}
+</style>
 
 <!-- Modal Ajouter / Éditer -->
 <div class="modal fade" id="vehicleModal" tabindex="-1" aria-hidden="true">
@@ -681,93 +688,146 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title fw-bold" id="plateSettingsModalLabel">
-          <i class="fas fa-id-card me-2 text-primary"></i>Paramètres — Immatriculation
+          <i class="fas fa-cog me-2 text-primary"></i>Paramètres
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-3">
-          Numérotation nationale unique — le compteur s'incrémente globalement quelle que soit l'île.
-          Le numéro enregistré est <strong>UC 0001 A</strong> — le code île (<strong>NG</strong> / <strong>ND</strong> / <strong>MW</strong>) s'affiche en indice uniquement à titre indicatif selon l'île du véhicule.
-        </p>
-
-        <div class="card border-0 bg-body-tertiary rounded-3 p-3">
-          <!-- Enable toggle -->
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" id="ps-enabled-global" role="switch">
-            <label class="form-check-label fw-semibold" for="ps-enabled-global">
-              Activer l'immatriculation automatique nationale
-            </label>
-          </div>
-
-          <div class="row g-3">
-            <div class="col-md-5">
-              <label class="form-label fw-semibold small">Prochain numéro <span class="text-muted">(0001–9999)</span></label>
-              <input type="number" class="form-control" id="ps-number-global" min="1" max="9999" value="1" placeholder="0001">
-              <div class="form-text">Partagé entre toutes les îles</div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold small">Lettre courante <span class="text-muted">(incrémentale)</span></label>
-              <select class="form-select" id="ps-letter2-global">
-                {% for l in 'ABCDEFGHJKLMNPQRSTUVWXYZ' %}
-                <option value="{{ l }}">{{ l }}</option>
-                {% endfor %}
-              </select>
-              <div class="form-text">Avance après 9999 véhicules</div>
-            </div>
-          </div>
-
-          <!-- Previews par île -->
-          <div class="mt-3 p-3 rounded-3 border">
-            <div class="text-muted small mb-2">Aperçu du prochain matricule selon l'île</div>
-            <div class="d-flex gap-4 flex-wrap">
-              <div class="text-center">
-                <div class="text-muted" style="font-size:.72rem;">🏝️ Grande Comore</div>
-                <span class="fs-5 fw-bold font-monospace ps-preview-gc">—</span>
-              </div>
-              <div class="text-center">
-                <div class="text-muted" style="font-size:.72rem;">🏝️ Anjouan</div>
-                <span class="fs-5 fw-bold font-monospace ps-preview-an">—</span>
-              </div>
-              <div class="text-center">
-                <div class="text-muted" style="font-size:.72rem;">🏝️ Mohéli</div>
-                <span class="fs-5 fw-bold font-monospace ps-preview-mo">—</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-3 text-end">
-            <button class="btn btn-primary btn-sm" onclick="savePlateSettings()">
-              <i class="fas fa-save me-1"></i>Enregistrer
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="ps-plate-tab" data-bs-toggle="tab" data-bs-target="#ps-plate-content" type="button" role="tab" aria-controls="ps-plate-content" aria-selected="true">
+              <i class="fas fa-id-card me-2"></i>Immatriculation
             </button>
-          </div>
-        </div>
+          </li>
+          {% if current_user.role == 'administrateur' %}
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="ps-import-tab" data-bs-toggle="tab" data-bs-target="#ps-import-content" type="button" role="tab" aria-controls="ps-import-content" aria-selected="false">
+              <i class="fas fa-file-import me-2"></i>Importer véhicules
+            </button>
+          </li>
+          {% endif %}
+        </ul>
 
-        <!-- dummy tab-content so old JS refs don't error -->
-        <div class="tab-content d-none" id="plateIslandTabContent">
-          {% for island_key, island_label, island_code in [('gc','Grande Comore','NG'),('an','Anjouan','ND'),('mo','Moheli','MW')] %}
-          <div id="ps-{{ island_key }}">
-            <div class="ps-fields-{{ island_key }}">
+        <div class="tab-content">
+          <!-- Onglet Immatriculation -->
+          <div class="tab-pane fade show active" id="ps-plate-content" role="tabpanel" aria-labelledby="ps-plate-tab">
+            <p class="text-muted small mb-3">
+              Numérotation nationale unique — le compteur s'incrémente globalement quelle que soit l'île.
+              Le numéro enregistré est <strong>UC 0001 A</strong> — le code île (<strong>NG</strong> / <strong>ND</strong> / <strong>MW</strong>) s'affiche en indice uniquement à titre indicatif selon l'île du véhicule.
+            </p>
+
+            <div class="card border-0 bg-body-tertiary rounded-3 p-3">
+              <!-- Enable toggle -->
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="ps-enabled-global" role="switch">
+                <label class="form-check-label fw-semibold" for="ps-enabled-global">
+                  Activer l'immatriculation automatique nationale
+                </label>
+              </div>
+
               <div class="row g-3">
                 <div class="col-md-5">
-                  <input type="number" class="form-control" id="ps-number-{{ island_key }}" min="1" max="9999" value="1">
+                  <label class="form-label fw-semibold small">Prochain numéro <span class="text-muted">(0001–9999)</span></label>
+                  <input type="number" class="form-control" id="ps-number-global" min="1" max="9999" value="1" placeholder="0001">
+                  <div class="form-text">Partagé entre toutes les îles</div>
                 </div>
                 <div class="col-md-4">
-                  <select class="form-select" id="ps-letter2-{{ island_key }}">
-                    {% for l in 'ABCDEFGHJKLMNPQRSTUVWXYZ' %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+                  <label class="form-label fw-semibold small">Lettre courante <span class="text-muted">(incrémentale)</span></label>
+                  <select class="form-select" id="ps-letter2-global">
+                    {% for l in 'ABCDEFGHJKLMNPQRSTUVWXYZ' %}
+                    <option value="{{ l }}">{{ l }}</option>
+                    {% endfor %}
                   </select>
-                </div>
-                <div class="col-12">
-                  <input type="checkbox" id="ps-enabled-{{ island_key }}">
+                  <div class="form-text">Avance après 9999 véhicules</div>
                 </div>
               </div>
 
-            </div>
-          </div>
-          {% endfor %}
-        </div>
+              <!-- Previews par île -->
+              <div class="mt-3 p-3 rounded-3 border">
+                <div class="text-muted small mb-2">Aperçu du prochain matricule selon l'île</div>
+                <div class="d-flex gap-4 flex-wrap">
+                  <div class="text-center">
+                    <div class="text-muted" style="font-size:.72rem;">🏝️ Grande Comore</div>
+                    <span class="fs-5 fw-bold font-monospace ps-preview-gc">—</span>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-muted" style="font-size:.72rem;">🏝️ Anjouan</div>
+                    <span class="fs-5 fw-bold font-monospace ps-preview-an">—</span>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-muted" style="font-size:.72rem;">🏝️ Mohéli</div>
+                    <span class="fs-5 fw-bold font-monospace ps-preview-mo">—</span>
+                  </div>
+                </div>
+              </div>
 
-        <div id="ps-save-msg" class="alert d-none mt-3"></div>
+              <div class="mt-3 text-end">
+                <button class="btn btn-primary btn-sm" onclick="savePlateSettings()">
+                  <i class="fas fa-save me-1"></i>Enregistrer
+                </button>
+              </div>
+            </div>
+
+            <!-- dummy tab-content so old JS refs don't error -->
+            <div class="tab-content d-none" id="plateIslandTabContent">
+              {% for island_key, island_label, island_code in [('gc','Grande Comore','NG'),('an','Anjouan','ND'),('mo','Moheli','MW')] %}
+              <div id="ps-{{ island_key }}">
+                <div class="ps-fields-{{ island_key }}">
+                  <div class="row g-3">
+                    <div class="col-md-5">
+                      <input type="number" class="form-control" id="ps-number-{{ island_key }}" min="1" max="9999" value="1">
+                    </div>
+                    <div class="col-md-4">
+                      <select class="form-select" id="ps-letter2-{{ island_key }}">
+                        {% for l in 'ABCDEFGHJKLMNPQRSTUVWXYZ' %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <input type="checkbox" id="ps-enabled-{{ island_key }}">
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+
+            <div id="ps-save-msg" class="alert d-none mt-3"></div>
+          </div>
+
+          {% if current_user.role == 'administrateur' %}
+          <!-- Onglet Import en masse -->
+          <div class="tab-pane fade" id="ps-import-content" role="tabpanel" aria-labelledby="ps-import-tab">
+            <div class="alert alert-info small mb-3">
+              <i class="fas fa-info-circle me-1"></i>
+              Chaque véhicule importé est ajouté comme <strong>véhicule existant</strong> : aucune activation SmartDev/QR Code n'est requise, comme lors d'un ajout manuel avec "Véhicule existant" décoché sur "Nouveau".
+            </div>
+
+            <div class="d-flex gap-2 mb-3">
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-import-template">
+                <i class="fas fa-download me-1"></i>Télécharger le modèle CSV
+              </button>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">Fichier CSV</label>
+              <input type="file" class="form-control" id="import-vehicles-file" accept=".csv">
+              <div class="form-text">
+                Colonnes attendues : license_plate, owner_name, owner_phone, owner_island, vehicle_type, fuel_type, make, model, year, vin, color, owner_address, status, notes, registration_date, places_assises, poids_total_autorise, poids_a_vide, charge_utile_ptc, profession_proprietaire.
+                Seuls <code>license_plate</code> et <code>owner_name</code> sont obligatoires. Les 5 dernières colonnes (Carte Grise) sont optionnelles.
+              </div>
+            </div>
+
+            <div class="text-end mb-3">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-import-submit">
+                <i class="fas fa-file-import me-1"></i>Importer
+              </button>
+            </div>
+
+            <div id="import-vehicles-result"></div>
+          </div>
+          {% endif %}
+        </div>
       </div>
     </div>
   </div>
@@ -786,4 +846,7 @@
 <script src="{{ url_for('static', filename='js/insurance-settings.js') }}"></script>
 <script src="{{ url_for('static', filename='js/insurance-accounts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicles.js') }}?v=20260819a"></script>
+{% if current_user.role == 'administrateur' %}
+<script src="{{ url_for('static', filename='js/vehicles_import.js') }}"></script>
+{% endif %}
 {% endblock %}

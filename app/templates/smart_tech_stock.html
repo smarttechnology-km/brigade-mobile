@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Development — Dépenses</title>
+    <title>Smart Development — Stock</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -49,6 +49,7 @@
         .icon-red{background:rgba(248,81,73,0.12);color:var(--st-red);}
         .icon-orange{background:rgba(247,129,102,0.12);color:var(--st-orange);}
         .icon-yellow{background:rgba(240,180,41,0.12);color:var(--st-yellow);}
+        .icon-green{background:rgba(63,185,80,0.12);color:var(--st-green);}
         .st-stat-label{font-size:.74rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.25rem;}
         .st-stat-val{font-size:1.45rem;font-weight:700;color:#fff;}
 
@@ -60,9 +61,6 @@
         .st-search-icon{position:absolute;left:.6rem;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.3);font-size:.75rem;pointer-events:none;}
         .st-search-clear{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,0.35);font-size:.75rem;cursor:pointer;padding:0;display:none;}
         .st-search-clear:hover{color:#fff;}
-        .st-filter-select{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.83rem;padding:.4rem .65rem;outline:none;transition:border-color .18s;}
-        .st-filter-select:focus{border-color:var(--st-cyan);}
-        .st-filter-select option{background:#1e2736;}
 
         /* ── Section ── */
         .st-section{background:var(--st-surface);border:1px solid var(--st-border);border-radius:14px;overflow:hidden;margin-bottom:1.5rem;}
@@ -75,16 +73,10 @@
         .table tbody td{border-color:rgba(255,255,255,0.04);padding:.7rem 1rem;vertical-align:middle;}
         .table tbody tr:hover td{background:rgba(0,212,255,0.07);color:#e6edf3;}
 
-        /* ── Category pills ── */
+        /* ── Pills ── */
         .pill{display:inline-block;font-size:.7rem;font-weight:500;padding:.2em .65em;border-radius:20px;}
-        .pill-achat{background:rgba(88,166,255,0.13);color:var(--st-blue);border:1px solid rgba(88,166,255,0.28);}
-        .pill-equipement{background:rgba(0,212,255,0.13);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.28);}
-        .pill-deplacement{background:rgba(240,180,41,0.13);color:var(--st-yellow);border:1px solid rgba(240,180,41,0.28);}
-        .pill-formation{background:rgba(188,140,255,0.13);color:var(--st-purple);border:1px solid rgba(188,140,255,0.28);}
-        .pill-maintenance{background:rgba(247,129,102,0.13);color:var(--st-orange);border:1px solid rgba(247,129,102,0.28);}
-        .pill-logiciel{background:rgba(63,185,80,0.13);color:var(--st-green);border:1px solid rgba(63,185,80,0.28);}
-        .pill-fournitures{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.15);}
-        .pill-autre{background:rgba(248,81,73,0.1);color:var(--st-red);border:1px solid rgba(248,81,73,0.22);}
+        .pill-ok{background:rgba(63,185,80,0.13);color:var(--st-green);border:1px solid rgba(63,185,80,0.28);}
+        .pill-low{background:rgba(248,81,73,0.13);color:var(--st-red);border:1px solid rgba(248,81,73,0.28);}
 
         /* ── Buttons ── */
         .btn-st{border-radius:7px;padding:.25rem .6rem;font-size:.75rem;cursor:pointer;transition:all .15s;border:1px solid;}
@@ -110,7 +102,6 @@
         .st-form-ctrl{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e6edf3;font-size:.85rem;padding:.45rem .75rem;outline:none;transition:border-color .18s;}
         .st-form-ctrl:focus{border-color:var(--st-cyan);}
         .st-form-ctrl::placeholder{color:rgba(255,255,255,0.25);}
-        select.st-form-ctrl option{background:#1e2736;}
         .st-form-group{margin-bottom:1rem;}
         .st-form-actions{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.3rem;}
         .btn-st-cancel{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);border-radius:8px;padding:.42rem .9rem;font-size:.82rem;cursor:pointer;}
@@ -121,12 +112,6 @@
         /* ── Confirm modal ── */
         .st-confirm-modal{max-width:380px;text-align:center;}
         .st-confirm-modal p{color:rgba(255,255,255,0.6);font-size:.88rem;margin:.5rem 0 1.3rem;}
-
-        /* ── Pagination ── */
-        .st-pagination{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.2rem;border-top:1px solid var(--st-border);font-size:.78rem;color:rgba(255,255,255,0.4);}
-        .st-pagination .pages{display:flex;gap:.3rem;}
-        .pg-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);border-radius:6px;padding:.2rem .55rem;font-size:.75rem;cursor:pointer;transition:all .15s;}
-        .pg-btn:hover,.pg-btn.active{background:rgba(0,212,255,0.12);border-color:rgba(0,212,255,0.3);color:var(--st-cyan);}
 
         /* ── Light mode ── */
         html[data-theme="light"] body{background:#f0f2f5;color:#1a1a2e;}
@@ -151,16 +136,9 @@
         html[data-theme="light"] .st-form-label{color:rgba(0,0,0,0.5);}
         html[data-theme="light"] .st-form-ctrl{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
         html[data-theme="light"] .st-form-ctrl:focus{border-color:#0095b3;}
-        html[data-theme="light"] select.st-form-ctrl option{background:#fff;color:#1a1a2e;}
         html[data-theme="light"] .st-search-input{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
         html[data-theme="light"] .st-search-input:focus{border-color:#0095b3;}
-        html[data-theme="light"] .st-filter-select{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:#1a1a2e;}
-        html[data-theme="light"] .st-filter-select:focus{border-color:#0095b3;}
-        html[data-theme="light"] .st-filter-select option{background:#fff;color:#1a1a2e;}
         html[data-theme="light"] .btn-st-cancel{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.12);color:#555;}
-        html[data-theme="light"] .st-pagination{border-top-color:rgba(0,0,0,0.08);}
-        html[data-theme="light"] .pg-btn{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.1);color:#555;}
-        html[data-theme="light"] .pg-btn:hover,.html[data-theme="light"] .pg-btn.active{background:rgba(0,149,179,0.1);border-color:rgba(0,149,179,0.25);color:#0095b3;}
 
         /* ── Mobile nav drawer ── */
         .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
@@ -169,7 +147,7 @@
         .mob-overlay.active{opacity:1;pointer-events:all;}
         html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
         html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
-        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}}}
+        @media(max-width:768px){.mob-menu-btn{display:flex!important;}.st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}.st-sidebar.mob-open{transform:translateX(0);z-index:101;}.st-main{margin-left:0;padding:1rem;}}
     </style>
     <script>(function(){const t=localStorage.getItem('st_theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 </head>
@@ -225,11 +203,11 @@
         <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
         </a>
-        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item active">
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
         </a>
         {% if current_user.role == 'admin' %}
-        <a href="{{ url_for('smart_tech.stock_page') }}" class="st-nav-item">
+        <a href="{{ url_for('smart_tech.stock_page') }}" class="st-nav-item active">
             <span class="st-nav-icon"><i class="fas fa-boxes-stacked"></i></span>Stock
         </a>
         {% endif %}
@@ -279,8 +257,8 @@
     <!-- Topbar -->
     <div class="st-topbar">
         <div>
-            <div class="st-page-title"><i class="fas fa-receipt me-2" style="color:var(--st-orange);"></i>Dépenses</div>
-            <div class="st-page-sub">Achats, équipements, déplacements, formations et autres coûts ponctuels</div>
+            <div class="st-page-title"><i class="fas fa-boxes-stacked me-2" style="color:var(--st-cyan);"></i>Stock</div>
+            <div class="st-page-sub">Catalogue des articles vendables — prix et quantité disponible</div>
         </div>
         <div class="d-flex align-items-center gap-3">
             <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
@@ -298,23 +276,23 @@
     <div class="row g-3 mb-4">
         <div class="col-6 col-lg-4">
             <div class="st-card">
-                <div class="st-card-icon icon-red"><i class="fas fa-coins"></i></div>
-                <div class="st-stat-label">Total des dépenses</div>
-                <div class="st-stat-val" style="color:var(--st-red);" id="stat-total">{{ "{:,.0f}".format(total_all) }} <small style="font-size:.5em;font-weight:400;">KMF</small></div>
+                <div class="st-card-icon icon-cyan"><i class="fas fa-boxes-stacked"></i></div>
+                <div class="st-stat-label">Articles en catalogue</div>
+                <div class="st-stat-val" id="stat-count">{{ count }}</div>
             </div>
         </div>
         <div class="col-6 col-lg-4">
             <div class="st-card">
-                <div class="st-card-icon icon-orange"><i class="fas fa-calendar-day"></i></div>
-                <div class="st-stat-label">Ce mois-ci</div>
-                <div class="st-stat-val" style="color:var(--st-orange);" id="stat-month">{{ "{:,.0f}".format(total_month) }} <small style="font-size:.5em;font-weight:400;">KMF</small></div>
+                <div class="st-card-icon icon-red"><i class="fas fa-triangle-exclamation"></i></div>
+                <div class="st-stat-label">Stock bas</div>
+                <div class="st-stat-val" style="color:var(--st-red);" id="stat-low">—</div>
             </div>
         </div>
         <div class="col-12 col-lg-4">
             <div class="st-card">
-                <div class="st-card-icon icon-yellow"><i class="fas fa-list-alt"></i></div>
-                <div class="st-stat-label">Nombre de dépenses</div>
-                <div class="st-stat-val" style="color:var(--st-yellow);" id="stat-count">{{ count }}</div>
+                <div class="st-card-icon icon-green"><i class="fas fa-sack-dollar"></i></div>
+                <div class="st-stat-label">Valeur totale du stock</div>
+                <div class="st-stat-val" style="color:var(--st-green);" id="stat-value">— <small style="font-size:.5em;font-weight:400;">KMF</small></div>
             </div>
         </div>
     </div>
@@ -323,100 +301,74 @@
     <div class="st-section">
         <div class="st-section-header">
             <div class="st-section-title">
-                <i class="fas fa-list me-2" style="color:var(--st-orange);"></i>Liste des dépenses
+                <i class="fas fa-list me-2" style="color:var(--st-cyan);"></i>Articles
             </div>
             <div class="st-filters">
                 <div class="st-search-wrap">
                     <i class="fas fa-search st-search-icon"></i>
-                    <input type="text" id="search-input" class="st-search-input" placeholder="Rechercher…" oninput="onSearch()">
+                    <input type="text" id="search-input" class="st-search-input" placeholder="Rechercher un article…" oninput="onSearch()">
                     <button id="search-clear" class="st-search-clear" onclick="clearSearch()"><i class="fas fa-times"></i></button>
                 </div>
-                <select id="cat-filter" class="st-filter-select" onchange="refreshTable(1)">
-                    <option value="">Toutes catégories</option>
-                    {% for c in categories %}
-                    <option value="{{ c }}">{{ c }}</option>
-                    {% endfor %}
-                </select>
                 <button class="btn-st btn-st-add" onclick="openModal()">
-                    <i class="fas fa-plus me-1"></i>Ajouter
+                    <i class="fas fa-plus me-1"></i>Ajouter un article
                 </button>
             </div>
         </div>
         <div class="table-responsive">
-            <table class="table" id="exp-table">
+            <table class="table" id="stock-table">
                 <thead>
                     <tr>
                         <th>#</th>
-                        <th>Description</th>
-                        <th>Catégorie</th>
-                        <th>Montant</th>
-                        <th>Fournisseur</th>
-                        <th>Date</th>
-                        <th>Enregistré par</th>
+                        <th>Article</th>
+                        <th>Prix unitaire</th>
+                        <th>Quantité</th>
+                        <th>Seuil d'alerte</th>
+                        <th>Statut</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody id="exp-tbody">
-                    <tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-1"></i>Chargement…</td></tr>
+                <tbody id="stock-tbody">
+                    <tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-1"></i>Chargement…</td></tr>
                 </tbody>
             </table>
-        </div>
-        <div class="st-pagination" id="pagination-wrap" style="{{ 'display:none;' if not expenses else '' }}">
-            <span id="pagination-info"></span>
-            <div class="pages" id="pagination-pages"></div>
         </div>
     </div>
 
 </main>
 
 <!-- ── Add / Edit modal ── -->
-<div class="st-modal-backdrop" id="exp-modal">
+<div class="st-modal-backdrop" id="item-modal">
     <div class="st-modal">
         <button class="st-modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
         <div class="st-modal-title">
-            <i class="fas fa-receipt" style="color:var(--st-orange);"></i>
-            <span id="modal-title-text">Ajouter une dépense</span>
+            <i class="fas fa-boxes-stacked" style="color:var(--st-cyan);"></i>
+            <span id="modal-title-text">Ajouter un article</span>
         </div>
         <input type="hidden" id="edit-id" value="">
 
         <div class="st-form-group">
-            <label class="st-form-label">Description *</label>
-            <input type="text" id="f-desc" class="st-form-ctrl" placeholder="Ex : Achat disque dur externe 2 To">
+            <label class="st-form-label">Nom de l'article *</label>
+            <input type="text" id="f-name" class="st-form-ctrl" placeholder="Ex : Plaque d'immatriculation">
         </div>
 
         <div class="row g-3">
             <div class="col-6">
                 <div class="st-form-group">
-                    <label class="st-form-label">Catégorie *</label>
-                    <select id="f-cat" class="st-form-ctrl">
-                        <option value="">— Sélectionner —</option>
-                        {% for c in categories %}
-                        <option value="{{ c }}">{{ c }}</option>
-                        {% endfor %}
-                    </select>
+                    <label class="st-form-label">Prix unitaire (KMF) *</label>
+                    <input type="number" id="f-price" class="st-form-ctrl" placeholder="0" min="0" step="1">
                 </div>
             </div>
             <div class="col-6">
                 <div class="st-form-group">
-                    <label class="st-form-label">Date *</label>
-                    <input type="date" id="f-date" class="st-form-ctrl">
+                    <label class="st-form-label">Quantité *</label>
+                    <input type="number" id="f-quantity" class="st-form-ctrl" placeholder="0" min="0" step="1">
                 </div>
             </div>
         </div>
 
-        <div class="row g-3">
-            <div class="col-6">
-                <div class="st-form-group">
-                    <label class="st-form-label">Montant (KMF) *</label>
-                    <input type="number" id="f-amount" class="st-form-ctrl" placeholder="0" min="0" step="1">
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="st-form-group">
-                    <label class="st-form-label">Fournisseur <small style="text-transform:none;opacity:.6;">(optionnel)</small></label>
-                    <input type="text" id="f-vendor" class="st-form-ctrl" placeholder="Nom du fournisseur">
-                </div>
-            </div>
+        <div class="st-form-group">
+            <label class="st-form-label">Seuil d'alerte (stock bas) *</label>
+            <input type="number" id="f-threshold" class="st-form-ctrl" placeholder="5" min="0" step="1">
         </div>
 
         <div class="st-form-group">
@@ -428,7 +380,7 @@
 
         <div class="st-form-actions">
             <button class="btn-st-cancel" onclick="closeModal()">Annuler</button>
-            <button class="btn-st-save" onclick="saveExpense()"><i class="fas fa-save me-1"></i>Enregistrer</button>
+            <button class="btn-st-save" onclick="saveItem()"><i class="fas fa-save me-1"></i>Enregistrer</button>
         </div>
     </div>
 </div>
@@ -437,7 +389,7 @@
 <div class="st-modal-backdrop" id="del-modal">
     <div class="st-modal st-confirm-modal">
         <div class="st-modal-title" style="justify-content:center;">
-            <i class="fas fa-trash" style="color:var(--st-red);"></i>Supprimer la dépense
+            <i class="fas fa-trash" style="color:var(--st-red);"></i>Supprimer l'article
         </div>
         <p>Voulez-vous vraiment supprimer <strong id="del-name"></strong> ?<br>Cette action est irréversible.</p>
         <div class="d-flex gap-2 justify-content-center">
@@ -468,25 +420,12 @@
 
     /* ── Helpers ── */
     function escHtml(s) {
-        return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return (s || '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
     function fmt(n) { return Math.round(n).toLocaleString('fr'); }
 
-    const CAT_CLASS = {
-        'Achat produit': 'achat', 'Équipement': 'equipement',
-        'Déplacement': 'deplacement', 'Formation': 'formation',
-        'Maintenance': 'maintenance', 'Logiciel': 'logiciel',
-        'Fournitures': 'fournitures', 'Autre': 'autre',
-    };
-    function catPill(cat) {
-        const cls = CAT_CLASS[cat] || 'autre';
-        return '<span class="pill pill-' + cls + '">' + escHtml(cat) + '</span>';
-    }
-
     /* ── State ── */
-    let allRows   = [];
-    let curPage   = 1;
-    const perPage = 25;
+    let allItems = [];
 
     /* ── Search ── */
     let _searchTimer = null;
@@ -494,142 +433,106 @@
         const v = document.getElementById('search-input').value;
         document.getElementById('search-clear').style.display = v ? 'block' : 'none';
         clearTimeout(_searchTimer);
-        _searchTimer = setTimeout(function () { refreshTable(1); }, 250);
+        _searchTimer = setTimeout(renderTable, 200);
     };
     window.clearSearch = function () {
         document.getElementById('search-input').value = '';
         document.getElementById('search-clear').style.display = 'none';
-        refreshTable(1);
+        renderTable();
     };
 
-    /* ── Load data and render ── */
-    window.refreshTable = function (page) {
-        curPage = page || 1;
-        fetch('/smart-tech/api/expenses')
+    /* ── Load data ── */
+    window.refreshTable = function () {
+        fetch('/smart-tech/api/stock')
             .then(r => r.ok ? r.json() : null)
             .then(function (d) {
                 if (!d) return;
-                document.getElementById('stat-total').innerHTML = fmt(d.total_all)   + ' <small style="font-size:.5em;font-weight:400;">KMF</small>';
-                document.getElementById('stat-month').innerHTML = fmt(d.total_month) + ' <small style="font-size:.5em;font-weight:400;">KMF</small>';
+                allItems = d.items || [];
                 document.getElementById('stat-count').textContent = d.count;
-
-                const search  = document.getElementById('search-input').value.toLowerCase().trim();
-                const catFilt = document.getElementById('cat-filter').value;
-
-                allRows = d.expenses.filter(function (e) {
-                    const matchCat = !catFilt || e.category === catFilt;
-                    const matchQ   = !search  ||
-                        (e.description || '').toLowerCase().includes(search) ||
-                        (e.category    || '').toLowerCase().includes(search) ||
-                        (e.vendor      || '').toLowerCase().includes(search) ||
-                        (e.notes       || '').toLowerCase().includes(search);
-                    return matchCat && matchQ;
-                });
-
-                renderPage(curPage);
-                updatePagination();
+                document.getElementById('stat-low').textContent = d.low_stock_count;
+                const totalValue = allItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+                document.getElementById('stat-value').innerHTML = fmt(totalValue) + ' <small style="font-size:.5em;font-weight:400;">KMF</small>';
+                renderTable();
             })
             .catch(function () {});
     };
 
-    function renderPage(page) {
-        const start = (page - 1) * perPage;
-        const rows  = allRows.slice(start, start + perPage);
-        const tbody = document.getElementById('exp-tbody');
-        if (!allRows.length) {
-            const msg = (document.getElementById('search-input').value || document.getElementById('cat-filter').value)
-                ? 'Aucune dépense ne correspond aux filtres.'
-                : 'Aucune dépense enregistrée. Cliquez sur « Ajouter » pour commencer.';
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' + msg + '</td></tr>';
+    function renderTable() {
+        const search = document.getElementById('search-input').value.toLowerCase().trim();
+        const rows = allItems.filter(i => !search || (i.name || '').toLowerCase().includes(search));
+        const tbody = document.getElementById('stock-tbody');
+        if (!rows.length) {
+            const msg = search ? 'Aucun article ne correspond à la recherche.' : 'Aucun article en catalogue. Cliquez sur « Ajouter un article » pour commencer.';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">' + msg + '</td></tr>';
             return;
         }
-        tbody.innerHTML = rows.map(function (e, i) {
-            const descExtra = e.notes ? '<br><small class="text-muted">' + escHtml(e.notes) + '</small>' : '';
-            const vendor    = e.vendor ? '<span style="font-size:.82rem;">' + escHtml(e.vendor) + '</span>' : '<span class="text-muted">—</span>';
+        tbody.innerHTML = rows.map(function (i, idx) {
+            const statusPill = i.is_low_stock
+                ? '<span class="pill pill-low"><i class="fas fa-triangle-exclamation me-1"></i>Stock bas</span>'
+                : '<span class="pill pill-ok">OK</span>';
             return '<tr>'
-                + '<td class="text-muted">' + (start + i + 1) + '</td>'
-                + '<td><strong>' + escHtml(e.description) + '</strong>' + descExtra + '</td>'
-                + '<td>' + catPill(e.category) + '</td>'
-                + '<td><strong style="color:var(--st-red);">' + fmt(e.amount) + ' KMF</strong></td>'
-                + '<td>' + vendor + '</td>'
-                + '<td><span style="font-size:.82rem;">' + (e.expense_date || '—') + '</span></td>'
-                + '<td class="text-muted">' + escHtml(e.created_by || '—') + '</td>'
+                + '<td class="text-muted">' + (idx + 1) + '</td>'
+                + '<td><strong>' + escHtml(i.name) + '</strong>' + (i.notes ? '<br><small class="text-muted">' + escHtml(i.notes) + '</small>' : '') + '</td>'
+                + '<td>' + fmt(i.price) + ' KMF</td>'
+                + '<td><strong style="' + (i.is_low_stock ? 'color:var(--st-red);' : '') + '">' + i.quantity + '</strong></td>'
+                + '<td class="text-muted">' + i.alert_threshold + '</td>'
+                + '<td>' + statusPill + '</td>'
                 + '<td><div class="d-flex gap-1">'
-                + '<button class="btn-st btn-st-edit" onclick=\'openModal(' + JSON.stringify(e) + ')\'><i class="fas fa-pen"></i></button>'
-                + '<button class="btn-st btn-st-del" onclick="confirmDelete(' + e.id + ',\'' + escHtml(e.description) + '\')"><i class="fas fa-trash"></i></button>'
+                + '<button class="btn-st btn-st-edit" onclick=\'openModal(' + JSON.stringify(i) + ')\'><i class="fas fa-pen"></i></button>'
+                + '<button class="btn-st btn-st-del" onclick="confirmDelete(' + i.id + ',\'' + escHtml(i.name) + '\')"><i class="fas fa-trash"></i></button>'
                 + '</div></td></tr>';
         }).join('');
     }
 
-    function updatePagination() {
-        const totalPages = Math.ceil(allRows.length / perPage) || 1;
-        const wrap  = document.getElementById('pagination-wrap');
-        const info  = document.getElementById('pagination-info');
-        const pages = document.getElementById('pagination-pages');
-        wrap.style.display = '';
-        info.textContent   = allRows.length + ' dépense' + (allRows.length !== 1 ? 's' : '');
-        pages.innerHTML    = '';
-        for (let p = 1; p <= totalPages; p++) {
-            const btn = document.createElement('button');
-            btn.className = 'pg-btn' + (p === curPage ? ' active' : '');
-            btn.textContent = p;
-            btn.onclick = (function (pg) { return function () { curPage = pg; renderPage(pg); updatePagination(); }; })(p);
-            pages.appendChild(btn);
-        }
-    }
-
     /* ── Modal ── */
-    window.openModal = function (exp) {
+    window.openModal = function (item) {
         document.getElementById('modal-error').style.display = 'none';
-        if (exp) {
-            document.getElementById('modal-title-text').textContent = 'Modifier la dépense';
-            document.getElementById('edit-id').value   = exp.id;
-            document.getElementById('f-desc').value    = exp.description || '';
-            document.getElementById('f-cat').value     = exp.category    || '';
-            document.getElementById('f-date').value    = exp.expense_date_iso || '';
-            document.getElementById('f-amount').value  = exp.amount      || '';
-            document.getElementById('f-vendor').value  = exp.vendor      || '';
-            document.getElementById('f-notes').value   = exp.notes       || '';
+        if (item) {
+            document.getElementById('modal-title-text').textContent = 'Modifier l\'article';
+            document.getElementById('edit-id').value = item.id;
+            document.getElementById('f-name').value = item.name || '';
+            document.getElementById('f-price').value = item.price || '';
+            document.getElementById('f-quantity').value = item.quantity ?? '';
+            document.getElementById('f-threshold').value = item.alert_threshold ?? '';
+            document.getElementById('f-notes').value = item.notes || '';
         } else {
-            document.getElementById('modal-title-text').textContent = 'Ajouter une dépense';
-            document.getElementById('edit-id').value  = '';
-            document.getElementById('f-desc').value   = '';
-            document.getElementById('f-cat').value    = '';
-            document.getElementById('f-date').value   = new Date().toLocaleDateString('en-CA');
-            document.getElementById('f-amount').value = '';
-            document.getElementById('f-vendor').value = '';
-            document.getElementById('f-notes').value  = '';
+            document.getElementById('modal-title-text').textContent = 'Ajouter un article';
+            document.getElementById('edit-id').value = '';
+            document.getElementById('f-name').value = '';
+            document.getElementById('f-price').value = '';
+            document.getElementById('f-quantity').value = '';
+            document.getElementById('f-threshold').value = '5';
+            document.getElementById('f-notes').value = '';
         }
-        document.getElementById('exp-modal').classList.add('open');
-        setTimeout(function () { document.getElementById('f-desc').focus(); }, 80);
+        document.getElementById('item-modal').classList.add('open');
+        setTimeout(function () { document.getElementById('f-name').focus(); }, 80);
     };
-    window.closeModal = function () { document.getElementById('exp-modal').classList.remove('open'); };
+    window.closeModal = function () { document.getElementById('item-modal').classList.remove('open'); };
 
-    window.saveExpense = function () {
+    window.saveItem = function () {
         const errEl = document.getElementById('modal-error');
         errEl.style.display = 'none';
         const payload = {
-            description:  document.getElementById('f-desc').value.trim(),
-            category:     document.getElementById('f-cat').value,
-            expense_date: document.getElementById('f-date').value,
-            amount:       parseFloat(document.getElementById('f-amount').value) || 0,
-            vendor:       document.getElementById('f-vendor').value.trim(),
-            notes:        document.getElementById('f-notes').value.trim(),
+            name: document.getElementById('f-name').value.trim(),
+            price: parseFloat(document.getElementById('f-price').value) || 0,
+            quantity: parseInt(document.getElementById('f-quantity').value) || 0,
+            alert_threshold: parseInt(document.getElementById('f-threshold').value) || 0,
+            notes: document.getElementById('f-notes').value.trim(),
         };
-        if (!payload.description || !payload.category || !payload.expense_date) {
-            errEl.textContent = 'Veuillez remplir la description, la catégorie et la date.';
+        if (!payload.name) {
+            errEl.textContent = 'Veuillez indiquer le nom de l\'article.';
             errEl.style.display = 'block';
             return;
         }
         const editId = document.getElementById('edit-id').value;
-        const url    = editId ? '/smart-tech/api/expenses/' + editId : '/smart-tech/api/expenses';
+        const url = editId ? '/smart-tech/api/stock/' + editId : '/smart-tech/api/stock';
         const method = editId ? 'PUT' : 'POST';
         fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
             .then(r => r.json())
             .then(function (d) {
                 if (d.error) { errEl.textContent = d.error; errEl.style.display = 'block'; return; }
                 closeModal();
-                refreshTable(curPage);
+                refreshTable();
             })
             .catch(function () { errEl.textContent = 'Erreur réseau.'; errEl.style.display = 'block'; });
     };
@@ -644,28 +547,32 @@
     window.closeDelModal = function () { document.getElementById('del-modal').classList.remove('open'); _deleteId = null; };
     window.doDelete = function () {
         if (!_deleteId) return;
-        fetch('/smart-tech/api/expenses/' + _deleteId, { method: 'DELETE' })
+        fetch('/smart-tech/api/stock/' + _deleteId, { method: 'DELETE' })
             .then(r => r.json())
-            .then(function () { closeDelModal(); refreshTable(1); })
+            .then(function (d) {
+                closeDelModal();
+                if (d && d.error) { alert(d.error); return; }
+                refreshTable();
+            })
             .catch(function () { closeDelModal(); });
     };
 
     /* ── Close on backdrop / Escape ── */
-    ['exp-modal', 'del-modal'].forEach(function (id) {
+    ['item-modal', 'del-modal'].forEach(function (id) {
         document.getElementById(id).addEventListener('click', function (e) {
             if (e.target === this) {
-                if (id === 'exp-modal') closeModal();
+                if (id === 'item-modal') closeModal();
                 else closeDelModal();
             }
         });
     });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { closeModal(); closeDelModal(); }
-        if (e.key === 'Enter' && document.getElementById('exp-modal').classList.contains('open')) saveExpense();
+        if (e.key === 'Enter' && document.getElementById('item-modal').classList.contains('open')) saveItem();
     });
 
     /* ── Init ── */
-    refreshTable(1);
+    refreshTable();
 })();
     /* ── Mobile sidebar ── */
     (function(){
@@ -679,42 +586,10 @@
         }
         window.openSidebar = openSidebar;
         window.closeSidebar = closeSidebar;
-        // Close on nav link click (mobile)
         document.querySelectorAll('.st-nav-item').forEach(function(a){
             a.addEventListener('click', closeSidebar);
         });
     })();
-</script>
-
-<script>
-(function(){
-    var _pollLicBadgeTimer = null;
-    function pollLicBadge(){
-        if (document.hidden) return;
-        fetch("/smart-tech/api/licences/requests/stats")
-            .then(function(r){return r.ok?r.json():null;})
-            .then(function(d){
-                if(!d)return;
-                var b=document.getElementById("nav-lic-badge");
-                if(b){ b.textContent=d.pending_count; b.style.display=d.pending_count>0?"":"none"; }
-                var vb=document.getElementById("nav-vt-badge");
-                if(vb){ vb.textContent=d.vt_pending_count; vb.style.display=d.vt_pending_count>0?"":"none"; }
-                var gb=document.getElementById("nav-gv-badge");
-                if(gb){ gb.textContent=d.gv_pending_count; gb.style.display=d.gv_pending_count>0?"":"none"; }
-                /* Rien en attente (Licences + Visite Technique) : on arrête les requêtes
-                   automatiques. Reprend au prochain chargement de page ou retour d'onglet. */
-                if (d.pending_count === 0 && d.vt_pending_count === 0) {
-                    if (_pollLicBadgeTimer) { clearInterval(_pollLicBadgeTimer); _pollLicBadgeTimer = null; }
-                } else if (!_pollLicBadgeTimer) {
-                    _pollLicBadgeTimer = setInterval(pollLicBadge, 60000);
-                }
-            }).catch(function(){});
-    }
-    pollLicBadge();
-    _pollLicBadgeTimer = setInterval(pollLicBadge,60000);
-    document.addEventListener('visibilitychange', function() { if (!document.hidden) pollLicBadge(); });
-    window.addEventListener('focus', pollLicBadge);
-})();
 </script>
 </body>
 </html>
