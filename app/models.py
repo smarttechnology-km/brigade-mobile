@@ -59,7 +59,7 @@ class User(UserMixin, db.Model):
 class UserHistory(db.Model):
     __tablename__ = 'user_history'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     action = db.Column(db.String(200), nullable=False)
     details = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
@@ -609,7 +609,7 @@ class TechnicalInspectionAppointment(db.Model):
     price_kmf = db.Column(db.Numeric(10, 2), nullable=False, default=0)  # frozen at booking time
     status = db.Column(db.String(20), nullable=False, default='confirmed')  # pending_payment / confirmed / cancelled
 
-    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id'), nullable=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id'), nullable=True, index=True)
     paid_at = db.Column(db.DateTime, nullable=True)  # set once paid in-app (or immediately for a free re-visit)
 
     # 'app_citoyen' (booked by the citizen through the mobile app) or
@@ -843,7 +843,7 @@ class InsuranceAccount(db.Model, UserMixin):
     """Represents an insurance company account with login credentials"""
     __tablename__ = 'insurance_accounts'
     id = db.Column(db.Integer, primary_key=True)
-    insurance_id = db.Column(db.Integer, db.ForeignKey('insurances.id'), nullable=False)
+    insurance_id = db.Column(db.Integer, db.ForeignKey('insurances.id'), nullable=False, index=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
     contact_person = db.Column(db.String(150), nullable=True)
@@ -1052,8 +1052,8 @@ class Phone(db.Model):
 class PhoneUsage(db.Model):
     __tablename__ = 'phone_usages'
     id = db.Column(db.Integer, primary_key=True)
-    phone_id = db.Column(db.Integer, db.ForeignKey('phones.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    phone_id = db.Column(db.Integer, db.ForeignKey('phones.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     checkout_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     checkin_at = db.Column(db.DateTime, nullable=True)  # NULL if not returned yet
     notes = db.Column(db.Text, nullable=True)
@@ -1085,7 +1085,7 @@ class PhoneUsage(db.Model):
 class PhotoSubmission(db.Model):
     __tablename__ = 'photo_submissions'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True, index=True)
     license_plate = db.Column(db.String(20), nullable=True)
     description = db.Column(db.Text, nullable=True)
@@ -1093,7 +1093,7 @@ class PhotoSubmission(db.Model):
     photo_path = db.Column(db.String(500), nullable=False)
     status = db.Column(db.String(20), default='pending')  # pending, approved, rejected, resolved
     submitted_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
-    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
     review_notes = db.Column(db.Text, nullable=True)
     
@@ -1181,7 +1181,7 @@ class VehicleTransfer(db.Model):
     status = db.Column(db.String(20), default='pending')  # 'pending', 'approved', 'rejected', 'completed'
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     processed_at = db.Column(db.DateTime, nullable=True)
-    processed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Admin who processed it
+    processed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)  # Admin who processed it
     notes = db.Column(db.Text, nullable=True)  # Admin notes
     
     vehicle = db.relationship('Vehicle', backref='transfers')
@@ -1531,7 +1531,7 @@ class StockSale(db.Model):
     __tablename__ = 'st_stock_sales'
 
     id             = db.Column(db.Integer, primary_key=True)
-    stock_item_id  = db.Column(db.Integer, db.ForeignKey('st_stock_items.id'), nullable=False)
+    stock_item_id  = db.Column(db.Integer, db.ForeignKey('st_stock_items.id'), nullable=False, index=True)
     item_name      = db.Column(db.String(150), nullable=False)  # snapshot, survives item edits/deletion
     quantity       = db.Column(db.Integer, nullable=False)
     unit_price     = db.Column(db.Float, nullable=False)        # price at time of sale
@@ -1713,7 +1713,7 @@ class LicenseEditRequest(db.Model):
     """An employé's proposed edit to a driver's license, pending directeur technique/général approval."""
     __tablename__ = 'license_edit_requests'
     id = db.Column(db.Integer, primary_key=True)
-    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False)
+    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False, index=True)
     proposed_changes = db.Column(db.Text, nullable=False)  # JSON: {field: new_value}
     old_values = db.Column(db.Text, nullable=False)        # JSON: {field: old_value} snapshot at request time
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending / approved / rejected
@@ -1746,7 +1746,7 @@ class LicenseEditRequest(db.Model):
 class LicensePrintRequest(db.Model):
     __tablename__ = 'license_print_requests'
     id           = db.Column(db.Integer, primary_key=True)
-    license_id   = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False)
+    license_id   = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False, index=True)
     requested_by = db.Column(db.String(100), nullable=False)
     requested_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     status       = db.Column(db.String(20), nullable=False, default='pending', index=True)  # pending | printed | cancelled
@@ -1833,7 +1833,7 @@ class LicenseStatusRule(db.Model):
 class PointReductionHistory(db.Model):
     __tablename__ = 'point_reduction_history'
     id              = db.Column(db.Integer, primary_key=True)
-    license_id      = db.Column(db.Integer, db.ForeignKey('driver_licenses.id', ondelete='CASCADE'), nullable=False)
+    license_id      = db.Column(db.Integer, db.ForeignKey('driver_licenses.id', ondelete='CASCADE'), nullable=False, index=True)
     reason_label    = db.Column(db.String(200), nullable=False)
     points_deducted = db.Column(db.Integer, nullable=False)
     points_before   = db.Column(db.Integer, nullable=False)
@@ -2201,7 +2201,7 @@ class LicenseDossier(db.Model):
     rejection_reason = db.Column(db.Text, nullable=True)
 
     # Permis créé en fin de chaîne (step 5)
-    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=True)
+    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=True, index=True)
 
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     created_by = db.Column(db.String(100), nullable=True)

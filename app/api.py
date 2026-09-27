@@ -4,7 +4,7 @@ from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
 from datetime import timedelta, datetime
-from app.timezone_utils import now_comoros
+from app.timezone_utils import now_comoros, ensure_comoros
 from app.push_notifications import send_fine_push_notification, send_alert_broadcast_notification, send_point_reduction_notification, send_point_reset_notification, send_async, ref
 from io import BytesIO
 import qrcode
@@ -454,7 +454,11 @@ def mobile_vehicle_scans_upload():
             continue
 
         try:
-            scanned_at = datetime.fromisoformat(scanned_at_str.replace('Z', '+00:00'))
+            # The phone sends its own device-clock UTC timestamp (with a 'Z'
+            # suffix) — convert to Comoros time before storing, since the
+            # created_at column is naive and keeps whatever wall-clock digits
+            # it's given (storing the UTC value as-is would read back 3h early).
+            scanned_at = ensure_comoros(datetime.fromisoformat(scanned_at_str.replace('Z', '+00:00')))
         except Exception:
             scanned_at = now_comoros()
 
