@@ -5,7 +5,7 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from flask_login import login_required, current_user
 from datetime import timedelta, datetime
 from app.timezone_utils import now_comoros
-from app.push_notifications import send_fine_push_notification, send_alert_broadcast_notification, send_point_reduction_notification, send_point_reset_notification
+from app.push_notifications import send_fine_push_notification, send_alert_broadcast_notification, send_point_reduction_notification, send_point_reset_notification, send_async, ref
 from io import BytesIO
 import qrcode
 import os
@@ -1406,10 +1406,9 @@ def api_fines_create():
         f"Amende pour {vehicle.license_plate}: {reason} ({amount})"
     )
 
-    # Send push notification to vehicle owner
-    push_result = send_fine_push_notification(vehicle, fine)
-    print(f"📲 Push notification result: {push_result}")
-    
+    # Send push notification to vehicle owner (backgrounded — never delays this response)
+    send_async(send_fine_push_notification, ref(vehicle), ref(fine))
+
     return jsonify({
         "message": "Fine created successfully",
         "fine": fine.to_dict()
@@ -3212,8 +3211,8 @@ def approve_vehicle_transfer():
 
         # Notify old owner that the transfer was approved (token saved before reassignment)
         try:
-            from app.push_notifications import send_transfer_approved_notification
-            send_transfer_approved_notification(old_push_token, vehicle.license_plate)
+            from app.push_notifications import send_transfer_approved_notification, send_async
+            send_async(send_transfer_approved_notification, old_push_token, vehicle.license_plate)
         except Exception as notif_err:
             print(f"⚠️ Transfer approval notification failed: {notif_err}")
 
@@ -3290,9 +3289,9 @@ def reject_vehicle_transfer():
 
         # Notify the owner that their transfer request was rejected
         try:
-            from app.push_notifications import send_transfer_rejected_notification
+            from app.push_notifications import send_transfer_rejected_notification, send_async, ref
             if transfer.vehicle:
-                send_transfer_rejected_notification(transfer.vehicle, notes)
+                send_async(send_transfer_rejected_notification, ref(transfer.vehicle), notes)
         except Exception as notif_err:
             print(f"⚠️ Transfer rejection notification failed: {notif_err}")
 
@@ -3723,7 +3722,7 @@ def api_licenses_reduce_points(license_id):
 
     log_user_history(current_user, 'Points retirés', f'Permis {lic.license_number} - {lic.holder_name}: -{reason.points_to_deduct} pts ({reason.label})')
 
-    send_point_reduction_notification(lic, reason.points_to_deduct, after, reason.label)
+    send_async(send_point_reduction_notification, ref(lic), reason.points_to_deduct, after, reason.label)
     return jsonify(lic.to_dict())
 
 
@@ -3755,7 +3754,7 @@ def api_licenses_reset_points(license_id):
     )
     db.session.add(history)
     db.session.commit()
-    send_point_reset_notification(lic, s.initial_points)
+    send_async(send_point_reset_notification, ref(lic), s.initial_points)
     return jsonify(lic.to_dict())
 
 
@@ -4216,7 +4215,7 @@ def api_mobile_reduce_points(license_id):
     )
     db.session.add(history)
     db.session.commit()
-    send_point_reduction_notification(lic, reason.points_to_deduct, after, reason.label)
+    send_async(send_point_reduction_notification, ref(lic), reason.points_to_deduct, after, reason.label)
     return jsonify(lic.to_dict())
 
 
@@ -5175,8 +5174,7 @@ def api_alerts_create():
     db.session.commit()
 
     if alert.send_notification:
-        push_result = send_alert_broadcast_notification(alert)
-        print(f"📲 Alert push notification result: {push_result}")
+        send_async(send_alert_broadcast_notification, ref(alert))
 
     return jsonify(alert.to_dict()), 201
 
@@ -6295,8 +6293,8 @@ def vehicle_warnings(vehicle_id):
     db.session.commit()
 
     try:
-        from app.push_notifications import send_warning_notification
-        send_warning_notification(vehicle, warning.to_dict())
+        from app.push_notifications import send_warning_notification, send_async, ref
+        send_async(send_warning_notification, ref(vehicle), warning.to_dict())
     except Exception as e:
         print(f"Warning: could not send push notification for warning {warning.id}: {e}")
 

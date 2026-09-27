@@ -268,7 +268,7 @@ class Payment(db.Model):
 class VehicleHistory(db.Model):
     __tablename__ = 'vehicle_history'
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
     action = db.Column(db.String(200), nullable=False)
     officer = db.Column(db.String(100))
     notes = db.Column(db.Text)
@@ -291,7 +291,7 @@ class VehicleEditRequest(db.Model):
     """A judiciaire's proposed edit to a vehicle, pending directeur_regional approval."""
     __tablename__ = 'vehicle_edit_requests'
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
     proposed_changes = db.Column(db.Text, nullable=False)  # JSON: {field: new_value}
     old_values = db.Column(db.Text, nullable=False)        # JSON: {field: old_value} snapshot at request time
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending / approved / rejected
@@ -350,7 +350,7 @@ class TechnicalInspection(db.Model):
     Once approved, it stands as a 1-year technical-inspection attestation."""
     __tablename__ = 'technical_inspections'
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
 
     checklist = db.Column(db.Text, nullable=False)  # JSON: {item_key: 'conforme'/'non_conforme'}
     observations = db.Column(db.Text)
@@ -505,7 +505,7 @@ class VehicleWarning(db.Model):
     modifies the original TechnicalInspection checklist."""
     __tablename__ = 'vehicle_warnings'
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
 
     item_key = db.Column(db.String(50), nullable=False)  # matches TECHNICAL_INSPECTION_ITEMS keys
     description = db.Column(db.Text, nullable=True)
@@ -601,7 +601,7 @@ class TechnicalInspectionAppointment(db.Model):
     inspector is automatically marked paid too, skipping the payment step."""
     __tablename__ = 'technical_inspection_appointments'
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
 
     appointment_date = db.Column(db.Date, nullable=False)
     appointment_time = db.Column(db.String(5), nullable=False)  # 'HH:MM'
@@ -686,7 +686,7 @@ class VehicleOwner(db.Model):
 class Fine(db.Model):
     __tablename__ = 'fines'
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
     amount = db.Column(db.Numeric(10,2), nullable=False)
     base_amount = db.Column(db.Numeric(10,2), nullable=True)  # original amount before late-rate increases
     reason = db.Column(db.String(255), nullable=False)
@@ -892,7 +892,7 @@ class QRCodePayment(db.Model):
     """Tracks QR code activation and renewal payments managed by Smart Development."""
     __tablename__ = 'qr_code_payments'
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
     # 'activation' = first QR code for a new vehicle
     # 'renewal'    = renewing an expired QR code
     payment_type = db.Column(db.String(20), nullable=False)
@@ -956,8 +956,8 @@ class VehicleInsuranceAssignment(db.Model):
     """Links vehicles to insurance accounts for management"""
     __tablename__ = 'vehicle_insurance_assignments'
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
-    insurance_account_id = db.Column(db.Integer, db.ForeignKey('insurance_accounts.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
+    insurance_account_id = db.Column(db.Integer, db.ForeignKey('insurance_accounts.id'), nullable=False, index=True)
     assigned_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     assigned_by = db.Column(db.String(100), nullable=True)  # Username who assigned it
     notes = db.Column(db.Text)
@@ -1086,7 +1086,7 @@ class PhotoSubmission(db.Model):
     __tablename__ = 'photo_submissions'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True, index=True)
     license_plate = db.Column(db.String(20), nullable=True)
     description = db.Column(db.Text, nullable=True)
     photo_filename = db.Column(db.String(255), nullable=False)
@@ -1171,7 +1171,7 @@ class VehicleTransfer(db.Model):
     __tablename__ = 'vehicle_transfers'
     
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
     current_owner_phone = db.Column(db.String(15), nullable=False)  # Phone of current owner making the request
     new_owner_phone = db.Column(db.String(15), nullable=False)  # Phone of new owner (may not be registered yet)
     new_owner_name = db.Column(db.String(100), nullable=True)  # Name of new owner if known

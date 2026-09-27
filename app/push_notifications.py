@@ -1,8 +1,63 @@
 import json
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+
+from flask import current_app
 
 EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send'
+
+# Push notifications are sent synchronously to Expo's API from inside request
+# handlers (issuing a fine, broadcasting an alert, etc). send_async() moves that
+# network call off the request thread so a slow/unreachable Expo endpoint never
+# delays the HTTP response to the officer/citizen who triggered it.
+_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='push-notif')
+
+
+class _Ref:
+    """Marks a SQLAlchemy instance passed to send_async so it is captured as
+    (model class, primary key) instead of the instance itself. Reusing the
+    original instance directly inside the background thread would be unsafe:
+    SQLAlchemy expires an instance's attributes after db.session.commit(), and
+    the request's session that owned it is torn down once the response is
+    sent — so a lazy attribute read from the background thread would raise
+    DetachedInstanceError. Re-fetching by primary key in the background
+    thread's own app context/session sidesteps both problems."""
+    __slots__ = ('model_cls', 'obj_id')
+
+    def __init__(self, obj):
+        self.model_cls = type(obj)
+        self.obj_id = obj.id
+
+
+def ref(obj):
+    """Wrap a SQLAlchemy model instance argument for send_async (see _Ref)."""
+    return _Ref(obj)
+
+
+def send_async(fn, *args):
+    """Fire-and-forget fn(*args) on a background thread inside a fresh Flask
+    app context, instead of calling it inline in the request. Wrap any
+    SQLAlchemy instance among args in ref(...) first."""
+    app = current_app._get_current_object()
+
+    def _task():
+        with app.app_context():
+            try:
+                real_args = []
+                for a in args:
+                    if isinstance(a, _Ref):
+                        obj = a.model_cls.query.get(a.obj_id)
+                        if obj is None:
+                            return
+                        real_args.append(obj)
+                    else:
+                        real_args.append(a)
+                fn(*real_args)
+            except Exception as e:
+                print(f"❌ Background push notification error: {e}")
+
+    _executor.submit(_task)
 
 
 def _get_vehicle_tokens(vehicle):
