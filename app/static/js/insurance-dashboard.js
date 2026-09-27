@@ -7,6 +7,11 @@ let vehiclesCache = [];
 let currentEditVehicle = null;
 let editLicenseNumbers = [];
 
+// ── Pagination (20 véhicules par page) ──
+const INS_PER_PAGE = 20;
+let currentPageIns = 1;
+let _insFilteredList = [];
+
 
 async function editAddLicense() {
     const input = document.getElementById('edit-license-num-input');
@@ -76,7 +81,7 @@ function loadDashboardData() {
     ])
     .then(() => {
         updateStatistics();
-        renderVehiclesTable();
+        filterVehicles();
     })
     .catch(err => console.error('Error loading dashboard:', err));
 }
@@ -150,19 +155,29 @@ function updateStatistics() {
     document.getElementById('active-count').textContent = activeCount;
 }
 
-function renderVehiclesTable() {
-    const tbody = document.getElementById('vehicles-tbody');
-    if (!tbody) return;
-    
-    if (vehiclesCache.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Aucun véhicule assigné</td></tr>';
-        return;
-    }
-    
+function getInsuranceStatus(vehicle) {
+    const insuranceExpiry = vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry) : null;
+    if (!insuranceExpiry) return null;
     const today = new Date();
     const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-    
-    tbody.innerHTML = vehiclesCache.map(vehicle => {
+    if (insuranceExpiry < today) return 'expired';
+    if (insuranceExpiry < thirtyDaysFromNow) return 'expiring';
+    return 'active';
+}
+
+function renderVehiclesTable(list) {
+    const tbody = document.getElementById('vehicles-tbody');
+    if (!tbody) return;
+
+    if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${vehiclesCache.length === 0 ? 'Aucun véhicule assigné' : 'Aucun résultat'}</td></tr>`;
+        return;
+    }
+
+    const today = new Date();
+    const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    tbody.innerHTML = list.map(vehicle => {
         const insuranceExpiry = vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry) : null;
         const vignetteExpiry = vehicle.vignette_expiry ? new Date(vehicle.vignette_expiry) : null;
         const registrationExpiry = vehicle.registration_expiry ? new Date(vehicle.registration_expiry) : null;
@@ -261,37 +276,61 @@ function getVehicleStatusBadge(status) {
 }
 
 function filterVehicles() {
-    const searchTerm = document.getElementById('vehicle-search').value.toLowerCase();
+    const searchTerm = (document.getElementById('vehicle-search').value || '').toLowerCase();
     const filterValue = document.getElementById('insurance-filter').value;
-    const tbody = document.getElementById('vehicles-tbody');
-    const rows = tbody.querySelectorAll('tr');
-    
-    const today = new Date();
-    const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-    
-    rows.forEach(row => {
-        const licensePlate = row.cells[0]?.textContent.toLowerCase() || '';
-        const owner = row.cells[1]?.textContent.toLowerCase() || '';
-        const vehicleType = row.cells[2]?.textContent.toLowerCase() || '';
-        
-        let matchesSearch = !searchTerm || licensePlate.includes(searchTerm) || owner.includes(searchTerm) || vehicleType.includes(searchTerm);
-        
-        let matchesFilter = true;
-        if (filterValue) {
-            const insuranceBadge = row.cells[6];
-            const badgeText = insuranceBadge?.textContent || '';
-            
-            if (filterValue === 'active') {
-                matchesFilter = insuranceBadge?.querySelector('.bg-success') !== null;
-            } else if (filterValue === 'expiring') {
-                matchesFilter = insuranceBadge?.querySelector('.bg-warning') !== null;
-            } else if (filterValue === 'expired') {
-                matchesFilter = insuranceBadge?.querySelector('.bg-danger') !== null;
-            }
-        }
-        
-        row.style.display = (matchesSearch && matchesFilter) ? '' : 'none';
+
+    _insFilteredList = vehiclesCache.filter(v => {
+        const licensePlate = (v.license_plate || '').toLowerCase();
+        const owner = (v.owner_name || '').toLowerCase();
+        const vehicleType = (v.vehicle_type || '').toLowerCase();
+        const matchesSearch = !searchTerm || licensePlate.includes(searchTerm) || owner.includes(searchTerm) || vehicleType.includes(searchTerm);
+        const matchesFilter = !filterValue || getInsuranceStatus(v) === filterValue;
+        return matchesSearch && matchesFilter;
     });
+
+    currentPageIns = 1;
+    renderInsPage();
+}
+
+function renderInsPage() {
+    const total = _insFilteredList.length;
+    const totalPages = Math.max(1, Math.ceil(total / INS_PER_PAGE));
+    if (currentPageIns > totalPages) currentPageIns = totalPages;
+    const start = (currentPageIns - 1) * INS_PER_PAGE;
+    const slice = _insFilteredList.slice(start, start + INS_PER_PAGE);
+
+    renderVehiclesTable(slice);
+    renderInsPagination(total, totalPages, start, slice.length);
+}
+
+function renderInsPagination(total, totalPages, start, sliceLen) {
+    const info = document.getElementById('ins-pagination-info');
+    const btns = document.getElementById('ins-pagination-btns');
+    if (info) info.textContent = total === 0 ? '' : `${start + 1}–${start + sliceLen} sur ${total}`;
+    if (!btns) return;
+    if (totalPages <= 1) { btns.innerHTML = ''; return; }
+
+    const item = (label, page, opts) => {
+        opts = opts || {};
+        const cls = 'page-item' + (opts.disabled ? ' disabled' : '') + (opts.active ? ' active' : '');
+        return `<li class="${cls}"><a class="page-link" href="#" onclick="event.preventDefault();goToInsPage(${page})">${label}</a></li>`;
+    };
+
+    let html = item('&laquo;', currentPageIns - 1, { disabled: currentPageIns === 1 });
+    for (let p = 1; p <= totalPages; p++) {
+        if (totalPages > 7 && Math.abs(p - currentPageIns) > 2 && p !== 1 && p !== totalPages) {
+            if (p === 2 || p === totalPages - 1) html += '<li class="page-item disabled"><span class="page-link">&hellip;</span></li>';
+            continue;
+        }
+        html += item(p, p, { active: p === currentPageIns });
+    }
+    html += item('&raquo;', currentPageIns + 1, { disabled: currentPageIns === totalPages });
+    btns.innerHTML = html;
+}
+
+function goToInsPage(p) {
+    currentPageIns = p;
+    renderInsPage();
 }
 
 function openEditDatesModal(vehicleId) {
