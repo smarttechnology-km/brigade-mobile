@@ -122,6 +122,99 @@ function fetchJson(url, opts) {
   });
 }
 
+// Same as fetchJson but also surfaces the pagination headers set by
+// /api/vehicles/query when page/per_page are passed.
+function fetchVehiclesPage(url) {
+  return fetch(url).then(r => {
+    const ct = r.headers.get('content-type') || '';
+    if (!r.ok) {
+      if (r.status === 302 || r.redirected || ct.indexOf('text/html') !== -1) {
+        throw new Error('Unauthorized or redirected to login (status ' + r.status + '). Please ensure you are logged in.');
+      }
+      throw new Error('HTTP error ' + r.status);
+    }
+    return r.json().then(items => {
+      const total = parseInt(r.headers.get('X-Total-Count'), 10);
+      const totalPages = parseInt(r.headers.get('X-Total-Pages'), 10);
+      return {
+        items,
+        total: isNaN(total) ? items.length : total,
+        totalPages: isNaN(totalPages) ? 1 : totalPages,
+      };
+    });
+  });
+}
+
+// Pagination state for the vehicle-based reports (vehicles/expired/qr_expired/insurance_expired)
+const REPORTS_PER_PAGE = 50;
+let reportsPage = 1;
+let reportsTotal = 0;
+let reportsTotalPages = 1;
+
+function hideReportsPagination() {
+  const bar = document.getElementById('reports-pagination-bar');
+  if (bar) bar.classList.add('d-none');
+}
+
+function updateReportsPaginationUI() {
+  const bar = document.getElementById('reports-pagination-bar');
+  if (!bar) return;
+  if (reportsTotal <= REPORTS_PER_PAGE) { bar.classList.add('d-none'); return; }
+  bar.classList.remove('d-none');
+  const start = (reportsPage - 1) * REPORTS_PER_PAGE + 1;
+  const end = Math.min(reportsPage * REPORTS_PER_PAGE, reportsTotal);
+  const info = document.getElementById('reports-pagination-info');
+  if (info) info.textContent = `Affichage ${start}-${end} sur ${reportsTotal}`;
+  const pageLabel = document.getElementById('reports-page-label');
+  if (pageLabel) pageLabel.textContent = `Page ${reportsPage} / ${reportsTotalPages}`;
+  const prevBtn = document.getElementById('reports-prev-page');
+  const nextBtn = document.getElementById('reports-next-page');
+  if (prevBtn) prevBtn.disabled = reportsPage <= 1;
+  if (nextBtn) nextBtn.disabled = reportsPage >= reportsTotalPages;
+}
+
+function goToReportsPage(delta) {
+  const target = reportsPage + delta;
+  if (target < 1 || target > reportsTotalPages) return;
+  reportsPage = target;
+  const kind = document.getElementById('report-kind') ? document.getElementById('report-kind').value : 'vehicles';
+  loadVehicleReport(kind);
+}
+
+function updateSummaryFromCounts(counts) {
+  document.getElementById('rep-total').textContent = counts.total;
+  document.getElementById('rep-active').textContent = counts.active;
+  document.getElementById('rep-suspended').textContent = counts.suspended;
+  document.getElementById('rep-expiring').textContent = counts.expiring;
+  const summary = document.getElementById('reports-summary');
+  if (summary) summary.classList.remove('d-none');
+}
+
+// Loads one page of a vehicle-based report (vehicles/expired/qr_expired/insurance_expired),
+// paginated at REPORTS_PER_PAGE, plus the summary cards from a lightweight aggregate query.
+function loadVehicleReport(kind) {
+  const params = collectFilters();
+  if (kind === 'expired') params.append('expired', 'true');
+  if (kind === 'qr_expired') params.append('qr_expired', 'true');
+  if (kind === 'insurance_expired') params.append('insurance_expired', 'true');
+
+  fetchJson(`/api/vehicles/report-summary?${params.toString()}`)
+    .then(counts => updateSummaryFromCounts(counts))
+    .catch(err => logError('Erreur résumé rapport: ' + (err && err.message)));
+
+  const pageParams = new URLSearchParams(params.toString());
+  pageParams.append('page', reportsPage);
+  pageParams.append('per_page', REPORTS_PER_PAGE);
+
+  return fetchVehiclesPage(`/api/vehicles/query?${pageParams.toString()}`)
+    .then(({ items, total, totalPages }) => {
+      reportsTotal = total;
+      reportsTotalPages = totalPages;
+      renderReportsTable(items);
+      updateReportsPaginationUI();
+    });
+}
+
 // Debug helpers: append messages to the visible debug panel if present
 function logDebug(msg) {
   try { console.log('[reports] ' + msg); } catch (e) { /* ignore */ }
@@ -156,6 +249,7 @@ function applyFilters() {
     const country = document.getElementById('report-country') ? document.getElementById('report-country').value : '';
     const paidParam = paid ? `&paid=${paid}` : '';
     const countryParam = country ? `&country=${encodeURIComponent(country)}` : '';
+    hideReportsPagination();
     fetchJson(`/api/vehicles/fines/all?q=${encodeURIComponent(q)}${paidParam}${countryParam}`)
       .then(data => { renderFinesTable(data); updateFinesSummary(data); })
       .catch(err => { logError('Erreur chargement amandes: ' + (err && err.message)); alert('Erreur lors du chargement des amandes'); })
@@ -163,37 +257,9 @@ function applyFilters() {
     return;
   }
 
-  if (kind === 'expired') {
-    const params = collectFilters(); params.append('expired', 'true');
-    fetchJson(`/api/vehicles/query?${params.toString()}`)
-      .then(data => { renderReportsTable(data); updateSummary(data); })
-      .catch(err => { logError('Erreur chargement rapports: ' + (err && err.message)); alert('Erreur lors du chargement des rapports'); })
-      .finally(() => { try { if (btnApply) { btnApply.disabled = false; btnApply.innerHTML = btnApply.dataset.orig || 'Appliquer'; } if (btnReset) btnReset.disabled = false; if (btnExport) btnExport.disabled = false; } catch (e) { logError('finally error: ' + (e && e.message)); } });
-    return;
-  }
-
-  if (kind === 'qr_expired') {
-    const params = collectFilters(); params.append('qr_expired', 'true');
-    fetchJson(`/api/vehicles/query?${params.toString()}`)
-      .then(data => { renderReportsTable(data); updateSummary(data); })
-      .catch(err => { logError('Erreur chargement rapports: ' + (err && err.message)); alert('Erreur lors du chargement des rapports'); })
-      .finally(() => { try { if (btnApply) { btnApply.disabled = false; btnApply.innerHTML = btnApply.dataset.orig || 'Appliquer'; } if (btnReset) btnReset.disabled = false; if (btnExport) btnExport.disabled = false; } catch (e) { logError('finally error: ' + (e && e.message)); } });
-    return;
-  }
-
-  if (kind === 'insurance_expired') {
-    const params = collectFilters(); params.append('insurance_expired', 'true');
-    fetchJson(`/api/vehicles/query?${params.toString()}`)
-      .then(data => { renderReportsTable(data); updateSummary(data); })
-      .catch(err => { logError('Erreur chargement rapports: ' + (err && err.message)); alert('Erreur lors du chargement des rapports'); })
-      .finally(() => { try { if (btnApply) { btnApply.disabled = false; btnApply.innerHTML = btnApply.dataset.orig || 'Appliquer'; } if (btnReset) btnReset.disabled = false; if (btnExport) btnExport.disabled = false; } catch (e) { logError('finally error: ' + (e && e.message)); } });
-    return;
-  }
-
-  // default vehicles report
-  const params = collectFilters();
-  fetchJson(`/api/vehicles/query?${params.toString()}`)
-    .then(data => { renderReportsTable(data); updateSummary(data); })
+  // vehicle-based reports (vehicles/expired/qr_expired/insurance_expired): paginated at 50/page
+  reportsPage = 1;
+  loadVehicleReport(kind)
     .catch(err => { logError('Erreur chargement rapports: ' + (err && err.message)); alert('Erreur lors du chargement des rapports'); })
     .finally(() => { try { if (btnApply) { btnApply.disabled = false; btnApply.innerHTML = btnApply.dataset.orig || 'Appliquer'; } if (btnReset) btnReset.disabled = false; if (btnExport) btnExport.disabled = false; } catch (e) { logError('finally error: ' + (e && e.message)); } });
 }
@@ -206,6 +272,8 @@ function applyFilters() {
    const summary = document.getElementById('reports-summary');
    if (card) card.classList.add('d-none');
    if (summary) summary.classList.add('d-none');
+   reportsPage = 1;
+   hideReportsPagination();
    // reset report kind to default
    try{
      const kindEl = document.getElementById('report-kind');
