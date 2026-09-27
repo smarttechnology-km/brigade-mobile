@@ -1974,6 +1974,63 @@ def vehicles_counts():
     return jsonify(counts)
 
 
+@vehicle_bp.route('/report-summary', methods=['GET'])
+@login_required
+def vehicles_report_summary():
+    """Aggregate counts (total/active/suspended/expiring) for the Rapports
+    page's summary cards, computed with COUNT queries against the same
+    filters as /query so the cards stay accurate now that the results
+    table itself is paginated."""
+    q = request.args.get('q', type=str)
+    vtype = request.args.get('type', type=str)
+    status = request.args.get('status', type=str)
+    start = request.args.get('start_date', type=str)
+    end = request.args.get('end_date', type=str)
+    country = request.args.get('country', type=str)
+    expired = request.args.get('expired', type=str)
+    qr_expired = request.args.get('qr_expired', type=str)
+    insurance_expired = request.args.get('insurance_expired', type=str)
+
+    query = Vehicle.query
+    query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
+    if vtype:
+        query = query.filter(Vehicle.vehicle_type == vtype)
+    if status:
+        query = query.filter(Vehicle.status == status)
+        query = query.filter(Vehicle.qr_pending_approval == False)
+    if q:
+        like = f"%{q}%"
+        query = query.filter((Vehicle.license_plate.ilike(like)) | (Vehicle.owner_name.ilike(like)) | (Vehicle.vin.ilike(like)))
+    if start:
+        try:
+            query = query.filter(Vehicle.created_at >= datetime.fromisoformat(start))
+        except Exception:
+            pass
+    if end:
+        try:
+            query = query.filter(Vehicle.created_at <= datetime.fromisoformat(end))
+        except Exception:
+            pass
+    if expired and expired.lower() in ('1', 'true', 'yes'):
+        query = query.filter(Vehicle.vignette_expiry != None).filter(Vehicle.vignette_expiry <= now_comoros())
+    if qr_expired and qr_expired.lower() in ('1', 'true', 'yes'):
+        query = query.filter(Vehicle.qr_code_expiry != None).filter(Vehicle.qr_code_expiry <= now_comoros())
+    if insurance_expired and insurance_expired.lower() in ('1', 'true', 'yes'):
+        query = query.filter(Vehicle.insurance_expiry != None).filter(Vehicle.insurance_expiry <= now_comoros())
+
+    total = query.count()
+    active = query.filter(Vehicle.status == 'active').count()
+    suspended = query.filter(Vehicle.status == 'suspended').count()
+    future = now_comoros() + timedelta(days=30)
+    expiring = query.filter(
+        Vehicle.registration_expiry.isnot(None),
+        Vehicle.registration_expiry >= now_comoros(),
+        Vehicle.registration_expiry <= future,
+    ).count()
+
+    return jsonify({'total': total, 'active': active, 'suspended': suspended, 'expiring': expiring})
+
+
 @vehicle_bp.route('/export', methods=['GET'])
 @login_required
 def export_vehicles_csv():
