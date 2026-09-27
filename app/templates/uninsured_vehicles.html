@@ -62,6 +62,14 @@
             </table>
         </div>
 
+        <div class="d-flex justify-content-between align-items-center p-3 border-top">
+            <small class="text-muted" id="uv-pagination-info"></small>
+            <nav>
+                <ul class="pagination pagination-sm mb-0" id="uv-pagination-btns"></ul>
+            </nav>
+        </div>
+    </div>
+
     <!-- No results message -->
     <div id="no-results-alert" class="alert alert-info mt-4" style="display: none;">
         <i class="fas fa-info-circle me-2"></i>
@@ -155,6 +163,11 @@
 <script>
 let vehiclesCache = [];
 
+// ── Pagination (20 véhicules par page) ──
+const UV_PER_PAGE = 20;
+let currentPageUv = 1;
+let _uvFilteredList = [];
+
 
 document.addEventListener('DOMContentLoaded', function() {
     loadUninsuredVehicles();
@@ -181,7 +194,7 @@ function loadUninsuredVehicles() {
     .then(data => {
         vehiclesCache = data.vehicles || [];
         console.log('Loaded ' + vehiclesCache.length + ' uninsured vehicles');
-        renderVehiclesTable(vehiclesCache);
+        filterVehicles();
     })
     .catch(err => {
         console.error('Error loading vehicles:', err);
@@ -194,16 +207,56 @@ function loadUninsuredVehicles() {
 
 function filterVehicles() {
     const searchTerm = (document.getElementById('search-input').value || '').toLowerCase();
-    
-    const filtered = vehiclesCache.filter(v => {
-        const matchesSearch = !searchTerm || 
+
+    _uvFilteredList = vehiclesCache.filter(v => {
+        return !searchTerm ||
             (v.license_plate && v.license_plate.toLowerCase().includes(searchTerm)) ||
             (v.owner_name && v.owner_name.toLowerCase().includes(searchTerm));
-        
-        return matchesSearch;
     });
-    
-    renderVehiclesTable(filtered);
+
+    currentPageUv = 1;
+    renderUvPage();
+}
+
+function renderUvPage() {
+    const total = _uvFilteredList.length;
+    const totalPages = Math.max(1, Math.ceil(total / UV_PER_PAGE));
+    if (currentPageUv > totalPages) currentPageUv = totalPages;
+    const start = (currentPageUv - 1) * UV_PER_PAGE;
+    const slice = _uvFilteredList.slice(start, start + UV_PER_PAGE);
+
+    renderVehiclesTable(slice);
+    renderUvPagination(total, totalPages, start, slice.length);
+}
+
+function renderUvPagination(total, totalPages, start, sliceLen) {
+    const info = document.getElementById('uv-pagination-info');
+    const btns = document.getElementById('uv-pagination-btns');
+    if (info) info.textContent = total === 0 ? '' : `${start + 1}–${start + sliceLen} sur ${total}`;
+    if (!btns) return;
+    if (totalPages <= 1) { btns.innerHTML = ''; return; }
+
+    const item = (label, page, opts) => {
+        opts = opts || {};
+        const cls = 'page-item' + (opts.disabled ? ' disabled' : '') + (opts.active ? ' active' : '');
+        return `<li class="${cls}"><a class="page-link" href="#" onclick="event.preventDefault();goToUvPage(${page})">${label}</a></li>`;
+    };
+
+    let html = item('&laquo;', currentPageUv - 1, { disabled: currentPageUv === 1 });
+    for (let p = 1; p <= totalPages; p++) {
+        if (totalPages > 7 && Math.abs(p - currentPageUv) > 2 && p !== 1 && p !== totalPages) {
+            if (p === 2 || p === totalPages - 1) html += '<li class="page-item disabled"><span class="page-link">&hellip;</span></li>';
+            continue;
+        }
+        html += item(p, p, { active: p === currentPageUv });
+    }
+    html += item('&raquo;', currentPageUv + 1, { disabled: currentPageUv === totalPages });
+    btns.innerHTML = html;
+}
+
+function goToUvPage(p) {
+    currentPageUv = p;
+    renderUvPage();
 }
 
 function isVehicleInactive(vehicle) {
