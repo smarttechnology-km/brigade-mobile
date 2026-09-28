@@ -2632,6 +2632,67 @@ def count_pending_photo_submissions():
     })
 
 
+@api_bp.route('/sidebar/pending-counts', methods=['GET'])
+@login_required
+def api_sidebar_pending_counts():
+    """Combined poll for the 5 sidebar approval badges (photo submissions,
+    vehicle-edit requests, license-edit requests, dossier signatures,
+    technical-inspection validations), replacing 5 separate 90s-interval
+    requests from base.html with a single one.
+
+    The 4 dgrtr-review badges (ver/ler/dossier_sig/vt) only ever render
+    together for directeur_general/technique/regional accounts — no other
+    role sees more than the photo badge — so DG/DT/DR sessions were making
+    5x the sidebar traffic of every other role on every single page.
+    Mirrors each original endpoint's own role-gating exactly, so counts and
+    visibility stay identical.
+    """
+    from app.models import LicenseEditRequest, VehicleEditRequest, TechnicalInspection
+    from app.routes import _is_dr_or_dg, _is_visite_technique_reviewer
+
+    photo_count = (
+        PhotoSubmission.query.filter_by(status='pending').count()
+        + VehicleTransfer.query.filter_by(status='pending').count()
+    )
+
+    if _is_license_employe():
+        ler_count = LicenseEditRequest.query.filter_by(requested_by=current_user.username, status='pending').count()
+    elif _is_license_reviewer():
+        ler_count = LicenseEditRequest.query.filter_by(status='pending').count()
+    else:
+        ler_count = 0
+
+    role = current_user.role
+    if role == 'judiciaire':
+        ver_count = VehicleEditRequest.query.filter_by(requested_by=current_user.username, status='pending').count()
+    elif role == 'administrateur' or _is_dr_or_dg():
+        ver_query = VehicleEditRequest.query.filter_by(status='pending')
+        if role == 'dgrtr' and current_user.dgrtr_type == 'directeur_regional' and current_user.country:
+            ver_query = ver_query.join(Vehicle).filter(Vehicle.owner_island == current_user.country)
+        ver_count = ver_query.count()
+    else:
+        ver_count = 0
+
+    if _is_visite_technique_reviewer():
+        vt_query = TechnicalInspection.query.filter_by(status='pending')
+        if current_user.country:
+            vt_query = vt_query.join(Vehicle).filter(Vehicle.owner_island == current_user.country)
+        vt_count = vt_query.count()
+    else:
+        vt_count = 0
+
+    is_dg = current_user.is_admin or (role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general')
+    dossier_sig_count = LicenseDossier.query.filter_by(current_step=5, status='en_cours').count() if is_dg else 0
+
+    return jsonify({
+        'photo': photo_count,
+        'ver': ver_count,
+        'ler': ler_count,
+        'dossier_sig': dossier_sig_count,
+        'vt': vt_count,
+    })
+
+
 @api_bp.route('/photo-submissions/list', methods=['GET'])
 def list_photo_submissions():
     # Support both JWT (mobile) and session auth (web admin)
