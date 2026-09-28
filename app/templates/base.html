@@ -248,90 +248,31 @@
                 })();
             </script>
             <script>
-                function updatePhotoCount() {
+                // Single combined poll for all 5 sidebar approval badges (was 5
+                // separate requests every 90s — DG/DT/DR accounts see up to 4 of
+                // these badges at once, so they were making 5x the sidebar
+                // traffic of every other role on every page).
+                function updateSidebarBadges() {
                     if (document.hidden) return;
-                    fetch('/api/photo-submissions/count-pending')
+                    fetch('/api/sidebar/pending-counts')
                         .then(r => r.json())
                         .then(data => {
-                            const badge = document.getElementById('photo-count-badge');
-                            if (badge) {
-                                const count = data.pending_count || 0;
-                                badge.textContent = count;
+                            const setBadge = (id, count) => {
+                                const badge = document.getElementById(id);
+                                if (!badge) return;
+                                badge.textContent = count || 0;
                                 badge.style.display = count > 0 ? 'inline-block' : 'none';
-                            }
+                            };
+                            setBadge('photo-count-badge', data.photo);
+                            setBadge('ver-count-badge', data.ver);
+                            setBadge('ler-count-badge', data.ler);
+                            setBadge('dossier-sig-count-badge', data.dossier_sig);
+                            setBadge('vt-count-badge', data.vt);
                         })
                         .catch(() => {});
                 }
-                document.addEventListener('DOMContentLoaded', updatePhotoCount);
-                setInterval(updatePhotoCount, 90000);
-            </script>
-            <script>
-                function updateVerCount() {
-                    if (document.hidden) return;
-                    const badge = document.getElementById('ver-count-badge');
-                    if (!badge) return;
-                    fetch('/api/vehicle-edit-requests/count-pending')
-                        .then(r => r.json())
-                        .then(data => {
-                            const count = data.pending_count || 0;
-                            badge.textContent = count;
-                            badge.style.display = count > 0 ? 'inline-block' : 'none';
-                        })
-                        .catch(() => {});
-                }
-                document.addEventListener('DOMContentLoaded', updateVerCount);
-                setInterval(updateVerCount, 90000);
-            </script>
-            <script>
-                function updateLerCount() {
-                    if (document.hidden) return;
-                    const badge = document.getElementById('ler-count-badge');
-                    if (!badge) return;
-                    fetch('/api/license-edit-requests/count-pending')
-                        .then(r => r.json())
-                        .then(data => {
-                            const count = data.pending_count || 0;
-                            badge.textContent = count;
-                            badge.style.display = count > 0 ? 'inline-block' : 'none';
-                        })
-                        .catch(() => {});
-                }
-                document.addEventListener('DOMContentLoaded', updateLerCount);
-                setInterval(updateLerCount, 90000);
-            </script>
-            <script>
-                function updateDossierSigCount() {
-                    if (document.hidden) return;
-                    const badge = document.getElementById('dossier-sig-count-badge');
-                    if (!badge) return;
-                    fetch('/api/dossiers-permis/count-pending-signature')
-                        .then(r => r.json())
-                        .then(data => {
-                            const count = data.pending_count || 0;
-                            badge.textContent = count;
-                            badge.style.display = count > 0 ? 'inline-block' : 'none';
-                        })
-                        .catch(() => {});
-                }
-                document.addEventListener('DOMContentLoaded', updateDossierSigCount);
-                setInterval(updateDossierSigCount, 90000);
-            </script>
-            <script>
-                function updateVtCount() {
-                    if (document.hidden) return;
-                    const badge = document.getElementById('vt-count-badge');
-                    if (!badge) return;
-                    fetch('/api/technical-inspections/count-pending')
-                        .then(r => r.json())
-                        .then(data => {
-                            const count = data.pending_count || 0;
-                            badge.textContent = count;
-                            badge.style.display = count > 0 ? 'inline-block' : 'none';
-                        })
-                        .catch(() => {});
-                }
-                document.addEventListener('DOMContentLoaded', updateVtCount);
-                setInterval(updateVtCount, 90000);
+                document.addEventListener('DOMContentLoaded', updateSidebarBadges);
+                setInterval(updateSidebarBadges, 90000);
             </script>
             {% else %}
             <a class="nav-link text-white mt-3" href="/auth/login"><i class="fas fa-sign-in-alt me-2"></i> Se connecter</a>
