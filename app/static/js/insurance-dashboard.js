@@ -209,13 +209,18 @@ function renderVehiclesTable(list) {
             ? `<button class="btn btn-sm btn-outline-secondary" type="button" onclick="openEditDatesModal(${vehicle.id})" title="Amende non payée — permis modifiables">
                     <i class="fas fa-lock"></i>
                 </button>`
-            : (isInactive
-                ? `<button class="btn btn-sm btn-outline-warning" onclick="openEditDatesModal(${vehicle.id})" title="Véhicule inactif - attention">
+            : (!vehicle.has_valid_technical_inspection
+                ? `<button class="btn btn-sm btn-outline-warning" onclick="openEditDatesModal(${vehicle.id})" title="Visite technique non valide">
                         <i class="fas fa-exclamation-triangle"></i>
                     </button>`
-                : `<button class="btn btn-sm btn-outline-primary" onclick="openEditDatesModal(${vehicle.id})" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                    </button>`
+                : (isInactive
+                    ? `<button class="btn btn-sm btn-outline-warning" onclick="openEditDatesModal(${vehicle.id})" title="Véhicule inactif - attention">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </button>`
+                    : `<button class="btn btn-sm btn-outline-primary" onclick="openEditDatesModal(${vehicle.id})" title="Modifier">
+                            <i class="fas fa-edit"></i>
+                        </button>`
+                  )
               );
 
         const drivers = Array.isArray(vehicle.driver_license_numbers) ? vehicle.driver_license_numbers : [];
@@ -373,6 +378,8 @@ function openEditDatesModal(vehicleId) {
 
     if (vehicle.has_unpaid_fines) {
         blockReason = vehicle.block_reason || 'Ce véhicule a une amende non payée. La date d\'assurance ne peut pas être modifiée.';
+    } else if (!vehicle.has_valid_technical_inspection) {
+        blockReason = vehicle.block_reason || 'La visite technique de ce véhicule n\'est pas valide. La date d\'assurance ne peut pas être modifiée.';
     } else if (vehicle.status === 'inactive') {
         blockReason = 'Le véhicule est inactif.';
     } else if (qrExpiry && qrExpiry < now) {

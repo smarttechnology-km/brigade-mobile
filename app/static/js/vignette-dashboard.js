@@ -302,12 +302,11 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
 
         // Get vignette price from API response
         const vignettePrice = vehicle.vignette_price || 0;
-        const qrActivationPrice = vehicle.qr_activation_price || 0;
         const displayExpiry = vehicle.vignette_expiry || vehicle.vignette_requested_expiry || null;
 
-        // Calculate total (includes QR activation for vehicles never activated)
-        const totalAmount = vignettePrice + penaltyAmount + finesAmount + qrActivationPrice;
-        
+        // QR activation is no longer part of the vignette payment — it's handled separately via SmartTech.
+        const totalAmount = vignettePrice + penaltyAmount + finesAmount;
+
         return `
             <tr>
                 <td class="fw-semibold">${vehicle.license_plate || '-'}</td>
@@ -317,7 +316,6 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
                 <td class="text-center">${vignettePrice > 0 ? vignettePrice.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td class="text-center ${penaltyAmount > 0 ? 'text-danger' : ''}">${penaltyAmount > 0 ? penaltyAmount.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td class="text-center ${finesAmount > 0 ? 'text-danger' : ''}">${finesAmount > 0 ? finesAmount.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
-                <td class="text-center ${qrActivationPrice > 0 ? 'text-info fw-semibold' : 'text-muted'}">${qrActivationPrice > 0 ? qrActivationPrice.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td class="fw-semibold text-center ${totalAmount > 0 ? 'text-danger' : ''}">${totalAmount > 0 ? totalAmount.toLocaleString('fr-KM') + ' KMF' : '-'}</td>
                 <td><span class="${statusBadge}">${statusText}</span></td>
                 <td>${actionButtons}</td>
@@ -580,7 +578,7 @@ function renewVignette(vehicleId) {
         alert('Impossible de renouveler la vignette: le QR code du véhicule est expiré. Activez d\'abord le QR code.');
         return;
     }
-    
+
     const vignetteExpiry = vehicle.vignette_expiry ? new Date(vehicle.vignette_expiry) : null;
     if (!vignetteExpiry) {
         alert('Impossible de Renew: aucune date d\'expiration définie');

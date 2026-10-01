@@ -238,11 +238,11 @@ function openAddVignetteModal(vehicleId) {
     const nextYear = nowDate.getFullYear() + 1;
     const defaultExpiryValue = `${nextYear}-03-31`;
     
-    // Get pricing information
+    // Get pricing information (QR activation is handled separately via SmartTech,
+    // no longer bundled into the vignette payment)
     const vignettePrice = vehicle.vignette_price || 0;
     const finesAmount = vehicle.unpaid_fines_amount || 0;
-    const qrActivationPrice = vehicle.qr_activation_price || 0;
-    const totalAmount = vignettePrice + finesAmount + qrActivationPrice;
+    const totalAmount = vignettePrice + finesAmount;
 
     // Build fines display
     let finesDisplay = '';
@@ -267,16 +267,6 @@ function openAddVignetteModal(vehicleId) {
                         ${vignettePrice > 0 ? vignettePrice.toLocaleString('fr-KM') + ' KMF' : '0 KMF'}
                     </div>
                 </div>
-                ${qrActivationPrice > 0 ? `
-                <div class="row mb-2">
-                    <div class="col-6">
-                        <strong>Activation QR Code:</strong>
-                    </div>
-                    <div class="col-6 text-end">
-                        ${qrActivationPrice.toLocaleString('fr-KM')} KMF
-                    </div>
-                </div>
-                ` : ''}
                 ${finesAmount > 0 ? `
                 <div class="row mb-2">
                     <div class="col-6">

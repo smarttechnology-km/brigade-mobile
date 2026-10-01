@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function () {
 function loadVignettePayments() {
     const tbody = document.getElementById('mm-vignette-tbody');
     if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Chargement...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Chargement...</td></tr>';
     }
 
     fetch('/api/vehicles/vignette-vehicles', { credentials: 'same-origin' })
@@ -82,7 +82,7 @@ function loadVignettePayments() {
         })
         .catch(function () {
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Erreur lors du chargement des vignettes expirées.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger py-4">Erreur lors du chargement des vignettes expirées.</td></tr>';
             }
             updateCount(0);
         });
@@ -126,8 +126,7 @@ function renderVignetteVehicles(items) {
         const vignettePrice = Number(vehicle.vignette_price || 0);
         const penaltyAmount = Number(vehicle.penalty_amount || 0);
         const finesAmount = Number(vehicle.unpaid_fines_amount || 0);
-        const qrActivationPrice = Number(vehicle.qr_activation_price || 0);
-        const totalAmount = vignettePrice + penaltyAmount + finesAmount + qrActivationPrice;
+        const totalAmount = vignettePrice + penaltyAmount + finesAmount;
 
         let expiryDate = vehicle.vignette_expiry || '-';
         if (vehicle.vignette_expiry) {
@@ -164,7 +163,6 @@ function renderVignetteVehicles(items) {
             '<td>' + Math.round(vignettePrice) + ' KMF</td>' +
             '<td>' + Math.round(penaltyAmount) + ' KMF</td>' +
             '<td>' + Math.round(finesAmount) + ' KMF</td>' +
-            '<td>' + (qrActivationPrice > 0 ? '<span style="color:#0dcaf0;font-weight:600;">' + Math.round(qrActivationPrice) + ' KMF</span>' : '<span class="text-muted">-</span>') + '</td>' +
             '<td><strong>' + Math.round(totalAmount) + ' KMF</strong></td>' +
             '<td>' + statusBadge + '</td>' +
             '<td>' + actionButton + '</td>' +
@@ -188,16 +186,11 @@ function openVignettePaymentModal(vehicleId) {
     const vignettePrice = Number(vehicle.vignette_price || 0);
     const penaltyAmount = Number(vehicle.penalty_amount || 0);
     const finesAmount = Number(vehicle.unpaid_fines_amount || 0);
-    const qrActivationPrice = Number(vehicle.qr_activation_price || 0);
-    const totalAmount = vignettePrice + penaltyAmount + finesAmount + qrActivationPrice;
+    const totalAmount = vignettePrice + penaltyAmount + finesAmount;
 
     const text = document.getElementById('mm-vignette-pay-text');
     if (text) {
-        let breakdown = 'Approuver le paiement de ' + (vehicle.license_plate || '') + ' : ' + Math.round(totalAmount) + ' KMF';
-        if (qrActivationPrice > 0) {
-            breakdown += ' (dont Activation QR : ' + Math.round(qrActivationPrice) + ' KMF)';
-        }
-        text.textContent = breakdown + ' ?';
+        text.textContent = 'Approuver le paiement de ' + (vehicle.license_plate || '') + ' : ' + Math.round(totalAmount) + ' KMF ?';
     }
 
     const modal = new bootstrap.Modal(document.getElementById('mmVignettePayModal'));
