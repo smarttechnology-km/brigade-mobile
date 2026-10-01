@@ -158,6 +158,40 @@
 
 </div>
 
+{% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_technique' %}
+<!-- Modal: modifier une demande en attente -->
+<div class="modal fade" id="lp-edit-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Modifier la demande</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="lp-edit-id">
+        <div class="mb-3">
+          <label class="form-label small text-muted">N° de licence (LP)</label>
+          <input type="text" id="lp-edit-number" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Date de fin de validité</label>
+          <input type="date" id="lp-edit-validity-date" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Zone d'activité</label>
+          <input type="text" id="lp-edit-zone" class="form-control">
+        </div>
+        <span id="lp-edit-error" class="text-danger small"></span>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="lpSaveEdit()"><i class="fas fa-save me-2"></i>Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <script>
 var IS_DT = {{ 'true' if (current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_technique') else 'false' }};
 var IS_DG = {{ 'true' if (current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general') else 'false' }};
@@ -257,9 +291,15 @@ function renderPending(items) {
         return;
     }
     tbody.innerHTML = items.map(function (d) {
-        var actionBtn = IS_DG
-            ? `<button class="btn btn-sm btn-success" onclick="lpValidate(${d.id})"><i class="fas fa-check me-1"></i>Valider</button>`
-            : '<span class="text-muted small">En attente du DG</span>';
+        var actions = [];
+        if (IS_DG) {
+            actions.push(`<button class="btn btn-sm btn-success" onclick="lpValidate(${d.id})"><i class="fas fa-check me-1"></i>Valider</button>`);
+        }
+        if (IS_DT) {
+            actions.push(`<button class="btn btn-sm btn-outline-secondary" onclick='lpEditRequest(${JSON.stringify(d).replace(/'/g, "&apos;")})'><i class="fas fa-edit"></i></button>`);
+            actions.push(`<button class="btn btn-sm btn-outline-danger" onclick="lpDeleteRequest(${d.id})"><i class="fas fa-trash"></i></button>`);
+        }
+        var actionBtn = actions.length ? actions.join(' ') : '<span class="text-muted small">En attente du DG</span>';
         return `<tr>
             <td class="ps-4 fw-bold font-monospace text-primary">${d.lp_number}</td>
             <td>${d.holder_firstname || ''} ${d.holder_name || ''}</td>
@@ -298,6 +338,49 @@ function lpValidate(id) {
     fetch('/api/licence-pro/' + id + '/validate', { method: 'POST', credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function () { loadLpLists(); });
+}
+
+function lpEditRequest(d) {
+    document.getElementById('lp-edit-id').value = d.id;
+    document.getElementById('lp-edit-number').value = d.lp_number;
+    document.getElementById('lp-edit-validity-date').value = d.validity_date_iso || '';
+    document.getElementById('lp-edit-zone').value = d.zone_activite;
+    document.getElementById('lp-edit-error').textContent = '';
+    var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('lp-edit-modal'));
+    modal.show();
+}
+
+function lpSaveEdit() {
+    var id = document.getElementById('lp-edit-id').value;
+    var errEl = document.getElementById('lp-edit-error');
+    errEl.textContent = '';
+    var payload = {
+        lp_number: document.getElementById('lp-edit-number').value.trim(),
+        validity_date: document.getElementById('lp-edit-validity-date').value,
+        zone_activite: document.getElementById('lp-edit-zone').value.trim(),
+    };
+    fetch('/api/licence-pro/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+    })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+        if (!res.ok) { errEl.textContent = res.data.error || 'Erreur'; return; }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('lp-edit-modal')).hide();
+        loadLpLists();
+    });
+}
+
+function lpDeleteRequest(id) {
+    if (!confirm('Supprimer définitivement cette demande de licence professionnelle ?')) return;
+    fetch('/api/licence-pro/' + id, { method: 'DELETE', credentials: 'same-origin' })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+            if (!res.ok) { alert(res.data.error || 'Erreur'); return; }
+            loadLpLists();
+        });
 }
 </script>
 
