@@ -1874,6 +1874,7 @@ class LicenceProRequest(db.Model):
             'lp_number':       self.lp_number,
             'zone_activite':   self.zone_activite,
             'validity_date':   self.validity_date.strftime('%d/%m/%Y') if self.validity_date else '',
+            'validity_date_iso': self.validity_date.isoformat() if self.validity_date else '',
             'status':          self.status,
             'requested_by':    self.requested_by,
             'requested_at':    self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else '',

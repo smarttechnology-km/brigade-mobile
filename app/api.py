@@ -5586,6 +5586,65 @@ def create_licence_pro():
     return jsonify(req.to_dict()), 201
 
 
+@api_bp.route('/licence-pro/<int:req_id>', methods=['PUT'])
+@login_required
+def update_licence_pro(req_id):
+    """Directeur Technique edits a licence pro request that is still pending DG validation."""
+    if not _is_licence_pro_dt():
+        return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
+
+    from app.models import LicenceProRequest
+    req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': 'Seules les demandes en attente peuvent être modifiées.'}), 409
+
+    data = request.get_json() or {}
+    lp_number = (data.get('lp_number') or '').strip()
+    zone_activite = (data.get('zone_activite') or '').strip()
+    validity_date_str = data.get('validity_date')
+
+    if not lp_number:
+        return jsonify({'error': 'Le numéro de licence (N° LP) est requis.'}), 400
+    if not zone_activite:
+        return jsonify({'error': "La zone d'activité est requise."}), 400
+    if not validity_date_str:
+        return jsonify({'error': 'La date de fin de validité est requise.'}), 400
+
+    existing = LicenceProRequest.query.filter(
+        LicenceProRequest.lp_number == lp_number, LicenceProRequest.id != req_id
+    ).first()
+    if existing:
+        return jsonify({'error': f"Le numéro '{lp_number}' est déjà utilisé."}), 400
+
+    try:
+        validity_date = datetime.strptime(validity_date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Date de fin de validité invalide.'}), 400
+
+    req.lp_number = lp_number
+    req.zone_activite = zone_activite
+    req.validity_date = validity_date
+    db.session.commit()
+    return jsonify(req.to_dict())
+
+
+@api_bp.route('/licence-pro/<int:req_id>', methods=['DELETE'])
+@login_required
+def delete_licence_pro(req_id):
+    """Directeur Technique deletes a licence pro request that is still pending DG validation."""
+    if not _is_licence_pro_dt():
+        return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
+
+    from app.models import LicenceProRequest
+    req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': 'Seules les demandes en attente peuvent être supprimées.'}), 409
+
+    db.session.delete(req)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
 @api_bp.route('/licence-pro/<int:req_id>/validate', methods=['POST'])
 @login_required
 def validate_licence_pro(req_id):
