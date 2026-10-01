@@ -41,7 +41,7 @@
     .card-header {
       background:
         radial-gradient(ellipse 420px 120px at 12% -30%, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 60%),
-        linear-gradient(90deg, #0a1638 0%, #14306e 45%, #1d4ed8 100%);
+        linear-gradient(90deg, #0d1526 0%, #17294d 45%, #22396b 100%);
       height: 64px; padding: 0 20px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
@@ -82,16 +82,14 @@
       width: 148px; flex-shrink: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       padding: 12px 10px; gap: 9px;
-      background:
-        radial-gradient(ellipse 140px 90px at 50% 0%, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 70%),
-        linear-gradient(170deg, #1d4ed8 0%, #0a1638 100%);
+      background: linear-gradient(170deg, #22396b 0%, #0d1526 100%);
       position: relative;
     }
     .photo-col::after {
       content: '';
-      position: absolute; top: 0; right: 0; bottom: 0; width: 3px;
+      position: absolute; top: 0; right: 0; bottom: 0; width: 5px;
       background: linear-gradient(180deg, #fbbf24, #f5e50b 50%, #fbbf24);
-      opacity: .7;
+      opacity: 1;
     }
     .photo-col-num {
       width: 100%; box-sizing: border-box;
@@ -133,13 +131,11 @@
       flex: 1; display: flex; flex-direction: column;
       padding: 11px 16px 8px; gap: 7px;
       position: relative;
-      background:
-        repeating-linear-gradient(135deg, rgba(13,30,80,.025) 0px, rgba(13,30,80,.025) 1px, transparent 1px, transparent 9px),
-        linear-gradient(180deg, #fbfcff 0%, #f3f6fb 100%);
+      background: #f7f2e7;
     }
     .info-col::before {
       content: '';
-      position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+      position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
       background: linear-gradient(180deg, #fcd116 0%, #fcd116 25%, #fff 25%, #fff 50%, #be0027 50%, #be0027 75%, #3a75c4 75%, #3a75c4 100%);
     }
     .info-col-watermark {
@@ -148,23 +144,27 @@
       transform: translate(-50%, -50%);
       width: 220px; height: 220px;
       object-fit: contain;
-      opacity: 0.08;
+      opacity: 0.35;
       pointer-events: none;
     }
     .info-divider { height: 1px; background: transparent; margin: 1px 0; }
 
-    .identity-col { display: flex; flex-direction: column; flex: 1; justify-content: space-between; }
+    .identity-col { display: flex; flex-direction: column; flex: 1; justify-content: flex-start; gap: 18px; }
     .id-row {
       display: flex; align-items: baseline; gap: 8px;
       padding: 1px 0;
-      border-bottom: 1px dotted rgba(15,23,42,.1);
     }
-    .id-row:last-child { border-bottom: none; }
-    .id-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #7c8aa3; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
-    .id-val { font-size: 12px; font-weight: 700; color: #0f172a; line-height: 1.25; text-transform: uppercase; }
+    .id-lbl { font-size: 11px; letter-spacing: .06em; color: #6b5a45; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
+    .id-val { font-size: 13px; font-weight: 700; color: #000; line-height: 1.25; text-transform: uppercase; }
     .id-pair-right { display: flex; align-items: baseline; gap: 8px; margin-left: 26px; flex-shrink: 0; }
     .id-pair-right .id-lbl { width: 52px; }
-    .id-val.holder-name { font-weight: 800; text-transform: uppercase; color: #0a1638; letter-spacing: .02em; }
+    .id-val.holder-name { font-weight: 800; text-transform: uppercase; color: #000; letter-spacing: .02em; }
+    /* Adresse can be long — keep its label/value at the original smaller size
+       so it doesn't wrap or overflow the row. */
+    .id-row-address .id-lbl { font-size: 10px; }
+    .id-row-address .id-val { font-size: 12px; }
+    .id-lbl.sm { font-size: 10px; }
+    .id-val.sm { font-size: 12px; }
 
     .fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px 12px; }
     .field-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; font-weight: 700; }
@@ -183,8 +183,8 @@
 
     /* Footer */
     .card-footer {
-      background: linear-gradient(180deg, #eff5ff 0%, #e3edfb 100%);
-      border-top: 1px solid #c7d8f5;
+      background: linear-gradient(90deg, #0d1526 0%, #17294d 45%, #22396b 100%);
+      border-top: 1px solid #22396b;
       padding: 4px 16px 4px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
@@ -197,8 +197,8 @@
       background: linear-gradient(90deg, transparent, #fbbf24 30%, #fbbf24 70%, transparent);
     }
     .footer-left { display: flex; flex-direction: column; gap: 1px; }
-    .footer-main { font-size: 10px; font-weight: 800; color: #14306e; letter-spacing: .01em; }
-    .footer-sub  { font-size: 8.5px; color: #8896ab; }
+    .footer-main { font-size: 10px; font-weight: 800; color: #fbbf24; letter-spacing: .01em; }
+    .footer-sub  { font-size: 8.5px; color: #dbe4f5; font-weight: 700; }
 
     /* Signature */
     .footer-signature { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; padding: 0 12px; width: 116px; }
@@ -213,8 +213,13 @@
     }
 
     /* QR */
-    .qr-wrap { margin-top: -58px; }
-    .qr-wrap img { width: 80px; height: 80px; display: block; border-radius: 3px; mix-blend-mode: multiply; }
+    .qr-wrap {
+      margin-top: -58px;
+      background: linear-gradient(to bottom, transparent 0%, transparent 52%, #fff 52%, #fff 100%);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .qr-wrap img { width: 92px; height: 92px; display: block; mix-blend-mode: multiply; }
 
     /* ── Back of card ── */
     .card-separator {
@@ -241,7 +246,7 @@
     .back-header {
       background:
         radial-gradient(ellipse 420px 100px at 12% -30%, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 60%),
-        linear-gradient(90deg, #0a1638 0%, #14306e 50%, #1d4ed8 100%);
+        linear-gradient(90deg, #0d1526 0%, #17294d 50%, #22396b 100%);
       padding: 9px 18px;
       display: flex; justify-content: space-between; align-items: center;
       flex-shrink: 0;
@@ -254,20 +259,20 @@
     }
     .back-header-left { display: flex; flex-direction: column; gap: 1px; }
     .back-header-title { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
-    .back-header-sub   { font-size: 11px; color: #fbbf24; }
+    .back-header-sub   { font-size: 11px; font-weight: 700; color: #fbbf24; }
     .back-header-right { text-align: right; }
     .back-header-num   { font-family: 'Courier New', monospace; font-size: 20px; font-weight: 700; color: #fbbf24; letter-spacing: .1em; }
     .back-header-holder{ font-size: 11px; color: rgba(255,255,255,.58); margin-top: 1px; }
 
     /* Holder's categories highlight strip */
     .holder-cats-strip {
-      background: linear-gradient(180deg, #eff5ff 0%, #e3edfb 100%);
-      border-bottom: 1px solid #c7d8f5;
+      background: linear-gradient(180deg, #b8cef2 0%, #96b8e8 100%);
+      border-bottom: 1px solid #7fa3d9;
       padding: 7px 18px;
       display: flex; align-items: center; gap: 10px;
       flex-shrink: 0;
     }
-    .holder-cats-lbl { font-size: 9px; font-weight: 700; color: #14306e; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
+    .holder-cats-lbl { font-size: 11px; font-weight: 700; color: #14306e; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
     .holder-cats-list { display: flex; flex-wrap: wrap; gap: 5px; }
     .holder-cat-pill {
       background: #14306e;
@@ -283,7 +288,7 @@
       overflow: hidden;
       background-color: #fff;
       background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46'%3E%3Cpath d='M-5 23 Q6.5 5 18 23 T41 23' stroke='%2314306e' stroke-opacity='0.07' fill='none' stroke-width='1'/%3E%3Cpath d='M-5 11.5 Q6.5 -6.5 18 11.5 T41 11.5' stroke='%2314306e' stroke-opacity='0.05' fill='none' stroke-width='1'/%3E%3Cpath d='M-5 34.5 Q6.5 16.5 18 34.5 T41 34.5' stroke='%2314306e' stroke-opacity='0.05' fill='none' stroke-width='1'/%3E%3C/svg%3E");
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46'%3E%3Cpath d='M-5 23 Q6.5 5 18 23 T41 23' stroke='%2314306e' stroke-opacity='0.24' fill='none' stroke-width='1'/%3E%3Cpath d='M-5 11.5 Q6.5 -6.5 18 11.5 T41 11.5' stroke='%2314306e' stroke-opacity='0.18' fill='none' stroke-width='1'/%3E%3Cpath d='M-5 34.5 Q6.5 16.5 18 34.5 T41 34.5' stroke='%2314306e' stroke-opacity='0.18' fill='none' stroke-width='1'/%3E%3C/svg%3E");
       background-repeat: repeat;
     }
     .back-body-grid { display: flex; gap: 12px; height: 100%; }
@@ -294,20 +299,20 @@
     .cat-desc-code { font-size: 7px; font-weight: 800; color: #14306e; flex-shrink: 0; width: 14px; padding-top: 1px; }
     .cat-desc-text { font-size: 6.5px; color: #475569; line-height: 1.3; }
     .back-sig-block { display: flex; flex-direction: column; align-items: center; width: 100%; padding: 6px 0 8px; border-bottom: 1px dotted #dbe3ef; }
-    .back-sig-title { font-size: 10px; color: #0f172a; text-transform: uppercase; letter-spacing: .02em; text-align: center; line-height: 1.4; margin-bottom: 2px; }
-    .back-sig-mark { width: 120px; height: 30px; object-fit: contain; margin: 2px 0; }
-    .back-sig-name { font-size: 11px; font-weight: 800; color: #14306e; white-space: nowrap; text-align: center; border-top: 1px solid #b9c2d4; padding-top: 3px; width: 100%; }
+    .back-sig-title { font-size: 10px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: .02em; text-align: center; line-height: 1.4; margin-bottom: 2px; }
+    .back-sig-mark { width: 195px; height: 58px; object-fit: contain; margin: 2px 0; }
+    .back-sig-name { font-size: 13px; font-weight: 800; color: #14306e; white-space: nowrap; text-align: center; border-top: 1px solid #b9c2d4; padding-top: 3px; width: 100%; }
     .back-dates-block { display: flex; flex-direction: row; gap: 10px; width: 100%; padding-top: 10px; justify-content: center; }
     .back-date-item { display: flex; flex-direction: column; gap: 1px; flex: 1; align-items: center; text-align: center; }
-    .back-date-lbl { font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; }
-    .back-date-val { font-size: 10px; font-weight: 800; color: #0f172a; }
+    .back-date-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #000; }
+    .back-date-val { font-size: 12px; font-weight: 800; color: #0f172a; }
     .back-date-val.exp-ok  { color: #15803d; }
     .back-date-val.exp-bad { color: #dc2626; }
     .cat-table { flex: 1; min-width: 0; border-collapse: collapse; table-layout: fixed; }
     .cat-table thead th {
-      font-size: 8px; text-transform: uppercase; letter-spacing: .05em;
-      color: #7c8aa3; font-weight: 700; text-align: left;
-      padding: 0 8px 3px 0; border-bottom: 1.5px solid #c7d2e0;
+      font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+      color: #000; font-weight: 700; text-align: left;
+      padding: 0 8px 3px 0;
     }
     .cat-table thead th.cat-th-date { text-align: center; }
     .cat-table tbody td {
@@ -328,30 +333,28 @@
     .cat-icon-table { font-size: 12px; color: #14306e; margin-left: 4px; }
     .cat-tr-other .cat-icon-table { color: #cbd5e1; }
     .cat-cell-id { font-weight: 700; text-align: center; }
-    .cat-cell-date { color: #64748b; text-align: center; }
+    .cat-table tbody td.cat-cell-date { color: #000; text-align: center; font-size: 13px; }
     .cat-cell-empty { font-style: italic; color: #aab3c0; }
 
     /* Back footer */
     .back-footer {
-      background: linear-gradient(180deg, #eff5ff 0%, #e3edfb 100%); border-top: 1px solid #c7d8f5;
+      background: linear-gradient(90deg, #0d1526 0%, #17294d 45%, #22396b 100%); border-top: 1px solid #22396b;
       padding: 6px 18px;
       display: flex; justify-content: space-between; align-items: center;
       flex-shrink: 0;
     }
-    .back-footer-note { font-size: 8.5px; color: #94a3b8; }
-    .back-footer-warn { font-size: 8.5px; color: #b91c1c; font-weight: 600; }
+    .back-footer-note { font-size: 8.5px; color: #dbe4f5; font-weight: 700; position: relative; top: -4px; }
+    .back-footer-warn { font-size: 8.5px; color: #ff8a80; font-weight: 600; position: relative; top: -4px; }
 
     /* ── Variante "Professionnelle" (recto + verso) — thème bordeaux / or ── */
     .card-pro .card-header,
     .card-pro .back-header {
       background:
         radial-gradient(ellipse 420px 120px at 12% -30%, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 60%),
-        linear-gradient(90deg, #2b0a12 0%, #6b1029 45%, #9c1f3f 100%);
+        linear-gradient(90deg, #200a0e 0%, #451220 45%, #5c1a2c 100%);
     }
     .card-pro .photo-col {
-      background:
-        radial-gradient(ellipse 140px 90px at 50% 0%, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 70%),
-        linear-gradient(170deg, #7a1530 0%, #3d0a18 100%);
+      background: linear-gradient(170deg, #5c1a2c 0%, #200a0e 100%);
     }
     .card-pro .cat,
     .card-pro .holder-cat-pill,
@@ -361,24 +364,22 @@
     .card-pro .cat-badge-owned { border-color: #6b1029; }
     .card-pro .cat-icon-table { color: #7a1530; }
     .card-pro .holder-cats-strip {
-      background: linear-gradient(180deg, #fdf2f4 0%, #fbe4e8 100%);
-      border-bottom-color: #f3c7d1;
+      background: linear-gradient(180deg, #f0c4bf 0%, #e8a8a1 100%);
+      border-bottom-color: #d68078;
     }
     .card-pro .holder-cats-lbl { color: #7a1530; }
+    .card-pro .back-footer-warn { color: #ff9e9e; }
     .card-pro .card-footer,
     .card-pro .back-footer {
-      background: linear-gradient(180deg, #fdf2f4 0%, #fbe4e8 100%);
-      border-top-color: #f3c7d1;
+      background: linear-gradient(90deg, #200a0e 0%, #451220 45%, #5c1a2c 100%);
+      border-top-color: #5c1a2c;
     }
     .card-pro .info-col {
-      background:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='70'%3E%3Cdefs%3E%3Cpath id='w1' d='M-130.0 20 Q-97.5 11.0 -65.0 20 Q-32.5 29.0 0.0 20 Q32.5 11.0 65.0 20 Q97.5 29.0 130.0 20 Q162.5 11.0 195.0 20 Q227.5 29.0 260.0 20 Q292.5 11.0 325.0 20 Q357.5 29.0 390.0 20 Q422.5 11.0 455.0 20 Q487.5 29.0 520.0 20'/%3E%3Cpath id='w2' d='M-65.0 50 Q-32.5 41.0 0.0 50 Q32.5 59.0 65.0 50 Q97.5 41.0 130.0 50 Q162.5 59.0 195.0 50 Q227.5 41.0 260.0 50 Q292.5 59.0 325.0 50 Q357.5 41.0 390.0 50 Q422.5 59.0 455.0 50 Q487.5 41.0 520.0 50 Q552.5 59.0 585.0 50'/%3E%3C/defs%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w1'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w2'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3C/svg%3E"),
-        linear-gradient(180deg, #fbfcff 0%, #f3f6fb 100%);
-      background-repeat: repeat, no-repeat;
+      background: #f7f2e7;
     }
     .card-pro .back-body {
       background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='70'%3E%3Cdefs%3E%3Cpath id='w1' d='M-130.0 20 Q-97.5 11.0 -65.0 20 Q-32.5 29.0 0.0 20 Q32.5 11.0 65.0 20 Q97.5 29.0 130.0 20 Q162.5 11.0 195.0 20 Q227.5 29.0 260.0 20 Q292.5 11.0 325.0 20 Q357.5 29.0 390.0 20 Q422.5 11.0 455.0 20 Q487.5 29.0 520.0 20'/%3E%3Cpath id='w2' d='M-65.0 50 Q-32.5 41.0 0.0 50 Q32.5 59.0 65.0 50 Q97.5 41.0 130.0 50 Q162.5 59.0 195.0 50 Q227.5 41.0 260.0 50 Q292.5 59.0 325.0 50 Q357.5 41.0 390.0 50 Q422.5 59.0 455.0 50 Q487.5 41.0 520.0 50 Q552.5 59.0 585.0 50'/%3E%3C/defs%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w1'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w2'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3C/svg%3E");
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='70'%3E%3Cdefs%3E%3Cpath id='w1' d='M-130.0 20 Q-97.5 11.0 -65.0 20 Q-32.5 29.0 0.0 20 Q32.5 11.0 65.0 20 Q97.5 29.0 130.0 20 Q162.5 11.0 195.0 20 Q227.5 29.0 260.0 20 Q292.5 11.0 325.0 20 Q357.5 29.0 390.0 20 Q422.5 11.0 455.0 20 Q487.5 29.0 520.0 20'/%3E%3Cpath id='w2' d='M-65.0 50 Q-32.5 41.0 0.0 50 Q32.5 59.0 65.0 50 Q97.5 41.0 130.0 50 Q162.5 59.0 195.0 50 Q227.5 41.0 260.0 50 Q292.5 59.0 325.0 50 Q357.5 41.0 390.0 50 Q422.5 59.0 455.0 50 Q487.5 41.0 520.0 50 Q552.5 59.0 585.0 50'/%3E%3C/defs%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.28' letter-spacing='1'%3E%3CtextPath href='%23w1'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%237a1530' fill-opacity='0.28' letter-spacing='1'%3E%3CtextPath href='%23w2'%3EPROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  PROFESSIONNEL  %3C/textPath%3E%3C/text%3E%3C/svg%3E");
     }
     .card-pro .back-header-num { color: #fbbf24; }
     .cat-pro-value { color: #7a1530 !important; }
@@ -483,7 +484,7 @@
           <span class="id-val">{{ lic.holder_name }}</span>
         </div>
         <div class="id-row">
-          <span class="id-lbl">Date Naissance</span>
+          <span class="id-lbl">Né(e) le</span>
           <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span>
           <div class="id-pair-right">
             <span class="id-lbl">Sang</span>
@@ -491,14 +492,14 @@
           </div>
         </div>
         <div class="id-row">
-          <span class="id-lbl">Lieu de naissance</span>
-          <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.lieu_naissance or '—' }}</span>
+          <span class="id-lbl sm">Lieu de naissance</span>
+          <span class="id-val sm" style="width:115px; flex-shrink:0;">{{ lic.lieu_naissance or '—' }}</span>
           <div class="id-pair-right">
             <span class="id-lbl">Sexe</span>
             <span class="id-val">{{ 'M' if lic.sexe == 'masculin' else ('F' if lic.sexe == 'feminin' else '—') }}</span>
           </div>
         </div>
-        <div class="id-row">
+        <div class="id-row id-row-address">
           <span class="id-lbl">Adresse</span>
           <span class="id-val">{{ lic.holder_address or '—' }}</span>
         </div>
@@ -572,7 +573,7 @@
     <div class="back-body-grid">
       <div class="cat-legend">
         <div class="back-sig-block">
-          <div class="back-sig-title">Signature et sceau de l'autorité<br>LE DIRECTEUR GENERAL DES ROUTES ET DES TRANSPORT ROUTIERS</div>
+          <div class="back-sig-title">Signature<br>LE DIRECTEUR GENERAL</div>
           {% if settings.directeur_signature_filename %}
             <img class="back-sig-mark" src="{{ signature_b64 or settings.directeur_signature_url }}" alt="Signature">
           {% else %}
@@ -653,11 +654,42 @@ function downloadImages() {
   var front = document.querySelector('.card');
   var back  = document.querySelector('.card-back');
 
+  // Evolis/ID-ALL card printers expect a PNG of exactly 1016x638px — the
+  // native CR-80 card resolution at 300 DPI. Exporting at exactly this
+  // size (rather than a higher one) avoids ID-ALL having to downscale the
+  // image itself before printing, which was producing ghosting/blur on
+  // fine text. Capturing the DOM at scale:5 gives ~2800x1697px in a
+  // slightly different ratio (this card's CSS is 560x340px, i.e. 1.647
+  // vs the required 1.593), which also gets cropped at print time —
+  // resizing onto a fixed-size canvas fixes both issues at once.
+  var CARD_EXPORT_WIDTH = 1016;
+  var CARD_EXPORT_HEIGHT = 638;
+
   function capture(el, bg) {
     return domtoimage.toPng(el, {
       scale: 5,
       bgcolor: bg || null,
       style: { margin: '0' },
+    }).then(function (dataUrl) {
+      return new Promise(function (resolve, reject) {
+        var img = new Image();
+        img.onload = function () {
+          var canvas = document.createElement('canvas');
+          canvas.width = CARD_EXPORT_WIDTH;
+          canvas.height = CARD_EXPORT_HEIGHT;
+          var ctx = canvas.getContext('2d');
+          // The captured element includes some transparent margin (from its
+          // box-shadow's bounding area) — fill it opaque first so no
+          // transparency survives into the final PNG (some viewers render
+          // transparent pixels as black instead of white).
+          ctx.fillStyle = bg || '#ffffff';
+          ctx.fillRect(0, 0, CARD_EXPORT_WIDTH, CARD_EXPORT_HEIGHT);
+          ctx.drawImage(img, 0, 0, CARD_EXPORT_WIDTH, CARD_EXPORT_HEIGHT);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
     });
   }
 

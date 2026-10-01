@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Development — Rapport Journalier QR</title>
+    <title>Smart Development — Rapport Journalier Visite Technique</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -35,7 +35,7 @@
 
         /* Main */
         .st-main{margin-left:var(--sidebar-w);padding:1.5rem 2rem;min-height:100vh;}
-        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;}
+        .st-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.6rem;flex-wrap:wrap;gap:.75rem;}
         .st-page-title{font-size:1.2rem;font-weight:700;color:#fff;}
         .st-page-sub{font-size:.78rem;color:rgba(255,255,255,0.4);margin-top:1px;}
         .st-user-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:30px;padding:.3rem .9rem;font-size:.8rem;color:rgba(255,255,255,0.7);}
@@ -81,8 +81,8 @@
         .table tbody td{border-color:rgba(255,255,255,0.04);padding:.65rem 1rem;vertical-align:middle;}
         .table tbody tr:hover td{background:rgba(0,212,255,0.07);color:#e6edf3;}
         .pill{display:inline-block;font-size:.7rem;font-weight:500;padding:.2em .65em;border-radius:20px;}
-        .pill-activation{background:rgba(0,212,255,0.13);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.28);}
-        .pill-renewal{background:rgba(188,140,255,0.13);color:var(--st-purple);border:1px solid rgba(188,140,255,0.28);}
+        .pill-12{background:rgba(0,212,255,0.13);color:var(--st-cyan);border:1px solid rgba(0,212,255,0.28);}
+        .pill-court{background:rgba(188,140,255,0.13);color:var(--st-purple);border:1px solid rgba(188,140,255,0.28);}
         .empty-state{padding:2.5rem;text-align:center;color:rgba(255,255,255,0.3);font-size:.84rem;}
         .td-muted{color:rgba(255,255,255,0.5);}
         html[data-theme="light"] .td-muted{color:rgba(0,0,0,0.45);}
@@ -107,8 +107,8 @@
         html[data-theme="light"] .st-section-title{color:#1a1a2e;}
         html[data-theme="light"] .st-stat-label{color:rgba(0,0,0,0.45);}
         html[data-theme="light"] .empty-state{color:rgba(0,0,0,0.35);}
-        html[data-theme="light"] .pill-activation{background:rgba(0,149,179,.1);color:#0095b3;border-color:rgba(0,149,179,.3);}
-        html[data-theme="light"] .pill-renewal{background:rgba(130,80,255,.1);color:#6f42c1;border-color:rgba(130,80,255,.3);}
+        html[data-theme="light"] .pill-12{background:rgba(0,149,179,.1);color:#0095b3;border-color:rgba(0,149,179,.3);}
+        html[data-theme="light"] .pill-court{background:rgba(130,80,255,.1);color:#6f42c1;border-color:rgba(130,80,255,.3);}
         html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
         html[data-theme="light"] .st-page-title{color:#1a1a2e;}
         html[data-theme="light"] .st-page-sub{color:rgba(0,0,0,0.45);}
@@ -169,13 +169,13 @@
             <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
         </a>
         {% if current_user.role in ['admin', 'employe'] %}
-        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item active">
+        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
             <span class="nav-badge" id="nav-gv-badge" style="{{ '' if gv_pending_count > 0 else 'display:none;' }}">{{ gv_pending_count }}</span>
         </a>
         {% endif %}
 {% if current_user.role in ['admin', 'employe'] %}
-        <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="st-nav-item">
+        <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="st-nav-item active">
             <span class="st-nav-icon"><i class="fas fa-clipboard-check"></i></span>Visite Technique
             <span class="nav-badge" id="nav-vt-badge" style="{{ '' if vt_pending_count > 0 else 'display:none;' }}">{{ vt_pending_count }}</span>
         </a>
@@ -249,14 +249,14 @@
     <!-- Topbar -->
     <div class="st-topbar">
         <div>
-            <div class="st-page-title"><i class="fas fa-calendar-day me-2" style="color:var(--st-cyan);"></i>Rapport Journalier QR</div>
-            <div class="st-page-sub" id="page-sub">QR codes validés — sélectionnez une date</div>
+            <div class="st-page-title"><i class="fas fa-calendar-day me-2" style="color:var(--st-cyan);"></i>Rapport Journalier Visite Technique</div>
+            <div class="st-page-sub" id="page-sub">Visites techniques validées — sélectionnez une date</div>
         </div>
         <div class="d-flex align-items-center gap-3">
             <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
             <button id="theme-toggle" class="st-theme-btn"><i class="fas fa-sun" id="theme-icon"></i></button>
-            <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="btn-back-nav">
-                <i class="fas fa-arrow-left"></i>Gestion des Véhicules
+            <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="btn-back-nav">
+                <i class="fas fa-arrow-left"></i>Visite Technique
             </a>
             <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
                 <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
@@ -289,23 +289,23 @@
     <div id="stats-row" class="row g-3 mb-4" style="display:none!important;">
         <div class="col-6 col-md-3">
             <div class="st-card">
-                <div class="st-card-icon icon-cyan"><i class="fas fa-qrcode"></i></div>
-                <div class="st-stat-label">Total QR validés</div>
+                <div class="st-card-icon icon-cyan"><i class="fas fa-clipboard-check"></i></div>
+                <div class="st-stat-label">Total validées</div>
                 <div class="st-stat-val" id="s-total">0</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="st-card">
-                <div class="st-card-icon icon-blue"><i class="fas fa-plus-circle"></i></div>
-                <div class="st-stat-label">Activations</div>
-                <div class="st-stat-val" style="color:var(--st-cyan);" id="s-act">0</div>
+                <div class="st-card-icon icon-blue"><i class="fas fa-calendar"></i></div>
+                <div class="st-stat-label">Validité 12 mois</div>
+                <div class="st-stat-val" style="color:var(--st-cyan);" id="s-12">0</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="st-card">
-                <div class="st-card-icon icon-purple"><i class="fas fa-redo"></i></div>
-                <div class="st-stat-label">Renouvellements</div>
-                <div class="st-stat-val" style="color:var(--st-purple);" id="s-ren">0</div>
+                <div class="st-card-icon icon-purple"><i class="fas fa-calendar-alt"></i></div>
+                <div class="st-stat-label">Validité 6/3 mois</div>
+                <div class="st-stat-val" style="color:var(--st-purple);" id="s-court">0</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
@@ -331,9 +331,9 @@
                         <th>Immatriculation</th>
                         <th>Propriétaire</th>
                         {% if current_user.role in ['admin', 'secretaire'] %}<th>Île</th>{% endif %}
-                        <th>Type</th>
+                        <th>Durée</th>
                         <th class="text-end">Montant (FC)</th>
-                        <th>Enregistré par</th>
+                        <th>Validé par</th>
                     </tr>
                 </thead>
                 <tbody id="main-tbody">
@@ -347,7 +347,7 @@
     <div id="empty-state" class="st-section" style="display:none;">
         <div class="empty-state">
             <i class="fas fa-calendar-times fa-2x mb-3" style="opacity:.3;"></i><br>
-            Aucun QR code validé ce jour-là.
+            Aucune visite technique validée ce jour-là.
         </div>
     </div>
 
@@ -355,8 +355,8 @@
     <div class="print-doc" id="print-doc">
         <div class="pd-header">
             <div class="pd-org">SMART DEVELOPMENT</div>
-            <div class="pd-sub">Système de Gestion des QR Codes Véhicules — SIGVA</div>
-            <div class="pd-title">RAPPORT JOURNALIER DE VALIDATION QR</div>
+            <div class="pd-sub">Système de Gestion des Visites Techniques — SIGVA</div>
+            <div class="pd-title">RAPPORT JOURNALIER DE VALIDATION VISITE TECHNIQUE</div>
         </div>
         <div class="pd-meta">
             <span><strong>Date :</strong> <span id="pd-date">—</span></span>
@@ -369,9 +369,9 @@
                     <th style="width:10%;">Heure</th>
                     <th style="width:18%;">Immatriculation</th>
                     <th style="width:28%;">Propriétaire</th>
-                    <th style="width:16%;">Type</th>
+                    <th style="width:16%;">Durée</th>
                     <th style="width:14%;text-align:right;">Montant (FC)</th>
-                    <th style="width:14%;">Enregistré par</th>
+                    <th style="width:14%;">Validé par</th>
                 </tr>
             </thead>
             <tbody id="pd-tbody"></tbody>
@@ -379,12 +379,12 @@
 
         <div class="pd-totals">
             <div class="pd-totals-row">
-                <span>Nombre d'activations</span>
-                <span id="pd-nb-act">—</span>
+                <span>Validités 12 mois</span>
+                <span id="pd-nb-12">—</span>
             </div>
             <div class="pd-totals-row">
-                <span>Nombre de renouvellements</span>
-                <span id="pd-nb-ren">—</span>
+                <span>Validités 6/3 mois</span>
+                <span id="pd-nb-court">—</span>
             </div>
             <div class="pd-totals-row grand">
                 <span>TOTAL À PERCEVOIR</span>
@@ -408,7 +408,7 @@
         </div>
 
         <div class="pd-footer-note">
-            Ce document atteste des QR codes validés par Smart Development pour la date indiquée et du montant correspondant dû.
+            Ce document atteste des visites techniques validées par Smart Development pour la date indiquée et du montant correspondant dû.
         </div>
     </div>
 
@@ -463,18 +463,18 @@ async function loadReport() {
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('btn-print').style.display = 'none';
 
-    let url = '/smart-tech/api/rapport-journalier?date=' + day;
+    let url = '/smart-tech/api/rapport-journalier-vt?date=' + day;
     if (_selectedIsland) url += '&island=' + encodeURIComponent(_selectedIsland);
     const res = await fetch(url, {credentials: 'same-origin'});
     if (!res.ok) { alert('Erreur de chargement.'); return; }
     const d = await res.json();
     _lastData = d;
 
-    document.getElementById('page-sub').textContent = 'QR codes validés le ' + d.date;
+    document.getElementById('page-sub').textContent = 'Visites techniques validées le ' + d.date;
 
     document.getElementById('s-total').textContent  = d.nb_total;
-    document.getElementById('s-act').textContent    = d.nb_activations;
-    document.getElementById('s-ren').textContent    = d.nb_renewals;
+    document.getElementById('s-12').textContent      = d.nb_12;
+    document.getElementById('s-court').textContent   = d.nb_court;
     document.getElementById('s-amount').textContent = fmtNum(d.total_amount) + ' FC';
 
     document.getElementById('stats-row').style.removeProperty('display');
@@ -488,11 +488,11 @@ async function loadReport() {
     // Main table
     document.getElementById('main-tbody').innerHTML = d.rows.map(r => `
         <tr>
-            <td class="td-muted" style="font-size:.75rem;">${r.paid_at}</td>
+            <td class="td-muted" style="font-size:.75rem;">${r.validated_at}</td>
             <td class="fw-semibold">${r.license_plate}</td>
             <td>${r.owner_name}</td>
             ${SHOW_ISLAND ? `<td class="td-muted" style="font-size:.78rem;">${r.owner_island || '—'}</td>` : ''}
-            <td><span class="pill pill-${r.payment_type}">${r.payment_type === 'activation' ? 'Activation' : 'Renouvellement'}</span></td>
+            <td><span class="pill pill-${r.duration_months === 12 ? '12' : 'court'}">${r.duration_months} mois</span></td>
             <td class="text-end fw-semibold">${fmtNum(r.amount)}</td>
             <td class="td-muted" style="font-size:.78rem;">${r.recorded_by}</td>
         </tr>`).join('');
@@ -503,16 +503,16 @@ async function loadReport() {
     // Print document
     document.getElementById('pd-date').textContent      = d.date;
     document.getElementById('pd-generated').textContent = fmtNow();
-    document.getElementById('pd-nb-act').textContent    = d.nb_activations + ' activation' + (d.nb_activations !== 1 ? 's' : '');
-    document.getElementById('pd-nb-ren').textContent    = d.nb_renewals + ' renouvellement' + (d.nb_renewals !== 1 ? 's' : '');
+    document.getElementById('pd-nb-12').textContent    = d.nb_12 + ' visite' + (d.nb_12 !== 1 ? 's' : '');
+    document.getElementById('pd-nb-court').textContent = d.nb_court + ' visite' + (d.nb_court !== 1 ? 's' : '');
     document.getElementById('pd-total').textContent     = fmtNum(d.total_amount) + ' FC';
 
     document.getElementById('pd-tbody').innerHTML = d.rows.map(r =>
         `<tr>
-            <td>${r.paid_at}</td>
+            <td>${r.validated_at}</td>
             <td>${r.license_plate}</td>
             <td>${r.owner_name}</td>
-            <td>${r.payment_type === 'activation' ? 'Activation' : 'Renouvellement'}</td>
+            <td>${r.duration_months} mois</td>
             <td style="text-align:right;">${fmtNum(r.amount)}</td>
             <td>${r.recorded_by}</td>
         </tr>`).join('');

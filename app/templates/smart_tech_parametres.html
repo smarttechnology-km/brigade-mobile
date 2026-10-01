@@ -237,11 +237,6 @@
         </a>
         {% endif %}
 {% if current_user.role in ['admin', 'employe'] %}
-        <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
-            <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
-        </a>
-        {% endif %}
-{% if current_user.role in ['admin', 'employe'] %}
         <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-clipboard-check"></i></span>Visite Technique
             <span class="nav-badge" id="nav-vt-badge" style="{{ '' if vt_pending_count > 0 else 'display:none;' }}">{{ vt_pending_count }}</span>
@@ -356,6 +351,50 @@
                 <div id="price-alert-error" class="alert-error mb-3"></div>
 
                 <button class="btn-save" onclick="savePrices()">
+                    <i class="fas fa-save me-1"></i>Enregistrer
+                </button>
+            </div>
+        </div>
+
+        <!-- ── Traitement des données numérique (Visite Technique) ── -->
+        <div class="col-12 col-lg-4 d-flex flex-column">
+            <div class="param-card flex-grow-1">
+                <div class="param-card-title">
+                    <i class="fas fa-qrcode" style="color:var(--st-cyan);"></i>Traitement des données numérique
+                </div>
+                <div class="text-muted small mb-3">Ajouté au Prix Visite Technique selon la durée de validité choisie.</div>
+
+                <div class="mb-3">
+                    <label class="form-label">1 an (12 mois)</label>
+                    <div class="input-group">
+                        <input type="number" id="vt-digital-price-12" class="form-control" min="0" step="100"
+                               value="{{ vt_digital_processing_price_12 }}" placeholder="0">
+                        <span class="input-group-text">FC</span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">6 mois</label>
+                    <div class="input-group">
+                        <input type="number" id="vt-digital-price-6" class="form-control" min="0" step="100"
+                               value="{{ vt_digital_processing_price_6 }}" placeholder="0">
+                        <span class="input-group-text">FC</span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">3 mois</label>
+                    <div class="input-group">
+                        <input type="number" id="vt-digital-price-3" class="form-control" min="0" step="100"
+                               value="{{ vt_digital_processing_price_3 }}" placeholder="0">
+                        <span class="input-group-text">FC</span>
+                    </div>
+                </div>
+
+                <div id="vt-digital-price-success" class="alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Tarifs enregistrés.</div>
+                <div id="vt-digital-price-error" class="alert-error mb-3"></div>
+
+                <button class="btn-save" onclick="saveVtDigitalPrices()">
                     <i class="fas fa-save me-1"></i>Enregistrer
                 </button>
             </div>
@@ -718,6 +757,34 @@
             document.getElementById('price-alert-success').style.display = '';
             document.getElementById('price-alert-error').style.display = 'none';
             setTimeout(function(){ document.getElementById('price-alert-success').style.display = 'none'; }, 3000);
+        });
+    };
+
+    window.saveVtDigitalPrices = function(){
+        const p12 = parseFloat(document.getElementById('vt-digital-price-12').value) || 0;
+        const p6  = parseFloat(document.getElementById('vt-digital-price-6').value)  || 0;
+        const p3  = parseFloat(document.getElementById('vt-digital-price-3').value)  || 0;
+        fetch('/smart-tech/api/parametres', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                vt_digital_processing_price_12: p12,
+                vt_digital_processing_price_6: p6,
+                vt_digital_processing_price_3: p3
+            })
+        })
+        .then(r => r.json())
+        .then(d => {
+            const ok  = document.getElementById('vt-digital-price-success');
+            const err = document.getElementById('vt-digital-price-error');
+            if (d.error) {
+                err.textContent = d.error; err.style.display = '';
+                ok.style.display = 'none';
+                return;
+            }
+            ok.style.display = '';
+            err.style.display = 'none';
+            setTimeout(function(){ ok.style.display = 'none'; }, 3000);
         });
     };
 

@@ -23,8 +23,8 @@ body {
 @media print {
   body { background: #fff; padding: 0; }
   .toolbar { display: none; }
-  .card { box-shadow: none; border-color: #000; }
-  @page { size: A5 landscape; margin: 8mm; }
+  .card { box-shadow: none; border: none !important; width: 100% !important; border-radius: 0 !important; }
+  @page { size: A4 portrait; margin: 0; }
 }
 </style>
 </head>
@@ -32,10 +32,23 @@ body {
 
 <div class="toolbar">
   <a href="javascript:history.back()" class="btn btn-back">&#8592; Retour</a>
-  <button class="btn btn-print" onclick="window.print()">&#128424; Imprimer</button>
+  <button class="btn btn-print" onclick="doPrint()">&#128424; Imprimer</button>
 </div>
 
 {% include '_visite_technique_card.html' %}
+
+<script>
+function doPrint() {
+  // Notify the backend that the attestation was printed (moves it out of
+  // SmartTech's "en attente d'impression" tab), then trigger the browser print.
+  fetch('/api/technical-inspections/{{ insp.id }}/mark-printed', {
+    method: 'POST',
+    credentials: 'same-origin',
+  }).finally(() => {
+    window.print();
+  });
+}
+</script>
 
 </body>
 </html>

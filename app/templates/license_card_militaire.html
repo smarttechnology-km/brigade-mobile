@@ -129,11 +129,7 @@
       flex: 1; display: flex; flex-direction: column;
       padding: 11px 16px 8px; gap: 7px;
       position: relative;
-      background:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='70'%3E%3Cdefs%3E%3Cpath id='w1' d='M-130.0 20 Q-97.5 11.0 -65.0 20 Q-32.5 29.0 0.0 20 Q32.5 11.0 65.0 20 Q97.5 29.0 130.0 20 Q162.5 11.0 195.0 20 Q227.5 29.0 260.0 20 Q292.5 11.0 325.0 20 Q357.5 29.0 390.0 20 Q422.5 11.0 455.0 20 Q487.5 29.0 520.0 20'/%3E%3Cpath id='w2' d='M-65.0 50 Q-32.5 41.0 0.0 50 Q32.5 59.0 65.0 50 Q97.5 41.0 130.0 50 Q162.5 59.0 195.0 50 Q227.5 41.0 260.0 50 Q292.5 59.0 325.0 50 Q357.5 41.0 390.0 50 Q422.5 59.0 455.0 50 Q487.5 41.0 520.0 50 Q552.5 59.0 585.0 50'/%3E%3C/defs%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%231a5c35' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w1'%3EETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  %3C/textPath%3E%3C/text%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%231a5c35' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w2'%3EETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  %3C/textPath%3E%3C/text%3E%3C/svg%3E"),
-        repeating-linear-gradient(135deg, rgba(20,60,20,.022) 0px, rgba(20,60,20,.022) 1px, transparent 1px, transparent 9px),
-        linear-gradient(180deg, #f8fbf8 0%, #eff6ef 100%);
-      background-repeat: repeat, repeat, no-repeat;
+      background: linear-gradient(180deg, #f8fbf8 0%, #eff6ef 100%);
     }
     .info-col::before {
       content: '';
@@ -146,19 +142,23 @@
       transform: translate(-50%, -50%);
       width: 200px; height: 200px;
       object-fit: contain;
-      opacity: 0.07;
+      opacity: 0.35;
       pointer-events: none;
     }
 
-    .identity-col { display: flex; flex-direction: column; flex: 1; justify-content: space-between; }
+    .identity-col { display: flex; flex-direction: column; flex: 1; justify-content: flex-start; gap: 18px; }
     .id-row {
       display: flex; align-items: baseline; gap: 8px;
       padding: 1px 0;
       border-bottom: 1px dotted rgba(15,40,15,.1);
     }
     .id-row:last-child { border-bottom: none; }
-    .id-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #5a7a62; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
-    .id-val { font-size: 12px; font-weight: 700; color: #0f1f0f; line-height: 1.25; text-transform: uppercase; }
+    .id-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #5a7a62; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
+    .id-val { font-size: 13px; font-weight: 700; color: #0f1f0f; line-height: 1.25; text-transform: uppercase; }
+    .id-row-address .id-lbl { font-size: 10px; }
+    .id-row-address .id-val { font-size: 12px; }
+    .id-lbl.sm { font-size: 10px; }
+    .id-val.sm { font-size: 12px; }
     .id-pair-right { display: flex; align-items: baseline; gap: 8px; margin-left: 26px; flex-shrink: 0; }
     .id-pair-right .id-lbl { width: 52px; }
     .id-val.holder-name { font-weight: 800; text-transform: uppercase; color: #0b2410; letter-spacing: .02em; }
@@ -181,8 +181,8 @@
 
     /* Footer */
     .card-footer {
-      background: linear-gradient(180deg, #f0f6f0 0%, #e4eee4 100%);
-      border-top: 1px solid #c8dcc8;
+      background: linear-gradient(180deg, #d9ecd9 0%, #c0dfc0 100%);
+      border-top: 1px solid #9cc49c;
       padding: 0 16px 3px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
@@ -199,9 +199,9 @@
       padding: 4px 16px 4px;
     }
     .footer-main { font-size: 10px; font-weight: 800; color: #1a5c35; letter-spacing: .01em; }
-    .footer-sub  { font-size: 8.5px; color: #6a8a72; }
+    .footer-sub  { font-size: 8.5px; color: #3d5a44; font-weight: 700; }
     .qr-wrap { margin-top: -58px; }
-    .qr-wrap img { width: 80px; height: 80px; display: block; border-radius: 3px; mix-blend-mode: multiply; }
+    .qr-wrap img { width: 92px; height: 92px; display: block; border-radius: 3px; mix-blend-mode: multiply; }
 
     /* ── Back ── */
     .card-separator {
@@ -248,8 +248,8 @@
 
     /* Holder cats strip */
     .holder-cats-strip {
-      background: linear-gradient(180deg, #eef5ee 0%, #dfeadf 100%);
-      border-bottom: 1px solid #b8d4b8;
+      background: linear-gradient(180deg, #d5ebd5 0%, #bfe0bf 100%);
+      border-bottom: 1px solid #93c093;
       padding: 7px 18px;
       display: flex; align-items: center; gap: 10px;
       flex-shrink: 0;
@@ -276,7 +276,7 @@
       overflow: hidden;
       background-color: #fff;
       background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='70'%3E%3Cdefs%3E%3Cpath id='w1' d='M-130.0 20 Q-97.5 11.0 -65.0 20 Q-32.5 29.0 0.0 20 Q32.5 11.0 65.0 20 Q97.5 29.0 130.0 20 Q162.5 11.0 195.0 20 Q227.5 29.0 260.0 20 Q292.5 11.0 325.0 20 Q357.5 29.0 390.0 20 Q422.5 11.0 455.0 20 Q487.5 29.0 520.0 20'/%3E%3Cpath id='w2' d='M-65.0 50 Q-32.5 41.0 0.0 50 Q32.5 59.0 65.0 50 Q97.5 41.0 130.0 50 Q162.5 59.0 195.0 50 Q227.5 41.0 260.0 50 Q292.5 59.0 325.0 50 Q357.5 41.0 390.0 50 Q422.5 59.0 455.0 50 Q487.5 41.0 520.0 50 Q552.5 59.0 585.0 50'/%3E%3C/defs%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%231a5c35' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w1'%3EETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  %3C/textPath%3E%3C/text%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%231a5c35' fill-opacity='0.09' letter-spacing='1'%3E%3CtextPath href='%23w2'%3EETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  %3C/textPath%3E%3C/text%3E%3C/svg%3E");
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='70'%3E%3Cdefs%3E%3Cpath id='w1' d='M-130.0 20 Q-97.5 11.0 -65.0 20 Q-32.5 29.0 0.0 20 Q32.5 11.0 65.0 20 Q97.5 29.0 130.0 20 Q162.5 11.0 195.0 20 Q227.5 29.0 260.0 20 Q292.5 11.0 325.0 20 Q357.5 29.0 390.0 20 Q422.5 11.0 455.0 20 Q487.5 29.0 520.0 20'/%3E%3Cpath id='w2' d='M-65.0 50 Q-32.5 41.0 0.0 50 Q32.5 59.0 65.0 50 Q97.5 41.0 130.0 50 Q162.5 59.0 195.0 50 Q227.5 41.0 260.0 50 Q292.5 59.0 325.0 50 Q357.5 41.0 390.0 50 Q422.5 59.0 455.0 50 Q487.5 41.0 520.0 50 Q552.5 59.0 585.0 50'/%3E%3C/defs%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%231a5c35' fill-opacity='0.18' letter-spacing='1'%3E%3CtextPath href='%23w1'%3EETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  %3C/textPath%3E%3C/text%3E%3Ctext font-family='Arial' font-weight='700' font-size='7.5' fill='%231a5c35' fill-opacity='0.18' letter-spacing='1'%3E%3CtextPath href='%23w2'%3EETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  ETAT MAJOR  %3C/textPath%3E%3C/text%3E%3C/svg%3E");
       background-repeat: repeat;
     }
     .back-body-grid { display: flex; gap: 12px; height: 100%; }
@@ -312,18 +312,18 @@
     .cat-icon-table { font-size: 12px; color: #1a5c35; margin-left: 5px; }
     .cat-tr-other .cat-icon-table { color: #cbd5e1; }
     .cat-cell-id { font-weight: 700; text-align: center; }
-    .cat-cell-date { color: #64748b; text-align: center; }
+    .cat-cell-date { color: #64748b; text-align: center; font-size: 11px; }
     .cat-cell-empty { font-style: italic; color: #aab3c0; }
 
     /* Back footer */
     .back-footer {
-      background: linear-gradient(180deg, #f0f6f0 0%, #e4eee4 100%);
-      border-top: 1px solid #c8dcc8;
+      background: linear-gradient(180deg, #d9ecd9 0%, #c0dfc0 100%);
+      border-top: 1px solid #9cc49c;
       padding: 6px 18px;
       display: flex; justify-content: space-between; align-items: center;
       flex-shrink: 0;
     }
-    .back-footer-note { font-size: 8.5px; color: #6a8a72; }
+    .back-footer-note { font-size: 8.5px; color: #3d5a44; font-weight: 700; }
     .back-footer-warn { font-size: 8.5px; color: #b91c1c; font-weight: 600; }
 
     /* ── Verso militaire — Serment ── */
@@ -516,7 +516,7 @@
           <span class="id-val">{{ lic.holder_name }}</span>
         </div>
         <div class="id-row">
-          <span class="id-lbl">Date Naissance</span>
+          <span class="id-lbl">Né(e) le</span>
           <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.date_of_birth.strftime('%d/%m/%Y') if lic.date_of_birth else '—' }}</span>
           <div class="id-pair-right">
             <span class="id-lbl">Sang</span>
@@ -524,14 +524,14 @@
           </div>
         </div>
         <div class="id-row">
-          <span class="id-lbl">Lieu de naissance</span>
-          <span class="id-val" style="width:115px; flex-shrink:0;">{{ lic.lieu_naissance or '—' }}</span>
+          <span class="id-lbl sm">Lieu de naissance</span>
+          <span class="id-val sm" style="width:115px; flex-shrink:0;">{{ lic.lieu_naissance or '—' }}</span>
           <div class="id-pair-right">
             <span class="id-lbl">Sexe</span>
             <span class="id-val">{{ 'M' if lic.sexe == 'masculin' else ('F' if lic.sexe == 'feminin' else '—') }}</span>
           </div>
         </div>
-        <div class="id-row">
+        <div class="id-row id-row-address">
           <span class="id-lbl">Adresse</span>
           <span class="id-val">{{ lic.holder_address or '—' }}</span>
         </div>
@@ -635,11 +635,39 @@ function downloadImages() {
   var front = document.querySelector('.card');
   var back  = document.querySelector('.card-back-mil');
 
+  // Evolis/ID-ALL card printers expect a PNG of exactly 1016x638px — the
+  // native CR-80 card resolution at 300 DPI. Exporting at exactly this
+  // size (rather than a higher one) avoids ID-ALL having to downscale the
+  // image itself before printing, which was producing ghosting/blur on
+  // fine text.
+  var CARD_EXPORT_WIDTH = 1016;
+  var CARD_EXPORT_HEIGHT = 638;
+
   function capture(el, bg) {
     return domtoimage.toPng(el, {
       scale: 5,
       bgcolor: bg || null,
       style: { margin: '0' },
+    }).then(function (dataUrl) {
+      return new Promise(function (resolve, reject) {
+        var img = new Image();
+        img.onload = function () {
+          var canvas = document.createElement('canvas');
+          canvas.width = CARD_EXPORT_WIDTH;
+          canvas.height = CARD_EXPORT_HEIGHT;
+          var ctx = canvas.getContext('2d');
+          // The captured element includes some transparent margin (from its
+          // box-shadow's bounding area) — fill it opaque first so no
+          // transparency survives into the final PNG (some viewers render
+          // transparent pixels as black instead of white).
+          ctx.fillStyle = bg || '#ffffff';
+          ctx.fillRect(0, 0, CARD_EXPORT_WIDTH, CARD_EXPORT_HEIGHT);
+          ctx.drawImage(img, 0, 0, CARD_EXPORT_WIDTH, CARD_EXPORT_HEIGHT);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
     });
   }
 

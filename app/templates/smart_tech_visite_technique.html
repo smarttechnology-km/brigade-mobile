@@ -75,6 +75,17 @@
         .page-link.active { background: rgba(0,212,255,0.18); border-color: var(--st-cyan); color: var(--st-cyan); font-weight: 600; }
         .page-link.disabled { opacity: 0.3; pointer-events: none; }
 
+        .badge-count{display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.08);border-radius:20px;font-size:.7rem;color:rgba(255,255,255,0.5);padding:.1em .55em;margin-left:.4rem;}
+        .detail-tabs{display:flex;flex-wrap:nowrap;list-style:none;padding:0;margin:0;border-bottom:none;overflow-x:auto;}
+        .detail-tabs .nav-link{color:rgba(255,255,255,0.5);border:none;border-bottom:2px solid transparent;background:none;border-radius:0;padding:.6rem .7rem;font-size:.78rem;transition:color .15s,background .15s,border-color .15s;white-space:nowrap;gap:5px!important;}
+        .detail-tabs .nav-link.active{color:#fff;border-bottom-color:var(--st-cyan);background:rgba(0,212,255,0.05);}
+        .detail-tabs .nav-link:hover:not(.active){color:rgba(255,255,255,0.8);background:rgba(255,255,255,0.04);}
+        .detail-tabs::-webkit-scrollbar{display:none;}
+        .detail-tabs{-ms-overflow-style:none;scrollbar-width:none;}
+        html[data-theme="light"] .badge-count{background:rgba(0,0,0,0.06);color:rgba(0,0,0,0.4);}
+        html[data-theme="light"] .detail-tabs .nav-link{color:rgba(0,0,0,0.5);}
+        html[data-theme="light"] .detail-tabs .nav-link.active{color:#0095b3;border-bottom-color:#0095b3;background:rgba(0,149,179,0.06);}
+        html[data-theme="light"] .detail-tabs .nav-link:hover:not(.active){color:rgba(0,0,0,0.7);background:rgba(0,0,0,0.04);}
         .btn-action { display: inline-flex; align-items: center; gap: 5px; padding: 0.25rem 0.6rem; border-radius: 7px; font-size: 0.75rem; font-weight: 500; cursor: pointer; text-decoration: none; transition: all 0.15s; border: 1px solid; white-space: nowrap; }
         .btn-action-validate { background: rgba(63,185,80,0.1); border-color: rgba(63,185,80,0.3); color: var(--st-green); }
         .btn-action-validate:hover { background: rgba(63,185,80,0.2); border-color: var(--st-green); color: var(--st-green); }
@@ -151,11 +162,6 @@
         <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
             <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
             <span class="nav-badge" id="nav-gv-badge" style="{{ '' if gv_pending_count > 0 else 'display:none;' }}">{{ gv_pending_count }}</span>
-        </a>
-        {% endif %}
-{% if current_user.role in ['admin', 'employe'] %}
-        <a href="{{ url_for('smart_tech.renouvellement_page') }}" class="st-nav-item">
-            <span class="st-nav-icon"><i class="fas fa-sync-alt"></i></span>Renouvellement
         </a>
         {% endif %}
 {% if current_user.role in ['admin', 'employe'] %}
@@ -238,6 +244,9 @@
             <button id="theme-toggle" class="st-theme-btn" title="Changer le thème">
                 <i id="theme-icon" class="fas fa-sun"></i>
             </button>
+            <a href="{{ url_for('smart_tech.rapport_journalier_vt_page') }}" style="display:inline-flex;align-items:center;gap:.45rem;background:linear-gradient(135deg,rgba(0,212,255,0.15),rgba(0,128,255,0.1));border:1px solid rgba(0,212,255,0.3);color:var(--st-cyan);border-radius:8px;padding:.35rem .85rem;font-size:.8rem;font-weight:600;text-decoration:none;white-space:nowrap;transition:background .18s;" onmouseover="this.style.background='linear-gradient(135deg,rgba(0,212,255,0.28),rgba(0,128,255,0.2))'" onmouseout="this.style.background='linear-gradient(135deg,rgba(0,212,255,0.15),rgba(0,128,255,0.1))'">
+                <i class="fas fa-calendar-day"></i>Rapport Journalier
+            </a>
             <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
                 <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
                 {{ current_user.full_name or current_user.username }}
@@ -245,83 +254,128 @@
         </div>
     </div>
 
-    <!-- ── Pending validation banner (collapsible) ── -->
-    <div class="st-section" id="pending-vt-section" style="display:none;border-top:3px solid #f59e0b;margin-bottom:0.5rem;">
-        <div class="st-section-header" style="cursor:pointer;" onclick="togglePendingPanel()">
-            <div style="display:flex;align-items:center;gap:0.6rem;">
-                <i class="fas fa-clock" style="color:#f59e0b;"></i>
-                <strong style="color:#f59e0b;">Visites techniques en attente de validation</strong>
-                <span id="pending-vt-badge" class="badge" style="background:#f59e0b;color:#000;font-size:0.7rem;">0</span>
-                <small class="text-muted" style="font-size:0.72rem;">Validées par le Directeur Régional — cliquer pour voir</small>
-            </div>
-            <i class="fas fa-chevron-down" id="pending-vt-chevron" style="color:rgba(255,255,255,0.4);transition:transform .2s;"></i>
+    <!-- ── Onglets Visite Technique ── -->
+    <div class="st-section" style="overflow:visible;">
+        <div style="padding:0 1rem;border-bottom:1px solid var(--st-border);">
+            <ul class="nav detail-tabs" id="vt-nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-vt-pending" type="button" role="tab">
+                        <i class="fas fa-clock"></i>En attente de validation
+                        <span class="badge-count" id="pending-badge">0</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-vt-awaiting-print" type="button" role="tab">
+                        <i class="fas fa-print"></i>En attente d'impression
+                        <span class="badge-count" id="awaiting-print-badge">0</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" data-bs-target="#tab-vt-printed" type="button" role="tab">
+                        <i class="fas fa-check-double"></i>Imprimées
+                    </button>
+                </li>
+            </ul>
         </div>
-        <div id="pending-vt-panel" style="display:none;padding:0 0.25rem 0.5rem;">
-            <div style="overflow-x:auto;">
-                <table class="table" style="font-size:0.82rem;">
-                    <thead>
-                        <tr>
-                            <th>Immatriculation</th>
-                            <th>Propriétaire</th>
-                            <th>Île</th>
-                            <th>Inspecté par</th>
-                            <th>Validé par</th>
-                            <th>Note</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pending-vt-tbody">
-                        <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
 
-    <!-- ── Validated table ── -->
-    <div class="st-section">
-        <div class="st-section-header">
-            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                <div class="st-toolbar">
+        <div class="tab-content">
+            <!-- Onglet En attente de validation -->
+            <div class="tab-pane show active" id="tab-vt-pending" role="tabpanel" style="padding:1rem 1.4rem;">
+                <div style="overflow-x:auto;">
+                    <table class="table" style="font-size:0.82rem;">
+                        <thead>
+                            <tr>
+                                <th>Immatriculation</th>
+                                <th>Propriétaire</th>
+                                <th>Île</th>
+                                <th>Inspecté par</th>
+                                <th>Validé par (DR)</th>
+                                <th>Note</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-vt-tbody">
+                            <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Onglet En attente d'impression -->
+            <div class="tab-pane" id="tab-vt-awaiting-print" role="tabpanel" style="padding:1rem 1.4rem;">
+                <div class="st-toolbar mb-3">
                     <div class="st-search-wrap">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="search-input" class="st-input st-search-input" placeholder="Immatriculation, propriétaire…" oninput="filterTable()">
+                        <input type="text" id="awaiting-print-search" class="st-input st-search-input" placeholder="Immatriculation, propriétaire…" oninput="filterAwaitingPrint()">
                     </div>
                 </div>
-                <span id="live-dot" title="Mise à jour automatique" style="display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--st-green);opacity:0.8;">
-                    <span id="pulse-dot" style="width:7px;height:7px;border-radius:50%;background:var(--st-green);display:inline-block;"></span>En direct
-                </span>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="font-size:0.82rem;">
+                        <thead>
+                            <tr>
+                                <th>Immatriculation</th>
+                                <th>Propriétaire</th>
+                                <th>Île</th>
+                                <th>Note</th>
+                                <th>Validé par</th>
+                                <th>Validé le</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="awaiting-print-tbody">
+                            <tr><td colspan="7" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
-            <div style="display:flex;align-items:center;gap:0.75rem;">
-                <span id="last-updated" class="text-muted" style="font-size:0.72rem;"></span>
-                <span id="vt-count" class="text-muted" style="font-size:0.8rem;"></span>
+
+            <!-- Onglet Imprimées -->
+            <div class="tab-pane" id="tab-vt-printed" role="tabpanel">
+                <div class="st-section-header">
+                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                        <div class="st-toolbar">
+                            <div class="st-search-wrap">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="search-input" class="st-input st-search-input" placeholder="Immatriculation, propriétaire…" oninput="filterTable()">
+                            </div>
+                        </div>
+                        <span id="live-dot" title="Mise à jour automatique" style="display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--st-green);opacity:0.8;">
+                            <span id="pulse-dot" style="width:7px;height:7px;border-radius:50%;background:var(--st-green);display:inline-block;"></span>En direct
+                        </span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                        <span id="last-updated" class="text-muted" style="font-size:0.72rem;"></span>
+                        <span id="vt-count" class="text-muted" style="font-size:0.8rem;"></span>
+                    </div>
+                </div>
+
+                <div style="overflow-x:auto;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Immatriculation</th>
+                                <th>Propriétaire</th>
+                                <th>Île</th>
+                                <th>Note</th>
+                                <th>Imprimé par</th>
+                                <th>Imprimé le</th>
+                                <th>Expire le</th>
+                                <th>Statut</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vt-tbody">
+                            <tr><td colspan="10" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="st-pagination" id="pagination-bar">
+                    <span id="pagination-info"></span>
+                    <div id="pagination-btns" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                </div>
             </div>
-        </div>
-
-        <div style="overflow-x:auto;">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Immatriculation</th>
-                        <th>Propriétaire</th>
-                        <th>Île</th>
-                        <th>Note</th>
-                        <th>Validé par</th>
-                        <th>Validé le</th>
-                        <th>Expire le</th>
-                        <th>Statut</th>
-                    </tr>
-                </thead>
-                <tbody id="vt-tbody">
-                    <tr><td colspan="9" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="st-pagination" id="pagination-bar">
-            <span id="pagination-info"></span>
-            <div id="pagination-btns" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
         </div>
     </div>
 </div>
@@ -351,26 +405,16 @@
     let allItems = [];
     let currentPage = 1;
     const perPage = 50;
-
-    /* ── Pending panel ── */
-    let _pendingOpen = false;
-    window.togglePendingPanel = function() {
-        _pendingOpen = !_pendingOpen;
-        document.getElementById('pending-vt-panel').style.display = _pendingOpen ? '' : 'none';
-        const chev = document.getElementById('pending-vt-chevron');
-        if (chev) chev.style.transform = _pendingOpen ? 'rotate(180deg)' : '';
-    };
+    let awaitingPrintItems = [];
 
     function loadPendingVt() {
         fetch('/smart-tech/api/visite-technique/pending', { credentials: 'same-origin' })
             .then(r => r.json())
             .then(data => {
-                const section = document.getElementById('pending-vt-section');
-                const badge   = document.getElementById('pending-vt-badge');
-                const tbody   = document.getElementById('pending-vt-tbody');
-                const count   = (data || []).length;
+                const badge = document.getElementById('pending-badge');
+                const tbody = document.getElementById('pending-vt-tbody');
+                const count = (data || []).length;
                 badge.textContent = count;
-                section.style.display = count > 0 ? '' : 'none';
                 const navBadge = document.getElementById('nav-vt-badge');
                 if (navBadge) { navBadge.textContent = count; navBadge.style.display = count > 0 ? '' : 'none'; }
                 if (count === 0) {
@@ -391,10 +435,48 @@
                     </td>
                 </tr>`).join('');
             })
-            .catch(() => {
-                document.getElementById('pending-vt-section').style.display = 'none';
-            });
+            .catch(() => {});
     }
+
+    /* ── En attente d'impression ── */
+    function loadAwaitingPrint() {
+        fetch('/smart-tech/api/visite-technique/awaiting-print', { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                awaitingPrintItems = data || [];
+                document.getElementById('awaiting-print-badge').textContent = awaitingPrintItems.length;
+                renderAwaitingPrint();
+            })
+            .catch(() => {});
+    }
+
+    function renderAwaitingPrint() {
+        const q = (document.getElementById('awaiting-print-search').value || '').toLowerCase().trim();
+        const filtered = !q ? awaitingPrintItems : awaitingPrintItems.filter(i =>
+            (i.license_plate || '').toLowerCase().includes(q) ||
+            (i.owner_name    || '').toLowerCase().includes(q)
+        );
+        const tbody = document.getElementById('awaiting-print-tbody');
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">${awaitingPrintItems.length === 0 ? 'Aucune attestation en attente d\'impression' : 'Aucun résultat pour cette recherche'}</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = filtered.map(i => `<tr>
+            <td><strong style="color:var(--st-cyan);font-family:monospace;">${esc(i.license_plate)}</strong></td>
+            <td>${esc(i.owner_name || '—')}</td>
+            <td>${esc(i.owner_island || '—')}</td>
+            <td>${scorePill(i.score, i.score_max)}</td>
+            <td class="text-muted">${esc(i.smarttech_validated_by || '—')}</td>
+            <td class="text-muted" style="font-size:0.78rem;">${esc(i.smarttech_validated_at || '—')}</td>
+            <td>
+                <a href="/smart-tech/visite-technique/${i.id}/print" target="_blank" class="btn-action btn-action-fiche" style="font-size:0.78rem;" onclick="setTimeout(function(){ loadAwaitingPrint(); loadPrinted(true); }, 1500);">
+                    <i class="fas fa-print me-1"></i>Imprimer
+                </a>
+            </td>
+        </tr>`).join('');
+    }
+
+    window.filterAwaitingPrint = renderAwaitingPrint;
 
     window.validateVt = async function(id, plate) {
         if (!confirm(`Confirmer la validation SmartTech de la visite technique pour ${plate} ?`)) return;
@@ -406,18 +488,18 @@
             if (!r.ok) throw new Error(data.error || 'Erreur');
             showToast(`Visite technique validée pour ${plate}`, 'success');
             loadPendingVt();
-            loadValidated(true);
+            loadAwaitingPrint();
         } catch (e) {
             showToast(e.message || 'Erreur lors de la validation.', 'error');
         }
     };
 
-    /* ── Validated table ── */
+    /* ── Imprimées table ── */
     let firstLoad = true;
-    function loadValidated(silent) {
+    function loadPrinted(silent) {
         if (!silent) {
             document.getElementById('vt-tbody').innerHTML =
-                '<tr><td colspan="9" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+                '<tr><td colspan="10" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
         }
         fetch('/smart-tech/api/visite-technique/history', { credentials: 'same-origin' })
             .then(r => r.json())
@@ -435,7 +517,7 @@
             .catch(() => {
                 if (!silent) {
                     document.getElementById('vt-tbody').innerHTML =
-                        '<tr><td colspan="9" class="text-center text-muted py-4"><i class="fas fa-exclamation-triangle me-2"></i>Erreur de chargement</td></tr>';
+                        '<tr><td colspan="10" class="text-center text-muted py-4"><i class="fas fa-exclamation-triangle me-2"></i>Erreur de chargement</td></tr>';
                 }
             });
     }
@@ -464,14 +546,14 @@
         const start    = (currentPage - 1) * perPage;
         const slice    = filtered.slice(start, start + perPage);
 
-        document.getElementById('vt-count').textContent = total + ' visite' + (total !== 1 ? 's' : '') + ' validée' + (total !== 1 ? 's' : '');
+        document.getElementById('vt-count').textContent = total + ' visite' + (total !== 1 ? 's' : '') + ' imprimée' + (total !== 1 ? 's' : '');
 
         const tbody = document.getElementById('vt-tbody');
         if (slice.length === 0) {
             const msg = allItems.length === 0
-                ? '<i class="fas fa-clipboard-check me-2"></i>Aucune visite technique validée pour le moment.'
+                ? '<i class="fas fa-clipboard-check me-2"></i>Aucune attestation imprimée pour le moment.'
                 : '<i class="fas fa-search me-2"></i>Aucun résultat pour cette recherche';
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">${msg}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">${msg}</td></tr>`;
         } else {
             tbody.innerHTML = slice.map((i, idx) => `<tr>
                 <td class="text-muted" style="font-size:0.78rem;">${start + idx + 1}</td>
@@ -479,10 +561,15 @@
                 <td>${esc(i.owner_name || '—')}</td>
                 <td class="text-muted">${esc(i.owner_island || '—')}</td>
                 <td>${scorePill(i.score, i.score_max)}</td>
-                <td class="text-muted">${esc(i.smarttech_validated_by || '—')}</td>
-                <td class="text-muted" style="font-size:0.78rem;">${esc(i.smarttech_validated_at || '—')}</td>
+                <td class="text-muted">${esc(i.attestation_printed_by || '—')}</td>
+                <td class="text-muted" style="font-size:0.78rem;">${esc(i.attestation_printed_at || '—')}</td>
                 <td class="text-muted">${esc(i.expiry_date_display || '—')}</td>
-                <td>${i.is_expired ? '<span class="pill pill-low">Expirée</span>' : '<span class="pill pill-ok">Validée</span>'}</td>
+                <td>${i.is_expired ? '<span class="pill pill-low">Expirée</span>' : '<span class="pill pill-ok">Valide</span>'}</td>
+                <td>
+                    <a href="/smart-tech/visite-technique/${i.id}/print" target="_blank" class="btn-action btn-action-fiche" style="font-size:0.78rem;">
+                        <i class="fas fa-print me-1"></i>Réimprimer
+                    </a>
+                </td>
             </tr>`).join('');
         }
 
@@ -538,11 +625,15 @@
                 if (gb) { gb.textContent = d.gv_pending_count; gb.style.display = d.gv_pending_count > 0 ? '' : 'none'; }
                 if (d.vt_pending_count > 0) {
                     loadPendingVt();
-                    loadValidated(true);
                 }
-                /* Rien en attente (Licences + Visite Technique) : on arrête les requêtes
-                   automatiques. Reprend au prochain chargement de page ou retour d'onglet. */
-                if (d.pending_count === 0 && d.vt_pending_count === 0) {
+                if (d.vt_awaiting_print_count > 0) {
+                    loadAwaitingPrint();
+                    loadPrinted(true);
+                }
+                /* Rien en attente (Licences + Visite Technique validation/impression) :
+                   on arrête les requêtes automatiques. Reprend au prochain chargement de
+                   page ou retour d'onglet. */
+                if (d.pending_count === 0 && d.vt_pending_count === 0 && d.vt_awaiting_print_count === 0) {
                     if (_vtPollTimer) { clearInterval(_vtPollTimer); _vtPollTimer = null; }
                 } else if (!_vtPollTimer) {
                     _vtPollTimer = setInterval(vtPollTick, 25000);
@@ -552,11 +643,12 @@
     }
 
     loadPendingVt();
-    loadValidated(false);
+    loadAwaitingPrint();
+    loadPrinted(false);
     vtPollTick();
     _vtPollTimer = setInterval(vtPollTick, 25000);
     document.addEventListener('visibilitychange', function() {
-        if (!document.hidden) { loadPendingVt(); loadValidated(true); vtPollTick(); }
+        if (!document.hidden) { loadPendingVt(); loadAwaitingPrint(); loadPrinted(true); vtPollTick(); }
     });
     window.addEventListener('focus', vtPollTick);
 })();

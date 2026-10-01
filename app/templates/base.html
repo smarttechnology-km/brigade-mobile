@@ -124,7 +124,9 @@
             {% if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'judiciaire' or _is_dr_dt or _is_dg) %}
             <a class="nav-link text-white {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard"><i class="fas fa-chart-line me-2"></i> Dashboard</a>
             <a class="nav-link text-white {% if request.path.startswith('/vehicles') %}active{% endif %}" href="/vehicles"><i class="fas fa-car-side me-2"></i> Véhicules</a>
+            {% if not _is_dg %}
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/visite-technique') %}active{% endif %}" href="/dgrtr/visite-technique"><i class="fas fa-clipboard-check me-2"></i> Visite Technique <span id="vt-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
+            {% endif %}
             {% if current_user.is_admin %}
             <a class="nav-link text-white {% if request.path.startswith('/licenses') %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
             {% endif %}
@@ -141,7 +143,7 @@
             <a class="nav-link text-white {% if request.path.startswith('/alerts') %}active{% endif %}" href="/alerts"><i class="fas fa-exclamation-triangle me-2"></i> Alertes</a>
             {% endif %}
 
-            {% if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'judiciaire' or _is_dr_dt or _is_dg) %}
+            {% if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'judiciaire' or _is_dr_dt) %}
             <a class="nav-link text-white {% if request.path.startswith('/reports') %}active{% endif %}" href="/reports"><i class="fas fa-file-alt me-2"></i> Rapports</a>
             {% endif %}
             {% if current_user.is_authenticated and current_user.role == 'judiciaire' %}
@@ -177,6 +179,8 @@
             {% if current_user.dgrtr_type == 'directeur_technique' %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-dossiers-complets' %}active{% endif %}" href="/dgrtr-dossiers-complets"><i class="fas fa-check-circle me-2"></i> Dossiers Complétés</a>
             {% endif %}
+            <a class="nav-link text-white {% if request.path == '/dgrtr/licence-professionnelle' %}active{% endif %}" href="/dgrtr/licence-professionnelle"><i class="fas fa-id-badge me-2"></i> Licence Pro <span id="lp-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr-licence-pro-complet' %}active{% endif %}" href="/dgrtr-licence-pro-complet"><i class="fas fa-check-double me-2"></i> Licence Pro Complet</a>
             <a class="nav-link text-white {% if request.path == '/licenses' %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Licences</a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/demandes-modification-permis') %}active{% endif %}" href="/dgrtr/demandes-modification-permis"><i class="fas fa-edit me-2"></i> Demandes permis <span id="ler-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             <a class="nav-link text-white {% if request.path == '/dgrtr-statistiques' %}active{% endif %}" href="/dgrtr-statistiques"><i class="fas fa-chart-bar me-2"></i> Statistiques</a>
@@ -268,6 +272,7 @@
                             setBadge('ler-count-badge', data.ler);
                             setBadge('dossier-sig-count-badge', data.dossier_sig);
                             setBadge('vt-count-badge', data.vt);
+                            setBadge('lp-count-badge', data.lp);
                         })
                         .catch(() => {});
                 }

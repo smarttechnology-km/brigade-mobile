@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.stat-card   { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px 20px; text-align:center; }
+.stat-num    { font-size:28px; font-weight:800; line-height:1; color:#0f172a; }
+.stat-lbl    { font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+</style>
+
+<div class="container-fluid py-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-id-badge me-2"></i>Licence Pro Complet</h2>
+      <small class="text-muted">Licences professionnelles imprimées</small>
+    </div>
+    <a href="/dgrtr/licence-professionnelle" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-2"></i>Retour
+    </a>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-success" id="stat-total">—</div>
+        <div class="stat-lbl">Total imprimées</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-secondary" id="stat-mois">—</div>
+        <div class="stat-lbl">Ce mois-ci</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-3 align-items-center">
+    <input type="search" id="search-input" class="form-control" style="max-width:380px;"
+      placeholder="Rechercher par nom, prénom ou N° LP…" oninput="filterLp()">
+    <span class="text-muted small ms-2" id="result-count"></span>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead style="background:#f8fafc; border-bottom:2px solid #e5e7eb;">
+          <tr>
+            <th class="ps-4 small text-uppercase text-muted">N° LP</th>
+            <th class="small text-uppercase text-muted">Candidat</th>
+            <th class="small text-uppercase text-muted">N° Permis</th>
+            <th class="small text-uppercase text-muted">Zone d'activité</th>
+            <th class="small text-uppercase text-muted">Validité jusqu'au</th>
+            <th class="small text-uppercase text-muted">Imprimé le</th>
+            <th class="small text-uppercase text-muted">Agent</th>
+            <th class="text-end pe-4 small text-uppercase text-muted">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="lp-tbody">
+          <tr><td colspan="8" class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var allLp = [];
+
+document.addEventListener('DOMContentLoaded', function () {
+    fetch('/api/licence-pro?status=printed', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            allLp = data;
+            updateStats(data);
+            renderTable(data);
+        });
+});
+
+function updateStats(data) {
+    document.getElementById('stat-total').textContent = data.length;
+    var now = new Date();
+    var thisMonth = data.filter(function (d) {
+        if (!d.printed_at) return false;
+        var parts = d.printed_at.split(' ')[0].split('/');
+        if (parts.length < 3) return false;
+        return parseInt(parts[1]) === now.getMonth() + 1 && parseInt(parts[2]) === now.getFullYear();
+    });
+    document.getElementById('stat-mois').textContent = thisMonth.length;
+}
+
+function filterLp() {
+    var q = document.getElementById('search-input').value.trim().toLowerCase();
+    var filtered = q
+        ? allLp.filter(function (d) {
+            return ((d.holder_name + ' ' + d.holder_firstname + ' ' + d.lp_number).toLowerCase().includes(q));
+        })
+        : allLp;
+    renderTable(filtered);
+}
+
+function renderTable(data) {
+    document.getElementById('result-count').textContent = data.length + ' licence' + (data.length > 1 ? 's' : '');
+    var tbody = document.getElementById('lp-tbody');
+    if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5"><i class="fas fa-id-badge me-2 opacity-25"></i>Aucune licence imprimée trouvée</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.map(function (d) {
+        return `<tr>
+            <td class="ps-4 fw-bold font-monospace text-primary">${d.lp_number}</td>
+            <td>${d.holder_firstname || ''} ${d.holder_name || ''}</td>
+            <td class="small font-monospace">${d.license_number || '—'}</td>
+            <td class="small">${d.zone_activite}</td>
+            <td class="small text-muted">${d.validity_date}</td>
+            <td class="small text-muted" style="white-space:nowrap;">${d.printed_at || '—'}</td>
+            <td class="small text-muted">${d.printed_by || '—'}</td>
+            <td class="text-end pe-4">
+                <a href="/dgrtr/licence-pro/${d.id}/print" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">
+                    <i class="fas fa-print me-1"></i>Réimprimer
+                </a>
+            </td>
+        </tr>`;
+    }).join('');
+}
+</script>
+
+{% endblock %}

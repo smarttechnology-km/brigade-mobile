@@ -29,13 +29,14 @@
             <tr>
               <th>Type de véhicule</th>
               <th>Type d'usage</th>
+              <th>Durée de validité</th>
               <th>Prix (KMF)</th>
               <th>Statut</th>
               <th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody id="vtr-tbody">
-            <tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+            <tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
           </tbody>
         </table>
       </div>
@@ -70,6 +71,14 @@
             {% endfor %}
           </select>
         </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Durée de validité</label>
+          <select id="vtr-add-duration" class="form-select">
+            <option value="12" selected>1 an (12 mois)</option>
+            <option value="6">6 mois</option>
+            <option value="3">3 mois</option>
+          </select>
+        </div>
         <div class="mb-2">
           <label class="form-label fw-semibold">Prix (KMF)</label>
           <input type="number" id="vtr-add-price" class="form-control" min="0" step="1" placeholder="Ex : 5000">
@@ -99,13 +108,21 @@ function vtrLoad() {
     .then(r => r.ok ? r.json() : [])
     .then(rates => {
       if (!rates.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucun tarif défini.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucun tarif défini.</td></tr>';
         return;
       }
+      const durationOption = (val, current) => `<option value="${val}" ${Number(current) === val ? 'selected' : ''}>${val === 12 ? '1 an (12 mois)' : val + ' mois'}</option>`;
       tbody.innerHTML = rates.map(r => `
         <tr>
           <td>${r.vehicle_type ? escVtr(VTR_VEHICLE_LABELS[r.vehicle_type] || r.vehicle_type) : '<span class="text-muted">Toutes les types</span>'}</td>
           <td>${r.usage_type ? escVtr(VTR_USAGE_LABELS[r.usage_type] || r.usage_type) : '<span class="text-muted">Tous les usages</span>'}</td>
+          <td>
+            <select class="form-select form-select-sm" style="max-width:150px;" onchange="vtrUpdateDuration(${r.id}, this.value)">
+              ${durationOption(12, r.duration_months)}
+              ${durationOption(6, r.duration_months)}
+              ${durationOption(3, r.duration_months)}
+            </select>
+          </td>
           <td>
             <div class="input-group input-group-sm vtr-price-input">
               <input type="number" min="0" step="1" class="form-control" value="${r.price_kmf}" onchange="vtrUpdatePrice(${r.id}, this.value)">
@@ -123,7 +140,7 @@ function vtrLoad() {
         </tr>`).join('');
     })
     .catch(() => {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
     });
 }
 
@@ -131,6 +148,7 @@ document.getElementById('vtr-add-confirm-btn').addEventListener('click', functio
   const vehicle_type = document.getElementById('vtr-add-vehicle-type').value;
   const usage_type = document.getElementById('vtr-add-usage-type').value;
   const price_kmf = document.getElementById('vtr-add-price').value;
+  const duration_months = document.getElementById('vtr-add-duration').value;
   if (price_kmf === '' || isNaN(price_kmf) || Number(price_kmf) < 0) {
     alert('Veuillez saisir un prix valide.');
     return;
@@ -139,7 +157,7 @@ document.getElementById('vtr-add-confirm-btn').addEventListener('click', functio
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ vehicle_type, usage_type, price_kmf }),
+    body: JSON.stringify({ vehicle_type, usage_type, price_kmf, duration_months }),
   })
     .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
     .then(() => {
@@ -147,6 +165,7 @@ document.getElementById('vtr-add-confirm-btn').addEventListener('click', functio
       document.getElementById('vtr-add-vehicle-type').value = '';
       document.getElementById('vtr-add-usage-type').value = '';
       document.getElementById('vtr-add-price').value = '';
+      document.getElementById('vtr-add-duration').value = '12';
       vtrLoad();
     })
     .catch(d => alert(d.error || 'Erreur.'));
@@ -158,6 +177,17 @@ function vtrUpdatePrice(id, price_kmf) {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ price_kmf }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .catch(d => { alert(d.error || 'Erreur.'); vtrLoad(); });
+}
+
+function vtrUpdateDuration(id, duration_months) {
+  fetch(`/api/technical-inspection-rates/${id}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ duration_months }),
   })
     .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
     .catch(d => { alert(d.error || 'Erreur.'); vtrLoad(); });

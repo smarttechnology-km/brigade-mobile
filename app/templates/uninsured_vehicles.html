@@ -311,6 +311,10 @@ function renderVehiclesTable(vehicles) {
                     <button class="btn btn-sm btn-outline-secondary" type="button" onclick="showFineDetails(${v.id})" title="Cliquer pour voir le type d'amende">
                         <i class="fas fa-lock"></i> Bloqué
                     </button>
+                ` : !v.has_valid_technical_inspection ? `
+                    <button class="btn btn-sm btn-outline-warning" type="button" onclick="showVtInvalidWarning(${v.id})" title="Visite technique non valide">
+                        <i class="fas fa-exclamation-triangle"></i> Attention
+                    </button>
                 ` : isVehicleInactive(v) ? `
                     <button class="btn btn-sm btn-outline-warning" type="button" onclick="showInactiveWarning(${v.id})" title="Véhicule inactif - QR code non actif">
                         <i class="fas fa-exclamation-triangle"></i> Attention
@@ -369,6 +373,16 @@ function showInactiveWarning(vehicleId) {
 
     document.getElementById('inactive-modal-plate').value = vehicle.license_plate || '-';
     document.getElementById('inactive-modal-reason').textContent = reason;
+    new bootstrap.Modal(document.getElementById('inactiveWarningModal')).show();
+}
+
+function showVtInvalidWarning(vehicleId) {
+    const vehicle = vehiclesCache.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+
+    document.getElementById('inactive-modal-plate').value = vehicle.license_plate || '-';
+    document.getElementById('inactive-modal-reason').textContent = vehicle.block_reason
+        || "Ce véhicule n'a pas de visite technique valide. Vous ne pouvez pas l'ajouter à l'assurance.";
     new bootstrap.Modal(document.getElementById('inactiveWarningModal')).show();
 }
 

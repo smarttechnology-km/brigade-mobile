@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% block content %}
+{% set is_dt_default = (current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_technique') %}
+
+<style>
+.stat-card   { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px 20px; text-align:center; }
+.stat-num    { font-size:28px; font-weight:800; line-height:1; color:#0f172a; }
+.stat-lbl    { font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+.lp-result-card { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:10px 14px; }
+.lp-result-card:hover { background:#eef2ff; }
+.lp-tabs .nav-link { color:#6b7280; font-weight:600; font-size:.92rem; border:none; border-bottom:2px solid transparent; border-radius:0; }
+.lp-tabs .nav-link.active { color:#0d6efd; border-bottom-color:#0d6efd; background:none; }
+.lp-tabs .nav-link:hover:not(.active) { color:#374151; border-color:transparent; }
+.lp-tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:10px; background:#e5e7eb; color:#374151; font-size:.72rem; font-weight:700; margin-left:4px; }
+</style>
+
+<div class="container-fluid py-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-id-badge me-2"></i>Licence Professionnelle</h2>
+      <small class="text-muted">Licences professionnelles de conducteur (taxi) — rattachées à un permis de conduire existant</small>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-warning" id="stat-pending">—</div>
+        <div class="stat-lbl">En attente validation DG</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-success" id="stat-validated">—</div>
+        <div class="stat-lbl">Validées — à imprimer</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white px-3 pt-2 pb-0">
+      <ul class="nav lp-tabs" id="lp-nav-tabs" role="tablist">
+        {% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_technique' %}
+        <li class="nav-item" role="presentation">
+          <button class="nav-link {{ 'active' if is_dt_default else '' }}" data-bs-toggle="tab" data-bs-target="#tab-lp-new" type="button" role="tab">
+            <i class="fas fa-plus-circle me-2"></i>Nouvelle demande
+          </button>
+        </li>
+        {% endif %}
+        <li class="nav-item" role="presentation">
+          <button class="nav-link {{ '' if is_dt_default else 'active' }}" data-bs-toggle="tab" data-bs-target="#tab-lp-pending" type="button" role="tab">
+            <i class="fas fa-clock me-2"></i>En attente de validation
+            <span class="lp-tab-badge" id="tab-badge-pending">0</span>
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-lp-validated" type="button" role="tab">
+            <i class="fas fa-check-circle me-2"></i>Validées — en attente d'impression
+            <span class="lp-tab-badge" id="tab-badge-validated">0</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <div class="tab-content">
+
+      {% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_technique' %}
+      <!-- Nouvelle demande (DT) -->
+      <div class="tab-pane {{ 'show active' if is_dt_default else '' }}" id="tab-lp-new" role="tabpanel">
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label small text-muted">Rechercher un titulaire par N° de permis</label>
+            <div class="d-flex gap-2">
+              <input type="text" id="lp-search" class="form-control" placeholder="N° de permis" style="max-width:320px;" onkeydown="if(event.key==='Enter'){event.preventDefault();lpSearch();}">
+              <button type="button" class="btn btn-primary" onclick="lpSearch()"><i class="fas fa-search me-2"></i>Rechercher</button>
+            </div>
+            <div id="lp-search-results" class="mt-2 d-flex flex-column gap-2"></div>
+          </div>
+
+          <div id="lp-form-section" class="d-none">
+            <hr>
+            <div class="d-flex align-items-center gap-3 mb-3">
+              <img id="lp-form-photo" src="" style="width:64px;height:80px;object-fit:cover;border-radius:6px;border:2px solid #e5e7eb;" onerror="this.style.display='none'">
+              <div>
+                <div class="fw-bold" id="lp-form-name"></div>
+                <div class="text-muted small font-monospace" id="lp-form-license-number"></div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" onclick="lpResetForm()"><i class="fas fa-times me-1"></i>Annuler</button>
+            </div>
+            <input type="hidden" id="lp-license-id">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label small text-muted">N° de licence (LP)</label>
+                <input type="text" id="lp-number" class="form-control" placeholder="LP-0001">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small text-muted">Date de fin de validité</label>
+                <input type="date" id="lp-validity-date" class="form-control">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small text-muted">Zone d'activité</label>
+                <input type="text" id="lp-zone" class="form-control" placeholder="Moroni, Grande Comores">
+              </div>
+            </div>
+            <button type="button" class="btn btn-primary mt-3" onclick="lpSubmitRequest()">
+              <i class="fas fa-paper-plane me-2"></i>Envoyer la demande au Directeur Général
+            </button>
+            <span id="lp-form-error" class="text-danger small ms-2"></span>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- En attente de validation DG -->
+      <div class="tab-pane {{ '' if is_dt_default else 'show active' }}" id="tab-lp-pending" role="tabpanel">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead style="background:#f8fafc; border-bottom:2px solid #e5e7eb;">
+              <tr>
+                <th class="ps-4 small text-uppercase text-muted">N° LP</th>
+                <th class="small text-uppercase text-muted">Candidat</th>
+                <th class="small text-uppercase text-muted">Zone d'activité</th>
+                <th class="small text-uppercase text-muted">Validité jusqu'au</th>
+                <th class="small text-uppercase text-muted">Demandé par</th>
+                <th class="text-end pe-4 small text-uppercase text-muted">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="lp-pending-tbody">
+              <tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Validées, à imprimer -->
+      <div class="tab-pane" id="tab-lp-validated" role="tabpanel">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead style="background:#f8fafc; border-bottom:2px solid #e5e7eb;">
+              <tr>
+                <th class="ps-4 small text-uppercase text-muted">N° LP</th>
+                <th class="small text-uppercase text-muted">Candidat</th>
+                <th class="small text-uppercase text-muted">Zone d'activité</th>
+                <th class="small text-uppercase text-muted">Validée par (DG)</th>
+                <th class="text-end pe-4 small text-uppercase text-muted">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="lp-validated-tbody">
+              <tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+var IS_DT = {{ 'true' if (current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_technique') else 'false' }};
+var IS_DG = {{ 'true' if (current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general') else 'false' }};
+var lpSelectedLicense = null;
+
+document.addEventListener('DOMContentLoaded', function () {
+    loadLpLists();
+});
+
+function lpSearch() {
+    var q = document.getElementById('lp-search').value.trim();
+    var results = document.getElementById('lp-search-results');
+    if (!q) { results.innerHTML = '<div class="text-danger small">Veuillez saisir un numéro de permis.</div>'; return; }
+    results.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-2"></i>Recherche…</div>';
+    fetch('/api/licence-pro/search-license?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (items) {
+            if (!items.length) {
+                results.innerHTML = '<div class="text-danger small"><i class="fas fa-times-circle me-1"></i>Aucun permis trouvé pour ce numéro.</div>';
+                return;
+            }
+            if (items.length === 1) {
+                results.innerHTML = '';
+                lpSelectLicense(items[0]);
+                return;
+            }
+            results.innerHTML = items.map(function (l) {
+                return `<div class="lp-result-card d-flex align-items-center justify-content-between" style="cursor:pointer;" onclick='lpSelectLicense(${JSON.stringify(l).replace(/'/g, "&apos;")})'>
+                    <div>
+                        <div class="fw-semibold">${l.holder_firstname || ''} ${l.holder_name || ''}</div>
+                        <div class="text-muted small font-monospace">${l.license_number}</div>
+                    </div>
+                    <i class="fas fa-chevron-right text-muted"></i>
+                </div>`;
+            }).join('');
+        });
+}
+
+function lpSelectLicense(lic) {
+    lpSelectedLicense = lic;
+    document.getElementById('lp-search-results').innerHTML = '';
+    document.getElementById('lp-search').value = '';
+    document.getElementById('lp-form-section').classList.remove('d-none');
+    document.getElementById('lp-form-name').textContent = (lic.holder_firstname || '') + ' ' + (lic.holder_name || '');
+    document.getElementById('lp-form-license-number').textContent = lic.license_number;
+    document.getElementById('lp-form-photo').src = lic.photo_url || '';
+    document.getElementById('lp-license-id').value = lic.id;
+    document.getElementById('lp-number').value = '';
+    document.getElementById('lp-validity-date').value = '';
+    document.getElementById('lp-zone').value = '';
+    document.getElementById('lp-form-error').textContent = '';
+}
+
+function lpResetForm() {
+    lpSelectedLicense = null;
+    document.getElementById('lp-form-section').classList.add('d-none');
+}
+
+function lpSubmitRequest() {
+    var errEl = document.getElementById('lp-form-error');
+    errEl.textContent = '';
+    var payload = {
+        license_id: document.getElementById('lp-license-id').value,
+        lp_number: document.getElementById('lp-number').value.trim(),
+        validity_date: document.getElementById('lp-validity-date').value,
+        zone_activite: document.getElementById('lp-zone').value.trim(),
+    };
+    fetch('/api/licence-pro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+    })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+        if (!res.ok) { errEl.textContent = res.data.error || 'Erreur'; return; }
+        lpResetForm();
+        loadLpLists();
+    });
+}
+
+function loadLpLists() {
+    fetch('/api/licence-pro?status=pending', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(renderPending);
+    fetch('/api/licence-pro?status=validated', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(renderValidated);
+}
+
+function renderPending(items) {
+    document.getElementById('stat-pending').textContent = items.length;
+    document.getElementById('tab-badge-pending').textContent = items.length;
+    var tbody = document.getElementById('lp-pending-tbody');
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Aucune demande en attente.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(function (d) {
+        var actionBtn = IS_DG
+            ? `<button class="btn btn-sm btn-success" onclick="lpValidate(${d.id})"><i class="fas fa-check me-1"></i>Valider</button>`
+            : '<span class="text-muted small">En attente du DG</span>';
+        return `<tr>
+            <td class="ps-4 fw-bold font-monospace text-primary">${d.lp_number}</td>
+            <td>${d.holder_firstname || ''} ${d.holder_name || ''}</td>
+            <td class="small">${d.zone_activite}</td>
+            <td class="small">${d.validity_date}</td>
+            <td class="text-muted small">${d.requested_by}</td>
+            <td class="text-end pe-4">${actionBtn}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderValidated(items) {
+    document.getElementById('stat-validated').textContent = items.length;
+    document.getElementById('tab-badge-validated').textContent = items.length;
+    var tbody = document.getElementById('lp-validated-tbody');
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Aucune licence validée en attente d\'impression.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(function (d) {
+        var actionBtn = IS_DT
+            ? `<a href="/dgrtr/licence-pro/${d.id}/print" target="_blank" class="btn btn-sm btn-primary"><i class="fas fa-print me-1"></i>Imprimer</a>`
+            : '<span class="text-muted small">—</span>';
+        return `<tr>
+            <td class="ps-4 fw-bold font-monospace text-primary">${d.lp_number}</td>
+            <td>${d.holder_firstname || ''} ${d.holder_name || ''}</td>
+            <td class="small">${d.zone_activite}</td>
+            <td class="text-muted small">${d.validated_by}</td>
+            <td class="text-end pe-4">${actionBtn}</td>
+        </tr>`;
+    }).join('');
+}
+
+function lpValidate(id) {
+    if (!confirm('Valider cette demande de licence professionnelle ?')) return;
+    fetch('/api/licence-pro/' + id + '/validate', { method: 'POST', credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function () { loadLpLists(); });
+}
+</script>
+
+{% endblock %}

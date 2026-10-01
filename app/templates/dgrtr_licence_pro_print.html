@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Licence Professionnelle — {{ req.lp_number }}</title>
+<style>
+html { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #dde3ea;
+  font-family: 'Arial', sans-serif;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px 16px 60px; color: #111;
+}
+
+.toolbar { display: flex; gap: 10px; margin-bottom: 28px; }
+.btn { display: flex; align-items: center; gap: 7px; padding: 9px 20px; border: none;
+       border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-print { background: #1e40af; color: #fff; }
+.btn-print:hover { background: #1e3a8a; }
+.btn-back  { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.btn-back:hover { background: #f9fafb; }
+
+/* ── Card (both sides share this base) ── */
+.lp-card {
+  width: 700px; height: 490px;
+  border: 2.5px solid #1a1a1a;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 20px 48px rgba(13,30,80,.18), 0 4px 12px rgba(13,30,80,.1);
+  background: #e9e9e9;
+  display: flex; flex-direction: column;
+}
+.lp-card-separator {
+  width: 700px; text-align: center; margin: 28px 0 18px;
+  font-size: 11px; color: #94a3b8; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 10px;
+}
+.lp-card-separator::before, .lp-card-separator::after { content: ''; flex: 1; height: 1px; background: #cbd5e1; }
+.lp-page { display: flex; justify-content: center; }
+
+/* Diagonal flag-color stripes, same on both sides — linear-gradient("to bottom right")
+   always runs exactly corner-to-corner regardless of the box's exact dimensions. */
+.lp-stripes {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background: linear-gradient(to bottom right,
+    transparent 0%, transparent 6%,
+    rgba(243,212,63,.55) 6%, rgba(243,212,63,.55) 18%,
+    rgba(255,255,255,1) 18%, rgba(255,255,255,1) 30%,
+    rgba(232,120,138,.55) 30%, rgba(232,120,138,.55) 42%,
+    rgba(111,163,216,.55) 42%, rgba(111,163,216,.55) 54%,
+    transparent 54%, transparent 100%);
+}
+
+.lp-content { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; }
+
+/* ── Recto ── */
+.lp-front-header { text-align: center; padding: 22px 30px 4px; }
+.lp-front-header .org-name { font-size: 22px; font-weight: 800; letter-spacing: .02em; color: #111; }
+.lp-front-header .org-sub  { font-size: 12px; font-weight: 700; color: #333; margin-top: 2px; }
+.lp-front-title { text-align: center; font-size: 23px; font-weight: 800; color: #111; line-height: 1.3; margin: 14px 30px 20px; }
+
+.lp-front-body { flex: 1; position: relative; display: flex; align-items: flex-start; padding: 0 36px; gap: 26px; }
+.lp-photo-box img, .lp-photo-box .no-photo {
+  width: 170px; height: 210px; object-fit: cover; border-radius: 4px;
+  border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.25); background: #f1f1f1;
+  display: flex; align-items: center; justify-content: center; font-size: 3rem; color: #aaa;
+}
+.lp-fields { flex: 1; display: flex; flex-direction: column; gap: 26px; margin-top: 15px; }
+.lp-field-row { display: flex; align-items: baseline; }
+.lp-field-lbl { font-size: 16px; color: #333; width: 85px; flex-shrink: 0; }
+.lp-field-val { font-size: 21px; font-weight: 800; color: #111; }
+.lp-qr-box { position: absolute; right: 36px; top: 190px; }
+.lp-qr-box img { width: 110px; height: 110px; display: block; }
+
+/* ── Verso ── */
+.lp-back-title { text-align: center; font-size: 24px; font-weight: 800; color: #111; padding: 26px 0 10px; }
+.lp-back-body { flex: 1; padding: 10px 50px; display: flex; flex-direction: column; gap: 20px; }
+.lp-back-row { display: flex; align-items: baseline; gap: 14px; }
+.lp-back-lbl { width: 190px; font-size: 18px; color: #222; flex-shrink: 0; }
+.lp-back-val { font-size: 19px; font-weight: 800; color: #111; }
+.lp-back-statement { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 23px; color: #222; line-height: 1.5; margin-top: 6px; }
+.lp-back-footer { display: flex; justify-content: flex-end; padding: 10px 50px 30px; }
+.lp-sig-block { text-align: center; }
+.lp-sig-title { font-size: 14px; font-weight: 800; color: #111; text-transform: uppercase; letter-spacing: .02em; max-width: 220px; line-height: 1.4; }
+.lp-sig-mark { height: 50px; max-width: 170px; object-fit: contain; display: block; margin: 6px auto 2px; }
+.lp-sig-name { font-size: 14px; font-weight: 700; color: #333; border-top: 1px solid #999; padding-top: 3px; margin-top: 2px; }
+
+@media print {
+  body { background: #fff; padding: 0; margin: 0; }
+  .toolbar { display: none; }
+  /* Each card keeps its original 700x490 design size (so fonts/photo/QR keep their
+     designed proportions) and is scaled up uniformly to exactly fill the A5 page;
+     .lp-page is the real page-sized box and clips any sub-pixel scale rounding. */
+  .lp-page {
+    width: 210mm; height: 148mm; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lp-card { box-shadow: none; border-radius: 0; transform: scale(1.134); }
+  .lp-card-separator, .lp-card-separator::before, .lp-card-separator::after { display: none; }
+  .lp-page-verso { page-break-before: always; }
+  @page { size: A5 landscape; margin: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <a href="javascript:history.back()" class="btn btn-back">&#8592; Retour</a>
+  <button class="btn btn-print" onclick="doPrint()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <polyline points="6 9 6 2 18 2 18 9"/>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+      <rect x="6" y="14" width="12" height="8"/>
+    </svg>
+    Imprimer
+  </button>
+</div>
+
+<!-- Recto -->
+<div class="lp-page">
+<div class="lp-card">
+  <div class="lp-stripes"></div>
+  <div class="lp-content">
+    <div class="lp-front-header">
+      <div class="org-name">UNION DES COMORES</div>
+      <div class="org-sub">DIRECTION GÉNÉRALE DES ROUTES ET TRANSPORTS ROUTIERS</div>
+    </div>
+    <div class="lp-front-title">LICENCE PROFESSIONNELLE DE TRANSPORT PUBLIC ET TAXI</div>
+    <div class="lp-front-body">
+      <div class="lp-photo-box">
+        {% if lic and lic.photo_url %}
+          <img src="{{ lic.photo_url }}" alt="Photo">
+        {% else %}
+          <div class="no-photo">&#128100;</div>
+        {% endif %}
+      </div>
+      <div class="lp-fields">
+        <div class="lp-field-row">
+          <div class="lp-field-lbl">N° :</div>
+          <div class="lp-field-val">{{ req.lp_number }}</div>
+        </div>
+        <div class="lp-field-row">
+          <div class="lp-field-lbl">Nom :</div>
+          <div class="lp-field-val">{{ lic.holder_firstname if lic else '—' }}</div>
+        </div>
+        <div class="lp-field-row">
+          <div class="lp-field-lbl">Prénom :</div>
+          <div class="lp-field-val">{{ lic.holder_name if lic else '—' }}</div>
+        </div>
+      </div>
+      {% if qr_data_uri %}
+      <div class="lp-qr-box"><img src="{{ qr_data_uri }}" alt="QR"></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="lp-card-separator">Verso</div>
+
+<!-- Verso -->
+<div class="lp-page lp-page-verso">
+<div class="lp-card">
+  <div class="lp-stripes"></div>
+  <div class="lp-content">
+    <div class="lp-back-title">LICENCE PROFESSIONNELLE</div>
+    <div class="lp-back-body">
+      <div class="lp-back-row">
+        <div class="lp-back-lbl">Date de naissance</div>
+        <div class="lp-back-val">: {{ lic.date_of_birth.strftime('%d/%m/%Y') if (lic and lic.date_of_birth) else '—' }}</div>
+      </div>
+      <div class="lp-back-row">
+        <div class="lp-back-lbl">Lieu de naissance</div>
+        <div class="lp-back-val">: {{ lic.lieu_naissance if lic else '—' }}</div>
+      </div>
+      <div class="lp-back-statement">
+        est autorisé(e) à conduire un véhicule de transport sur le territoire de l'Union des Comores
+      </div>
+    </div>
+    <div class="lp-back-footer">
+      <div class="lp-sig-block">
+        <div class="lp-sig-title">DIRECTEUR GÉNÉRAL DES ROUTES ET TRANSPORTS ROUTIERS</div>
+        {% if settings.directeur_signature_url %}
+          <img class="lp-sig-mark" src="{{ settings.directeur_signature_url }}" alt="Signature">
+        {% endif %}
+        <div class="lp-sig-name">{{ settings.directeur_general_name or '' }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+function doPrint() {
+  fetch('/api/licence-pro/{{ req.id }}/mark-printed', {
+    method: 'POST',
+    credentials: 'same-origin',
+  }).finally(() => {
+    window.print();
+  });
+}
+</script>
+</body>
+</html>
