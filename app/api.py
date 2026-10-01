@@ -894,40 +894,6 @@ def api_vehicles_search():
     })
 
 
-@api_bp.route('/vehicles/<int:vehicle_id>/qrcode/renew', methods=['POST'])
-@login_required
-def api_vehicle_qrcode_renew(vehicle_id):
-    """Renew QR code for a vehicle and record a SmartTech payment."""
-    from app.models import QRCodePayment, SmartTechSetting
-    from datetime import timedelta
-
-    vehicle = Vehicle.query.get(vehicle_id)
-    if not vehicle:
-        return jsonify({'error': 'Véhicule introuvable.'}), 404
-
-    now = now_comoros()
-    vehicle.qr_code_expiry = now + timedelta(days=365)
-    vehicle.status = 'active'
-
-    amount = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
-    payment = QRCodePayment(
-        vehicle_id=vehicle.id,
-        payment_type='renewal',
-        amount=amount,
-        status='paid',
-        paid_at=now,
-        recorded_by=current_user.username,
-    )
-    db.session.add(payment)
-    db.session.commit()
-
-    return jsonify({
-        'success': True,
-        'message': f'QR Code renouvelé pour {vehicle.license_plate}.',
-        'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y'),
-    })
-
-
 @api_bp.route('/vehicles', methods=['POST'])
 @jwt_required(optional=True)
 def api_vehicles_create():
@@ -2662,7 +2628,7 @@ def api_sidebar_pending_counts():
     else:
         ler_count = 0
 
-    role = current_user.role
+    role = getattr(current_user, 'role', None)
     if role == 'judiciaire':
         ver_count = VehicleEditRequest.query.filter_by(requested_by=current_user.username, status='pending').count()
     elif role == 'administrateur' or _is_dr_or_dg():
@@ -2681,8 +2647,17 @@ def api_sidebar_pending_counts():
     else:
         vt_count = 0
 
-    is_dg = current_user.is_admin or (role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general')
+    is_dg = getattr(current_user, 'is_admin', False) or (role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general')
     dossier_sig_count = LicenseDossier.query.filter_by(current_step=5, status='en_cours').count() if is_dg else 0
+
+    from app.models import LicenceProRequest
+    is_dt = getattr(current_user, 'is_admin', False) or (role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_technique')
+    if is_dg:
+        lp_count = LicenceProRequest.query.filter_by(status='pending').count()
+    elif is_dt:
+        lp_count = LicenceProRequest.query.filter_by(status='validated').count()
+    else:
+        lp_count = 0
 
     return jsonify({
         'photo': photo_count,
@@ -2690,6 +2665,7 @@ def api_sidebar_pending_counts():
         'ler': ler_count,
         'dossier_sig': dossier_sig_count,
         'vt': vt_count,
+        'lp': lp_count,
     })
 
 
@@ -4438,7 +4414,7 @@ def _is_license_employe():
 
 
 def _is_license_reviewer():
-    return current_user.is_admin or (getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) in ('directeur_technique', 'directeur_general'))
+    return getattr(current_user, 'is_admin', False) or (getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) in ('directeur_technique', 'directeur_general'))
 
 
 @api_bp.route('/licenses/<int:license_id>/edit-requests', methods=['POST'])
@@ -5505,6 +5481,148 @@ def _generate_dossier_number():
         except (ValueError, IndexError):
             pass
     return f'{prefix}{n:04d}'
+
+
+def _is_licence_pro_dt():
+    return current_user.role == 'administrateur' or (
+        getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_technique'
+    )
+
+
+def _is_licence_pro_dg():
+    return current_user.role == 'administrateur' or (
+        getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general'
+    )
+
+
+def _is_licence_pro_dt_or_dg():
+    return _is_licence_pro_dt() or _is_licence_pro_dg()
+
+
+@api_bp.route('/licence-pro/search-license', methods=['GET'])
+@login_required
+def licence_pro_search_license():
+    """Search existing DriverLicense holders to attach a Licence Professionnelle to."""
+    if not _is_licence_pro_dt_or_dg():
+        return jsonify({'error': 'Accès refusé'}), 403
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    like = f'%{q}%'
+    results = DriverLicense.query.filter(
+        DriverLicense.license_number.ilike(like)
+    ).order_by(DriverLicense.holder_name.asc()).limit(20).all()
+    return jsonify([l.to_dict() for l in results])
+
+
+@api_bp.route('/licence-pro', methods=['GET'])
+@login_required
+def list_licence_pro():
+    if not _is_licence_pro_dt_or_dg():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import LicenceProRequest
+    q = LicenceProRequest.query
+    status_filter = request.args.get('status', '').strip()
+    if status_filter:
+        statuses = [s.strip() for s in status_filter.split(',')]
+        q = q.filter(LicenceProRequest.status.in_(statuses))
+    search = request.args.get('q', '').strip()
+    if search:
+        like = f'%{search}%'
+        q = q.join(DriverLicense).filter(db.or_(
+            DriverLicense.holder_name.ilike(like),
+            DriverLicense.holder_firstname.ilike(like),
+            LicenceProRequest.lp_number.ilike(like),
+        ))
+    items = q.order_by(LicenceProRequest.requested_at.desc()).all()
+    return jsonify([x.to_dict() for x in items])
+
+
+@api_bp.route('/licence-pro', methods=['POST'])
+@login_required
+def create_licence_pro():
+    """Directeur Technique creates a new Licence Professionnelle request for an
+    existing driver's license holder — pending the Directeur Général's validation."""
+    if not _is_licence_pro_dt():
+        return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
+
+    data = request.get_json() or {}
+    license_id = data.get('license_id')
+    lp_number = (data.get('lp_number') or '').strip()
+    zone_activite = (data.get('zone_activite') or '').strip()
+    validity_date_str = data.get('validity_date')
+
+    if not license_id:
+        return jsonify({'error': 'license_id requis'}), 400
+    if not lp_number:
+        return jsonify({'error': 'Le numéro de licence (N° LP) est requis.'}), 400
+    if not zone_activite:
+        return jsonify({'error': "La zone d'activité est requise."}), 400
+    if not validity_date_str:
+        return jsonify({'error': 'La date de fin de validité est requise.'}), 400
+
+    lic = DriverLicense.query.get(license_id)
+    if not lic:
+        return jsonify({'error': 'Permis introuvable.'}), 404
+
+    from app.models import LicenceProRequest
+    if LicenceProRequest.query.filter_by(lp_number=lp_number).first():
+        return jsonify({'error': f"Le numéro '{lp_number}' est déjà utilisé."}), 400
+
+    try:
+        validity_date = datetime.strptime(validity_date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Date de fin de validité invalide.'}), 400
+
+    req = LicenceProRequest(
+        license_id=license_id,
+        lp_number=lp_number,
+        zone_activite=zone_activite,
+        validity_date=validity_date,
+        requested_by=current_user.username,
+    )
+    db.session.add(req)
+    db.session.commit()
+    return jsonify(req.to_dict()), 201
+
+
+@api_bp.route('/licence-pro/<int:req_id>/validate', methods=['POST'])
+@login_required
+def validate_licence_pro(req_id):
+    """Directeur Général validates a pending Licence Professionnelle request."""
+    if not _is_licence_pro_dg():
+        return jsonify({'error': 'Réservé au Directeur Général.'}), 403
+
+    from app.models import LicenceProRequest
+    req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': 'Cette demande a déjà été traitée.'}), 409
+
+    req.status = 'validated'
+    req.validated_by = current_user.username
+    req.validated_at = now_comoros()
+    db.session.commit()
+    return jsonify(req.to_dict())
+
+
+@api_bp.route('/licence-pro/<int:req_id>/mark-printed', methods=['POST'])
+@login_required
+def mark_licence_pro_printed(req_id):
+    """Directeur Technique marks a validated Licence Professionnelle as printed
+    (called right before the browser print dialog fires)."""
+    if not _is_licence_pro_dt():
+        return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
+
+    from app.models import LicenceProRequest
+    req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status != 'validated':
+        return jsonify({'error': "Cette licence n'est pas (ou plus) validée par le Directeur Général."}), 409
+
+    req.status = 'printed'
+    req.printed_by = current_user.username
+    req.printed_at = now_comoros()
+    db.session.commit()
+    return jsonify(req.to_dict())
 
 
 @api_bp.route('/dossiers-permis', methods=['GET'])

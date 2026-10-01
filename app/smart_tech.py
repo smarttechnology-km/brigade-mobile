@@ -174,6 +174,9 @@ def parametres_page():
                            renewal_price=int(renewal_price),
                            license_print_price=int(license_print_price),
                            insurance_commission=int(insurance_commission),
+                           vt_digital_processing_price_12=int(SmartTechSetting.get('vt_digital_processing_price_12', 0)),
+                           vt_digital_processing_price_6=int(SmartTechSetting.get('vt_digital_processing_price_6', 0)),
+                           vt_digital_processing_price_3=int(SmartTechSetting.get('vt_digital_processing_price_3', 0)),
                            qr_renewal_destination_phone=HuriDestinationSetting.get().qr_renewal_phone or '',
                            sim_new_vehicles=int(SmartTechSetting.get('sim_new_vehicles', 500)),
                            sim_existing=int(SmartTechSetting.get('sim_existing', 10000)),
@@ -195,6 +198,9 @@ def api_parametres_get():
         'license_print_price':   SmartTechSetting.get('license_print_price', 0),
         'insurance_commission':  SmartTechSetting.get('insurance_commission', 0),
         'qr_renewal_destination_phone': HuriDestinationSetting.get().qr_renewal_phone or '',
+        'vt_digital_processing_price_12': SmartTechSetting.get('vt_digital_processing_price_12', 0),
+        'vt_digital_processing_price_6':  SmartTechSetting.get('vt_digital_processing_price_6', 0),
+        'vt_digital_processing_price_3':  SmartTechSetting.get('vt_digital_processing_price_3', 0),
     })
 
 
@@ -203,7 +209,8 @@ def api_parametres_get():
 def api_parametres_update():
     data = request.get_json(silent=True) or {}
     errors = []
-    for key in ('qr_activation_price', 'qr_renewal_price', 'license_print_price', 'insurance_commission'):
+    for key in ('qr_activation_price', 'qr_renewal_price', 'license_print_price', 'insurance_commission',
+                'vt_digital_processing_price_12', 'vt_digital_processing_price_6', 'vt_digital_processing_price_3'):
         val = data.get(key)
         if val is None:
             continue
@@ -570,13 +577,105 @@ def _latest_qr_payment_summary(vehicle_ids):
             amount = sum(float(p.amount or 0) for p in plist if p.payment_type == 'activation')
         else:
             amount = float(latest.amount or 0)
+        activations = [p for p in plist if p.payment_type == 'activation']
+        # The vehicle's actual activation date, independent of whatever the most
+        # recent QR event is — a later renewal must never be compared against
+        # itself when deciding whether it happened "the same day" as activation.
+        activation_paid_at = (
+            min(p.paid_at or p.created_at or _dt.min for p in activations)
+            if activations else None
+        )
         summary[vid] = SimpleNamespace(
             payment_type=latest.payment_type,
             amount=amount,
             recorded_by=latest.recorded_by,
             paid_at=latest.paid_at,
+            activation_paid_at=activation_paid_at,
         )
     return summary
+
+
+def _latest_vt_qr_renewal_summary(vehicle_ids):
+    """One summary row per vehicle for its most recent QR renewal triggered by
+    validating a technical inspection (see api_visite_technique_validate) —
+    same shape as _latest_qr_payment_summary so callers can compare the two
+    and use whichever is actually the most recent event for that vehicle."""
+    if not vehicle_ids:
+        return {}
+    from app.models import TechnicalInspection
+    from collections import defaultdict
+
+    by_vehicle = defaultdict(list)
+    for insp in TechnicalInspection.query.filter(
+        TechnicalInspection.vehicle_id.in_(vehicle_ids),
+        TechnicalInspection.qr_renewed_at.isnot(None),
+    ).all():
+        by_vehicle[insp.vehicle_id].append(insp)
+
+    summary = {}
+    for vid, ilist in by_vehicle.items():
+        latest = max(ilist, key=lambda i: i.qr_renewed_at)
+        summary[vid] = SimpleNamespace(
+            payment_type='renewal',
+            amount=float(latest.qr_renewal_amount or 0),
+            recorded_by=latest.smarttech_validated_by,
+            paid_at=latest.qr_renewed_at,
+        )
+    return summary
+
+
+def _qr_renewals_via_technical_inspection(start_dt=None, end_dt=None):
+    """Vehicles whose QR was renewed via technical-inspection validation
+    (see api_visite_technique_validate), used by both the Rapport page's
+    'Renouvellements QR Code' section and the Stats par île page.
+
+    QR renewal used to be triggered by the vignette payment; that link was
+    removed and replaced with the technical-inspection-driven renewal. This
+    mirrors that: a vehicle's QR renewal now counts here starting from its
+    SECOND technical inspection onward — the first inspection pairs with QR
+    activation as one combined tariff (see _vehicles_query_filtered's
+    same-cycle merge) and is never a 'renewal' on its own.
+
+    start_dt/end_dt narrow to a period (both required together); pass
+    neither for an all-time count."""
+    from app.models import TechnicalInspection
+    from app.timezone_utils import ensure_comoros
+
+    all_renewed = TechnicalInspection.query.filter(
+        TechnicalInspection.qr_renewed_at.isnot(None)
+    ).all()
+    if start_dt is not None:
+        in_period = [i for i in all_renewed
+                     if i.qr_renewed_at and start_dt <= ensure_comoros(i.qr_renewed_at) <= end_dt]
+    else:
+        in_period = all_renewed
+    if not in_period:
+        return []
+
+    vehicle_ids = {i.vehicle_id for i in in_period}
+    first_insp_id = {}
+    for vid in vehicle_ids:
+        first = (TechnicalInspection.query
+                 .filter_by(vehicle_id=vid)
+                 .order_by(TechnicalInspection.inspected_at.asc(), TechnicalInspection.id.asc())
+                 .first())
+        if first:
+            first_insp_id[vid] = first.id
+
+    rows = []
+    for insp in sorted(in_period, key=lambda i: i.qr_renewed_at):
+        if first_insp_id.get(insp.vehicle_id) == insp.id:
+            continue
+        rows.append(SimpleNamespace(
+            vehicle_id=insp.vehicle_id,
+            vehicle=insp.vehicle,
+            payment_type='renewal',
+            amount=float(insp.qr_renewal_amount or 0),
+            recorded_by=insp.smarttech_validated_by,
+            paid_at=insp.qr_renewed_at,
+            created_at=insp.qr_renewed_at,
+        ))
+    return rows
 
 
 def _group_qr_activations_by_vehicle(activations):
@@ -652,8 +751,44 @@ def _vehicles_query_filtered(search, type_filter):
         Vehicle.created_at.desc()
     ).all()
     all_ids = [v.id for v in all_vehicles]
+    THREE_DAYS = 3 * 86400
+    vehicles_by_id = {v.id: v for v in all_vehicles}
 
     recorded_payments = _latest_qr_payment_summary(all_ids)
+    vt_renewals = _latest_vt_qr_renewal_summary(all_ids)
+    for vid, vt_renewal in vt_renewals.items():
+        existing = recorded_payments.get(vid)
+        v = vehicles_by_id.get(vid)
+        # A vehicle whose first technical inspection lands within days of its
+        # QR activation (added and inspected the same day, a common case for
+        # newly-registered vehicles) isn't really "renewing" anything yet —
+        # fold the digital-processing fee into the activation as one combined
+        # amount instead of showing a separate, confusing "Renouvellement".
+        # This must be the vehicle's TRUE (earliest) activation date, not
+        # whatever its most recent QR event happens to be — otherwise a second
+        # renewal, compared against a first renewal's own date, would wrongly
+        # look "same-day" every time. Vehicles with no recorded activation
+        # payment at all (pre-QRCodePayment-tracking legacy data) never merge.
+        activation_date = existing.activation_paid_at if existing else None
+        is_same_activation_cycle = bool(
+            activation_date and vt_renewal.paid_at
+            and (ensure_comoros(vt_renewal.paid_at) - ensure_comoros(activation_date)).total_seconds() < THREE_DAYS
+        )
+        if is_same_activation_cycle:
+            base_amount = existing.amount if existing else None
+            recorded_payments[vid] = SimpleNamespace(
+                payment_type='activation',
+                amount=(base_amount or 0) + vt_renewal.amount,
+                recorded_by=(existing.recorded_by if existing else None) or vt_renewal.recorded_by,
+                paid_at=activation_date,
+            )
+        # A technical-inspection-triggered renewal never creates a QRCodePayment
+        # row (its amount is already collected inside the inspection's own
+        # price), so without this it would look like nothing happened since
+        # the last real payment. Whichever event is actually the most recent
+        # is what the vehicle's current QR state reflects.
+        elif not existing or (vt_renewal.paid_at and existing.paid_at and vt_renewal.paid_at > existing.paid_at):
+            recorded_payments[vid] = vt_renewal
 
     renewal_officer = {}
     if all_ids:
@@ -668,7 +803,6 @@ def _vehicles_query_filtered(search, type_filter):
         ):
             renewal_officer.setdefault(h.vehicle_id, h.officer)
 
-    THREE_DAYS = 3 * 86400
     rows = []
     for v in all_vehicles:
         recorded = recorded_payments.get(v.id)
@@ -1138,15 +1272,6 @@ def api_deletion_request_reject(req_id):
 @st_no_secretaire_required
 def gestion_vehicules_page():
     return render_template('smart_tech_gestion_vehicules.html')
-
-
-# ── Renouvellement QR ──────────────────────────────────────────────────────────
-
-@smart_tech_bp.route('/renouvellement')
-@st_no_secretaire_required
-def renouvellement_page():
-    renewal_price = int(SmartTechSetting.get('qr_renewal_price', 3000))
-    return render_template('smart_tech_renouvellement.html', renewal_price=renewal_price)
 
 
 # ── Subscriptions ──────────────────────────────────────────────────────────────
@@ -1704,7 +1829,9 @@ def _build_report(period_type, period_value):
     qr_in  = [q for q in qr_all
               if q.paid_at and start_dt <= ensure_comoros(q.paid_at) <= end_dt]
     activations = [q for q in qr_in if q.payment_type == 'activation']
-    renewals    = [q for q in qr_in if q.payment_type == 'renewal']
+    # Renewals are no longer vignette-driven — they now come from a vehicle's
+    # 2nd+ technical inspection (see _qr_renewals_via_technical_inspection).
+    renewals    = _qr_renewals_via_technical_inspection(start_dt, end_dt)
 
     # All active subscriptions (displayed in every report)
     active_subs = Subscription.query.filter_by(is_active=True)\
@@ -1907,7 +2034,14 @@ def api_rapport():
             'recorded_by':   q.recorded_by,
             'created_at':    q.created_at.strftime('%d/%m/%Y %H:%M') if q.created_at else None,
         } for q in r['activations']],
-        'renewals':          [q.to_dict() for q in r['renewals']],
+        'renewals':          [{
+            'vehicle_id':    q.vehicle_id,
+            'license_plate': q.vehicle.license_plate if q.vehicle else None,
+            'owner_name':    q.vehicle.owner_name if q.vehicle else None,
+            'amount':        float(q.amount),
+            'recorded_by':   q.recorded_by,
+            'created_at':    q.created_at.strftime('%d/%m/%Y %H:%M') if q.created_at else None,
+        } for q in r['renewals']],
         'subscriptions':     [fmt_sub(s) for s in r['manual_paid'] + r['auto_due']],
         'licenses_printed':  [lr.to_dict() for lr in r['licenses_printed']],
         'license_price':     r['license_print_price'],
@@ -2248,13 +2382,19 @@ def _island_stats(year=None):
             return True
         return start_dt <= ensure_comoros(dt) <= end_dt
 
-    # Revenue and activation/renewal counts: from recorded QRCodePayment rows, filtered by year
-    qr_query = QRCodePayment.query.filter_by(status='paid')
+    # Activation revenue/count: from recorded QRCodePayment rows, filtered by year
+    qr_query = QRCodePayment.query.filter_by(status='paid', payment_type='activation')
     if year:
         all_qr = [q for q in qr_query.all()
                   if in_year(q.created_at)]
     else:
         all_qr = qr_query.all()
+
+    # Renewals no longer come from QRCodePayment (that link — via the vignette —
+    # was removed) but from a vehicle's 2nd+ technical inspection (see
+    # _qr_renewals_via_technical_inspection).
+    vt_renewals = _qr_renewals_via_technical_inspection(start_dt, end_dt) if year \
+        else _qr_renewals_via_technical_inspection()
 
     def isle_stats(vehicles):
         """Build stats dict for a list of vehicles.
@@ -2263,11 +2403,12 @@ def _island_stats(year=None):
         all vehicles are shown with their current state.
 
         Revenue and activation/renewal counts come directly from QRCodePayment
-        records for ALL of this island's vehicles (not gated by the vehicle's
-        current qr_code_generated_at snapshot), so a vehicle billed more than
-        once — e.g. once via Carte Grise and again later via Vignette, or
-        re-activated after its qr_code_generated_at was overwritten — is
-        always fully counted instead of silently dropped.
+        (activations) and technical-inspection renewals for ALL of this
+        island's vehicles (not gated by the vehicle's current
+        qr_code_generated_at snapshot), so a vehicle billed more than once —
+        e.g. once via Carte Grise and again later via a technical-inspection
+        renewal, or re-activated after its qr_code_generated_at was
+        overwritten — is always fully counted instead of silently dropped.
         """
         if year:
             scope = [v for v in vehicles if in_year(v.qr_code_generated_at)]
@@ -2278,9 +2419,10 @@ def _island_stats(year=None):
         qr_exp   = sum(1 for v in scope if v.qr_code_expiry and v.is_qr_code_expired())
         all_v_ids = {v.id for v in vehicles}
         i_qr    = [q for q in all_qr if q.vehicle_id in all_v_ids]
-        acts    = sum(1 for q in i_qr if q.payment_type == 'activation')
-        rens    = sum(1 for q in i_qr if q.payment_type == 'renewal')
-        revenue = sum(q.amount for q in i_qr)
+        i_ren   = [r for r in vt_renewals if r.vehicle_id in all_v_ids]
+        acts    = len(i_qr)
+        rens    = len(i_ren)
+        revenue = sum(q.amount for q in i_qr) + sum(r.amount for r in i_ren)
         return {
             'vehicles': len(scope), 'active': active,
             'qr_valid': qr_valid, 'qr_expired': qr_exp,
@@ -2418,7 +2560,8 @@ def api_visite_technique_pending():
 @smart_tech_required
 def api_visite_technique_validate(insp_id):
     from app.models import TechnicalInspection
-    from app.timezone_utils import now_comoros
+    from app.timezone_utils import now_comoros, ensure_comoros
+    from datetime import datetime
     insp = TechnicalInspection.query.get_or_404(insp_id)
     if insp.status != 'approved':
         return jsonify({'error': "Cette visite n'est pas (ou plus) validée par le directeur régional."}), 409
@@ -2426,40 +2569,137 @@ def api_visite_technique_validate(insp_id):
         return jsonify({'error': "Le paiement de la visite technique doit être effectué avant validation SmartTech."}), 409
     if insp.smarttech_print_validated:
         return jsonify({'error': 'Déjà validée.'}), 409
+    now = now_comoros()
     insp.smarttech_print_validated = True
-    insp.smarttech_validated_at = now_comoros()
+    insp.smarttech_validated_at = now
     insp.smarttech_validated_by = current_user.username
+
+    # QR renewal now tracks the technical inspection's own cycle (like it used
+    # to track the vignette's) — but only a RENEWAL: a vehicle whose QR was
+    # never activated still needs that paid separately, this never activates
+    # one from scratch.
+    vehicle = insp.vehicle
+    if vehicle and vehicle.qr_code_expiry is not None and insp.expiry_date:
+        from app.mobile_pay import _get_technical_inspection_digital_processing_price
+        from app.models import VehicleHistory
+        old_expiry = vehicle.qr_code_expiry
+        vehicle.qr_code_generated_at = now
+        vehicle.qr_code_expiry = ensure_comoros(datetime(
+            insp.expiry_date.year, insp.expiry_date.month, insp.expiry_date.day, 23, 59, 59
+        ))
+        insp.qr_renewed_at = now
+        insp.qr_renewal_amount = _get_technical_inspection_digital_processing_price(insp.duration_months or 12)
+        # Same action text the old manual "Renouveler QR" wrote — SmartTech's
+        # "Véhicules" page (renewal_officer lookup) and per-vehicle history
+        # modal both match on it, so this keeps them working unchanged.
+        db.session.add(VehicleHistory(
+            vehicle_id=vehicle.id,
+            action='QR Code renouvelé - Visite technique',
+            officer=current_user.username,
+            notes=(
+                f"Renouvelé via validation de la visite technique #{insp.id}\n"
+                f"Ancien expiry: {old_expiry.strftime('%Y-%m-%d') if old_expiry else 'Non défini'}\n"
+                f"Nouvelle expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
+            ),
+        ))
+
     db.session.commit()
     return jsonify({'ok': True, 'inspection': insp.to_dict()})
+
+
+@smart_tech_bp.route('/visite-technique/<int:insp_id>/print')
+@st_no_secretaire_required
+def visite_technique_print(insp_id):
+    """Print the technical-inspection attestation directly from SmartTech,
+    once SmartTech itself has validated it — same document and same gating
+    rules (approved / smarttech_print_validated / paid) as the judiciaire/DR
+    print route, just reachable from the SmartTech account instead."""
+    from app.models import TechnicalInspection, CarteGriseSetting, TECHNICAL_INSPECTION_ITEMS, TECHNICAL_INSPECTION_SCORE_MAX
+    import json as _json
+    insp = _vti_q().filter(TechnicalInspection.id == insp_id).first()
+    if not insp:
+        abort(404)
+    if insp.status != 'approved':
+        abort(403)
+    if not insp.smarttech_print_validated:
+        abort(403)
+    if insp.payment_status != 'paid':
+        abort(403)
+    vehicle = insp.vehicle
+
+    island = vehicle.owner_island or 'Grande Comore'
+    cg_settings = CarteGriseSetting.get(island)
+
+    vehicle_qr_data_uri = None
+    if vehicle.track_token:
+        try:
+            import qrcode, io, base64 as _b64
+            _qr = qrcode.QRCode(box_size=5, border=2)
+            _qr.add_data(f'VEHICLE_TRACK:{vehicle.track_token}')
+            _qr.make(fit=True)
+            _img = _qr.make_image(fill_color='black', back_color='white')
+            _buf = io.BytesIO()
+            _img.save(_buf, format='PNG')
+            vehicle_qr_data_uri = 'data:image/png;base64,' + _b64.b64encode(_buf.getvalue()).decode()
+        except Exception:
+            pass
+
+    from app.timezone_utils import now_comoros
+    return render_template('dgrtr_visite_technique_print.html',
+                           vehicle=vehicle, insp=insp,
+                           cg_settings=cg_settings,
+                           now_comoros=now_comoros,
+                           checklist_items=TECHNICAL_INSPECTION_ITEMS,
+                           checklist_result=_json.loads(insp.checklist) if insp.checklist else {},
+                           score_max=TECHNICAL_INSPECTION_SCORE_MAX,
+                           vehicle_qr_data_uri=vehicle_qr_data_uri)
+
+
+def _vti_exclude_stale_cycle(reqs):
+    """Drop a validated record when a NEWER inspection cycle exists for the
+    same vehicle (a fresh draft/report already in progress) — otherwise the
+    vehicle would misleadingly show as "validée"/"imprimée" here while it's
+    actually back to pending payment / pending directeur régional review."""
+    from app.models import TechnicalInspection
+    if not reqs:
+        return reqs
+    vehicle_ids = {r.vehicle_id for r in reqs}
+    latest_by_vehicle = dict(
+        db.session.query(TechnicalInspection.vehicle_id, db.func.max(TechnicalInspection.inspected_at))
+        .filter(TechnicalInspection.vehicle_id.in_(vehicle_ids))
+        .group_by(TechnicalInspection.vehicle_id)
+        .all()
+    )
+    return [r for r in reqs if latest_by_vehicle.get(r.vehicle_id) == r.inspected_at]
+
+
+@smart_tech_bp.route('/api/visite-technique/awaiting-print')
+@smart_tech_required
+def api_visite_technique_awaiting_print():
+    """Validated by SmartTech but not yet actually printed — a persistent
+    worklist, not date-limited, so an attestation validated days ago still
+    shows up here until it's actually printed."""
+    from app.models import TechnicalInspection
+    reqs = (_vti_q()
+            .filter(TechnicalInspection.smarttech_print_validated == True,
+                    TechnicalInspection.attestation_printed_at.is_(None))
+            .order_by(TechnicalInspection.smarttech_validated_at.asc())
+            .all())
+    return jsonify([r.to_dict() for r in _vti_exclude_stale_cycle(reqs)])
 
 
 @smart_tech_bp.route('/api/visite-technique/history')
 @smart_tech_required
 def api_visite_technique_history():
-    """Already-validated inspections, newest first.
-
-    Excludes a validated record when a NEWER inspection cycle exists for the
-    same vehicle (a fresh draft/report already in progress) — otherwise the
-    vehicle would misleadingly show as "validée" here while it's actually
-    back to pending payment / pending directeur régional review."""
+    """Already-printed attestations, newest first."""
     from app.models import TechnicalInspection
     reqs = (_vti_q()
-            .filter(TechnicalInspection.smarttech_print_validated == True)
-            .order_by(TechnicalInspection.smarttech_validated_at.desc())
+            .filter(TechnicalInspection.smarttech_print_validated == True,
+                    TechnicalInspection.attestation_printed_at.isnot(None))
+            .order_by(TechnicalInspection.attestation_printed_at.desc())
             .limit(200)
             .all())
-
-    if reqs:
-        vehicle_ids = {r.vehicle_id for r in reqs}
-        latest_by_vehicle = dict(
-            db.session.query(TechnicalInspection.vehicle_id, db.func.max(TechnicalInspection.inspected_at))
-            .filter(TechnicalInspection.vehicle_id.in_(vehicle_ids))
-            .group_by(TechnicalInspection.vehicle_id)
-            .all()
-        )
-        reqs = [r for r in reqs if latest_by_vehicle.get(r.vehicle_id) == r.inspected_at]
-
-    return jsonify([r.to_dict() for r in reqs])
+    return jsonify([r.to_dict() for r in _vti_exclude_stale_cycle(reqs)])
 
 
 @smart_tech_bp.route('/api/licences/requests/stats')
@@ -2489,8 +2729,13 @@ def api_licences_requests_stats():
             TechnicalInspection.smarttech_print_validated == False,
             TechnicalInspection.payment_status == 'paid',
         ).count()
+        vt_awaiting_print = _vti_q().filter(
+            TechnicalInspection.smarttech_print_validated == True,
+            TechnicalInspection.attestation_printed_at.is_(None),
+        ).count()
     except Exception:
         vt_pending = 0
+        vt_awaiting_print = 0
     try:
         gv_pending = _vq().filter_by(qr_pending_approval=True).count()
     except Exception:
@@ -2503,6 +2748,7 @@ def api_licences_requests_stats():
         'printed_total':    printed_total,
         'cancelled_total':  cancelled_total,
         'vt_pending_count': vt_pending,
+        'vt_awaiting_print_count': vt_awaiting_print,
         'gv_pending_count': gv_pending,
     })
 
@@ -3305,6 +3551,78 @@ def api_rapport_journalier():
         'act_price':       act_price,
         'ren_price':       ren_price,
         'rows':            rows,
+    })
+
+
+@smart_tech_bp.route('/rapport-journalier-vt')
+@smart_tech_required
+def rapport_journalier_vt_page():
+    from app.timezone_utils import now_comoros
+    today = now_comoros().date()
+    return render_template(
+        'smart_tech_rapport_journalier_vt.html',
+        today=today.isoformat(),
+    )
+
+
+@smart_tech_bp.route('/api/rapport-journalier-vt')
+@smart_tech_required
+def api_rapport_journalier_vt():
+    from app.models import TechnicalInspection
+    from app.timezone_utils import now_comoros
+    from datetime import date as date_type, datetime
+
+    day_str = request.args.get('date', '')
+    try:
+        day = date_type.fromisoformat(day_str)
+    except (ValueError, TypeError):
+        day = now_comoros().date()
+
+    day_start = datetime(day.year, day.month, day.day, 0, 0, 0)
+    day_end   = datetime(day.year, day.month, day.day, 23, 59, 59)
+
+    q = _vti_q().filter(
+        TechnicalInspection.smarttech_print_validated == True,
+        TechnicalInspection.smarttech_validated_at >= day_start,
+        TechnicalInspection.smarttech_validated_at <= day_end,
+    )
+
+    emp_island = _employe_island()
+    if not emp_island:
+        # admin/secretaire: optional island filter from query param
+        requested_island = request.args.get('island', '').strip()
+        if requested_island:
+            q = q.filter(Vehicle.owner_island == requested_island)
+
+    inspections = q.order_by(TechnicalInspection.smarttech_validated_at.asc()).all()
+
+    nb_12 = sum(1 for i in inspections if (i.duration_months or 12) == 12)
+    nb_court = len(inspections) - nb_12
+    total_amount = sum(float(i.price_kmf or 0) for i in inspections)
+
+    rows = []
+    for i in inspections:
+        v = i.vehicle
+        rows.append({
+            'id':            i.id,
+            'vehicle_id':    i.vehicle_id,
+            'license_plate': v.license_plate if v else '—',
+            'owner_name':    v.owner_name if v else '—',
+            'owner_island':  v.owner_island if v else '—',
+            'duration_months': i.duration_months or 12,
+            'amount':        float(i.price_kmf or 0),
+            'validated_at':  i.smarttech_validated_at.strftime('%H:%M') if i.smarttech_validated_at else '—',
+            'recorded_by':   i.smarttech_validated_by or '—',
+        })
+
+    return jsonify({
+        'date':         day.strftime('%d/%m/%Y'),
+        'date_iso':     day.isoformat(),
+        'nb_total':     len(inspections),
+        'nb_12':        nb_12,
+        'nb_court':     nb_court,
+        'total_amount': total_amount,
+        'rows':         rows,
     })
 
 

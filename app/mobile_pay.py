@@ -152,11 +152,11 @@ def _get_vignette_rate_breakdown(vehicle):
         return None
 
 
-def _get_technical_inspection_price(vehicle):
-    """Resolve the technical-inspection price for a vehicle from TechnicalInspectionRate,
-    preferring the most specific match (exact vehicle_type + usage_type over wildcards)."""
+def _resolve_technical_inspection_rate(vehicle):
+    """Return the TechnicalInspectionRate that applies to a vehicle, preferring the
+    most specific match (exact vehicle_type + usage_type over wildcards), or None."""
     if not vehicle:
-        return 0.0
+        return None
     try:
         from app.models import TechnicalInspectionRate
 
@@ -174,7 +174,7 @@ def _get_technical_inspection_price(vehicle):
 
         rates = query.all()
         if not rates:
-            return 0.0
+            return None
 
         def specificity_score(rate):
             score = 0
@@ -185,9 +185,37 @@ def _get_technical_inspection_price(vehicle):
             return score
 
         rates.sort(key=specificity_score, reverse=True)
-        return float(rates[0].price_kmf) if rates[0].price_kmf else 0.0
+        return rates[0]
     except Exception:
+        return None
+
+
+def _get_technical_inspection_digital_processing_price(duration_months):
+    """Flat "Traitement des données numérique" fee for a technical-inspection
+    attestation, configured per validity duration (12/6/3 months) in
+    SmartTech settings — independent of vehicle type/usage. Folded directly
+    into _get_technical_inspection_price()'s total, not billed separately."""
+    key = f'vt_digital_processing_price_{int(duration_months) if duration_months in (12, 6, 3) else 12}'
+    return float(SmartTechSetting.get(key, 0) or 0)
+
+
+def _get_technical_inspection_price(vehicle):
+    """Resolve the technical-inspection price for a vehicle from TechnicalInspectionRate
+    (most specific vehicle_type + usage_type match), plus the flat "Traitement des
+    données numérique" fee for that rate's validity duration."""
+    rate = _resolve_technical_inspection_rate(vehicle)
+    if not rate:
         return 0.0
+    base_price = float(rate.price_kmf) if rate.price_kmf else 0.0
+    digital_processing_price = _get_technical_inspection_digital_processing_price(rate.duration_months or 12)
+    return base_price + digital_processing_price
+
+
+def _get_technical_inspection_duration_months(vehicle):
+    """Resolve the technical-inspection attestation validity (in months) for a
+    vehicle from TechnicalInspectionRate, defaulting to 12 if no rate matches."""
+    rate = _resolve_technical_inspection_rate(vehicle)
+    return (rate.duration_months or 12) if rate else 12
 
 
 def _calculate_penalty_amount(days_late):
@@ -432,11 +460,10 @@ def lookup():
             qr_status = 'active'
     qr_renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
 
-    # QR fee: always charged when adding a first vignette (vehicle has none yet),
-    # otherwise only if the QR code was never activated.
-    is_new_vignette = vehicle.vignette_expiry is None
-    needs_qr_activation = vehicle.qr_code_expiry is None
-    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if (is_new_vignette or needs_qr_activation) else 0.0
+    # QR activation is no longer bundled into the vignette payment — it's
+    # handled separately via SmartTech (see qr_quote below for the standalone
+    # renewal option, which is unaffected).
+    qr_activation_price = 0.0
 
     return jsonify({
         'vehicle': vehicle_payload,
@@ -448,7 +475,7 @@ def lookup():
             'penalty_amount': round(penalty_amount, 2),
             'fines_amount': round(unpaid_fines_amount, 2),
             'qr_activation_price': round(qr_activation_price, 2),
-            'total_amount': round(vignette_total + penalty_amount + unpaid_fines_amount + qr_activation_price, 2) if renewal_allowed else 0.0,
+            'total_amount': round(vignette_total + penalty_amount + unpaid_fines_amount, 2) if renewal_allowed else 0.0,
             'requested_expiry': requested_expiry.isoformat() if requested_expiry else None,
             'is_renewal': bool(vignette_expiry and (vignette_expiry < now or renewal_needed)),
             'renewal_allowed': renewal_allowed,
@@ -490,13 +517,12 @@ def _build_vignette_payment_payload(vehicle, requested_expiry=None):
     unpaid_fines_ids = [f.id for f in unpaid_fines]
     unpaid_fines_amount = float(sum(float(f.amount or 0.0) for f in unpaid_fines))
 
-    # QR fee: always charged when adding a first vignette (vehicle has none yet),
-    # otherwise only if the QR code was never activated.
+    # QR activation is no longer bundled into the vignette payment — it's
+    # handled separately via SmartTech.
     is_new_vignette = vehicle.vignette_expiry is None
-    needs_qr_activation = vehicle.qr_code_expiry is None
-    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if (is_new_vignette or needs_qr_activation) else 0.0
+    qr_activation_price = 0.0
 
-    total_amount = round(vignette_price + annual_ds_amount + penalty_amount + unpaid_fines_amount + qr_activation_price, 2)
+    total_amount = round(vignette_price + annual_ds_amount + penalty_amount + unpaid_fines_amount, 2)
     payload = {
         'type': 'vignette_request',
         'payment_type': 'vignette',
@@ -588,56 +614,6 @@ def create_payment():
                 'total_amount': round(total, 2),
                 'requested_expiry': requested_expiry.isoformat() if requested_expiry else None,
             }
-        })
-
-    if payment_type == 'qr_renewal':
-        vehicle_id = data.get('vehicle_id')
-        if not vehicle_id:
-            return jsonify({'error': 'vehicle_id is required for QR code renewal'}), 400
-
-        vehicle = Vehicle.query.get(vehicle_id)
-        if not vehicle:
-            return jsonify({'error': 'Vehicle not found'}), 404
-
-        qr_expiry = ensure_comoros(vehicle.qr_code_expiry) if vehicle.qr_code_expiry else None
-        if qr_expiry and qr_expiry > now_comoros():
-            return jsonify({'error': 'Le code QR de ce véhicule est encore valide.'}), 400
-
-        amount = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
-        payload = {
-            'type': 'qr_renewal_request',
-            'payment_type': 'qr_renewal',
-            'vehicle_id': vehicle.id,
-            'license_plate': vehicle.license_plate,
-            'owner_name': vehicle.owner_name,
-            'amount': amount,
-        }
-
-        payment = Payment(
-            amount=amount,
-            currency='KMF',
-            status='pending',
-            license_plate=vehicle.license_plate,
-            owner_name=vehicle.owner_name,
-            payer_name=payer_name,
-            payer_email=payer_email,
-            destination_phone=HuriDestinationSetting.get().phone_for('qr_renewal'),
-            fines=json.dumps(payload)
-        )
-        db.session.add(payment)
-        db.session.commit()
-
-        checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
-
-        return jsonify({
-            'payment_id': payment.id,
-            'confirm_token': payment.confirm_token,
-            'checkout_url': checkout_url,
-            'amount': round(amount, 2),
-            'currency': 'KMF',
-            'status': 'pending',
-            'payment_type': 'qr_renewal',
-            'vehicle': vehicle.to_dict(),
         })
 
     if payment_type == 'technical_inspection':
@@ -950,7 +926,6 @@ def webhook():
             vehicle = Vehicle.query.get(int(vehicle_id)) if vehicle_id else None
             if vehicle:
                 payment_time = payment.paid_at or now_comoros()
-                is_new_vignette = vehicle.vignette_expiry is None
                 try:
                     requested_expiry = datetime.fromisoformat(fine_payload.get('requested_expiry')) if fine_payload.get('requested_expiry') else None
                 except Exception:
@@ -973,27 +948,14 @@ def webhook():
                 vehicle.vignette_last_paid_vignette_amount = float(fine_payload.get('vignette_price') or 0.0) + float(fine_payload.get('annual_ds_amount') or 0.0)
                 vehicle.vignette_last_paid_penalty_amount = float(fine_payload.get('penalty_amount') or 0.0)
                 vehicle.vignette_last_paid_fines_amount = float(fine_payload.get('fines_amount') or 0.0)
-                vehicle.vignette_last_paid_qr_amount = float(fine_payload.get('qr_activation_price') or 0.0)
+                vehicle.vignette_last_paid_qr_amount = 0.0
                 vehicle.vignette_last_paid_total_amount = float(payment.amount or 0.0)
                 vehicle.vignette_payment_requested_at = None
                 vehicle.vignette_payment_requested_by = None
                 vehicle.vignette_payment_requested_expiry = None
 
-                # Adding a vignette for the first time: the QR code now tracks the
-                # vignette's expiry date, and its activation fee (bundled in the
-                # total above) is recorded as a SmartTech QR payment.
-                qr_activation_price = float(fine_payload.get('qr_activation_price') or 0.0)
-                if is_new_vignette and qr_activation_price > 0:
-                    vehicle.qr_code_generated_at = payment_time
-                    vehicle.qr_code_expiry = requested_expiry
-                    db.session.add(QRCodePayment(
-                        vehicle_id=vehicle.id,
-                        payment_type='activation',
-                        amount=qr_activation_price,
-                        status='paid',
-                        paid_at=payment_time,
-                        recorded_by=citizen_label,
-                    ))
+                # QR activation is no longer bundled into the vignette payment — it's
+                # handled separately via SmartTech, so it's never auto-activated here.
 
                 db.session.add(VehicleHistory(
                     vehicle_id=vehicle.id,
@@ -1011,30 +973,6 @@ def webhook():
                         f.paid_by = citizen_label
                         f.receipt_number = f'VEN-{f.id}-{int(payment_time.timestamp())}'
 
-                db.session.commit()
-        elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'qr_renewal_request':
-            vehicle_id = fine_payload.get('vehicle_id')
-            vehicle = Vehicle.query.get(int(vehicle_id)) if vehicle_id else None
-            if vehicle:
-                payment_time = payment.paid_at or now_comoros()
-                vehicle.generate_qr_code_with_expiry()
-                vehicle.status = 'active'
-
-                citizen_name = payment.payer_name or payment.phone_number or 'Inconnu'
-                db.session.add(QRCodePayment(
-                    vehicle_id=vehicle.id,
-                    payment_type='renewal',
-                    amount=float(payment.amount or 0.0),
-                    status='paid',
-                    paid_at=payment_time,
-                    recorded_by=f'App Citoyen / {citizen_name}',
-                ))
-                db.session.add(VehicleHistory(
-                    vehicle_id=vehicle.id,
-                    action='Renouvellement QR Code via mobile citoyen',
-                    officer='App Mobile',
-                    notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF | Nouvelle expiration: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
-                ))
                 db.session.commit()
         elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'technical_inspection_payment_request':
             from app.models import TechnicalInspection

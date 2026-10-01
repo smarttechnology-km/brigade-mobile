@@ -399,36 +399,40 @@ def calculate_vignette_price(vehicle):
 def get_pending_vignette_request_expiry(vehicle):
     """Return a pending requested vignette expiry, if any.
 
-    The primary source is the vehicle request fields. If those are absent,
-    fall back to a pending Payment row created for a vignette request.
+    Only the vehicle's own request field counts — set explicitly by an agent
+    via request_vignette_payment(). A Payment row created by the citizen app
+    at checkout is NOT enough on its own: the app never tells the backend
+    when someone backs out of checkout (it just navigates back), so an
+    unconfirmed Payment is not proof anyone is actually paying. Until the
+    payment is genuinely confirmed (which sets vignette_expiry directly), the
+    vehicle must not show as "En attente".
     """
-    requested_expiry = getattr(vehicle, 'vignette_payment_requested_expiry', None)
-    if requested_expiry:
-        return requested_expiry
+    return getattr(vehicle, 'vignette_payment_requested_expiry', None)
 
-    try:
-        from app.models import Payment
 
-        pending_payments = Payment.query.filter_by(
-            license_plate=vehicle.license_plate,
-            status='pending'
-        ).order_by(Payment.created_at.desc()).all()
+def get_vehicle_technical_inspection_block_message(vehicle, action="ajouter ou renouveler son assurance"):
+    """Message explaining why an action requiring a valid technical inspection
+    is blocked for this vehicle (insurance add/renew, vignette add/renew, ...),
+    or None if it's valid. `action` is the trailing phrase describing what's
+    blocked, e.g. "ajouter ou renouveler son assurance" / "ajouter une vignette"."""
+    from app.models import TechnicalInspection
+    from app.timezone_utils import now_comoros
 
-        for payment in pending_payments:
-            try:
-                payload = json.loads(payment.fines or '{}')
-            except Exception:
-                continue
+    latest = (TechnicalInspection.query
+              .filter_by(vehicle_id=vehicle.id, status='approved')
+              .order_by(TechnicalInspection.issued_at.desc())
+              .first())
+    if not latest:
+        return f"Ce véhicule n'a jamais fait de visite technique. Vous ne pouvez pas {action}."
 
-            if isinstance(payload, dict) and payload.get('type') == 'vignette_request':
-                expiry_value = payload.get('requested_expiry')
-                if expiry_value:
-                    try:
-                        return datetime.fromisoformat(expiry_value)
-                    except Exception:
-                        return None
-    except Exception:
-        pass
+    if not (latest.expiry_date and latest.expiry_date >= now_comoros().date()):
+        return f"La visite technique de ce véhicule a expiré. Vous ne pouvez pas {action}."
+
+    if not latest.smarttech_print_validated or latest.payment_status != 'paid':
+        return f"La visite technique de ce véhicule est en attente de validation. Vous ne pouvez pas {action}."
+
+    if not vehicle.has_valid_technical_inspection():
+        return f"Une nouvelle visite technique est en cours pour ce véhicule. Vous ne pouvez pas {action} en attendant sa validation."
 
     return None
 
@@ -442,6 +446,10 @@ def get_vehicle_block_reason_for_insurance(vehicle):
         if unpaid_fine.amount is not None:
                 fine_label += f" ({format_kmf_amount(unpaid_fine.amount)} KMF)"
         return f"{fine_label}. Vous devez d'abord la régler avant d'ajouter ou de modifier l'assurance."
+
+    vt_message = get_vehicle_technical_inspection_block_message(vehicle)
+    if vt_message:
+        return vt_message
 
     try:
         qr_expired = vehicle.is_qr_code_expired()
@@ -1167,15 +1175,6 @@ def mobile_money_vignettes_page():
     return render_template('mobile_money_vignettes.html')
 
 
-@main_bp.route('/mobile-money-qr-renewal')
-@roles_required('mobile_money_agent')
-def mobile_money_qr_renewal_page():
-    """Page for mobile money agents to process QR code renewals."""
-    from app.models import SmartTechSetting
-    renewal_price = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
-    return render_template('mobile_money_qr_renewal.html', renewal_price=renewal_price)
-
-
 @main_bp.route('/mobile-money-cartes-grises')
 @roles_required('mobile_money_agent')
 def mobile_money_cartes_grises_page():
@@ -1256,7 +1255,7 @@ def api_mm_visite_technique_pending():
 def api_mm_confirm_visite_technique_payment(draft_id):
     """Collect payment in person for a technical inspection draft (before the checklist)."""
     from app.models import TechnicalInspectionDraft
-    from app.mobile_pay import _get_technical_inspection_price
+    from app.mobile_pay import _get_technical_inspection_price, _get_technical_inspection_duration_months
 
     draft = TechnicalInspectionDraft.query.get_or_404(draft_id)
     if draft.payment_status == 'paid':
@@ -1264,6 +1263,7 @@ def api_mm_confirm_visite_technique_payment(draft_id):
 
     draft.payment_status = 'paid'
     draft.price_kmf = draft.price_kmf if draft.price_kmf is not None else _get_technical_inspection_price(draft.vehicle)
+    draft.duration_months = draft.duration_months if draft.duration_months is not None else _get_technical_inspection_duration_months(draft.vehicle)
     draft.payment_channel = 'agent_huri_money'
     draft.paid_by = current_user.username
     draft.paid_at = now_comoros()
@@ -1376,6 +1376,53 @@ def dgrtr_dossiers_complets():
         from flask import abort
         abort(403)
     return render_template('dgrtr_dossiers_complets.html')
+
+
+@main_bp.route('/dgrtr/licence-professionnelle')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_licence_professionnelle():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
+        abort(403)
+    return render_template('dgrtr_licence_professionnelle.html')
+
+
+@main_bp.route('/dgrtr-licence-pro-complet')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_licence_pro_complet():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
+        abort(403)
+    return render_template('dgrtr_licence_pro_complet.html')
+
+
+@main_bp.route('/dgrtr/licence-pro/<int:req_id>/print')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_licence_pro_print(req_id):
+    from app.models import LicenceProRequest, LicenseSetting
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
+        abort(403)
+    req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status not in ('validated', 'printed'):
+        abort(403)
+    lic = req.license
+    settings = LicenseSetting.get()
+
+    import qrcode, io, base64 as _b64
+    qr_data_uri = None
+    if lic:
+        _qr = qrcode.QRCode(box_size=5, border=2)
+        _qr.add_data(f'LICENCE_PRO:{req.lp_number}')
+        _qr.make(fit=True)
+        _img = _qr.make_image(fill_color='black', back_color='white').convert('RGBA')
+        _img.putdata([(255, 255, 255, 0) if px[0] > 200 and px[1] > 200 and px[2] > 200 else px
+                      for px in _img.getdata()])
+        _buf = io.BytesIO()
+        _img.save(_buf, format='PNG')
+        qr_data_uri = 'data:image/png;base64,' + _b64.b64encode(_buf.getvalue()).decode('ascii')
+
+    return render_template(
+        'dgrtr_licence_pro_print.html',
+        req=req, lic=lic, settings=settings, qr_data_uri=qr_data_uri,
+    )
 
 
 @main_bp.route('/dgrtr/ajouter-permis')
@@ -1664,6 +1711,7 @@ def license_print_history(license_id):
 @roles_required('administrateur','judiciaire','dgrtr')
 def reports_page():
     _require_dr_only()
+    _block_directeur_general()
     return render_template('reports.html')
 
 
@@ -3404,60 +3452,6 @@ def vehicle_sheet_pdf(vehicle_id):
         return jsonify({'error': str(e)}), 500
 
 
-@vehicle_bp.route('/<int:vehicle_id>/qrcode/renew', methods=['POST'])
-@login_required
-def renew_vehicle_qrcode(vehicle_id):
-    """Renouvelle le QR code d'un véhicule avec une nouvelle date d'expiration de 1 an sans changer le token"""
-    vehicle = Vehicle.query.get_or_404(vehicle_id)
-    check_island_access(vehicle.owner_island)
-    
-    try:
-        old_expiry = vehicle.qr_code_expiry.strftime('%Y-%m-%d') if vehicle.qr_code_expiry else 'Non défini'
-        old_status = vehicle.status
-        
-        # Renouveler uniquement l'expiration du QR code
-        vehicle.generate_qr_code_with_expiry()
-        vehicle.qr_renewed_by = current_user.username
-
-        # Réactiver le véhicule s'il était inactif
-        if vehicle.status == 'inactive':
-            vehicle.status = 'active'
-
-        # Enregistrer dans l'historique
-        from app.models import VehicleHistory
-        history = VehicleHistory(
-            vehicle_id=vehicle.id,
-            action=f"QR Code renouvelé - Token conservé",
-            officer=current_user.username,
-            notes=f"Token conservé: {vehicle.track_token}\nAncien expiry: {old_expiry}\nNouvelle expiry: {vehicle.qr_code_expiry.strftime('%Y-%m-%d')}"
-        )
-        db.session.add(history)
-        db.session.commit()
-        _record_qr_payment(vehicle, 'renewal', current_user.username)
-
-        from app.models import SmartTechSetting
-        renewal_amount = float(SmartTechSetting.get('qr_renewal_price', 3000) or 3000)
-        return jsonify({
-            'success': True,
-            'message': f'Code QR renouvelé pour {vehicle.license_plate}',
-            'track_token': vehicle.track_token,
-            'token_unchanged': True,
-            'old_expiry': old_expiry,
-            'new_expiry': vehicle.qr_code_expiry.strftime('%d/%m/%Y'),
-            'old_status': old_status,
-            'new_status': vehicle.status,
-            'generated_at': vehicle.qr_code_generated_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'owner_name': vehicle.owner_name or '',
-            'amount': renewal_amount,
-            'payment_type': 'renewal',
-            'recorded_by': current_user.username,
-            'paid_at': now_comoros().strftime('%d/%m/%Y %H:%M'),
-        }), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-
 @vehicle_bp.route('/<int:vehicle_id>/qrcode/activate', methods=['POST'])
 @login_required
 def activate_vehicle_qrcode(vehicle_id):
@@ -4568,6 +4562,11 @@ def update_vehicle(vehicle_id):
             if ins_exp > now_comoros():
                 return jsonify({'error': "Impossible de modifier l'assurance: l'assurance actuelle est encore active jusqu'au "
                                          + ins_exp.strftime('%d/%m/%Y') + "."}), 400
+        # Insurance agencies can only add/renew insurance on a vehicle that has
+        # a currently valid technical inspection.
+        vt_message = get_vehicle_technical_inspection_block_message(vehicle)
+        if vt_message:
+            return jsonify({'error': vt_message}), 400
 
     # Tax agents can renew vignette only when vehicle QR code is active.
     vignette_update_requested = 'vignette_expiry' in data
@@ -4792,7 +4791,7 @@ VEHICLE_EDIT_REQUEST_FIELD_LABELS = {
 
 def _is_dr_or_dg():
     """directeur_regional only (dgrtr) — the only dgrtr type that may approve vehicle edit requests."""
-    return current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'
+    return getattr(current_user, 'role', None) == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'
 
 
 @vehicle_bp.route('/<int:vehicle_id>/edit-requests', methods=['POST'])
@@ -4950,13 +4949,13 @@ def dgrtr_vehicle_edit_requests_page():
 
 def _is_visite_technique_reviewer():
     """directeur_regional only (dgrtr) — the only role that may validate/reject technical inspections."""
-    return current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'
+    return getattr(current_user, 'role', None) == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'
 
 
 def _can_view_visite_technique():
-    """administrateur and dgrtr (directeur_regional / directeur_general) can view the page; judiciaire is handled separately."""
+    """administrateur and dgrtr (directeur_regional only) can view the page; judiciaire is handled separately."""
     return current_user.role == 'administrateur' or (
-        current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) in ('directeur_regional', 'directeur_general')
+        current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional'
     )
 
 
@@ -5046,6 +5045,7 @@ def create_technical_inspection(vehicle_id):
         inspected_by=current_user.username,
         payment_status=draft.payment_status,
         price_kmf=draft.price_kmf,
+        duration_months=draft.duration_months,
         payment_channel=draft.payment_channel,
         paid_by=draft.paid_by,
         paid_at=draft.paid_at,
@@ -5148,12 +5148,14 @@ def save_technical_inspection_draft(vehicle_id):
         )
         free_source = _free_reinspection_source(vehicle_id)
         prepaid_appt = _appointment_prepaid_source(vehicle_id) if not free_source else None
+        from app.mobile_pay import _get_technical_inspection_duration_months
         if free_source:
             from dateutil.relativedelta import relativedelta
             free_deadline = free_source.reviewed_at + relativedelta(months=1)
             draft.payment_status = 'paid'
             draft.payment_channel = 'free_reinspection'
             draft.price_kmf = 0
+            draft.duration_months = _get_technical_inspection_duration_months(vehicle)
             draft.paid_by = (
                 f"Revisite gratuite (rejet du {free_source.reviewed_at.strftime('%d/%m/%Y')}, "
                 f"gratuite jusqu'au {free_deadline.strftime('%d/%m/%Y')})"
@@ -5163,10 +5165,12 @@ def save_technical_inspection_draft(vehicle_id):
             draft.payment_status = 'paid'
             draft.payment_channel = 'app_citoyen'
             draft.price_kmf = prepaid_appt.price_kmf
+            draft.duration_months = prepaid_appt.duration_months
             draft.paid_by = "Payé à la prise de rendez-vous (App Citoyen)"
             draft.paid_at = prepaid_appt.paid_at
         else:
             draft.price_kmf = _get_technical_inspection_price(vehicle)
+            draft.duration_months = _get_technical_inspection_duration_months(vehicle)
         db.session.add(draft)
     db.session.commit()
     return jsonify(draft.to_dict()), 201
@@ -5226,7 +5230,7 @@ def approve_technical_inspection(insp_id):
     insp.reviewed_by = current_user.username
     insp.reviewed_at = now
     insp.issued_at = now
-    insp.expiry_date = now.date() + relativedelta(years=1)
+    insp.expiry_date = now.date() + relativedelta(months=insp.duration_months or 12)
 
     db.session.add(VehicleHistory(
         vehicle_id=vehicle.id,
@@ -5329,7 +5333,7 @@ def list_technical_inspection_appointments():
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def visite_technique_page():
     from app.models import TECHNICAL_INSPECTION_ITEMS
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_regional':
         abort(403)
     return render_template('dgrtr_visite_technique.html',
                            checklist_items=TECHNICAL_INSPECTION_ITEMS,
@@ -5414,6 +5418,28 @@ def visite_technique_receipt(insp_id):
                            free_revisit_deadline=free_revisit_deadline)
 
 
+@main_bp.route('/api/technical-inspections/<int:insp_id>/mark-printed', methods=['POST'])
+@login_required
+def mark_technical_inspection_printed(insp_id):
+    """Called from the attestation print page itself, right before triggering
+    window.print() — same pattern as license cards. Reachable from both the
+    judiciaire/DR print route and the SmartTech print route, since either can
+    be the one that actually prints it. Marks it out of "en attente
+    d'impression" on SmartTech's Visite Technique page."""
+    from app.models import TechnicalInspection
+    is_dgrtr_staff = hasattr(current_user, 'role') and current_user.role in ('administrateur', 'judiciaire', 'dgrtr')
+    is_smart_tech = getattr(current_user, 'is_smart_tech', False)
+    if not (is_dgrtr_staff or is_smart_tech):
+        return jsonify({'error': 'Accès refusé'}), 403
+    insp = TechnicalInspection.query.get_or_404(insp_id)
+    if not insp.smarttech_print_validated:
+        return jsonify({'error': "Cette attestation n'est pas encore validée par SmartTech."}), 409
+    insp.attestation_printed_at = now_comoros()
+    insp.attestation_printed_by = current_user.username
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 @main_bp.route('/dgrtr/visite-technique/<int:insp_id>/rejection-letter')
 @roles_required('administrateur', 'judiciaire', 'dgrtr')
 def visite_technique_rejection_letter(insp_id):
@@ -5496,11 +5522,18 @@ def create_technical_inspection_rate():
     if price_kmf < 0:
         return jsonify({'error': 'Prix invalide'}), 400
 
+    try:
+        duration_months = int(data.get('duration_months', 12))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Durée invalide'}), 400
+    if duration_months not in (3, 6, 12):
+        return jsonify({'error': 'Durée invalide (3, 6 ou 12 mois)'}), 400
+
     existing = TechnicalInspectionRate.query.filter_by(vehicle_type=vehicle_type, usage_type=usage_type).first()
     if existing:
         return jsonify({'error': 'Un tarif existe déjà pour cette combinaison.'}), 400
 
-    rate = TechnicalInspectionRate(vehicle_type=vehicle_type, usage_type=usage_type, price_kmf=price_kmf)
+    rate = TechnicalInspectionRate(vehicle_type=vehicle_type, usage_type=usage_type, price_kmf=price_kmf, duration_months=duration_months)
     db.session.add(rate)
     db.session.commit()
     return jsonify(rate.to_dict()), 201
@@ -5522,6 +5555,14 @@ def update_technical_inspection_rate(rate_id):
         if price_kmf < 0:
             return jsonify({'error': 'Prix invalide'}), 400
         rate.price_kmf = price_kmf
+    if 'duration_months' in data:
+        try:
+            duration_months = int(data.get('duration_months'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Durée invalide'}), 400
+        if duration_months not in (3, 6, 12):
+            return jsonify({'error': 'Durée invalide (3, 6 ou 12 mois)'}), 400
+        rate.duration_months = duration_months
     if 'is_active' in data:
         rate.is_active = bool(data.get('is_active'))
     rate.updated_at = now_comoros()
@@ -6235,6 +6276,7 @@ def get_insurance_vehicles():
         vehicle_data['has_unpaid_fines'] = vehicle_has_unpaid_fines(vehicle.id)
         vehicle_data['block_reason'] = get_vehicle_block_reason_for_insurance(vehicle)
         vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
+        vehicle_data['has_valid_technical_inspection'] = vehicle.has_valid_technical_inspection()
         lp = last_payments.get(vehicle.id)
         vehicle_data['last_payment_at'] = lp.isoformat() if lp else None
         a = assignment_map.get(vehicle.id)
@@ -6393,18 +6435,15 @@ def get_vignette_vehicles():
 
         payment_approved = bool(getattr(vehicle, 'vignette_payment_approved', False))
 
-        # QR activation price: use stored amount after approval, live calculation before.
-        # Always charged when adding a first vignette; otherwise only if QR never activated.
-        from app.models import SmartTechSetting
+        # QR activation is no longer bundled into the vignette payment — it's
+        # handled separately via SmartTech. The historical amount (already
+        # collected on a past approved payment) is still shown for the record.
         if payment_approved:
             qr_activation_price = float(getattr(vehicle, 'vignette_last_paid_qr_amount', 0.0) or 0.0)
-            needs_qr_activation = False
         else:
-            is_new_vignette = (vignette_status == 'pending')
-            needs_qr_activation = vehicle.qr_code_expiry is None
-            qr_activation_price = int(SmartTechSetting.get('qr_activation_price', 5000)) if (is_new_vignette or needs_qr_activation) else 0
+            qr_activation_price = 0
         vehicle_data['qr_activation_price'] = qr_activation_price
-        vehicle_data['needs_qr_activation'] = needs_qr_activation
+        vehicle_data['needs_qr_activation'] = vehicle.qr_code_expiry is None
 
         # Determine renewal period status
         renewal_opening = get_renewal_opening_datetime()
@@ -6516,14 +6555,11 @@ def approve_vignette_payment(vehicle_id):
     unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
     unpaid_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
 
-    # QR fee: always charged when adding a first vignette, otherwise only if the
-    # QR code was never activated.
-    from app.models import SmartTechSetting, QRCodePayment
-    needs_qr_activation = vehicle.qr_code_expiry is None
-    charge_qr = is_new_vignette or needs_qr_activation
-    qr_activation_price = float(SmartTechSetting.get('qr_activation_price', 5000) or 5000) if charge_qr else 0.0
+    # QR activation is no longer bundled into the vignette payment — it's handled
+    # separately via SmartTech, so it's never charged and never auto-activated here.
+    qr_activation_price = 0.0
 
-    total_amount = vignette_price + penalty_amount + unpaid_fines_amount + qr_activation_price
+    total_amount = vignette_price + penalty_amount + unpaid_fines_amount
 
     # Persist last paid breakdown so tax dashboard can still display paid components after renewal.
     vehicle.vignette_last_paid_at = now_time
@@ -6531,28 +6567,11 @@ def approve_vignette_payment(vehicle_id):
     vehicle.vignette_last_paid_vignette_amount = float(vignette_price or 0.0)
     vehicle.vignette_last_paid_penalty_amount = float(penalty_amount or 0.0)
     vehicle.vignette_last_paid_fines_amount = float(unpaid_fines_amount or 0.0)
-    vehicle.vignette_last_paid_qr_amount = float(qr_activation_price or 0.0)
+    vehicle.vignette_last_paid_qr_amount = 0.0
     vehicle.vignette_last_paid_total_amount = float(total_amount or 0.0)
     vehicle.vignette_payment_requested_at = None
     vehicle.vignette_payment_requested_by = None
     vehicle.vignette_payment_requested_expiry = None
-
-    # Activate/sync the QR code and record its payment whenever a QR fee was charged.
-    if charge_qr:
-        if is_new_vignette:
-            # Adding a vignette: the QR code now tracks the vignette's expiry date.
-            vehicle.qr_code_generated_at = now_time
-            vehicle.qr_code_expiry = vehicle.vignette_expiry
-        elif needs_qr_activation:
-            vehicle.generate_qr_code_with_expiry()
-        db.session.add(QRCodePayment(
-            vehicle_id=vehicle.id,
-            payment_type='activation',
-            amount=qr_activation_price,
-            status='paid',
-            paid_at=now_time,
-            recorded_by=agent_display_name or 'Système',
-        ))
 
     unpaid_fines_count = len(unpaid_fines)
 
@@ -6597,8 +6616,6 @@ def approve_vignette_payment(vehicle_id):
     db.session.add(payment_record)
 
     history_notes = f"Mode: {payment_method} | Montant total: {round(total_amount, 2)} KMF | Amendes payées: {unpaid_fines_count}"
-    if charge_qr:
-        history_notes += f" | Activation QR: {round(qr_activation_price, 2)} KMF"
     db.session.add(VehicleHistory(
         vehicle_id=vehicle.id,
         action='Paiement vignette approuvé',
@@ -6752,12 +6769,10 @@ def get_vignette_vehicles_without():
         vignette_price = calculate_vignette_price(vehicle)
         vehicle_data['vignette_price'] = vignette_price
 
-        # QR activation price: always charged when adding a vignette for the first time.
-        from app.models import SmartTechSetting
-        needs_qr_activation = vehicle.qr_code_expiry is None
-        qr_activation_price = int(SmartTechSetting.get('qr_activation_price', 5000))
-        vehicle_data['qr_activation_price'] = qr_activation_price
-        vehicle_data['needs_qr_activation'] = needs_qr_activation
+        # QR activation is no longer bundled into the vignette payment — it's
+        # handled separately via SmartTech.
+        vehicle_data['qr_activation_price'] = 0
+        vehicle_data['needs_qr_activation'] = vehicle.qr_code_expiry is None
 
         # Add unpaid fines amount
         unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
@@ -7704,6 +7719,7 @@ def get_uninsured_vehicles():
         vehicle_data['has_unpaid_fines'] = vehicle_has_unpaid_fines(vehicle.id)
         vehicle_data['block_reason'] = get_vehicle_block_reason_for_insurance(vehicle)
         vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
+        vehicle_data['has_valid_technical_inspection'] = vehicle.has_valid_technical_inspection()
         uninsured_payload.append(vehicle_data)
 
     return jsonify({
@@ -7741,7 +7757,11 @@ def assign_vehicle_to_insurance():
         qr_expired = False
     if vehicle.status == 'inactive' or qr_expired:
         return jsonify({"error": "Impossible d'ajouter ce véhicule: il est inactif ou son QR code est expiré."}), 400
-    
+
+    vt_message = get_vehicle_technical_inspection_block_message(vehicle)
+    if vt_message:
+        return jsonify({"error": vt_message}), 400
+
     # Allow reassignment when existing insurance is expired.
     now_dt = now_comoros()
     now_dt_naive = now_dt.replace(tzinfo=None) if getattr(now_dt, 'tzinfo', None) else now_dt
@@ -7935,6 +7955,11 @@ def create_vehicle_assignment():
 
     vehicle = Vehicle.query.get_or_404(vehicle_id)
     account = InsuranceAccount.query.get_or_404(insurance_account_id)
+
+    if is_insurance:
+        vt_message = get_vehicle_technical_inspection_block_message(vehicle)
+        if vt_message:
+            return jsonify({"error": vt_message}), 400
 
     driver_nums = [n.strip().upper() for n in (data.get('driver_license_numbers') or []) if n and n.strip()]
     if not driver_nums:

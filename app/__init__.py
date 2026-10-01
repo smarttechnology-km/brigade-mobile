@@ -415,6 +415,9 @@ def create_app():
                             if 'reminder_sent' not in vt_appt_columns:
                                 conn.execute(text("ALTER TABLE technical_inspection_appointments ADD COLUMN reminder_sent BOOLEAN NOT NULL DEFAULT 0"))
                                 logger.info("Added missing technical_inspection_appointments.reminder_sent column")
+                            if 'duration_months' not in vt_appt_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_appointments ADD COLUMN duration_months INTEGER"))
+                                logger.info("Added missing technical_inspection_appointments.duration_months column")
 
                         # Patch technical_inspections table (SmartTech print validation)
                         vt_insp_table_exists = conn.execute(
@@ -449,6 +452,21 @@ def create_app():
                             if 'inspector_name' not in vt_insp_columns:
                                 conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN inspector_name VARCHAR(150)"))
                                 logger.info("Added missing technical_inspections.inspector_name column")
+                            if 'duration_months' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN duration_months INTEGER"))
+                                logger.info("Added missing technical_inspections.duration_months column")
+                            if 'attestation_printed_at' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN attestation_printed_at DATETIME"))
+                                logger.info("Added missing technical_inspections.attestation_printed_at column")
+                            if 'attestation_printed_by' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN attestation_printed_by VARCHAR(100)"))
+                                logger.info("Added missing technical_inspections.attestation_printed_by column")
+                            if 'qr_renewed_at' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN qr_renewed_at DATETIME"))
+                                logger.info("Added missing technical_inspections.qr_renewed_at column")
+                            if 'qr_renewal_amount' not in vt_insp_columns:
+                                conn.execute(text("ALTER TABLE technical_inspections ADD COLUMN qr_renewal_amount NUMERIC(10,2)"))
+                                logger.info("Added missing technical_inspections.qr_renewal_amount column")
 
                         # Patch technical_inspection_drafts table (pre-report payment)
                         vt_draft_table_exists = conn.execute(
@@ -471,6 +489,19 @@ def create_app():
                             if 'paid_at' not in vt_draft_columns:
                                 conn.execute(text("ALTER TABLE technical_inspection_drafts ADD COLUMN paid_at DATETIME"))
                                 logger.info("Added missing technical_inspection_drafts.paid_at column")
+                            if 'duration_months' not in vt_draft_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_drafts ADD COLUMN duration_months INTEGER"))
+                                logger.info("Added missing technical_inspection_drafts.duration_months column")
+
+                        # Patch technical_inspection_rates table (validity duration alongside price)
+                        vt_rate_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='technical_inspection_rates'")
+                        ).first() is not None
+                        if vt_rate_table_exists:
+                            vt_rate_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(technical_inspection_rates)")).fetchall()}
+                            if 'duration_months' not in vt_rate_columns:
+                                conn.execute(text("ALTER TABLE technical_inspection_rates ADD COLUMN duration_months INTEGER NOT NULL DEFAULT 12"))
+                                logger.info("Added missing technical_inspection_rates.duration_months column")
 
                         # Patch vehicle_warnings table (officer resolution tracking)
                         veh_warn_table_exists = conn.execute(
@@ -869,6 +900,7 @@ def create_app():
                         "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS channel VARCHAR(20) DEFAULT 'app_citoyen'",
                         "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS recorded_by VARCHAR(100)",
                         "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE technical_inspection_appointments ADD COLUMN IF NOT EXISTS duration_months INTEGER",
                         # technical_inspections
                         "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS smarttech_print_validated BOOLEAN NOT NULL DEFAULT FALSE",
                         "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS smarttech_validated_at TIMESTAMP",
@@ -879,12 +911,20 @@ def create_app():
                         "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS paid_by VARCHAR(100)",
                         "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
                         "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS inspector_name VARCHAR(150)",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS duration_months INTEGER",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS attestation_printed_at TIMESTAMP",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS attestation_printed_by VARCHAR(100)",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS qr_renewed_at TIMESTAMP",
+                        "ALTER TABLE technical_inspections ADD COLUMN IF NOT EXISTS qr_renewal_amount NUMERIC(10,2)",
                         # technical_inspection_drafts
                         "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid'",
                         "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS price_kmf NUMERIC(10,2)",
                         "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS payment_channel VARCHAR(20)",
                         "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS paid_by VARCHAR(100)",
                         "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
+                        "ALTER TABLE technical_inspection_drafts ADD COLUMN IF NOT EXISTS duration_months INTEGER",
+                        # technical_inspection_rates
+                        "ALTER TABLE technical_inspection_rates ADD COLUMN IF NOT EXISTS duration_months INTEGER NOT NULL DEFAULT 12",
                         # vehicle_warnings
                         "ALTER TABLE vehicle_warnings ADD COLUMN IF NOT EXISTS resolved_by VARCHAR(100)",
                         "ALTER TABLE vehicle_warnings ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",

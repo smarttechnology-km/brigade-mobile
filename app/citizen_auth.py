@@ -1375,8 +1375,10 @@ def citizen_technical_inspection_appointment_price():
             'free_until': free_deadline.strftime('%d/%m/%Y'),
             'slots': TECHNICAL_INSPECTION_APPOINTMENT_SLOTS,
         })
+    from app.mobile_pay import _get_technical_inspection_duration_months
     price = _get_technical_inspection_price(vehicle)
-    return jsonify({'price_kmf': price, 'is_free': False, 'slots': TECHNICAL_INSPECTION_APPOINTMENT_SLOTS})
+    duration_months = _get_technical_inspection_duration_months(vehicle)
+    return jsonify({'price_kmf': price, 'duration_months': duration_months, 'is_free': False, 'slots': TECHNICAL_INSPECTION_APPOINTMENT_SLOTS})
 
 
 @citizen_auth_bp.route('/technical-inspection-appointments/my', methods=['GET'])
@@ -1453,6 +1455,7 @@ def citizen_create_technical_inspection_appointment():
     # 'pending_payment', so an abandoned/cancelled payment never leaves a
     # confirmed-looking appointment behind. Skipped entirely for a free re-visit.
     from app.routes import _free_reinspection_source
+    from app.mobile_pay import _get_technical_inspection_duration_months
     free_source = _free_reinspection_source(vehicle.id)
     appointment = TechnicalInspectionAppointment(
         vehicle_id=vehicle.id,
@@ -1461,6 +1464,7 @@ def citizen_create_technical_inspection_appointment():
         status='confirmed' if free_source else 'pending_payment',
         channel='app_citoyen',
         price_kmf=0 if free_source else _get_technical_inspection_price(vehicle),
+        duration_months=_get_technical_inspection_duration_months(vehicle),
         paid_at=now_comoros() if free_source else None,
     )
     db.session.add(appointment)

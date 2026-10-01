@@ -155,7 +155,33 @@ class Vehicle(db.Model):
             return False
         from app.timezone_utils import now_comoros, ensure_comoros
         return now_comoros() > ensure_comoros(self.qr_code_expiry)
-    
+
+    def has_valid_technical_inspection(self):
+        """Same 4-part 'is_valid' definition used elsewhere for this vehicle's
+        latest technical inspection (see app/api.py: api_track / app/mobile_pay.py:
+        lookup): approved by the directeur régional, validated by SmartTech, paid,
+        not expired, and with no newer inspection cycle already in progress."""
+        from app.timezone_utils import now_comoros
+
+        latest = (TechnicalInspection.query
+                  .filter_by(vehicle_id=self.id, status='approved')
+                  .order_by(TechnicalInspection.issued_at.desc())
+                  .first())
+        if not latest:
+            return False
+        not_expired = bool(latest.expiry_date and latest.expiry_date >= now_comoros().date())
+        paid = bool(latest.payment_status == 'paid')
+
+        newer_cycle = (TechnicalInspection.query
+                       .filter_by(vehicle_id=self.id)
+                       .filter(TechnicalInspection.inspected_at > latest.inspected_at)
+                       .order_by(TechnicalInspection.inspected_at.desc())
+                       .first())
+        draft = TechnicalInspectionDraft.query.filter_by(vehicle_id=self.id).first()
+        new_cycle_in_progress = bool(draft or newer_cycle)
+
+        return bool(not_expired and latest.smarttech_print_validated and paid and not new_cycle_in_progress)
+
     def to_dict(self):
         def format_date(value, date_format='%Y-%m-%d'):
             if not value:
@@ -370,11 +396,28 @@ class TechnicalInspection(db.Model):
 
     issued_at = db.Column(db.DateTime, nullable=True)
     expiry_date = db.Column(db.Date, nullable=True)
+    # Frozen from the matching TechnicalInspectionRate at draft/report time, so a
+    # later rate change never retroactively changes an already-issued attestation.
+    duration_months = db.Column(db.Integer, nullable=True)
 
     # SmartTech must validate before the attestation print button is enabled.
     smarttech_print_validated = db.Column(db.Boolean, nullable=False, default=False)
     smarttech_validated_at = db.Column(db.DateTime, nullable=True)
     smarttech_validated_by = db.Column(db.String(100), nullable=True)
+
+    # Set the first time the attestation is actually printed (not just validated),
+    # so SmartTech's "Visite Technique" page can move it out of "en attente
+    # d'impression" into a separate printed/history tab.
+    attestation_printed_at = db.Column(db.DateTime, nullable=True)
+    attestation_printed_by = db.Column(db.String(100), nullable=True)
+
+    # Set when validating this inspection also renewed the vehicle's QR code
+    # (see api_visite_technique_validate) — lets SmartTech's "Véhicules" page
+    # show this as a "Renouvellement" event with its own amount (the "Traitement
+    # des données numérique" fee), without double-billing via a QRCodePayment
+    # row (that fee is already collected inside price_kmf above).
+    qr_renewed_at = db.Column(db.DateTime, nullable=True)
+    qr_renewal_amount = db.Column(db.Numeric(10, 2), nullable=True)
 
     # Payment now happens AFTER approval (not at appointment booking). The
     # attestation requires BOTH smarttech_print_validated AND payment_status='paid'.
@@ -422,10 +465,16 @@ class TechnicalInspection(db.Model):
             'smarttech_print_validated': bool(self.smarttech_print_validated),
             'smarttech_validated_at': self.smarttech_validated_at.strftime('%d/%m/%Y %H:%M') if self.smarttech_validated_at else None,
             'smarttech_validated_by': self.smarttech_validated_by,
+            'is_printed': bool(self.attestation_printed_at),
+            'attestation_printed_at': self.attestation_printed_at.strftime('%d/%m/%Y %H:%M') if self.attestation_printed_at else None,
+            'attestation_printed_by': self.attestation_printed_by,
+            'qr_renewed_at': self.qr_renewed_at.strftime('%d/%m/%Y %H:%M') if self.qr_renewed_at else None,
+            'qr_renewal_amount': float(self.qr_renewal_amount) if self.qr_renewal_amount is not None else None,
             'payment_status': self.payment_status,
             'is_paid': self.payment_status == 'paid',
             'pending_payment': bool(self.status == 'approved' and self.payment_status != 'paid'),
             'price_kmf': float(self.price_kmf) if self.price_kmf is not None else None,
+            'duration_months': self.duration_months or 12,
             'payment_channel': self.payment_channel,
             'paid_by': self.paid_by,
             'paid_at': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else None,
@@ -473,6 +522,7 @@ class TechnicalInspectionDraft(db.Model):
 
     payment_status = db.Column(db.String(20), nullable=False, default='unpaid')  # unpaid / paid
     price_kmf = db.Column(db.Numeric(10, 2), nullable=True)
+    duration_months = db.Column(db.Integer, nullable=True)
     payment_channel = db.Column(db.String(20), nullable=True)  # app_citoyen / agent_huri_money / free_reinspection
     paid_by = db.Column(db.String(100), nullable=True)
     paid_at = db.Column(db.DateTime, nullable=True)
@@ -492,6 +542,7 @@ class TechnicalInspectionDraft(db.Model):
             'payment_status': self.payment_status,
             'is_paid': self.payment_status == 'paid',
             'price_kmf': float(self.price_kmf) if self.price_kmf is not None else None,
+            'duration_months': self.duration_months or 12,
             'payment_channel': self.payment_channel,
             'paid_by': self.paid_by,
             'paid_at': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else None,
@@ -572,6 +623,9 @@ class TechnicalInspectionRate(db.Model):
     vehicle_type = db.Column(db.String(50), nullable=True)
     usage_type = db.Column(db.String(50), nullable=True)
     price_kmf = db.Column(db.Numeric(10, 2), nullable=False)
+    # How long the resulting attestation stays valid — 12/6/3 months, chosen
+    # together with the price (e.g. a cheaper 3-month rate for taxis).
+    duration_months = db.Column(db.Integer, nullable=False, default=12)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
@@ -582,6 +636,7 @@ class TechnicalInspectionRate(db.Model):
             'vehicle_type': self.vehicle_type,
             'usage_type': self.usage_type,
             'price_kmf': float(self.price_kmf) if self.price_kmf is not None else 0.0,
+            'duration_months': self.duration_months or 12,
             'is_active': bool(self.is_active),
             'updated_at': self.updated_at.strftime('%d/%m/%Y %H:%M') if self.updated_at else None,
         }
@@ -607,6 +662,7 @@ class TechnicalInspectionAppointment(db.Model):
     appointment_time = db.Column(db.String(5), nullable=False)  # 'HH:MM'
 
     price_kmf = db.Column(db.Numeric(10, 2), nullable=False, default=0)  # frozen at booking time
+    duration_months = db.Column(db.Integer, nullable=True)  # frozen at booking time, alongside price_kmf
     status = db.Column(db.String(20), nullable=False, default='confirmed')  # pending_payment / confirmed / cancelled
 
     payment_id = db.Column(db.Integer, db.ForeignKey('payments.id'), nullable=True, index=True)
@@ -637,6 +693,7 @@ class TechnicalInspectionAppointment(db.Model):
             'appointment_date_display': self.appointment_date.strftime('%d/%m/%Y') if self.appointment_date else None,
             'appointment_time': self.appointment_time,
             'price_kmf': float(self.price_kmf) if self.price_kmf is not None else 0.0,
+            'duration_months': self.duration_months or 12,
             'status': self.status,
             'payment_id': self.payment_id,
             'is_paid': bool(self.paid_at),
@@ -1778,6 +1835,53 @@ class LicensePrintRequest(db.Model):
             'notes':        self.notes or '',
             'smarttech_validated_by': (lic.smarttech_validated_by or '') if lic else '',
             'smarttech_validated_at': (lic.smarttech_validated_at.strftime('%d/%m/%Y %H:%M') if lic.smarttech_validated_at else '') if lic else '',
+        }
+
+
+class LicenceProRequest(db.Model):
+    """A 'Licence Professionnelle' (taxi driver permit) request for an existing
+    DriverLicense holder. Workflow: directeur_technique creates it (pending) →
+    directeur_general validates it (validated, DG signature now applies) →
+    directeur_technique prints it (printed) → shows up in 'Licence Pro Complet'."""
+    __tablename__ = 'licence_pro_requests'
+    id              = db.Column(db.Integer, primary_key=True)
+    license_id      = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False, index=True)
+    lp_number       = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    zone_activite   = db.Column(db.String(255), nullable=False)
+    validity_date   = db.Column(db.Date, nullable=False)
+    status          = db.Column(db.String(20), nullable=False, default='pending', index=True)  # pending | validated | printed
+    requested_by    = db.Column(db.String(100), nullable=False)
+    requested_at    = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    validated_by    = db.Column(db.String(100), nullable=True)
+    validated_at    = db.Column(db.DateTime, nullable=True)
+    printed_by      = db.Column(db.String(100), nullable=True)
+    printed_at      = db.Column(db.DateTime, nullable=True)
+    notes           = db.Column(db.Text, nullable=True)
+
+    license = db.relationship('DriverLicense', backref=db.backref('licence_pro_requests', lazy='dynamic'))
+
+    def to_dict(self):
+        lic = self.license
+        return {
+            'id':              self.id,
+            'license_id':      self.license_id,
+            'license_number':  lic.license_number if lic else '',
+            'holder_name':     lic.holder_name if lic else '',
+            'holder_firstname': lic.holder_firstname if lic else '',
+            'date_of_birth':   lic.date_of_birth.strftime('%d/%m/%Y') if (lic and lic.date_of_birth) else '',
+            'lieu_naissance':  lic.lieu_naissance if lic else '',
+            'photo_url':       lic.photo_url if lic else '',
+            'lp_number':       self.lp_number,
+            'zone_activite':   self.zone_activite,
+            'validity_date':   self.validity_date.strftime('%d/%m/%Y') if self.validity_date else '',
+            'status':          self.status,
+            'requested_by':    self.requested_by,
+            'requested_at':    self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else '',
+            'validated_by':    self.validated_by or '',
+            'validated_at':    self.validated_at.strftime('%d/%m/%Y %H:%M') if self.validated_at else '',
+            'printed_by':      self.printed_by or '',
+            'printed_at':      self.printed_at.strftime('%d/%m/%Y %H:%M') if self.printed_at else '',
+            'notes':           self.notes or '',
         }
 
 
