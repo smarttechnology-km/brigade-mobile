@@ -1397,14 +1397,19 @@ def dgrtr_licence_pro_complet():
 @main_bp.route('/dgrtr/licence-pro/<int:req_id>/print')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_licence_pro_print(req_id):
-    from app.models import LicenceProRequest, LicenseSetting
+    from app.models import LicenceProRequest, LicenseSetting, LICENCE_PRO_ACTIVITES
     if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
         abort(403)
     req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status == 'printed' and req.reprint_status != 'approved':
+        abort(403)
     if req.status not in ('validated', 'printed'):
         abort(403)
     lic = req.license
     settings = LicenseSetting.get()
+    front_title = LICENCE_PRO_ACTIVITES.get(req.activite_type, {}).get(
+        'print_title', 'Licence Professionnelle de Transport Public et Taxi'
+    )
 
     import qrcode, io, base64 as _b64
     qr_data_uri = None
@@ -1421,7 +1426,7 @@ def dgrtr_licence_pro_print(req_id):
 
     return render_template(
         'dgrtr_licence_pro_print.html',
-        req=req, lic=lic, settings=settings, qr_data_uri=qr_data_uri,
+        req=req, lic=lic, settings=settings, qr_data_uri=qr_data_uri, front_title=front_title,
     )
 
 

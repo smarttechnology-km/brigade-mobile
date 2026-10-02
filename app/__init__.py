@@ -842,6 +842,27 @@ def create_app():
                                 conn.execute(text(sql))
                                 logger.info(f"Added carte_grise.{col} column")
 
+                        # licence_pro_requests patches
+                        lpr_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='licence_pro_requests'")
+                        ).first() is not None
+                        if lpr_table_exists:
+                            lpr_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(licence_pro_requests)")).fetchall()}
+                            if 'activite_type' not in lpr_cols:
+                                conn.execute(text("ALTER TABLE licence_pro_requests ADD COLUMN activite_type VARCHAR(30)"))
+                                logger.info("Added licence_pro_requests.activite_type column")
+                            lpr_reprint_col_defs = {
+                                'reprint_status':       "ALTER TABLE licence_pro_requests ADD COLUMN reprint_status VARCHAR(20)",
+                                'reprint_requested_by': "ALTER TABLE licence_pro_requests ADD COLUMN reprint_requested_by VARCHAR(100)",
+                                'reprint_requested_at': "ALTER TABLE licence_pro_requests ADD COLUMN reprint_requested_at DATETIME",
+                                'reprint_approved_by':  "ALTER TABLE licence_pro_requests ADD COLUMN reprint_approved_by VARCHAR(100)",
+                                'reprint_approved_at':  "ALTER TABLE licence_pro_requests ADD COLUMN reprint_approved_at DATETIME",
+                            }
+                            for col, sql in lpr_reprint_col_defs.items():
+                                if col not in lpr_cols:
+                                    conn.execute(text(sql))
+                                    logger.info(f"Added licence_pro_requests.{col} column")
+
             elif 'postgresql' in str(app.config.get('SQLALCHEMY_DATABASE_URI', '')):
                 with db.engine.begin() as conn:
                     pg_patches = [
@@ -1033,6 +1054,13 @@ def create_app():
                         "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS phone_id INTEGER",
                         "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS start_date DATE",
                         "ALTER TABLE st_subscriptions ADD COLUMN IF NOT EXISTS employee_id INTEGER",
+                        # licence_pro_requests
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS activite_type VARCHAR(30)",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS reprint_status VARCHAR(20)",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS reprint_requested_by VARCHAR(100)",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS reprint_requested_at TIMESTAMP",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS reprint_approved_by VARCHAR(100)",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS reprint_approved_at TIMESTAMP",
                     ]
                     for sql in pg_patches:
                         try:

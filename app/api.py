@@ -5546,20 +5546,23 @@ def create_licence_pro():
     if not _is_licence_pro_dt():
         return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
 
+    from app.models import LICENCE_PRO_ACTIVITES, LicenceProSetting
+    from dateutil.relativedelta import relativedelta
+
     data = request.get_json() or {}
     license_id = data.get('license_id')
     lp_number = (data.get('lp_number') or '').strip()
+    activite_type = (data.get('activite_type') or '').strip()
     zone_activite = (data.get('zone_activite') or '').strip()
-    validity_date_str = data.get('validity_date')
 
     if not license_id:
         return jsonify({'error': 'license_id requis'}), 400
     if not lp_number:
         return jsonify({'error': 'Le numéro de licence (N° LP) est requis.'}), 400
+    if activite_type not in LICENCE_PRO_ACTIVITES:
+        return jsonify({'error': "L'activité professionnelle demandée est requise."}), 400
     if not zone_activite:
         return jsonify({'error': "La zone d'activité est requise."}), 400
-    if not validity_date_str:
-        return jsonify({'error': 'La date de fin de validité est requise.'}), 400
 
     lic = DriverLicense.query.get(license_id)
     if not lic:
@@ -5569,14 +5572,13 @@ def create_licence_pro():
     if LicenceProRequest.query.filter_by(lp_number=lp_number).first():
         return jsonify({'error': f"Le numéro '{lp_number}' est déjà utilisé."}), 400
 
-    try:
-        validity_date = datetime.strptime(validity_date_str, '%Y-%m-%d').date()
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Date de fin de validité invalide.'}), 400
+    years = LicenceProSetting.get().years_for(activite_type)
+    validity_date = now_comoros().date() + relativedelta(years=years)
 
     req = LicenceProRequest(
         license_id=license_id,
         lp_number=lp_number,
+        activite_type=activite_type,
         zone_activite=zone_activite,
         validity_date=validity_date,
         requested_by=current_user.username,
@@ -5593,22 +5595,23 @@ def update_licence_pro(req_id):
     if not _is_licence_pro_dt():
         return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
 
-    from app.models import LicenceProRequest
+    from app.models import LicenceProRequest, LICENCE_PRO_ACTIVITES, LicenceProSetting
+    from dateutil.relativedelta import relativedelta
     req = LicenceProRequest.query.get_or_404(req_id)
     if req.status != 'pending':
         return jsonify({'error': 'Seules les demandes en attente peuvent être modifiées.'}), 409
 
     data = request.get_json() or {}
     lp_number = (data.get('lp_number') or '').strip()
+    activite_type = (data.get('activite_type') or '').strip()
     zone_activite = (data.get('zone_activite') or '').strip()
-    validity_date_str = data.get('validity_date')
 
     if not lp_number:
         return jsonify({'error': 'Le numéro de licence (N° LP) est requis.'}), 400
+    if activite_type not in LICENCE_PRO_ACTIVITES:
+        return jsonify({'error': "L'activité professionnelle demandée est requise."}), 400
     if not zone_activite:
         return jsonify({'error': "La zone d'activité est requise."}), 400
-    if not validity_date_str:
-        return jsonify({'error': 'La date de fin de validité est requise.'}), 400
 
     existing = LicenceProRequest.query.filter(
         LicenceProRequest.lp_number == lp_number, LicenceProRequest.id != req_id
@@ -5616,12 +5619,11 @@ def update_licence_pro(req_id):
     if existing:
         return jsonify({'error': f"Le numéro '{lp_number}' est déjà utilisé."}), 400
 
-    try:
-        validity_date = datetime.strptime(validity_date_str, '%Y-%m-%d').date()
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Date de fin de validité invalide.'}), 400
+    years = LicenceProSetting.get().years_for(activite_type)
+    validity_date = now_comoros().date() + relativedelta(years=years)
 
     req.lp_number = lp_number
+    req.activite_type = activite_type
     req.zone_activite = zone_activite
     req.validity_date = validity_date
     db.session.commit()
@@ -5643,6 +5645,45 @@ def delete_licence_pro(req_id):
     db.session.delete(req)
     db.session.commit()
     return jsonify({'success': True})
+
+
+@api_bp.route('/licence-pro/settings', methods=['GET'])
+@login_required
+def get_licence_pro_settings():
+    """Current validity-duration-per-activité-type configuration (DT needs this read-only
+    to know the years-rule in effect; only the DG may change it)."""
+    if not _is_licence_pro_dt_or_dg():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import LicenceProSetting
+    return jsonify(LicenceProSetting.get().to_dict())
+
+
+@api_bp.route('/licence-pro/settings', methods=['PUT'])
+@login_required
+def update_licence_pro_settings():
+    """Directeur Général sets how many years of validity each activité type grants."""
+    if not _is_licence_pro_dg():
+        return jsonify({'error': 'Réservé au Directeur Général.'}), 403
+    from app.models import LicenceProSetting
+    data = request.get_json() or {}
+    settings = LicenceProSetting.get()
+    field_map = {
+        'taxi_ville': 'validity_years_taxi_ville',
+        'transport_commun': 'validity_years_transport_commun',
+        'proprietaire_exploitant': 'validity_years_proprietaire_exploitant',
+    }
+    for key, col in field_map.items():
+        if key not in data:
+            continue
+        try:
+            years = int(data[key])
+        except (ValueError, TypeError):
+            return jsonify({'error': f"Valeur invalide pour '{key}'."}), 400
+        if years < 1:
+            return jsonify({'error': 'La durée de validité doit être au moins 1 an.'}), 400
+        setattr(settings, col, years)
+    db.session.commit()
+    return jsonify(settings.to_dict())
 
 
 @api_bp.route('/licence-pro/<int:req_id>/validate', methods=['POST'])
@@ -5667,19 +5708,67 @@ def validate_licence_pro(req_id):
 @api_bp.route('/licence-pro/<int:req_id>/mark-printed', methods=['POST'])
 @login_required
 def mark_licence_pro_printed(req_id):
-    """Directeur Technique marks a validated Licence Professionnelle as printed
-    (called right before the browser print dialog fires)."""
+    """Directeur Technique marks a Licence Professionnelle as printed (called right
+    before the browser print dialog fires) — either the first print (status must be
+    'validated') or a reprint (status 'printed' with an approved reprint request,
+    which this consumes back to None so the next reprint needs a fresh DG approval)."""
     if not _is_licence_pro_dt():
         return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
 
     from app.models import LicenceProRequest
     req = LicenceProRequest.query.get_or_404(req_id)
-    if req.status != 'validated':
+    is_first_print = req.status == 'validated'
+    is_approved_reprint = req.status == 'printed' and req.reprint_status == 'approved'
+    if not (is_first_print or is_approved_reprint):
         return jsonify({'error': "Cette licence n'est pas (ou plus) validée par le Directeur Général."}), 409
 
     req.status = 'printed'
     req.printed_by = current_user.username
     req.printed_at = now_comoros()
+    if is_approved_reprint:
+        req.reprint_status = None
+    db.session.commit()
+    return jsonify(req.to_dict())
+
+
+@api_bp.route('/licence-pro/<int:req_id>/request-reprint', methods=['POST'])
+@login_required
+def request_licence_pro_reprint(req_id):
+    """Directeur Technique requests permission to reprint an already-printed licence."""
+    if not _is_licence_pro_dt():
+        return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
+
+    from app.models import LicenceProRequest
+    req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status != 'printed':
+        return jsonify({'error': "Cette licence n'a pas encore été imprimée une première fois."}), 409
+    if req.reprint_status in ('pending', 'approved'):
+        return jsonify({'error': 'Une demande de réimpression est déjà en cours pour cette licence.'}), 409
+
+    req.reprint_status = 'pending'
+    req.reprint_requested_by = current_user.username
+    req.reprint_requested_at = now_comoros()
+    req.reprint_approved_by = None
+    req.reprint_approved_at = None
+    db.session.commit()
+    return jsonify(req.to_dict())
+
+
+@api_bp.route('/licence-pro/<int:req_id>/approve-reprint', methods=['POST'])
+@login_required
+def approve_licence_pro_reprint(req_id):
+    """Directeur Général approves a pending reprint request."""
+    if not _is_licence_pro_dg():
+        return jsonify({'error': 'Réservé au Directeur Général.'}), 403
+
+    from app.models import LicenceProRequest
+    req = LicenceProRequest.query.get_or_404(req_id)
+    if req.reprint_status != 'pending':
+        return jsonify({'error': 'Aucune demande de réimpression en attente pour cette licence.'}), 409
+
+    req.reprint_status = 'approved'
+    req.reprint_approved_by = current_user.username
+    req.reprint_approved_at = now_comoros()
     db.session.commit()
     return jsonify(req.to_dict())
 

@@ -1838,6 +1838,22 @@ class LicensePrintRequest(db.Model):
         }
 
 
+LICENCE_PRO_ACTIVITES = {
+    'taxi_ville': {
+        'label': 'Taxi ville',
+        'print_title': 'Licence Professionnelle de conducteur de Taxi',
+    },
+    'transport_commun': {
+        'label': 'Transport en commun de personnes',
+        'print_title': 'Licence Professionnelle de conducteur de Transport Publique',
+    },
+    'proprietaire_exploitant': {
+        'label': 'Conducteur propriétaire exploitant',
+        'print_title': 'Licence Professionnelle de conducteur de propriétaire exploitant',
+    },
+}
+
+
 class LicenceProRequest(db.Model):
     """A 'Licence Professionnelle' (taxi driver permit) request for an existing
     DriverLicense holder. Workflow: directeur_technique creates it (pending) →
@@ -1847,6 +1863,7 @@ class LicenceProRequest(db.Model):
     id              = db.Column(db.Integer, primary_key=True)
     license_id      = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False, index=True)
     lp_number       = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    activite_type   = db.Column(db.String(30), nullable=True)  # taxi_ville | transport_commun | proprietaire_exploitant
     zone_activite   = db.Column(db.String(255), nullable=False)
     validity_date   = db.Column(db.Date, nullable=False)
     status          = db.Column(db.String(20), nullable=False, default='pending', index=True)  # pending | validated | printed
@@ -1857,6 +1874,14 @@ class LicenceProRequest(db.Model):
     printed_by      = db.Column(db.String(100), nullable=True)
     printed_at      = db.Column(db.DateTime, nullable=True)
     notes           = db.Column(db.Text, nullable=True)
+    # Reprint sub-workflow (only relevant once status == 'printed'): DT requests a
+    # reprint → DG approves it → DT can print again; the approval is consumed (reset
+    # to None) once that reprint happens, so each further reprint needs a new cycle.
+    reprint_status        = db.Column(db.String(20), nullable=True)  # None | pending | approved
+    reprint_requested_by  = db.Column(db.String(100), nullable=True)
+    reprint_requested_at  = db.Column(db.DateTime, nullable=True)
+    reprint_approved_by   = db.Column(db.String(100), nullable=True)
+    reprint_approved_at   = db.Column(db.DateTime, nullable=True)
 
     license = db.relationship('DriverLicense', backref=db.backref('licence_pro_requests', lazy='dynamic'))
 
@@ -1872,6 +1897,8 @@ class LicenceProRequest(db.Model):
             'lieu_naissance':  lic.lieu_naissance if lic else '',
             'photo_url':       lic.photo_url if lic else '',
             'lp_number':       self.lp_number,
+            'activite_type':   self.activite_type or '',
+            'activite_label':  LICENCE_PRO_ACTIVITES.get(self.activite_type, {}).get('label', ''),
             'zone_activite':   self.zone_activite,
             'validity_date':   self.validity_date.strftime('%d/%m/%Y') if self.validity_date else '',
             'validity_date_iso': self.validity_date.isoformat() if self.validity_date else '',
@@ -1883,6 +1910,45 @@ class LicenceProRequest(db.Model):
             'printed_by':      self.printed_by or '',
             'printed_at':      self.printed_at.strftime('%d/%m/%Y %H:%M') if self.printed_at else '',
             'notes':           self.notes or '',
+            'reprint_status':       self.reprint_status or '',
+            'reprint_requested_by': self.reprint_requested_by or '',
+            'reprint_requested_at': self.reprint_requested_at.strftime('%d/%m/%Y %H:%M') if self.reprint_requested_at else '',
+            'reprint_approved_by':  self.reprint_approved_by or '',
+            'reprint_approved_at':  self.reprint_approved_at.strftime('%d/%m/%Y %H:%M') if self.reprint_approved_at else '',
+        }
+
+
+class LicenceProSetting(db.Model):
+    """Singleton: Directeur Général-configured validity duration (in years) for each
+    Licence Professionnelle activité type. Drives the auto-computed validity_date on
+    LicenceProRequest creation/edit — DT no longer picks the date manually."""
+    __tablename__ = 'licence_pro_settings'
+    id = db.Column(db.Integer, primary_key=True)
+    validity_years_taxi_ville = db.Column(db.Integer, nullable=False, default=1)
+    validity_years_transport_commun = db.Column(db.Integer, nullable=False, default=1)
+    validity_years_proprietaire_exploitant = db.Column(db.Integer, nullable=False, default=1)
+
+    @classmethod
+    def get(cls):
+        obj = cls.query.first()
+        if not obj:
+            obj = cls()
+            db.session.add(obj)
+            db.session.commit()
+        return obj
+
+    def years_for(self, activite_type):
+        return {
+            'taxi_ville': self.validity_years_taxi_ville,
+            'transport_commun': self.validity_years_transport_commun,
+            'proprietaire_exploitant': self.validity_years_proprietaire_exploitant,
+        }.get(activite_type, 1)
+
+    def to_dict(self):
+        return {
+            'taxi_ville': self.validity_years_taxi_ville,
+            'transport_commun': self.validity_years_transport_commun,
+            'proprietaire_exploitant': self.validity_years_proprietaire_exploitant,
         }
 
 
