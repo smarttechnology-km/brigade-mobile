@@ -3,106 +3,363 @@
 <head>
 <meta charset="utf-8">
 <title>Licence Professionnelle — {{ req.lp_number }}</title>
+<!-- Intégration de la police moderne Inter -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
 <style>
 html { color-scheme: light; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  background: #dde3ea;
-  font-family: 'Arial', sans-serif;
+  background: #cbd5e1;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   min-height: 100vh;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 40px 16px 60px; color: #111;
+  padding: 40px 16px 60px; color: #0f172a;
 }
 
-.toolbar { display: flex; gap: 10px; margin-bottom: 28px; }
-.btn { display: flex; align-items: center; gap: 7px; padding: 9px 20px; border: none;
-       border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
-.btn-print { background: #1e40af; color: #fff; }
-.btn-print:hover { background: #1e3a8a; }
-.btn-back  { background: #fff; color: #374151; border: 1px solid #d1d5db; }
-.btn-back:hover { background: #f9fafb; }
+/* ── Barre d'outils (Toolbar) ── */
+.toolbar { display: flex; gap: 12px; margin-bottom: 28px; }
+.btn {
+  display: flex; align-items: center; gap: 8px; padding: 10px 22px; border: none;
+  border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none;
+  transition: all 0.2s ease;
+}
+.btn-print { background: #0284c7; color: #fff; box-shadow: 0 4px 12px rgba(2,132,199,0.3); }
+.btn-print:hover { background: #0369a1; transform: translateY(-1px); }
+.btn-back  { background: #ffffff; color: #334155; border: 1px solid #cbd5e1; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.btn-back:hover { background: #f8fafc; color: #0f172a; }
 
-/* ── Card (both sides share this base) ── */
+/* ── Carte LP (Base commune) ── */
 .lp-card {
-  width: 700px; height: 490px;
-  border: 2.5px solid #1a1a1a;
-  border-radius: 10px;
+  width: 700px; height: 490px; flex-shrink: 0;
+  border: 2px solid #212224;
+  border-radius: 16px;
   overflow: hidden;
   position: relative;
-  box-shadow: 0 20px 48px rgba(13,30,80,.18), 0 4px 12px rgba(13,30,80,.1);
-  background: #e9e9e9;
+  box-shadow: 0 20px 35px -10px rgba(15,23,42,0.18), 0 8px 15px -6px rgba(15,23,42,0.08);
+  background: #fffbfb;
   display: flex; flex-direction: column;
 }
 .lp-card-separator {
   width: 700px; text-align: center; margin: 28px 0 18px;
-  font-size: 11px; color: #94a3b8; font-weight: 600;
-  letter-spacing: .06em; text-transform: uppercase;
-  display: flex; align-items: center; gap: 10px;
+  font-size: 11px; color: #64748b; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 12px;
 }
-.lp-card-separator::before, .lp-card-separator::after { content: ''; flex: 1; height: 1px; background: #cbd5e1; }
+.lp-card-separator::before, .lp-card-separator::after { content: ''; flex: 1; height: 1px; background: #94a3b8; }
 .lp-page { display: flex; justify-content: center; }
 
-/* Diagonal flag-color stripes, same on both sides — linear-gradient("to bottom right")
-   always runs exactly corner-to-corner regardless of the box's exact dimensions. */
-.lp-stripes {
-  position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
-  background: linear-gradient(to bottom right,
-    transparent 0%, transparent 6%,
-    rgba(243,212,63,.55) 6%, rgba(243,212,63,.55) 18%,
-    rgba(255,255,255,1) 18%, rgba(255,255,255,1) 30%,
-    rgba(232,120,138,.55) 30%, rgba(232,120,138,.55) 42%,
-    rgba(111,163,216,.55) 42%, rgba(111,163,216,.55) 54%,
-    transparent 54%, transparent 100%);
+/* Motif décoratif de fond (Bande de filigrane aux couleurs du drapeau) */
+.stripes-container {
+  position: absolute;
+  top: +30%;
+  right: -65%;
+  width: 200%;
+  height: 205%;
+  transform: rotate(-35deg);
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  pointer-events: none;
+  z-index: 1;
 }
 
-.lp-content { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; }
-
-/* ── Recto ── */
-.lp-front-header { text-align: center; padding: 22px 30px 4px; }
-.lp-front-header .org-name { font-size: 22px; font-weight: 800; letter-spacing: .02em; color: #111; }
-.lp-front-header .org-sub  { font-size: 12px; font-weight: 700; color: #333; margin-top: 2px; }
-.lp-front-title { text-align: center; font-size: 23px; font-weight: 800; color: #111; line-height: 1.3; margin: 14px 30px 20px; }
-
-.lp-front-body { flex: 1; position: relative; display: flex; align-items: flex-start; padding: 0 36px; gap: 26px; }
-.lp-photo-box img, .lp-photo-box .no-photo {
-  width: 170px; height: 210px; object-fit: cover; border-radius: 4px;
-  border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.25); background: #f1f1f1;
-  display: flex; align-items: center; justify-content: center; font-size: 3rem; color: #aaa;
+.stripe {
+  height: 48px;
+  width: 100%;
+  border-radius: 50px;
+  opacity: 0.18;
 }
-.lp-fields { flex: 1; display: flex; flex-direction: column; gap: 26px; margin-top: 15px; }
-.lp-field-row { display: flex; align-items: baseline; }
-.lp-field-lbl { font-size: 16px; color: #333; width: 85px; flex-shrink: 0; }
-.lp-field-val { font-size: 21px; font-weight: 800; color: #111; }
-.lp-qr-box { position: absolute; right: 36px; top: 190px; }
-.lp-qr-box img { width: 110px; height: 110px; display: block; }
+
+.stripe-yellow {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, #FACC15 0%, #F59E0B 100%, rgba(241, 240, 237, 0.2) 100%);
+  }
+
+.stripe-white {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%,#ddd8d8 0%, #E2E8F0 10%, rgba(226,232,240,0.2) 0%);
+  }
+
+.stripe-red {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, #EF4444 0%, #B91C1C 100%, rgba(185,28,28,0.2) 100%);
+ }
+
+.stripe-blue {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, #3B82F6 0%, #1D4ED8 100%, rgba(29,78,216,0.2) 100%);
+ }
+
+/* Contenu sur la carte */
+.lp-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* ── En-têtes ── */
+.lp-front-header, .lp-back-header {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  border-bottom: 2px solid rgba(15, 23, 42, 0.08);
+  padding-bottom: 12px;
+  padding-top: 29px;
+}
+
+.org-name, .lp-back-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0F172A;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+
+}
+
+.org-sub {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a525d;
+  letter-spacing: 1px;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+.lp-front-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #191a1d;
+  text-transform: uppercase;
+  margin-top: 25px;
+  letter-spacing: 0.5px;
+  text-align: center;
+
+}
+
+/* ── Recto Body ── */
+.lp-front-body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-right: 22px;
+  margin-bottom: 15px;
+}
+
+/* Photo Box */
+.lp-photo-box {
+  position: relative;
+  width: 175px;
+  height: 205px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #CBD5E1;
+  border: 2px solid #000000;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.12);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 35px;
+}
+
+.lp-photo-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.lp-photo-box .no-photo {
+  font-size: 3.5rem;
+  color: #64748B;
+}
+
+/*QR Code & */
+.lp-qr-box {
+  width: 110px;
+  height: 110px;
+  flex-shrink: 0;
+  margin-left: 24px;
+  margin-right:5px;
+}
+
+.lp-qr-box img {
+  width: 100%;
+  height: 100%;
+}
+
+
+/* Informations  */
+.lp-fields {
+  flex-grow: 1;
+  min-width: 0;
+  padding: 20px 8px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+
+}
+
+.lp-field-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.lp-field-lbl {
+  font-size: 14px;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.lp-field-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.lp-num-row .lp-field-val {
+  font-size: 22px;
+  color: #B91C1C;
+  font-family: monospace;
+  letter-spacing: 1px;
+}
+
+/* Footer */
+.lp-front-footer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 8px 15px;
+}
+
+.security-badge {
+  font-size: 9px;
+  font-weight: 600;
+  color: #1a1b1d;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
 
 /* ── Verso ── */
-.lp-back-title { text-align: center; font-size: 24px; font-weight: 800; color: #111; padding: 26px 0 10px; }
-.lp-back-body { flex: 1; padding: 10px 50px; display: flex; flex-direction: column; gap: 20px; }
-.lp-back-row { display: flex; align-items: baseline; gap: 14px; }
-.lp-back-lbl { width: 190px; font-size: 18px; color: #222; flex-shrink: 0; }
-.lp-back-val { font-size: 19px; font-weight: 800; color: #111; }
-.lp-back-statement { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 23px; color: #222; line-height: 1.5; margin-top: 6px; }
-.lp-back-footer { display: flex; justify-content: flex-end; padding: 10px 50px 30px; }
-.lp-sig-block { text-align: center; }
-.lp-sig-title { font-size: 14px; font-weight: 800; color: #111; text-transform: uppercase; letter-spacing: .02em; max-width: 220px; line-height: 1.4; }
-.lp-sig-mark { height: 50px; max-width: 170px; object-fit: contain; display: block; margin: 6px auto 2px; }
-.lp-sig-name { font-size: 14px; font-weight: 700; color: #333; border-top: 1px solid #999; padding-top: 3px; margin-top: 2px; }
+.lp-back-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 35px;
+}
 
+.lp-back-fields {
+  padding: 18px 24px;
+  margin : 15px 35px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.lp-back-row {
+  display: flex;
+  align-items: baseline;
+}
+
+.lp-back-lbl {
+  width: 200px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #64748B;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.lp-back-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-left: 50px;
+}
+
+.lp-back-statement {
+  padding: 14px 20px;
+  margin : 0 35px;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  line-height: 1.4;
+}
+
+.lp-back-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 8px 15px;
+}
+
+.lp-sig-block {
+  text-align: center;
+  width: 260px;
+  background: rgba(255, 255, 255, 0);
+  padding: 10px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  margin: 12px 22px;
+}
+
+.lp-sig-title {
+  font-size: 11px;
+  font-weight: 1000;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+.lp-sig-mark {
+  height: 45px;
+  max-width: 160px;
+  object-fit: contain;
+  display: block;
+  margin: 4px auto;
+}
+
+.lp-sig-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0F172A;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+  padding-top: 4px;
+  margin-top: 2px;
+}
+/* ── Impression ── */
 @media print {
-  body { background: #fff; padding: 0; margin: 0; }
+  body { background: #fff; padding: 0; margin: 0; display: block; min-height: 0; }
   .toolbar { display: none; }
-  /* Each card keeps its original 700x490 design size (so fonts/photo/QR keep their
-     designed proportions) and is scaled up uniformly to exactly fill the A5 page;
-     .lp-page is the real page-sized box and clips any sub-pixel scale rounding. */
+  /* The card keeps its original 700x490 design size so fonts/photo/QR keep their designed
+     proportions. The paper itself is 148x105mm (landscape, matching the card's own
+     orientation), so it's simply scaled up (no rotation needed) to exactly fill that
+     sheet; .lp-page is the real page-sized box and clips any sub-pixel scale rounding. */
   .lp-page {
-    width: 210mm; height: 148mm; overflow: hidden;
+    width: 148mm; height: 105mm; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
   }
-  .lp-card { box-shadow: none; border-radius: 0; transform: scale(1.134); }
+  .lp-card { box-shadow: none; border-radius: 0; border: none; transform: scale(.82); }
+  .lp-photo-box { box-shadow: none; }
   .lp-card-separator, .lp-card-separator::before, .lp-card-separator::after { display: none; }
   .lp-page-verso { page-break-before: always; }
-  @page { size: A5 landscape; margin: 0; }
+  @page { size: 148mm 105mm; margin: 0; }
 }
 </style>
 </head>
@@ -123,13 +380,22 @@ body {
 <!-- Recto -->
 <div class="lp-page">
 <div class="lp-card">
-  <div class="lp-stripes"></div>
+  <div class="stripes-container">
+    <div class="stripe stripe-yellow"></div>
+    <div class="stripe stripe-white"></div>
+    <div class="stripe stripe-red"></div>
+    <div class="stripe stripe-blue"></div>
+  </div>
+
   <div class="lp-content">
-    <div class="lp-front-header">
-      <div class="org-name">UNION DES COMORES</div>
-      <div class="org-sub">DIRECTION GÉNÉRALE DES ROUTES ET TRANSPORTS ROUTIERS</div>
+    <div>
+      <div class="lp-front-header">
+        <div class="org-name">Union des Comores</div>
+        <div class="org-sub">Direction Générale des Routes et Transports Routiers</div>
+      </div>
+      <div class="lp-front-title">{{ front_title }}</div>
     </div>
-    <div class="lp-front-title">LICENCE PROFESSIONNELLE DE TRANSPORT PUBLIC ET TAXI</div>
+
     <div class="lp-front-body">
       <div class="lp-photo-box">
         {% if lic and lic.photo_url %}
@@ -138,23 +404,33 @@ body {
           <div class="no-photo">&#128100;</div>
         {% endif %}
       </div>
+
       <div class="lp-fields">
-        <div class="lp-field-row">
-          <div class="lp-field-lbl">N° :</div>
-          <div class="lp-field-val">{{ req.lp_number }}</div>
+        <div class="lp-field-row lp-num-row">
+          <span class="lp-field-lbl">N°</span>
+          <span class="lp-field-val">{{ req.lp_number }}</span>
         </div>
         <div class="lp-field-row">
-          <div class="lp-field-lbl">Nom :</div>
-          <div class="lp-field-val">{{ lic.holder_firstname if lic else '—' }}</div>
+          <span class="lp-field-lbl">Nom</span>
+          <span class="lp-field-val">{{ lic.holder_firstname if lic else '—' }}</span>
         </div>
         <div class="lp-field-row">
-          <div class="lp-field-lbl">Prénom :</div>
-          <div class="lp-field-val">{{ lic.holder_name if lic else '—' }}</div>
+          <span class="lp-field-lbl">Prénom</span>
+          <span class="lp-field-val">{{ lic.holder_name if lic else '—' }}</span>
+        </div>
+        <div class="lp-field-row">
+          <span class="lp-field-lbl">Expire le</span>
+          <span class="lp-field-val">{{ req.validity_date.strftime('%d/%m/%Y') if req.validity_date else '—' }}</span>
         </div>
       </div>
-      {% if qr_data_uri %}
-      <div class="lp-qr-box"><img src="{{ qr_data_uri }}" alt="QR"></div>
+
+       {% if qr_data_uri %}
+      <div class="lp-qr-box"><img src="{{ qr_data_uri }}" alt="QR Code"></div>
       {% endif %}
+    </div>
+
+    <div class="lp-front-footer">
+
     </div>
   </div>
 </div>
@@ -165,25 +441,40 @@ body {
 <!-- Verso -->
 <div class="lp-page lp-page-verso">
 <div class="lp-card">
-  <div class="lp-stripes"></div>
+  <!-- BARRES DE COULEURS EN DÉGRADÉ -->
+  <div class="stripes-container">
+    <div class="stripe stripe-yellow"></div>
+    <div class="stripe stripe-white"></div>
+    <div class="stripe stripe-red"></div>
+    <div class="stripe stripe-blue"></div>
+  </div>
+
   <div class="lp-content">
-    <div class="lp-back-title">LICENCE PROFESSIONNELLE</div>
+    <div class="lp-back-header">
+      <div class="lp-back-title">Licence Professionnelle</div>
+    </div>
+
     <div class="lp-back-body">
-      <div class="lp-back-row">
-        <div class="lp-back-lbl">Date de naissance</div>
-        <div class="lp-back-val">: {{ lic.date_of_birth.strftime('%d/%m/%Y') if (lic and lic.date_of_birth) else '—' }}</div>
+      <div class="lp-back-fields">
+        <div class="lp-back-row">
+          <span class="lp-back-lbl">Date de naissance :</span>
+          <span class="lp-back-val">{{ lic.date_of_birth.strftime('%d/%m/%Y') if (lic and lic.date_of_birth) else '—' }}</span>
+        </div>
+        <div class="lp-back-row">
+          <span class="lp-back-lbl">Lieu de naissance :</span>
+          <span class="lp-back-val">{{ lic.lieu_naissance if lic else '—' }}</span>
+        </div>
       </div>
-      <div class="lp-back-row">
-        <div class="lp-back-lbl">Lieu de naissance</div>
-        <div class="lp-back-val">: {{ lic.lieu_naissance if lic else '—' }}</div>
-      </div>
+
       <div class="lp-back-statement">
-        est autorisé(e) à conduire un véhicule de transport sur le territoire de l'Union des Comores
+        Le titulaire est autorisé(e) à conduire un véhicule de transport sur le territoire de l'Union des Comores.
       </div>
     </div>
+
     <div class="lp-back-footer">
+      <span class="security-badge">Document Officiel </span>
       <div class="lp-sig-block">
-        <div class="lp-sig-title">DIRECTEUR GÉNÉRAL DES ROUTES ET TRANSPORTS ROUTIERS</div>
+        <div class="lp-sig-title">Le Directeur Général des Routes et Transports Routiers</div>
         {% if settings.directeur_signature_url %}
           <img class="lp-sig-mark" src="{{ settings.directeur_signature_url }}" alt="Signature">
         {% endif %}
@@ -195,11 +486,25 @@ body {
 </div>
 
 <script>
+function waitForImages() {
+  const imgs = Array.from(document.images);
+  return Promise.all(imgs.map(img => {
+    if (img.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+    });
+  }));
+}
+
 function doPrint() {
-  fetch('/api/licence-pro/{{ req.id }}/mark-printed', {
-    method: 'POST',
-    credentials: 'same-origin',
-  }).finally(() => {
+  Promise.all([
+    fetch('/api/licence-pro/{{ req.id }}/mark-printed', {
+      method: 'POST',
+      credentials: 'same-origin',
+    }),
+    waitForImages(),
+  ]).finally(() => {
     window.print();
   });
 }

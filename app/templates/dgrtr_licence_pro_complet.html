@@ -2,6 +2,7 @@
 {% block content %}
 
 <style>
+.lp-lpnumber-btn, .lp-lpnumber-btn:hover, .lp-lpnumber-btn:focus { text-decoration: none !important; }
 .stat-card   { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px 20px; text-align:center; }
 .stat-num    { font-size:28px; font-weight:800; line-height:1; color:#0f172a; }
 .stat-lbl    { font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
@@ -14,9 +15,16 @@
       <h2 class="mb-0"><i class="fas fa-id-badge me-2"></i>Licence Pro Complet</h2>
       <small class="text-muted">Licences professionnelles imprimées</small>
     </div>
-    <a href="/dgrtr/licence-professionnelle" class="btn btn-outline-secondary btn-sm">
-      <i class="fas fa-arrow-left me-2"></i>Retour
-    </a>
+    <div class="d-flex gap-2">
+      {% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general' %}
+      <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#lp-stats-modal" onclick="lpRenderMonthlyStats()">
+        <i class="fas fa-chart-column me-2"></i>Statistique
+      </button>
+      {% endif %}
+      <a href="/dgrtr/licence-professionnelle" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-2"></i>Retour
+      </a>
+    </div>
   </div>
 
   <div class="row g-3 mb-4">
@@ -28,8 +36,20 @@
     </div>
     <div class="col-6 col-md-3">
       <div class="stat-card">
-        <div class="stat-num text-secondary" id="stat-mois">—</div>
-        <div class="stat-lbl">Ce mois-ci</div>
+        <div class="stat-num text-primary" id="stat-taxi">—</div>
+        <div class="stat-lbl">Taxi ville</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-primary" id="stat-transport">—</div>
+        <div class="stat-lbl">Transport publique</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num text-primary" id="stat-proprio">—</div>
+        <div class="stat-lbl">Propriétaire exploitant</div>
       </div>
     </div>
   </div>
@@ -37,6 +57,12 @@
   <div class="d-flex gap-2 mb-3 align-items-center">
     <input type="search" id="search-input" class="form-control" style="max-width:380px;"
       placeholder="Rechercher par nom, prénom ou N° LP…" oninput="filterLp()">
+    <select id="activite-filter" class="form-select" style="max-width:260px;" onchange="filterLp()">
+      <option value="">Toutes les activités</option>
+      <option value="taxi_ville">Taxi ville</option>
+      <option value="transport_commun">Transport en commun de personnes</option>
+      <option value="proprietaire_exploitant">Conducteur propriétaire exploitant</option>
+    </select>
     <span class="text-muted small ms-2" id="result-count"></span>
   </div>
 
@@ -48,6 +74,7 @@
             <th class="ps-4 small text-uppercase text-muted">N° LP</th>
             <th class="small text-uppercase text-muted">Candidat</th>
             <th class="small text-uppercase text-muted">N° Permis</th>
+            <th class="small text-uppercase text-muted">Activité</th>
             <th class="small text-uppercase text-muted">Zone d'activité</th>
             <th class="small text-uppercase text-muted">Validité jusqu'au</th>
             <th class="small text-uppercase text-muted">Imprimé le</th>
@@ -56,7 +83,7 @@
           </tr>
         </thead>
         <tbody id="lp-tbody">
-          <tr><td colspan="8" class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+          <tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
         </tbody>
       </table>
     </div>
@@ -64,7 +91,65 @@
 
 </div>
 
+{% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general' %}
+<!-- Modal: statistique mensuelle par activité -->
+<div class="modal fade" id="lp-stats-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-chart-column me-2"></i>Statistique mensuelle par activité</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="lp-stats-print-area">
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle mb-0">
+              <thead style="background:#f8fafc;">
+                <tr>
+                  <th class="small text-uppercase text-muted">Mois</th>
+                  <th class="small text-uppercase text-muted text-end">Taxi ville</th>
+                  <th class="small text-uppercase text-muted text-end">Transport publique</th>
+                  <th class="small text-uppercase text-muted text-end">Propriétaire exploitant</th>
+                  <th class="small text-uppercase text-muted text-end">Total</th>
+                </tr>
+              </thead>
+              <tbody id="lp-stats-tbody">
+                <tr><td colspan="5" class="text-center text-muted py-4">Chargement…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" onclick="lpPrintStats()"><i class="fas fa-print me-2"></i>Imprimer</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Modal: historique d'une licence -->
+<div class="modal fade" id="lp-history-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-clock-rotate-left me-2"></i>Historique — <span id="lp-history-number"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="list-group list-group-flush" id="lp-history-list"></ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
+var IS_DT = {{ 'true' if (current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_technique') else 'false' }};
+var IS_DG = {{ 'true' if (current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general') else 'false' }};
 var allLp = [];
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -79,49 +164,178 @@ document.addEventListener('DOMContentLoaded', function () {
 
 function updateStats(data) {
     document.getElementById('stat-total').textContent = data.length;
-    var now = new Date();
-    var thisMonth = data.filter(function (d) {
-        if (!d.printed_at) return false;
-        var parts = d.printed_at.split(' ')[0].split('/');
-        if (parts.length < 3) return false;
-        return parseInt(parts[1]) === now.getMonth() + 1 && parseInt(parts[2]) === now.getFullYear();
-    });
-    document.getElementById('stat-mois').textContent = thisMonth.length;
+    document.getElementById('stat-taxi').textContent = data.filter(function (d) { return d.activite_type === 'taxi_ville'; }).length;
+    document.getElementById('stat-transport').textContent = data.filter(function (d) { return d.activite_type === 'transport_commun'; }).length;
+    document.getElementById('stat-proprio').textContent = data.filter(function (d) { return d.activite_type === 'proprietaire_exploitant'; }).length;
 }
 
 function filterLp() {
     var q = document.getElementById('search-input').value.trim().toLowerCase();
-    var filtered = q
-        ? allLp.filter(function (d) {
-            return ((d.holder_name + ' ' + d.holder_firstname + ' ' + d.lp_number).toLowerCase().includes(q));
-        })
-        : allLp;
+    var activite = document.getElementById('activite-filter').value;
+    var filtered = allLp.filter(function (d) {
+        var matchesQ = !q || (d.holder_name + ' ' + d.holder_firstname + ' ' + d.lp_number).toLowerCase().includes(q);
+        var matchesActivite = !activite || d.activite_type === activite;
+        return matchesQ && matchesActivite;
+    });
     renderTable(filtered);
 }
 
 function renderTable(data) {
+    if (IS_DG) {
+        data = data.slice().sort(function (a, b) {
+            return (b.reprint_status === 'pending' ? 1 : 0) - (a.reprint_status === 'pending' ? 1 : 0);
+        });
+    }
     document.getElementById('result-count').textContent = data.length + ' licence' + (data.length > 1 ? 's' : '');
     var tbody = document.getElementById('lp-tbody');
     if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5"><i class="fas fa-id-badge me-2 opacity-25"></i>Aucune licence imprimée trouvée</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-id-badge me-2 opacity-25"></i>Aucune licence imprimée trouvée</td></tr>';
         return;
     }
     tbody.innerHTML = data.map(function (d) {
         return `<tr>
-            <td class="ps-4 fw-bold font-monospace text-primary">${d.lp_number}</td>
+            <td class="ps-4"><button type="button" class="btn btn-link lp-lpnumber-btn p-0 fw-bold font-monospace" onclick='lpShowHistory(${JSON.stringify(d).replace(/'/g, "&apos;")})'>${d.lp_number}</button></td>
             <td>${d.holder_firstname || ''} ${d.holder_name || ''}</td>
             <td class="small font-monospace">${d.license_number || '—'}</td>
+            <td class="small">${d.activite_label || '—'}</td>
             <td class="small">${d.zone_activite}</td>
             <td class="small text-muted">${d.validity_date}</td>
             <td class="small text-muted" style="white-space:nowrap;">${d.printed_at || '—'}</td>
             <td class="small text-muted">${d.printed_by || '—'}</td>
-            <td class="text-end pe-4">
-                <a href="/dgrtr/licence-pro/${d.id}/print" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">
-                    <i class="fas fa-print me-1"></i>Réimprimer
-                </a>
-            </td>
+            <td class="text-end pe-4">${lpReprintActionHtml(d)}</td>
         </tr>`;
     }).join('');
+}
+
+var FR_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+function lpRenderMonthlyStats() {
+    var byMonth = {};
+    allLp.forEach(function (d) {
+        if (!d.printed_at) return;
+        var parts = d.printed_at.split(' ')[0].split('/');
+        if (parts.length < 3) return;
+        var month = parseInt(parts[1]), year = parseInt(parts[2]);
+        var key = year + '-' + String(month).padStart(2, '0');
+        if (!byMonth[key]) {
+            byMonth[key] = { year: year, month: month, taxi_ville: 0, transport_commun: 0, proprietaire_exploitant: 0, total: 0 };
+        }
+        if (d.activite_type && byMonth[key].hasOwnProperty(d.activite_type)) {
+            byMonth[key][d.activite_type]++;
+        }
+        byMonth[key].total++;
+    });
+    var keys = Object.keys(byMonth).sort().reverse();
+    var tbody = document.getElementById('lp-stats-tbody');
+    if (!keys.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Aucune licence imprimée.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = keys.map(function (key) {
+        var m = byMonth[key];
+        return `<tr>
+            <td class="small">${FR_MONTHS[m.month - 1]} ${m.year}</td>
+            <td class="small text-end">${m.taxi_ville}</td>
+            <td class="small text-end">${m.transport_commun}</td>
+            <td class="small text-end">${m.proprietaire_exploitant}</td>
+            <td class="small text-end fw-bold">${m.total}</td>
+        </tr>`;
+    }).join('');
+}
+
+function lpPrintStats() {
+    var tableHtml = document.getElementById('lp-stats-print-area').innerHTML;
+    var w = window.open('', '_blank');
+    w.document.write(`<!doctype html><html><head><title>Statistique mensuelle — Licence Professionnelle</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+            h2 { text-align: center; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 13px; }
+            th { background: #f8fafc; text-transform: uppercase; font-size: 11px; color: #555; }
+            td.text-end, th.text-end { text-align: right; }
+        </style>
+        </head><body>
+        <h2>Statistique mensuelle — Licence Professionnelle</h2>
+        ${tableHtml}
+        </body></html>`);
+    w.document.close();
+    w.focus();
+    setTimeout(function () { w.print(); }, 300);
+}
+
+function lpReprintActionHtml(d) {
+    if (d.reprint_status === 'approved') {
+        if (IS_DT) {
+            return `<a href="/dgrtr/licence-pro/${d.id}/print" target="_blank" class="btn btn-sm btn-primary py-0 px-2">
+                        <i class="fas fa-print me-1"></i>Imprimer</a>`;
+        }
+        return '<span class="text-success small">Approuvée — en attente d\'impression</span>';
+    }
+    if (d.reprint_status === 'pending') {
+        if (IS_DG) {
+            return `<button class="btn btn-sm btn-success py-0 px-2" onclick="lpApproveReprint(${d.id})">
+                        <i class="fas fa-check me-1"></i>Valider réimpression</button>`;
+        }
+        return '<span class="text-muted small">En attente du DG</span>';
+    }
+    if (IS_DT) {
+        return `<button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="lpRequestReprint(${d.id})">
+                    <i class="fas fa-print me-1"></i>Demander réimpression</button>`;
+    }
+    return '<span class="text-muted small">—</span>';
+}
+
+function lpRequestReprint(id) {
+    if (!confirm('Demander une réimpression de cette licence ? Le Directeur Général devra valider la demande.')) return;
+    fetch('/api/licence-pro/' + id + '/request-reprint', { method: 'POST', credentials: 'same-origin' })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+            if (!res.ok) { alert(res.data.error || 'Erreur'); return; }
+            var idx = allLp.findIndex(function (x) { return x.id === id; });
+            if (idx !== -1) allLp[idx] = res.data;
+            filterLp();
+        });
+}
+
+function lpApproveReprint(id) {
+    if (!confirm('Valider cette demande de réimpression ?')) return;
+    fetch('/api/licence-pro/' + id + '/approve-reprint', { method: 'POST', credentials: 'same-origin' })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+            if (!res.ok) { alert(res.data.error || 'Erreur'); return; }
+            var idx = allLp.findIndex(function (x) { return x.id === id; });
+            if (idx !== -1) allLp[idx] = res.data;
+            filterLp();
+        });
+}
+
+function lpShowHistory(d) {
+    document.getElementById('lp-history-number').textContent = d.lp_number;
+    var events = [];
+    events.push({ label: 'Demande créée', by: d.requested_by, at: d.requested_at, icon: 'fa-plus-circle', color: 'text-secondary' });
+    if (d.validated_at) {
+        events.push({ label: 'Validée par le Directeur Général', by: d.validated_by, at: d.validated_at, icon: 'fa-check-circle', color: 'text-success' });
+    }
+    if (d.printed_at) {
+        events.push({ label: 'Imprimée', by: d.printed_by, at: d.printed_at, icon: 'fa-print', color: 'text-primary' });
+    }
+    if (d.reprint_requested_at) {
+        events.push({ label: 'Demande de réimpression', by: d.reprint_requested_by, at: d.reprint_requested_at, icon: 'fa-rotate', color: 'text-secondary' });
+    }
+    if (d.reprint_approved_at) {
+        events.push({ label: 'Réimpression validée par le Directeur Général', by: d.reprint_approved_by, at: d.reprint_approved_at, icon: 'fa-check-circle', color: 'text-success' });
+    }
+    document.getElementById('lp-history-list').innerHTML = events.map(function (ev) {
+        return `<li class="list-group-item d-flex align-items-start gap-3">
+            <i class="fas ${ev.icon} ${ev.color} mt-1"></i>
+            <div>
+                <div class="fw-semibold">${ev.label}</div>
+                <div class="text-muted small">${ev.by || '—'} · ${ev.at || '—'}</div>
+            </div>
+        </li>`;
+    }).join('');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('lp-history-modal')).show();
 }
 </script>
 

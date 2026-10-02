@@ -21,6 +21,11 @@
       <h2 class="mb-0"><i class="fas fa-id-badge me-2"></i>Licence Professionnelle</h2>
       <small class="text-muted">Licences professionnelles de conducteur (taxi) — rattachées à un permis de conduire existant</small>
     </div>
+    {% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general' %}
+    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#lp-settings-modal" onclick="lpOpenSettings()">
+      <i class="fas fa-cog me-2"></i>Paramètres
+    </button>
+    {% endif %}
   </div>
 
   <div class="row g-3 mb-4">
@@ -89,20 +94,34 @@
               <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" onclick="lpResetForm()"><i class="fas fa-times me-1"></i>Annuler</button>
             </div>
             <input type="hidden" id="lp-license-id">
+            <div class="mb-3">
+              <label class="form-label small text-muted d-block">Activité professionnelle demandée</label>
+              <div class="d-flex flex-wrap gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="lp-activite" id="lp-activite-taxi" value="taxi_ville">
+                  <label class="form-check-label small" for="lp-activite-taxi">Taxi ville</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="lp-activite" id="lp-activite-transport" value="transport_commun">
+                  <label class="form-check-label small" for="lp-activite-transport">Transport en commun de personnes</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="lp-activite" id="lp-activite-proprio" value="proprietaire_exploitant">
+                  <label class="form-check-label small" for="lp-activite-proprio">Conducteur propriétaire exploitant</label>
+                </div>
+              </div>
+            </div>
             <div class="row g-3">
-              <div class="col-md-4">
+              <div class="col-md-6">
                 <label class="form-label small text-muted">N° de licence (LP)</label>
                 <input type="text" id="lp-number" class="form-control" placeholder="LP-0001">
               </div>
-              <div class="col-md-4">
-                <label class="form-label small text-muted">Date de fin de validité</label>
-                <input type="date" id="lp-validity-date" class="form-control">
-              </div>
-              <div class="col-md-4">
+              <div class="col-md-6">
                 <label class="form-label small text-muted">Zone d'activité</label>
                 <input type="text" id="lp-zone" class="form-control" placeholder="Moroni, Grande Comores">
               </div>
             </div>
+            <div class="form-text mt-2"><i class="fas fa-circle-info me-1"></i>La date de fin de validité sera calculée automatiquement selon la durée fixée par le Directeur Général pour l'activité choisie.</div>
             <button type="button" class="btn btn-primary mt-3" onclick="lpSubmitRequest()">
               <i class="fas fa-paper-plane me-2"></i>Envoyer la demande au Directeur Général
             </button>
@@ -120,6 +139,7 @@
               <tr>
                 <th class="ps-4 small text-uppercase text-muted">N° LP</th>
                 <th class="small text-uppercase text-muted">Candidat</th>
+                <th class="small text-uppercase text-muted">Activité demandée</th>
                 <th class="small text-uppercase text-muted">Zone d'activité</th>
                 <th class="small text-uppercase text-muted">Validité jusqu'au</th>
                 <th class="small text-uppercase text-muted">Demandé par</th>
@@ -127,7 +147,7 @@
               </tr>
             </thead>
             <tbody id="lp-pending-tbody">
-              <tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+              <tr><td colspan="7" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
             </tbody>
           </table>
         </div>
@@ -141,13 +161,14 @@
               <tr>
                 <th class="ps-4 small text-uppercase text-muted">N° LP</th>
                 <th class="small text-uppercase text-muted">Candidat</th>
+                <th class="small text-uppercase text-muted">Activité demandée</th>
                 <th class="small text-uppercase text-muted">Zone d'activité</th>
                 <th class="small text-uppercase text-muted">Validée par (DG)</th>
                 <th class="text-end pe-4 small text-uppercase text-muted">Actions</th>
               </tr>
             </thead>
             <tbody id="lp-validated-tbody">
-              <tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+              <tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
             </tbody>
           </table>
         </div>
@@ -174,18 +195,75 @@
           <input type="text" id="lp-edit-number" class="form-control">
         </div>
         <div class="mb-3">
-          <label class="form-label small text-muted">Date de fin de validité</label>
-          <input type="date" id="lp-edit-validity-date" class="form-control">
+          <label class="form-label small text-muted d-block">Activité professionnelle demandée</label>
+          <div class="d-flex flex-column gap-1">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="lp-edit-activite" id="lp-edit-activite-taxi" value="taxi_ville">
+              <label class="form-check-label small" for="lp-edit-activite-taxi">Taxi ville</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="lp-edit-activite" id="lp-edit-activite-transport" value="transport_commun">
+              <label class="form-check-label small" for="lp-edit-activite-transport">Transport en commun de personnes</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="lp-edit-activite" id="lp-edit-activite-proprio" value="proprietaire_exploitant">
+              <label class="form-check-label small" for="lp-edit-activite-proprio">Conducteur propriétaire exploitant</label>
+            </div>
+          </div>
         </div>
         <div class="mb-3">
           <label class="form-label small text-muted">Zone d'activité</label>
           <input type="text" id="lp-edit-zone" class="form-control">
         </div>
+        <div class="form-text"><i class="fas fa-circle-info me-1"></i>La date de fin de validité sera recalculée automatiquement selon la durée fixée par le Directeur Général pour l'activité choisie.</div>
         <span id="lp-edit-error" class="text-danger small"></span>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
         <button type="button" class="btn btn-primary" onclick="lpSaveEdit()"><i class="fas fa-save me-2"></i>Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general' %}
+<!-- Modal: paramètres durée de validité par activité (DG) -->
+<div class="modal fade" id="lp-settings-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-cog me-2"></i>Paramètres — Durée de validité</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">Nombre d'années de validité accordées selon l'activité professionnelle demandée.</p>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Taxi ville</label>
+          <div class="input-group">
+            <input type="number" min="1" step="1" id="lp-settings-taxi" class="form-control">
+            <span class="input-group-text">an(s)</span>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Transport en commun de personnes</label>
+          <div class="input-group">
+            <input type="number" min="1" step="1" id="lp-settings-transport" class="form-control">
+            <span class="input-group-text">an(s)</span>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Conducteur propriétaire exploitant</label>
+          <div class="input-group">
+            <input type="number" min="1" step="1" id="lp-settings-proprio" class="form-control">
+            <span class="input-group-text">an(s)</span>
+          </div>
+        </div>
+        <span id="lp-settings-error" class="text-danger small"></span>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="lpSaveSettings()"><i class="fas fa-save me-2"></i>Enregistrer</button>
       </div>
     </div>
   </div>
@@ -240,8 +318,8 @@ function lpSelectLicense(lic) {
     document.getElementById('lp-form-photo').src = lic.photo_url || '';
     document.getElementById('lp-license-id').value = lic.id;
     document.getElementById('lp-number').value = '';
-    document.getElementById('lp-validity-date').value = '';
     document.getElementById('lp-zone').value = '';
+    document.querySelectorAll('input[name="lp-activite"]').forEach(function (r) { r.checked = false; });
     document.getElementById('lp-form-error').textContent = '';
 }
 
@@ -253,12 +331,17 @@ function lpResetForm() {
 function lpSubmitRequest() {
     var errEl = document.getElementById('lp-form-error');
     errEl.textContent = '';
+    var activiteEl = document.querySelector('input[name="lp-activite"]:checked');
     var payload = {
         license_id: document.getElementById('lp-license-id').value,
         lp_number: document.getElementById('lp-number').value.trim(),
-        validity_date: document.getElementById('lp-validity-date').value,
+        activite_type: activiteEl ? activiteEl.value : '',
         zone_activite: document.getElementById('lp-zone').value.trim(),
     };
+    if (!payload.activite_type) {
+        errEl.textContent = "Veuillez choisir l'activité professionnelle demandée.";
+        return;
+    }
     fetch('/api/licence-pro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -287,7 +370,7 @@ function renderPending(items) {
     document.getElementById('tab-badge-pending').textContent = items.length;
     var tbody = document.getElementById('lp-pending-tbody');
     if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Aucune demande en attente.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Aucune demande en attente.</td></tr>';
         return;
     }
     tbody.innerHTML = items.map(function (d) {
@@ -303,6 +386,7 @@ function renderPending(items) {
         return `<tr>
             <td class="ps-4 fw-bold font-monospace text-primary">${d.lp_number}</td>
             <td>${d.holder_firstname || ''} ${d.holder_name || ''}</td>
+            <td class="small">${d.activite_label || '—'}</td>
             <td class="small">${d.zone_activite}</td>
             <td class="small">${d.validity_date}</td>
             <td class="text-muted small">${d.requested_by}</td>
@@ -316,7 +400,7 @@ function renderValidated(items) {
     document.getElementById('tab-badge-validated').textContent = items.length;
     var tbody = document.getElementById('lp-validated-tbody');
     if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Aucune licence validée en attente d\'impression.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Aucune licence validée en attente d\'impression.</td></tr>';
         return;
     }
     tbody.innerHTML = items.map(function (d) {
@@ -326,6 +410,7 @@ function renderValidated(items) {
         return `<tr>
             <td class="ps-4 fw-bold font-monospace text-primary">${d.lp_number}</td>
             <td>${d.holder_firstname || ''} ${d.holder_name || ''}</td>
+            <td class="small">${d.activite_label || '—'}</td>
             <td class="small">${d.zone_activite}</td>
             <td class="text-muted small">${d.validated_by}</td>
             <td class="text-end pe-4">${actionBtn}</td>
@@ -343,8 +428,10 @@ function lpValidate(id) {
 function lpEditRequest(d) {
     document.getElementById('lp-edit-id').value = d.id;
     document.getElementById('lp-edit-number').value = d.lp_number;
-    document.getElementById('lp-edit-validity-date').value = d.validity_date_iso || '';
     document.getElementById('lp-edit-zone').value = d.zone_activite;
+    document.querySelectorAll('input[name="lp-edit-activite"]').forEach(function (r) {
+        r.checked = (r.value === d.activite_type);
+    });
     document.getElementById('lp-edit-error').textContent = '';
     var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('lp-edit-modal'));
     modal.show();
@@ -354,11 +441,16 @@ function lpSaveEdit() {
     var id = document.getElementById('lp-edit-id').value;
     var errEl = document.getElementById('lp-edit-error');
     errEl.textContent = '';
+    var activiteEl = document.querySelector('input[name="lp-edit-activite"]:checked');
     var payload = {
         lp_number: document.getElementById('lp-edit-number').value.trim(),
-        validity_date: document.getElementById('lp-edit-validity-date').value,
+        activite_type: activiteEl ? activiteEl.value : '',
         zone_activite: document.getElementById('lp-edit-zone').value.trim(),
     };
+    if (!payload.activite_type) {
+        errEl.textContent = "Veuillez choisir l'activité professionnelle demandée.";
+        return;
+    }
     fetch('/api/licence-pro/' + id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -381,6 +473,39 @@ function lpDeleteRequest(id) {
             if (!res.ok) { alert(res.data.error || 'Erreur'); return; }
             loadLpLists();
         });
+}
+
+function lpOpenSettings() {
+    var errEl = document.getElementById('lp-settings-error');
+    errEl.textContent = '';
+    fetch('/api/licence-pro/settings', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            document.getElementById('lp-settings-taxi').value = d.taxi_ville;
+            document.getElementById('lp-settings-transport').value = d.transport_commun;
+            document.getElementById('lp-settings-proprio').value = d.proprietaire_exploitant;
+        });
+}
+
+function lpSaveSettings() {
+    var errEl = document.getElementById('lp-settings-error');
+    errEl.textContent = '';
+    var payload = {
+        taxi_ville: document.getElementById('lp-settings-taxi').value,
+        transport_commun: document.getElementById('lp-settings-transport').value,
+        proprietaire_exploitant: document.getElementById('lp-settings-proprio').value,
+    };
+    fetch('/api/licence-pro/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+    })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+        if (!res.ok) { errEl.textContent = res.data.error || 'Erreur'; return; }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('lp-settings-modal')).hide();
+    });
 }
 </script>
 
