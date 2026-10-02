@@ -21,10 +21,10 @@ body {
 .btn-back:hover { background: #f9fafb; }
 
 @media print {
-  body { background: #fff; padding: 0; }
+  body { background: #fff; padding: 0; margin: 0; height: 148mm; max-height: 148mm; overflow: hidden; justify-content: center; }
   .toolbar { display: none; }
-  .card { box-shadow: none; border: none !important; width: 100% !important; border-radius: 0 !important; }
-  @page { size: A4 portrait; margin: 0; }
+  .card { box-shadow: none; }
+  @page { size: A5 landscape; margin: 0; }
 }
 </style>
 </head>
