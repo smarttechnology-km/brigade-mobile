@@ -894,7 +894,8 @@
 <style>
 .calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; font-size: .72rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 6px; }
-.calendar-day { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 6px; min-height: 58px; background: #fff; }
+.calendar-day { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 6px; min-height: 58px; background: #fff; cursor: pointer; transition: background .12s, border-color .12s; }
+.calendar-day:not(.empty):hover { background: #f1f5ff; border-color: #93c5fd; }
 .calendar-day.empty { visibility: hidden; }
 .calendar-day.has-count { background: #eef4ff; border-color: #bfdbfe; }
 .calendar-day .cal-day-num { font-size: .72rem; color: #6b7280; font-weight: 600; }
