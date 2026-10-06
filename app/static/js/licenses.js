@@ -1725,6 +1725,14 @@
         win.print();
     };
 
+    window.showPerformanceForDay = function (dateStr) {
+        document.getElementById('perf-date-from').value = dateStr;
+        document.getElementById('perf-date-to').value = dateStr;
+        const employeTabBtn = document.querySelector('[data-bs-target="#perf-tab-employe"]');
+        bootstrap.Tab.getOrCreateInstance(employeTabBtn).show();
+        loadPerformance();
+    };
+
     window.loadPerformanceDaily = function () {
         const monthInput = document.getElementById('perf-month');
         if (!monthInput.value) {
@@ -1746,7 +1754,7 @@
                 for (let i = 0; i < leadingBlanks; i++) {
                     cells += '<div class="calendar-day empty"></div>';
                 }
-                cells += d.days.map(day => `<div class="calendar-day${day.count > 0 ? ' has-count' : ''}">
+                cells += d.days.map(day => `<div class="calendar-day${day.count > 0 ? ' has-count' : ''}" role="button" onclick="showPerformanceForDay('${day.date}')">
                     <div class="cal-day-num">${day.day}</div>
                     <div class="cal-day-count">${day.count}</div>
                 </div>`).join('');
