@@ -70,7 +70,7 @@ body {
   height: 48px;
   width: 100%;
   border-radius: 50px;
-  opacity: 0.18;
+  opacity: 0.4;
 }
 
 .stripe-yellow {
@@ -345,7 +345,8 @@ body {
 }
 /* ── Impression ── */
 @media print {
-  body { background: #fff; padding: 0; margin: 0; display: block; min-height: 0; }
+  body { background: #fff; padding: 0; margin: 0; display: block; min-height: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .toolbar { display: none; }
   /* The card keeps its original 700x490 design size so fonts/photo/QR keep their designed
      proportions. The paper itself is 148x105mm (landscape, matching the card's own
