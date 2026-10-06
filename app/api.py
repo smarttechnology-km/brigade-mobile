@@ -4951,6 +4951,51 @@ def api_licenses_performance():
     })
 
 
+@api_bp.route('/licenses/performance-daily', methods=['GET'])
+@login_required
+def api_licenses_performance_daily():
+    """Nombre de permis créés par jour sur un mois donné — réservé au directeur
+    général et à l'administrateur (onglet 'Par jour' du modal Performances DGRTR)."""
+    if not _is_license_dg_or_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    month_str = request.args.get('month')
+    if month_str:
+        try:
+            month_start = datetime.strptime(month_str, '%Y-%m').date()
+        except ValueError:
+            return jsonify({'error': 'Mois invalide (format attendu: YYYY-MM)'}), 400
+    else:
+        month_start = now_comoros().date().replace(day=1)
+        month_str = month_start.strftime('%Y-%m')
+
+    next_month = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    days_in_month = (next_month - month_start).days
+
+    rows = db.session.query(
+        db.func.date(DriverLicense.created_at),
+        db.func.count(DriverLicense.id),
+    ).filter(
+        DriverLicense.created_at >= datetime.combine(month_start, datetime.min.time()),
+        DriverLicense.created_at < datetime.combine(next_month, datetime.min.time()),
+    ).group_by(db.func.date(DriverLicense.created_at)).all()
+
+    counts_by_day = {}
+    for day_str, count in rows:
+        counts_by_day[str(day_str)] = count
+
+    days = []
+    for i in range(days_in_month):
+        d = month_start + timedelta(days=i)
+        days.append({'date': d.isoformat(), 'day': d.day, 'count': counts_by_day.get(d.isoformat(), 0)})
+
+    return jsonify({
+        'month': month_str,
+        'days': days,
+        'total': sum(d['count'] for d in days),
+    })
+
+
 # ── Alertes (accidents, recherches de véhicule, travaux...) ──────────────────
 
 def _sanitize_description_html(html):
