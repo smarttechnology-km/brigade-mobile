@@ -1627,6 +1627,8 @@
     /* ── Performance des employés DGRTR ── */
     let _perfModal = null;
     let _perfLastData = null;
+    let _perfDailyLastData = null;
+    let _perfDailyChart = null;
 
     function toInputDate(d) {
         const y = d.getFullYear();
@@ -1715,6 +1717,96 @@
                 <thead><tr><th>#</th><th>Employé</th><th style="text-align:right;">Permis ajoutés</th></tr></thead>
                 <tbody>${rows}</tbody>
                 <tfoot><tr><td colspan="2">Total</td><td style="text-align:right;">${d.total}</td></tr></tfoot>
+            </table>
+            </body></html>
+        `);
+        win.document.close();
+        win.focus();
+        win.print();
+    };
+
+    window.loadPerformanceDaily = function () {
+        const monthInput = document.getElementById('perf-month');
+        if (!monthInput.value) {
+            const now = new Date();
+            monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+        document.getElementById('performance-daily-loading').style.display = '';
+        document.getElementById('performance-daily-content').style.display = 'none';
+        const params = new URLSearchParams({ month: monthInput.value });
+        fetch('/api/licenses/performance-daily?' + params.toString(), { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : Promise.reject(r))
+            .then(d => {
+                _perfDailyLastData = d;
+                const calendar = document.getElementById('performance-daily-calendar');
+                // ISO weekday: Monday=1..Sunday=7. Leading blanks = how many cells before day 1.
+                const firstWeekday = new Date(d.days[0].date + 'T00:00:00').getDay();
+                const leadingBlanks = firstWeekday === 0 ? 6 : firstWeekday - 1;
+                let cells = '';
+                for (let i = 0; i < leadingBlanks; i++) {
+                    cells += '<div class="calendar-day empty"></div>';
+                }
+                cells += d.days.map(day => `<div class="calendar-day${day.count > 0 ? ' has-count' : ''}">
+                    <div class="cal-day-num">${day.day}</div>
+                    <div class="cal-day-count">${day.count}</div>
+                </div>`).join('');
+                calendar.innerHTML = cells;
+                document.getElementById('performance-daily-total').textContent = `Total : ${d.total} permis ajoutés sur le mois`;
+
+                const ctx = document.getElementById('performance-daily-chart');
+                if (_perfDailyChart) { _perfDailyChart.destroy(); }
+                _perfDailyChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: d.days.map(day => day.day),
+                        datasets: [{
+                            label: 'Permis ajoutés',
+                            data: d.days.map(day => day.count),
+                            backgroundColor: '#0d6efd',
+                            borderRadius: 3,
+                        }],
+                    },
+                    options: {
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+                    },
+                });
+
+                document.getElementById('performance-daily-loading').style.display = 'none';
+                document.getElementById('performance-daily-content').style.display = '';
+            })
+            .catch(() => {
+                document.getElementById('performance-daily-loading').innerHTML =
+                    '<div class="text-danger py-3 text-center">Erreur de chargement</div>';
+            });
+    };
+
+    window.printPerformanceDaily = function () {
+        if (!_perfDailyLastData) return;
+        const d = _perfDailyLastData;
+        const rows = d.days.map(day => `<tr>
+            <td>${day.day}</td>
+            <td style="text-align:right;font-weight:bold;">${day.count}</td>
+        </tr>`).join('');
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html><head><title>Performances DGRTR — Par jour</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
+                h2 { margin-bottom: 2px; }
+                p.sub { color: #666; margin-top: 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+                th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 0.9rem; }
+                th { background: #f0f0f0; text-align: left; }
+                tfoot td { font-weight: bold; }
+            </style>
+            </head><body>
+            <h2>Permis ajoutés par jour — Employés DGRTR</h2>
+            <p class="sub">Mois : ${escapeHtml(d.month)}</p>
+            <table>
+                <thead><tr><th>Jour</th><th style="text-align:right;">Permis ajoutés</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot><tr><td>Total</td><td style="text-align:right;">${d.total}</td></tr></tfoot>
             </table>
             </body></html>
         `);
