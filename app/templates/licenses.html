@@ -891,6 +891,17 @@
   </div>
 </div>
 
+<style>
+.calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; font-size: .72rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 6px; }
+.calendar-day { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 6px; min-height: 58px; background: #fff; }
+.calendar-day.empty { visibility: hidden; }
+.calendar-day.has-count { background: #eef4ff; border-color: #bfdbfe; }
+.calendar-day .cal-day-num { font-size: .72rem; color: #6b7280; font-weight: 600; }
+.calendar-day .cal-day-count { font-size: 1.05rem; font-weight: 800; color: #0f172a; margin-top: 4px; }
+.calendar-day.has-count .cal-day-count { color: #0d6efd; }
+</style>
+
 <!-- Performance modal -->
 <div class="modal fade" id="performanceModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -900,40 +911,81 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
-          <div>
-            <label class="form-label small mb-1">Du</label>
-            <input type="date" id="perf-date-from" class="form-control form-control-sm">
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#perf-tab-employe" type="button">Par employé</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#perf-tab-jour" type="button" onclick="loadPerformanceDaily()">Par jour</button>
+          </li>
+        </ul>
+
+        <div class="tab-content">
+          <!-- Par employé -->
+          <div class="tab-pane fade show active" id="perf-tab-employe" role="tabpanel">
+            <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+              <div>
+                <label class="form-label small mb-1">Du</label>
+                <input type="date" id="perf-date-from" class="form-control form-control-sm">
+              </div>
+              <div>
+                <label class="form-label small mb-1">Au</label>
+                <input type="date" id="perf-date-to" class="form-control form-control-sm">
+              </div>
+              <button class="btn btn-sm btn-outline-primary" onclick="loadPerformance()">
+                <i class="fas fa-search me-1"></i>Filtrer
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="setPerformanceToday()">Aujourd'hui</button>
+              <button class="btn btn-sm btn-outline-success ms-auto" onclick="printPerformance()">
+                <i class="fas fa-print me-1"></i>Imprimer
+              </button>
+            </div>
+            <div id="performance-loading" class="text-center text-muted py-4">
+              <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+            </div>
+            <div id="performance-content" style="display:none;">
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Employé</th>
+                      <th class="text-end">Permis ajoutés</th>
+                    </tr>
+                  </thead>
+                  <tbody id="performance-tbody"></tbody>
+                </table>
+              </div>
+              <div class="text-end text-muted small mt-2" id="performance-total"></div>
+            </div>
           </div>
-          <div>
-            <label class="form-label small mb-1">Au</label>
-            <input type="date" id="perf-date-to" class="form-control form-control-sm">
+
+          <!-- Par jour -->
+          <div class="tab-pane fade" id="perf-tab-jour" role="tabpanel">
+            <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+              <div>
+                <label class="form-label small mb-1">Mois</label>
+                <input type="month" id="perf-month" class="form-control form-control-sm">
+              </div>
+              <button class="btn btn-sm btn-outline-primary" onclick="loadPerformanceDaily()">
+                <i class="fas fa-search me-1"></i>Afficher
+              </button>
+              <button class="btn btn-sm btn-outline-success ms-auto" onclick="printPerformanceDaily()">
+                <i class="fas fa-print me-1"></i>Imprimer
+              </button>
+            </div>
+            <div id="performance-daily-loading" class="text-center text-muted py-4">
+              <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
+            </div>
+            <div id="performance-daily-content" style="display:none;">
+              <canvas id="performance-daily-chart" height="90"></canvas>
+              <div class="calendar-weekdays mt-3">
+                <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+              </div>
+              <div class="calendar-grid" id="performance-daily-calendar"></div>
+              <div class="text-end text-muted small mt-2" id="performance-daily-total"></div>
+            </div>
           </div>
-          <button class="btn btn-sm btn-outline-primary" onclick="loadPerformance()">
-            <i class="fas fa-search me-1"></i>Filtrer
-          </button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="setPerformanceToday()">Aujourd'hui</button>
-          <button class="btn btn-sm btn-outline-success ms-auto" onclick="printPerformance()">
-            <i class="fas fa-print me-1"></i>Imprimer
-          </button>
-        </div>
-        <div id="performance-loading" class="text-center text-muted py-4">
-          <i class="fas fa-spinner fa-spin me-2"></i>Chargement…
-        </div>
-        <div id="performance-content" style="display:none;">
-          <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Employé</th>
-                  <th class="text-end">Permis ajoutés</th>
-                </tr>
-              </thead>
-              <tbody id="performance-tbody"></tbody>
-            </table>
-          </div>
-          <div class="text-end text-muted small mt-2" id="performance-total"></div>
         </div>
       </div>
     </div>
