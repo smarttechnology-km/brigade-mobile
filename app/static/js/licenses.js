@@ -1789,33 +1789,62 @@
             });
     };
 
+    const FR_MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
     window.printPerformanceDaily = function () {
         if (!_perfDailyLastData) return;
         const d = _perfDailyLastData;
-        const rows = d.days.map(day => `<tr>
-            <td>${day.day}</td>
-            <td style="text-align:right;font-weight:bold;">${day.count}</td>
-        </tr>`).join('');
+        const [y, m] = d.month.split('-').map(Number);
+        const monthLabel = `${FR_MONTHS[m - 1]} ${y}`;
+
+        const firstWeekday = new Date(d.days[0].date + 'T00:00:00').getDay();
+        const leadingBlanks = firstWeekday === 0 ? 6 : firstWeekday - 1;
+        let cells = '';
+        for (let i = 0; i < leadingBlanks; i++) {
+            cells += '<div class="day empty"></div>';
+        }
+        cells += d.days.map(day => `<div class="day${day.count > 0 ? ' has-count' : ''}">
+            <div class="day-num">${day.day}</div>
+            <div class="day-count">${day.count}</div>
+        </div>`).join('');
+
+        const busiest = d.days.reduce((max, day) => day.count > max.count ? day : max, d.days[0]);
+        const activeDays = d.days.filter(day => day.count > 0).length;
+        const chartCanvas = document.getElementById('performance-daily-chart');
+        const chartImg = (_perfDailyChart && chartCanvas) ? chartCanvas.toDataURL('image/png') : null;
+
         const win = window.open('', '_blank');
         win.document.write(`
             <html><head><title>Performances DGRTR — Par jour</title>
             <style>
-                body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
+                body { font-family: Arial, sans-serif; padding: 28px; color: #222; }
                 h2 { margin-bottom: 2px; }
-                p.sub { color: #666; margin-top: 0; }
-                table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-                th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 0.9rem; }
-                th { background: #f0f0f0; text-align: left; }
-                tfoot td { font-weight: bold; }
+                p.sub { color: #666; margin-top: 0; margin-bottom: 18px; }
+                .summary { display: flex; gap: 28px; margin-bottom: 20px; }
+                .summary div b { display: block; font-size: 1.3rem; color: #0d6efd; }
+                .summary div span { font-size: .78rem; color: #666; text-transform: uppercase; letter-spacing: .03em; }
+                .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; font-size: .7rem; font-weight: 700; color: #666; text-transform: uppercase; margin-bottom: 6px; }
+                .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+                .day { border: 1px solid #ddd; border-radius: 6px; padding: 8px 6px; min-height: 52px; }
+                .day.empty { border: none; }
+                .day.has-count { background: #eef4ff; border-color: #a9c6fb; }
+                .day-num { font-size: .72rem; color: #666; font-weight: 600; }
+                .day-count { font-size: 1.05rem; font-weight: 800; color: #111; margin-top: 4px; }
+                .day.has-count .day-count { color: #0d6efd; }
+                .chart-img { width: 100%; max-height: 260px; object-fit: contain; margin-bottom: 20px; }
+                @media print { body { padding: 10px; } }
             </style>
             </head><body>
             <h2>Permis ajoutés par jour — Employés DGRTR</h2>
-            <p class="sub">Mois : ${escapeHtml(d.month)}</p>
-            <table>
-                <thead><tr><th>Jour</th><th style="text-align:right;">Permis ajoutés</th></tr></thead>
-                <tbody>${rows}</tbody>
-                <tfoot><tr><td>Total</td><td style="text-align:right;">${d.total}</td></tr></tfoot>
-            </table>
+            <p class="sub">Mois : ${escapeHtml(monthLabel)}</p>
+            <div class="summary">
+                <div><b>${d.total}</b><span>Total du mois</span></div>
+                <div><b>${activeDays}</b><span>Jours avec activité</span></div>
+                <div><b>${busiest.count}</b><span>Max — le ${busiest.day}</span></div>
+            </div>
+            ${chartImg ? `<img class="chart-img" src="${chartImg}" alt="Graphique">` : ''}
+            <div class="weekdays"><div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div></div>
+            <div class="grid">${cells}</div>
             </body></html>
         `);
         win.document.close();
