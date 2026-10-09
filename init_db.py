@@ -5,7 +5,7 @@ Script pour initialiser la base de données avec des données d'exemple
 import os
 import sys
 from app import create_app, db
-from app.models import Vehicle, User, FineType
+from app.models import Vehicle, User, FineType, FineCategory
 from datetime import datetime, timedelta
 from app.models import User
 from werkzeug.security import generate_password_hash
@@ -40,15 +40,22 @@ def init_db():
             db.session.commit()
             print(f"✓ Utilisateur admin créé: {admin_username} / {admin_password}")
 
-        # Seed default fine types if none exist
+        # Seed a default fine category + fine types if none exist
+        if not FineCategory.query.first():
+            default_category = FineCategory(name='Catégorie 1', min_price=150.0, max_price=1000.0)
+            db.session.add(default_category)
+            db.session.commit()
+        else:
+            default_category = FineCategory.query.first()
+
         default_types = [
-            {'label': 'Non-port du casque', 'amount': 200.0},
-            {'label': 'Excès de vitesse', 'amount': 500.0},
-            {'label': 'Stationnement interdit', 'amount': 150.0},
+            {'label': 'Non-port du casque'},
+            {'label': 'Excès de vitesse'},
+            {'label': 'Stationnement interdit'},
         ]
         if not FineType.query.first():
             for t in default_types:
-                ft = FineType(label=t['label'], amount=t['amount'])
+                ft = FineType(label=t['label'], category_id=default_category.id)
                 db.session.add(ft)
             db.session.commit()
             print(f"✓ {len(default_types)} types d'amandes ajoutés")

@@ -99,7 +99,7 @@ The citizen app has a mock backend (`utils/mockBackend.js`) for offline developm
 
 - `Vehicle` – central entity; has `track_token` (UUID) for public QR tracking, `qr_code_expiry` (1 year), vignette payment state, `fiscal_class` (A/B/C/D), `cv_class`, `usage_type`, `insurance_company` (text).
 - `VehicleOwner` – one-to-one with `Vehicle`; holds mobile auth state (`session_version`, `current_device_id`, `expo_push_token`).
-- `Fine` – fines issued against vehicles; `officer` field (username string) links to the issuing officer. `FineType` stores reusable infraction codes and amounts.
+- `Fine` – fines issued against vehicles; `officer` field (username string) links to the issuing officer. `FineType` stores reusable infraction codes linked to a `FineCategory` (name + `min_price`/`max_price` range). Unpaid fines escalate weekly: week 1 = `min_price`, week N = `min(min_price * N, max_price)` — see `app/tasks.py:apply_fine_weekly_escalation`.
 - `VignetteRate` / `PenaltyRate` – configurable pricing tables for annual road tax and late penalties.
 - `Phone` – police department phones tracked with daily-rotating QR codes.
 - `Insurance` / `InsuranceAccount` – `Insurance` is the company record; `InsuranceAccount` is the login account linked to it. `VehicleInsuranceAssignment` links vehicles to insurance accounts.
