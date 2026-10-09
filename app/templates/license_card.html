@@ -88,7 +88,7 @@
     .photo-col::after {
       content: '';
       position: absolute; top: 0; right: 0; bottom: 0; width: 5px;
-      background: linear-gradient(180deg, #fbbf24, #f5e50b 50%, #fbbf24);
+      background: linear-gradient(180deg, #28c114, #2cae0f 45%, #0da412, #29af0b 35%, #209810 50%,#28c114);
       opacity: 1;
     }
     .photo-col-num {
@@ -154,8 +154,8 @@
       display: flex; align-items: baseline; gap: 8px;
       padding: 1px 0;
     }
-    .id-lbl { font-size: 11px; letter-spacing: .06em; color: #6b5a45; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
-    .id-val { font-size: 13px; font-weight: 700; color: #000; line-height: 1.25; text-transform: uppercase; }
+    .id-lbl { z-index:1 ;font-size: 11px; letter-spacing: .06em; color: #6b5a45; font-weight: 700; width: 114px; flex-shrink: 0; white-space: nowrap; }
+    .id-val { z-index:1 ;font-size: 13px; font-weight: 700; color: #000; line-height: 1.25; text-transform: uppercase; }
     .id-pair-right { display: flex; align-items: baseline; gap: 8px; margin-left: 26px; flex-shrink: 0; }
     .id-pair-right .id-lbl { width: 52px; }
     .id-val.holder-name { font-weight: 800; text-transform: uppercase; color: #000; letter-spacing: .02em; }
@@ -215,9 +215,10 @@
     /* QR */
     .qr-wrap {
       margin-top: -58px;
-      background: linear-gradient(to bottom, transparent 0%, transparent 52%, #fff 52%, #fff 100%);
+      background: #f7f2e7;
       border-radius: 10px;
       overflow: hidden;
+      z-index:0;
     }
     .qr-wrap img { width: 92px; height: 92px; display: block; mix-blend-mode: multiply; }
 

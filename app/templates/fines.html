@@ -109,11 +109,13 @@
               <i class="fas fa-book me-1"></i>Articles
             </button>
           </li>
+          {% if current_user.is_admin %}
           <li class="nav-item">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-late-rates" type="button" id="tab-late-rates-btn">
-              <i class="fas fa-clock me-1"></i>Durée des amendes
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-fine-categories" type="button" id="tab-fine-categories-btn">
+              <i class="fas fa-layer-group me-1"></i>Catégorie des amendes
             </button>
           </li>
+          {% endif %}
         </ul>
 
         <div class="tab-content">
@@ -135,19 +137,28 @@
                   </div>
                 </div>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label small">Motif (libellé)</label>
                 <input type="text" id="fine-type-label" class="form-control" placeholder="Ex: Non-port du casque" required />
               </div>
               <div class="col-md-2">
-                <label class="form-label small">Montant (KMF)</label>
-                <input type="number" step="0.01" id="fine-type-amount" class="form-control" required />
+                <label class="form-label small">Catégorie</label>
+                <select id="fine-type-category" class="form-select" required>
+                  <option value="">— choisir —</option>
+                </select>
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="form-label small">Article</label>
                 <select id="fine-type-article" class="form-select">
                   <option value="">— aucun —</option>
                 </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small d-block">App mobile</label>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="fine-type-visible-mobile" checked>
+                  <label class="form-check-label small" for="fine-type-visible-mobile">Visible</label>
+                </div>
               </div>
               <div class="col-md-2 text-end">
                 <button type="button" id="fine-type-cancel" class="btn btn-outline-secondary me-2 d-none">Annuler</button>
@@ -160,13 +171,14 @@
                   <tr>
                     <th>Icône</th>
                     <th>Motif</th>
-                    <th>Montant (KMF)</th>
+                    <th>Catégorie</th>
                     <th>Article</th>
+                    <th>App mobile</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="fine-types-tbody">
-                  <tr><td colspan="5" class="text-center text-muted">Chargement...</td></tr>
+                  <tr><td colspan="6" class="text-center text-muted">Chargement...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -205,31 +217,37 @@
             </div>
           </div>
 
-          <!-- Tab 3 : Durée des amendes -->
-          <div class="tab-pane" id="tab-late-rates">
+          {% if current_user.is_admin %}
+          <!-- Tab 3 : Catégorie des amendes -->
+          <div class="tab-pane" id="tab-fine-categories">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <p class="text-muted small mb-0">
-                Définissez à partir de combien de mois une amende impayée sera majorée, et de quel pourcentage <strong>par mois</strong>. Ex : « À partir de 1 mois → +50%/mois » donne +50% à 1 mois, +100% à 2 mois, +150% à 3 mois…
+                Chaque catégorie définit un prix min, un prix max et une augmentation par semaine. Une amende impayée démarre au prix min et augmente chaque <strong>semaine</strong> de ce montant, jusqu'à atteindre le prix max (où elle s'arrête). Ex : Catégorie 1 (min 5 000 / max 25 000 / +5 000 par semaine) → semaine 1 : 5 000 KMF, semaine 2 : 10 000 KMF, semaine 3 : 15 000 KMF…
               </p>
-              <button class="btn btn-sm btn-outline-secondary ms-3" id="btn-apply-late-rates" onclick="applyLateRatesNow()" title="Recalculer toutes les amendes impayées maintenant">
+              <button class="btn btn-sm btn-outline-secondary ms-3" id="btn-apply-fine-categories" onclick="applyFineCategoriesNow()" title="Recalculer toutes les amendes impayées maintenant">
                 <i class="fas fa-sync-alt me-1"></i>Appliquer maintenant
               </button>
             </div>
-            <form id="late-rate-form" class="row g-2 align-items-end mb-3">
-              <div class="col-md-4">
-                <label class="form-label small">À partir de (mois)</label>
-                <input type="number" min="1" id="late-rate-months" class="form-control" placeholder="Ex: 1" required />
+            <form id="fine-category-form" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3">
+                <label class="form-label small">Nom de la catégorie</label>
+                <input type="text" id="fine-category-name" class="form-control" placeholder="Ex: Catégorie 1" required />
               </div>
-              <div class="col-md-4">
-                <label class="form-label small">Augmentation par mois (%)</label>
-                <div class="input-group">
-                  <input type="number" min="0.01" step="0.01" id="late-rate-percentage" class="form-control" placeholder="Ex: 50" required />
-                  <span class="input-group-text">% / mois</span>
-                </div>
+              <div class="col-md-2">
+                <label class="form-label small">Prix min (KMF)</label>
+                <input type="number" min="1" step="0.01" id="fine-category-min" class="form-control" placeholder="Ex: 5000" required />
               </div>
-              <div class="col-md-4 text-end">
-                <button type="button" id="late-rate-cancel-btn" class="btn btn-outline-secondary me-2 d-none" onclick="cancelEditLateRate()">Annuler</button>
-                <button type="submit" id="late-rate-submit-btn" class="btn btn-outline-primary">
+              <div class="col-md-2">
+                <label class="form-label small">Prix max (KMF)</label>
+                <input type="number" min="1" step="0.01" id="fine-category-max" class="form-control" placeholder="Ex: 25000" required />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">+ / semaine (KMF)</label>
+                <input type="number" min="1" step="0.01" id="fine-category-increment" class="form-control" placeholder="Ex: 5000" required />
+              </div>
+              <div class="col-md-3 text-end">
+                <button type="button" id="fine-category-cancel-btn" class="btn btn-outline-secondary me-2 d-none" onclick="cancelEditFineCategory()">Annuler</button>
+                <button type="submit" id="fine-category-submit-btn" class="btn btn-outline-primary">
                   <i class="fas fa-plus me-1"></i>Ajouter
                 </button>
               </div>
@@ -238,18 +256,21 @@
               <table class="table table-sm table-hover">
                 <thead class="table-light">
                   <tr>
-                    <th>À partir de</th>
-                    <th>Par mois</th>
-                    <th>Exemple (base 10 000 KMF)</th>
+                    <th>Catégorie</th>
+                    <th>Prix min</th>
+                    <th>Prix max</th>
+                    <th>+ / semaine</th>
+                    <th>Paliers hebdomadaires</th>
                     <th></th>
                   </tr>
                 </thead>
-                <tbody id="late-rates-tbody">
-                  <tr><td colspan="4" class="text-center text-muted">Chargement...</td></tr>
+                <tbody id="fine-categories-tbody">
+                  <tr><td colspan="6" class="text-center text-muted">Chargement...</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
+          {% endif %}
         </div>
       </div>
       <div class="modal-footer">
@@ -263,42 +284,69 @@
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/fines_list.js') }}"></script>
 <script>
-// ── Durée des amendes ─────────────────────────────────────────────────────────
+// ── Catégorie des amendes ─────────────────────────────────────────────────────
 
-async function loadLateRates() {
+async function loadFineCategories() {
   try {
-    const res = await fetch('/api/fine-late-rates', { credentials: 'include' });
-    const rates = await res.json();
-    renderLateRates(rates);
+    const res = await fetch('/api/fine-categories', { credentials: 'include' });
+    const categories = await res.json();
+    window.fineCategoriesCache = categories;
+    renderFineCategories(categories);
+    populateFineCategorySelect(categories);
   } catch (e) {
-    document.getElementById('late-rates-tbody').innerHTML =
-      '<tr><td colspan="4" class="text-danger text-center">Erreur de chargement</td></tr>';
+    const tbody = document.getElementById('fine-categories-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-danger text-center">Erreur de chargement</td></tr>';
   }
 }
 
-let _editingRateId = null;
+function populateFineCategorySelect(categories) {
+  const sel = document.getElementById('fine-type-category');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— choisir —</option>' + categories.map(c =>
+    `<option value="${c.id}">${c.name} (${Math.round(c.min_price).toLocaleString('fr-FR')} – ${Math.round(c.max_price).toLocaleString('fr-FR')} KMF)</option>`
+  ).join('');
+  if (current) sel.value = current;
+}
 
-function renderLateRates(rates) {
-  const tbody = document.getElementById('late-rates-tbody');
-  if (!rates.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Aucune règle configurée</td></tr>';
+let _editingCategoryId = null;
+
+function renderFineCategories(categories) {
+  const tbody = document.getElementById('fine-categories-tbody');
+  if (!tbody) return; // tab doesn't exist for non-admins
+  if (!categories.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucune catégorie configurée</td></tr>';
     return;
   }
-  tbody.innerHTML = rates.map(r => {
+  tbody.innerHTML = categories.map(c => {
     const fmt = n => Math.round(n).toLocaleString('fr-FR');
-    const ex1 = fmt(10000 * (1 + r.percentage / 100 * r.months));
-    const ex2 = fmt(10000 * (1 + r.percentage / 100 * (r.months + 1)));
-    const ex3 = fmt(10000 * (1 + r.percentage / 100 * (r.months + 2)));
+    const steps = [];
+    let week = 1;
+    let value = c.min_price;
+    while (value < c.max_price && steps.length < 3) {
+      steps.push(`S${week}: ${fmt(value)}`);
+      week += 1;
+      value = Math.min(c.min_price + (week - 1) * c.weekly_increment, c.max_price);
+    }
+    // Keep advancing (without displaying) until max_price is actually reached,
+    // so the reported week number for "max" is correct even when truncated above.
+    while (value < c.max_price) {
+      week += 1;
+      value = Math.min(c.min_price + (week - 1) * c.weekly_increment, c.max_price);
+    }
+    steps.push(`… max S${week}: ${fmt(c.max_price)}`);
     return `
       <tr>
-        <td><strong>${r.months} mois</strong></td>
-        <td><span class="badge bg-warning text-dark">+${r.percentage}% / mois</span></td>
-        <td class="text-muted small">${r.months} mois: ${ex1} KMF · ${r.months+1} mois: ${ex2} KMF · ${r.months+2} mois: ${ex3} KMF</td>
+        <td><strong>${c.name}</strong></td>
+        <td>${fmt(c.min_price)} KMF</td>
+        <td>${fmt(c.max_price)} KMF</td>
+        <td>${fmt(c.weekly_increment)} KMF</td>
+        <td class="text-muted small">${steps.join(' · ')}</td>
         <td class="text-end">
-          <button class="btn btn-sm btn-outline-secondary me-1" onclick="startEditLateRate(${r.id}, ${r.months}, ${r.percentage})" title="Modifier">
+          <button class="btn btn-sm btn-outline-secondary me-1" onclick="startEditFineCategory(${c.id}, '${(c.name||'').replace(/'/g, "\\'")}', ${c.min_price}, ${c.max_price}, ${c.weekly_increment})" title="Modifier">
             <i class="fas fa-pencil-alt"></i>
           </button>
-          <button class="btn btn-sm btn-outline-danger" onclick="deleteLateRate(${r.id})" title="Supprimer">
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteFineCategory(${c.id})" title="Supprimer">
             <i class="fas fa-trash"></i>
           </button>
         </td>
@@ -306,65 +354,75 @@ function renderLateRates(rates) {
   }).join('');
 }
 
-function startEditLateRate(id, months, percentage) {
-  _editingRateId = id;
-  document.getElementById('late-rate-months').value = months;
-  document.getElementById('late-rate-percentage').value = percentage;
-  document.getElementById('late-rate-submit-btn').textContent = 'Enregistrer';
-  document.getElementById('late-rate-cancel-btn').classList.remove('d-none');
-  document.getElementById('late-rate-months').focus();
+function startEditFineCategory(id, name, minPrice, maxPrice, weeklyIncrement) {
+  _editingCategoryId = id;
+  document.getElementById('fine-category-name').value = name;
+  document.getElementById('fine-category-min').value = minPrice;
+  document.getElementById('fine-category-max').value = maxPrice;
+  document.getElementById('fine-category-increment').value = weeklyIncrement;
+  document.getElementById('fine-category-submit-btn').textContent = 'Enregistrer';
+  document.getElementById('fine-category-cancel-btn').classList.remove('d-none');
+  document.getElementById('fine-category-name').focus();
 }
 
-function cancelEditLateRate() {
-  _editingRateId = null;
-  document.getElementById('late-rate-months').value = '';
-  document.getElementById('late-rate-percentage').value = '';
-  document.getElementById('late-rate-submit-btn').textContent = 'Ajouter';
-  document.getElementById('late-rate-cancel-btn').classList.add('d-none');
+function cancelEditFineCategory() {
+  _editingCategoryId = null;
+  document.getElementById('fine-category-name').value = '';
+  document.getElementById('fine-category-min').value = '';
+  document.getElementById('fine-category-max').value = '';
+  document.getElementById('fine-category-increment').value = '';
+  document.getElementById('fine-category-submit-btn').innerHTML = '<i class="fas fa-plus me-1"></i>Ajouter';
+  document.getElementById('fine-category-cancel-btn').classList.add('d-none');
 }
 
-document.getElementById('late-rate-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const months = parseInt(document.getElementById('late-rate-months').value);
-  const percentage = parseFloat(document.getElementById('late-rate-percentage').value);
-  const isEdit = _editingRateId !== null;
-  const url = isEdit ? `/api/fine-late-rates/${_editingRateId}` : '/api/fine-late-rates';
-  const method = isEdit ? 'PUT' : 'POST';
-  try {
-    const res = await fetch(url, {
-      method,
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ months, percentage }),
-    });
-    const data = await res.json();
-    if (!res.ok) { alert(data.error || 'Erreur'); return; }
-    cancelEditLateRate();
-    loadLateRates();
-  } catch (e) {
-    alert('Erreur réseau');
-  }
-});
+const fineCategoryForm = document.getElementById('fine-category-form');
+if (fineCategoryForm) {
+  fineCategoryForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('fine-category-name').value.trim();
+    const min_price = parseFloat(document.getElementById('fine-category-min').value);
+    const max_price = parseFloat(document.getElementById('fine-category-max').value);
+    const weekly_increment = parseFloat(document.getElementById('fine-category-increment').value);
+    const isEdit = _editingCategoryId !== null;
+    const url = isEdit ? `/api/fine-categories/${_editingCategoryId}` : '/api/fine-categories';
+    const method = isEdit ? 'PUT' : 'POST';
+    try {
+      const res = await fetch(url, {
+        method,
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, min_price, max_price, weekly_increment }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Erreur'); return; }
+      cancelEditFineCategory();
+      loadFineCategories();
+    } catch (e) {
+      alert('Erreur réseau');
+    }
+  });
+}
 
-async function deleteLateRate(id) {
-  if (!confirm('Supprimer cette règle ?')) return;
+async function deleteFineCategory(id) {
+  if (!confirm('Supprimer cette catégorie ?')) return;
   try {
-    const res = await fetch(`/api/fine-late-rates/${id}`, {
+    const res = await fetch(`/api/fine-categories/${id}`, {
       method: 'DELETE', credentials: 'include',
     });
-    if (res.ok) loadLateRates();
-    else alert('Erreur lors de la suppression');
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) loadFineCategories();
+    else alert(data.error || 'Erreur lors de la suppression');
   } catch (e) {
     alert('Erreur réseau');
   }
 }
 
-async function applyLateRatesNow() {
-  const btn = document.getElementById('btn-apply-late-rates');
+async function applyFineCategoriesNow() {
+  const btn = document.getElementById('btn-apply-fine-categories');
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours...';
   try {
-    const res = await fetch('/api/fine-late-rates/apply-now', {
+    const res = await fetch('/api/fine-categories/apply-now', {
       method: 'POST', credentials: 'include',
     });
     const data = await res.json();
@@ -387,12 +445,15 @@ async function applyLateRatesNow() {
   }
 }
 
-// Load when tab is shown
-document.getElementById('tab-late-rates-btn').addEventListener('shown.bs.tab', loadLateRates);
+// Load when tab is shown (tab only exists for admins — "Catégorie des amendes" is admin-only)
+const tabFineCategoriesBtn = document.getElementById('tab-fine-categories-btn');
+if (tabFineCategoriesBtn) {
+  tabFineCategoriesBtn.addEventListener('shown.bs.tab', loadFineCategories);
+}
 
-// Also load when modal opens (in case late-rates tab was active)
+// Also load when modal opens (categories are needed to populate the fine-type category select)
 document.getElementById('fine-types-modal').addEventListener('show.bs.modal', () => {
-  loadLateRates();
+  loadFineCategories();
 });
 </script>
 {% endblock %}
