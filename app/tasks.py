@@ -334,57 +334,45 @@ def send_technical_inspection_appointment_reminders():
             db.session.rollback()
 
 
-def apply_fine_late_rates():
+def apply_fine_weekly_escalation():
     """
-    Daily job (09:00) — for every unpaid fine, check how many full months have
-    elapsed since issue and apply the matching FineLateRate percentage to the
-    base_amount.  Only the highest matching rule is applied (not cumulative).
+    Daily job (09:00) — for every unpaid fine linked to a FineType/FineCategory,
+    check how many full weeks have elapsed since issue and set the amount to
+    min(category.min_price + weeks_elapsed * category.weekly_increment,
+    category.max_price). Week 1 (issuance) = min_price; each further week adds
+    the category's own weekly_increment, capped at max_price.
     """
     app = get_app()
     with app.app_context():
         try:
-            from app.models import FineLateRate
             from app.timezone_utils import ensure_comoros
 
-            rates = FineLateRate.query.order_by(FineLateRate.months.desc()).all()
-            if not rates:
-                logger.info("No FineLateRate rules configured — skipping")
-                return
-
-            unpaid_fines = Fine.query.filter_by(paid=False).all()
+            unpaid_fines = Fine.query.filter_by(paid=False).filter(Fine.fine_type_id.isnot(None)).all()
             now = ensure_comoros(now_comoros())
             updated = 0
 
             for fine in unpaid_fines:
-                if not fine.issued_at:
+                if not fine.issued_at or not fine.fine_type or not fine.fine_type.category:
                     continue
 
+                category = fine.fine_type.category
                 issued = ensure_comoros(fine.issued_at)
-                # Full months elapsed (approximate: 30 days = 1 month)
-                months_elapsed = int((now - issued).days // 30)
-                if months_elapsed < 1:
-                    continue
+                weeks_elapsed = (now - issued).days // 7
 
-                # Ensure base_amount is set (backfill guard)
                 if not fine.base_amount:
                     fine.base_amount = fine.amount
 
-                # Find the highest matching rule
-                applicable = next(
-                    (r for r in rates if r.months <= months_elapsed), None
-                )
-                if not applicable:
-                    continue
-
-                # Cumulative: +Y% per month elapsed (e.g. 50%/month × 2 months = +100%)
-                new_amount = round(float(fine.base_amount) * (1 + float(applicable.percentage) / 100 * months_elapsed), 2)
+                new_amount = round(min(
+                    float(category.min_price) + weeks_elapsed * float(category.weekly_increment),
+                    float(category.max_price)
+                ), 2)
                 if abs(float(fine.amount) - new_amount) >= 0.01:
                     fine.amount = new_amount
                     updated += 1
 
             db.session.commit()
-            logger.info(f"apply_fine_late_rates: updated {updated} fine(s)")
+            logger.info(f"apply_fine_weekly_escalation: updated {updated} fine(s)")
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error in apply_fine_late_rates: {e}")
+            logger.error(f"Error in apply_fine_weekly_escalation: {e}")

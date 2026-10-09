@@ -217,7 +217,7 @@ def create_app():
         tasks_set_app(app)
 
         # Add the exoneration task to run every hour
-        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_late_rates, send_technical_inspection_appointment_reminders
+        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_weekly_escalation, send_technical_inspection_appointment_reminders
         scheduler.add_job(
             func=process_exonerated_fines,
             trigger=IntervalTrigger(hours=1),
@@ -253,12 +253,12 @@ def create_app():
             replace_existing=True
         )
 
-        # Apply fine late-rate increases to unpaid fines daily at 09:00 AM
+        # Apply weekly fine-category price escalation to unpaid fines daily at 09:00 AM
         scheduler.add_job(
-            func=apply_fine_late_rates,
+            func=apply_fine_weekly_escalation,
             trigger=CronTrigger(hour=9, minute=0),
-            id='apply_fine_late_rates',
-            name='Apply late-rate percentage increases to unpaid fines daily at 09:00 AM',
+            id='apply_fine_weekly_escalation',
+            name='Apply weekly category-based price escalation to unpaid fines daily at 09:00 AM',
             replace_existing=True
         )
 
@@ -366,8 +366,12 @@ def create_app():
                             if 'photo_filename' not in fine_columns:
                                 conn.execute(text("ALTER TABLE fines ADD COLUMN photo_filename VARCHAR(255)"))
                                 logger.info("Added fines.photo_filename column")
+                            if 'fine_type_id' not in fine_columns:
+                                conn.execute(text("ALTER TABLE fines ADD COLUMN fine_type_id INTEGER REFERENCES fine_types(id)"))
+                                logger.info("Added fines.fine_type_id column")
 
-                        # Patch fine_types table (icon shown in web + mobile app)
+                        # Patch fine_types table (icon shown in web + mobile app; category_id for the
+                        # weekly-escalation price-range system replacing the old fixed amount)
                         fine_types_table_exists = conn.execute(
                             text("SELECT name FROM sqlite_master WHERE type='table' AND name='fine_types'")
                         ).first() is not None
@@ -376,6 +380,44 @@ def create_app():
                             if 'icon' not in fine_type_columns:
                                 conn.execute(text("ALTER TABLE fine_types ADD COLUMN icon VARCHAR(10)"))
                                 logger.info("Added fine_types.icon column")
+                            if 'category_id' not in fine_type_columns:
+                                conn.execute(text("ALTER TABLE fine_types ADD COLUMN category_id INTEGER REFERENCES fine_categories(id)"))
+                                logger.info("Added fine_types.category_id column")
+                            if 'visible_mobile' not in fine_type_columns:
+                                conn.execute(text("ALTER TABLE fine_types ADD COLUMN visible_mobile BOOLEAN NOT NULL DEFAULT 1"))
+                                logger.info("Added fine_types.visible_mobile column")
+                            if 'amount' in fine_type_columns:
+                                # SQLite can't drop a NOT NULL column in place — rebuild the table
+                                # without it (superseded by category_id's min/max price range).
+                                conn.execute(text("""
+                                    CREATE TABLE fine_types_new (
+                                        id INTEGER PRIMARY KEY,
+                                        code VARCHAR(50) UNIQUE,
+                                        label VARCHAR(150) NOT NULL,
+                                        category_id INTEGER REFERENCES fine_categories(id),
+                                        article_id INTEGER REFERENCES fine_articles(id),
+                                        icon VARCHAR(10),
+                                        visible_mobile BOOLEAN NOT NULL DEFAULT 1,
+                                        created_at DATETIME NOT NULL
+                                    )
+                                """))
+                                conn.execute(text("""
+                                    INSERT INTO fine_types_new (id, code, label, category_id, article_id, icon, visible_mobile, created_at)
+                                    SELECT id, code, label, category_id, article_id, icon, visible_mobile, created_at FROM fine_types
+                                """))
+                                conn.execute(text("DROP TABLE fine_types"))
+                                conn.execute(text("ALTER TABLE fine_types_new RENAME TO fine_types"))
+                                logger.info("Rebuilt fine_types table without the legacy NOT NULL amount column")
+
+                        # Patch fine_categories table (per-category weekly escalation increment)
+                        fine_categories_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='fine_categories'")
+                        ).first() is not None
+                        if fine_categories_table_exists:
+                            fine_category_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(fine_categories)")).fetchall()}
+                            if 'weekly_increment' not in fine_category_columns:
+                                conn.execute(text("ALTER TABLE fine_categories ADD COLUMN weekly_increment NUMERIC(10,2) NOT NULL DEFAULT 5000"))
+                                logger.info("Added fine_categories.weekly_increment column")
 
                         # Patch point_reduction_reasons table (icon shown in licenses settings)
                         reasons_table_exists = conn.execute(
@@ -914,6 +956,7 @@ def create_app():
                         # fines
                         "ALTER TABLE fines ADD COLUMN IF NOT EXISTS base_amount NUMERIC(10,2)",
                         "ALTER TABLE fines ADD COLUMN IF NOT EXISTS photo_filename VARCHAR(255)",
+                        "ALTER TABLE fines ADD COLUMN IF NOT EXISTS fine_type_id INTEGER REFERENCES fine_types(id)",
                         # payments
                         "ALTER TABLE payments ADD COLUMN IF NOT EXISTS destination_phone VARCHAR(20)",
                         "ALTER TABLE payments ADD COLUMN IF NOT EXISTS confirm_token VARCHAR(64)",
@@ -986,6 +1029,10 @@ def create_app():
                         # fine_types
                         "ALTER TABLE fine_types ADD COLUMN IF NOT EXISTS article_id INTEGER",
                         "ALTER TABLE fine_types ADD COLUMN IF NOT EXISTS icon VARCHAR(10)",
+                        "ALTER TABLE fine_types ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES fine_categories(id)",
+                        "ALTER TABLE fine_types ADD COLUMN IF NOT EXISTS visible_mobile BOOLEAN NOT NULL DEFAULT TRUE",
+                        "ALTER TABLE fine_types ALTER COLUMN amount DROP NOT NULL",
+                        "ALTER TABLE fine_categories ADD COLUMN IF NOT EXISTS weekly_increment NUMERIC(10,2) NOT NULL DEFAULT 5000",
                         # point_reduction_reasons
                         "ALTER TABLE point_reduction_reasons ADD COLUMN IF NOT EXISTS article_id INTEGER",
                         "ALTER TABLE point_reduction_reasons ADD COLUMN IF NOT EXISTS icon VARCHAR(10)",

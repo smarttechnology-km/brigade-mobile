@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, redirect, g, current_app
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, FineLateRate, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest, Alert, AlertPhoto, VehicleInsuranceAssignment, LicenseDossier
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, FineCategory, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest, Alert, AlertPhoto, VehicleInsuranceAssignment, LicenseDossier
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -489,12 +489,16 @@ def api_fine_types_list():
     if not user or user.role not in ['policier', 'administrateur']:
         return jsonify({"error": "Forbidden"}), 403
     
-    fine_types = FineType.query.all()
+    fine_types = FineType.query.filter_by(visible_mobile=True).all()
     return jsonify({
         "fine_types": [{
             "id": ft.id,
             "name": ft.label,
-            "default_amount": float(ft.amount),
+            "default_amount": float(ft.category.min_price) if ft.category else 0,
+            "category_id": ft.category_id,
+            "category_name": ft.category.name if ft.category else None,
+            "category_min_price": float(ft.category.min_price) if ft.category else None,
+            "category_max_price": float(ft.category.max_price) if ft.category else None,
             "article_code": ft.article.code if ft.article else None,
             "article_description": ft.article.description if ft.article else None,
             "icon": ft.icon,
@@ -502,108 +506,100 @@ def api_fine_types_list():
     })
 
 
-# Fine Late Rate Routes
-@api_bp.route('/fine-late-rates', methods=['GET'])
-def get_fine_late_rates():
+# Fine Category Routes (price range driving the weekly escalation of unpaid fines)
+@api_bp.route('/fine-categories', methods=['GET'])
+def get_fine_categories():
     user = get_current_user()
     if not user or user.role not in ['administrateur', 'judiciaire', 'policier']:
         return jsonify({'error': 'Access denied'}), 403
-    rates = FineLateRate.query.order_by(FineLateRate.months).all()
-    return jsonify([r.to_dict() for r in rates]), 200
+    categories = FineCategory.query.order_by(FineCategory.min_price).all()
+    return jsonify([c.to_dict() for c in categories]), 200
 
 
-@api_bp.route('/fine-late-rates', methods=['POST'])
-def create_fine_late_rate():
-    user = get_current_user()
-    if not user or user.role not in ['administrateur', 'judiciaire']:
-        return jsonify({'error': 'Access denied'}), 403
-    data = request.get_json() or {}
-    months = data.get('months')
-    percentage = data.get('percentage')
-    if months is None or percentage is None:
-        return jsonify({'error': 'months et percentage requis'}), 400
+def _validate_fine_category_payload(data):
+    name = (data.get('name') or '').strip()
+    min_price = data.get('min_price')
+    max_price = data.get('max_price')
+    weekly_increment = data.get('weekly_increment')
+    if not name:
+        return None, ('Le nom de la catégorie est requis', 400)
     try:
-        months = int(months)
-        percentage = float(percentage)
+        min_price = float(min_price)
+        max_price = float(max_price)
+        weekly_increment = float(weekly_increment)
     except (ValueError, TypeError):
-        return jsonify({'error': 'Valeurs invalides'}), 400
-    if months < 1:
-        return jsonify({'error': 'Le nombre de mois doit être ≥ 1'}), 400
-    if percentage <= 0:
-        return jsonify({'error': 'Le pourcentage doit être positif'}), 400
-    if FineLateRate.query.filter_by(months=months).first():
-        return jsonify({'error': f'Une règle pour {months} mois existe déjà'}), 409
-    rate = FineLateRate(months=months, percentage=percentage)
-    db.session.add(rate)
-    db.session.commit()
-
-    # Apply immediately — no need to wait for the 09:00 cron
-    try:
-        from app.tasks import apply_fine_late_rates
-        apply_fine_late_rates()
-    except Exception as e:
-        print(f"⚠️ apply_fine_late_rates after create: {e}")
-
-    return jsonify(rate.to_dict()), 201
+        return None, ('Prix min/max/augmentation invalides', 400)
+    if min_price <= 0 or max_price <= 0 or weekly_increment <= 0:
+        return None, ('Les prix et l\'augmentation doivent être positifs', 400)
+    if max_price < min_price:
+        return None, ('Le prix max doit être supérieur ou égal au prix min', 400)
+    return (name, min_price, max_price, weekly_increment), None
 
 
-@api_bp.route('/fine-late-rates/<int:rate_id>', methods=['DELETE'])
-def delete_fine_late_rate(rate_id):
+@api_bp.route('/fine-categories', methods=['POST'])
+def create_fine_category():
     user = get_current_user()
-    if not user or user.role not in ['administrateur', 'judiciaire']:
+    if not user or user.role != 'administrateur':
         return jsonify({'error': 'Access denied'}), 403
-    rate = FineLateRate.query.get_or_404(rate_id)
-    db.session.delete(rate)
-    db.session.commit()
-
-    # Re-apply remaining rules immediately after deletion
-    try:
-        from app.tasks import apply_fine_late_rates
-        apply_fine_late_rates()
-    except Exception as e:
-        print(f"⚠️ apply_fine_late_rates after delete: {e}")
-
-    return jsonify({'message': 'Règle supprimée'}), 200
-
-
-@api_bp.route('/fine-late-rates/<int:rate_id>', methods=['PUT'])
-def update_fine_late_rate(rate_id):
-    user = get_current_user()
-    if not user or user.role not in ['administrateur', 'judiciaire']:
-        return jsonify({'error': 'Access denied'}), 403
-    rate = FineLateRate.query.get_or_404(rate_id)
     data = request.get_json() or {}
-    try:
-        months = int(data['months'])
-        percentage = float(data['percentage'])
-    except (KeyError, ValueError, TypeError):
-        return jsonify({'error': 'months et percentage requis'}), 400
-    if months < 1:
-        return jsonify({'error': 'Le nombre de mois doit être ≥ 1'}), 400
-    if percentage <= 0:
-        return jsonify({'error': 'Le pourcentage doit être positif'}), 400
-    conflict = FineLateRate.query.filter(FineLateRate.months == months, FineLateRate.id != rate_id).first()
-    if conflict:
-        return jsonify({'error': f'Une règle pour {months} mois existe déjà'}), 409
-    rate.months = months
-    rate.percentage = percentage
+    parsed, error = _validate_fine_category_payload(data)
+    if error:
+        return jsonify({'error': error[0]}), error[1]
+    name, min_price, max_price, weekly_increment = parsed
+    category = FineCategory(name=name, min_price=min_price, max_price=max_price, weekly_increment=weekly_increment)
+    db.session.add(category)
     db.session.commit()
-    try:
-        from app.tasks import apply_fine_late_rates
-        apply_fine_late_rates()
-    except Exception as e:
-        print(f"⚠️ apply_fine_late_rates after update: {e}")
-    return jsonify(rate.to_dict()), 200
+    return jsonify(category.to_dict()), 201
 
 
-@api_bp.route('/fine-late-rates/apply-now', methods=['POST'])
-def apply_fine_late_rates_now():
+@api_bp.route('/fine-categories/<int:category_id>', methods=['PUT'])
+def update_fine_category(category_id):
     user = get_current_user()
-    if not user or user.role not in ['administrateur', 'judiciaire']:
+    if not user or user.role != 'administrateur':
+        return jsonify({'error': 'Access denied'}), 403
+    category = FineCategory.query.get_or_404(category_id)
+    data = request.get_json() or {}
+    parsed, error = _validate_fine_category_payload(data)
+    if error:
+        return jsonify({'error': error[0]}), error[1]
+    name, min_price, max_price, weekly_increment = parsed
+    category.name = name
+    category.min_price = min_price
+    category.max_price = max_price
+    category.weekly_increment = weekly_increment
+    db.session.commit()
+
+    # Re-apply escalation immediately — the price range just changed
+    try:
+        from app.tasks import apply_fine_weekly_escalation
+        apply_fine_weekly_escalation()
+    except Exception as e:
+        print(f"⚠️ apply_fine_weekly_escalation after category update: {e}")
+
+    return jsonify(category.to_dict()), 200
+
+
+@api_bp.route('/fine-categories/<int:category_id>', methods=['DELETE'])
+def delete_fine_category(category_id):
+    user = get_current_user()
+    if not user or user.role != 'administrateur':
+        return jsonify({'error': 'Access denied'}), 403
+    category = FineCategory.query.get_or_404(category_id)
+    if FineType.query.filter_by(category_id=category_id).first():
+        return jsonify({'error': 'Cette catégorie est utilisée par au moins un type d\'amende'}), 409
+    db.session.delete(category)
+    db.session.commit()
+    return jsonify({'message': 'Catégorie supprimée'}), 200
+
+
+@api_bp.route('/fine-categories/apply-now', methods=['POST'])
+def apply_fine_categories_now():
+    user = get_current_user()
+    if not user or user.role != 'administrateur':
         return jsonify({'error': 'Access denied'}), 403
     try:
-        from app.tasks import apply_fine_late_rates
-        apply_fine_late_rates()
+        from app.tasks import apply_fine_weekly_escalation
+        apply_fine_weekly_escalation()
         return jsonify({'message': 'Majorations appliquées'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1320,21 +1316,26 @@ def api_fines_create():
         data = request.get_json() or {}
 
     vehicle_id = data.get('vehicle_id')
-    amount = data.get('amount')
+    fine_type_id = data.get('fine_type_id')
     reason = data.get('reason')
 
-    if not vehicle_id or not amount or not reason:
+    if not vehicle_id or not fine_type_id or not reason:
         return jsonify({"error": "Missing required fields"}), 400
 
     try:
         vehicle_id = int(vehicle_id)
-        amount = float(amount)
+        fine_type_id = int(fine_type_id)
     except (TypeError, ValueError):
-        return jsonify({"error": "Invalid vehicle_id or amount"}), 400
+        return jsonify({"error": "Invalid vehicle_id or fine_type_id"}), 400
 
     vehicle = Vehicle.query.get(vehicle_id)
     if not vehicle:
         return jsonify({"error": "Vehicle not found"}), 404
+
+    fine_type = FineType.query.get(fine_type_id)
+    if not fine_type or not fine_type.category:
+        return jsonify({"error": "Invalid fine_type_id"}), 400
+    amount = float(fine_type.category.min_price)
 
     photo_filename = None
     # Accept direct Cloudinary URL (mobile direct-upload flow)
@@ -1360,6 +1361,7 @@ def api_fines_create():
         vehicle_id=vehicle_id,
         amount=amount,
         base_amount=amount,
+        fine_type_id=fine_type_id,
         reason=reason,
         officer=user.username,
         issued_at=now_comoros(),

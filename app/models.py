@@ -745,7 +745,8 @@ class Fine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False, index=True)
     amount = db.Column(db.Numeric(10,2), nullable=False)
-    base_amount = db.Column(db.Numeric(10,2), nullable=True)  # original amount before late-rate increases
+    base_amount = db.Column(db.Numeric(10,2), nullable=True)  # original amount before weekly escalation increases
+    fine_type_id = db.Column(db.Integer, db.ForeignKey('fine_types.id'), nullable=True)
     reason = db.Column(db.String(255), nullable=False)
     officer = db.Column(db.String(100))
     paid = db.Column(db.Boolean, default=False)
@@ -757,13 +758,18 @@ class Fine(db.Model):
     photo_filename = db.Column(db.String(255), nullable=True)
 
     vehicle = db.relationship('Vehicle', backref=db.backref('fines', lazy='dynamic'))
+    fine_type = db.relationship('FineType', backref=db.backref('fines', lazy='dynamic'))
 
     def to_dict(self):
+        category = self.fine_type.category if self.fine_type else None
         return {
             'id': self.id,
             'vehicle_id': self.vehicle_id,
             'amount': float(self.amount),
             'base_amount': float(self.base_amount) if self.base_amount else float(self.amount),
+            'fine_type_id': self.fine_type_id,
+            'category_min_price': float(category.min_price) if category else None,
+            'category_max_price': float(category.max_price) if category else None,
             'reason': self.reason,
             'officer': self.officer,
             'paid': self.paid,
@@ -825,48 +831,59 @@ class FineArticle(db.Model):
         }
 
 
+class FineCategory(db.Model):
+    """A price range (min/max, in KMF) that a FineType belongs to. Drives the weekly
+    escalation of unpaid fines: week 1 = min_price, week N = min(min_price +
+    (N-1) * weekly_increment, max_price)."""
+    __tablename__ = 'fine_categories'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    min_price = db.Column(db.Numeric(10, 2), nullable=False)
+    max_price = db.Column(db.Numeric(10, 2), nullable=False)
+    weekly_increment = db.Column(db.Numeric(10, 2), nullable=False, default=5000)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'min_price': float(self.min_price),
+            'max_price': float(self.max_price),
+            'weekly_increment': float(self.weekly_increment),
+            'created_at': self.created_at.isoformat(),
+        }
+
+
 class FineType(db.Model):
     __tablename__ = 'fine_types'
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(50), unique=True, nullable=True)
     label = db.Column(db.String(150), nullable=False)
-    amount = db.Column(db.Numeric(10,2), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('fine_categories.id'), nullable=False)
     article_id = db.Column(db.Integer, db.ForeignKey('fine_articles.id'), nullable=True)
     icon = db.Column(db.String(10), nullable=True)  # emoji, shown in web + mobile app
+    visible_mobile = db.Column(db.Boolean, nullable=False, default=True)  # shown in the police mobile app's fine-type picker
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
     article = db.relationship('FineArticle', backref='fine_types', lazy=True)
+    category = db.relationship('FineCategory', backref='fine_types', lazy=True)
 
     def __repr__(self):
-        return f'<FineType {self.label} ({self.amount})>'
+        return f'<FineType {self.label} (category {self.category_id})>'
 
     def to_dict(self):
         return {
             'id': self.id,
             'code': self.code,
             'label': self.label,
-            'amount': float(self.amount),
+            'category_id': self.category_id,
+            'category_name': self.category.name if self.category else None,
+            'category_min_price': float(self.category.min_price) if self.category else None,
+            'category_max_price': float(self.category.max_price) if self.category else None,
             'article_id': self.article_id,
             'article_code': self.article.code if self.article else None,
             'icon': self.icon,
-            'created_at': self.created_at.isoformat(),
-        }
-
-
-class FineLateRate(db.Model):
-    """Penalty percentage applied to unpaid fines based on overdue duration (months)."""
-    __tablename__ = 'fine_late_rates'
-    id = db.Column(db.Integer, primary_key=True)
-    months = db.Column(db.Integer, nullable=False, unique=True)
-    percentage = db.Column(db.Numeric(10, 2), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
-    updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'months': self.months,
-            'percentage': float(self.percentage),
+            'visible_mobile': bool(self.visible_mobile),
             'created_at': self.created_at.isoformat(),
         }
 

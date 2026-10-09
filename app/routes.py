@@ -2601,21 +2601,25 @@ def create_fine(vehicle_id):
     except Exception:
         officer = data.get('officer')
     notes = data.get('notes')
-    # Parse amount and reason
-    amount = data.get('amount')
-    try:
-        amount = float(amount)
-    except Exception:
-        amount = 0.0
+    fine_type_id = data.get('fine_type_id')
     reason = data.get('reason')
-    if not reason or amount <= 0:
-        return jsonify({'error':'reason et amount requis'}), 400
-    
+    if not reason or not fine_type_id:
+        return jsonify({'error':'reason et fine_type_id requis'}), 400
+    from app.models import FineType
+    try:
+        fine_type_id = int(fine_type_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'fine_type_id invalide'}), 400
+    fine_type = FineType.query.get(fine_type_id)
+    if not fine_type or not fine_type.category:
+        return jsonify({'error': 'fine_type_id invalide'}), 400
+    amount = float(fine_type.category.min_price)
+
     # Check if vehicle is exonerated
     exonerated = ExoneratedVehicle.query.filter_by(vehicle_id=vehicle.id).first()
     is_exonerated = exonerated is not None
-    
-    fine = Fine(vehicle_id=vehicle.id, amount=amount, base_amount=amount, reason=reason, officer=officer, notes=notes)
+
+    fine = Fine(vehicle_id=vehicle.id, amount=amount, base_amount=amount, fine_type_id=fine_type_id, reason=reason, officer=officer, notes=notes)
     
     # If vehicle is exonerated, mark it for automatic deletion after 60 minutes
     # (will be deleted automatically by background task - no trace left)
@@ -2892,18 +2896,22 @@ def manage_fine_types():
     # POST: create
     data = request.get_json() or request.form
     label = data.get('label')
-    amount = data.get('amount')
+    category_id = data.get('category_id')
     code = data.get('code')
     icon = (data.get('icon') or '').strip() or None
     article_id = data.get('article_id') or None
-    if not label or not amount:
-        return jsonify({'error': 'label et amount requis'}), 400
+    visible_mobile = data.get('visible_mobile', True)
+    if isinstance(visible_mobile, str):
+        visible_mobile = visible_mobile.lower() not in ('false', '0', '')
+    if not label or not category_id:
+        return jsonify({'error': 'label et category_id requis'}), 400
     try:
-        amt = Decimal(str(amount))
-    except Exception:
-        return jsonify({'error': 'Montant invalide'}), 400
-    ft = FineType(label=label, amount=amt, code=code, icon=icon,
-                  article_id=int(article_id) if article_id else None)
+        category_id = int(category_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Catégorie invalide'}), 400
+    ft = FineType(label=label, category_id=category_id, code=code, icon=icon,
+                  article_id=int(article_id) if article_id else None,
+                  visible_mobile=bool(visible_mobile))
     db.session.add(ft)
     db.session.commit()
     return jsonify(ft.to_dict()), 201
@@ -2922,17 +2930,20 @@ def fine_type_detail(type_id):
     data = request.get_json() or request.form
     if 'label' in data:
         ft.label = data.get('label')
-    if 'amount' in data:
+    if 'category_id' in data:
         try:
-            ft.amount = Decimal(str(data.get('amount')))
-        except Exception:
-            return jsonify({'error': 'Montant invalide'}), 400
+            ft.category_id = int(data['category_id']) if data['category_id'] else None
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Catégorie invalide'}), 400
     if 'code' in data:
         ft.code = data.get('code')
     if 'icon' in data:
         ft.icon = (data.get('icon') or '').strip() or None
     if 'article_id' in data:
         ft.article_id = int(data['article_id']) if data['article_id'] else None
+    if 'visible_mobile' in data:
+        v = data['visible_mobile']
+        ft.visible_mobile = (v.lower() not in ('false', '0', '')) if isinstance(v, str) else bool(v)
     db.session.commit()
     return jsonify(ft.to_dict())
 
@@ -2958,8 +2969,7 @@ def _apply_fine_payment(fine, paid_by, payment_method=''):
 @vehicle_bp.route('/fines/<int:fine_id>/reason', methods=['PATCH'])
 @login_required
 def update_fine_reason(fine_id):
-    from app.models import Fine, VehicleHistory
-    from decimal import Decimal
+    from app.models import Fine, FineType, VehicleHistory
     fine = Fine.query.get_or_404(fine_id)
     age = (now_comoros() - ensure_comoros(fine.issued_at)).total_seconds()
     if age > 3 * 24 * 3600:
@@ -2972,12 +2982,17 @@ def update_fine_reason(fine_id):
     old_amount = float(fine.amount)
     fine.reason = new_reason
     new_amount = old_amount
-    if data.get('amount') is not None:
+    if data.get('fine_type_id') is not None:
         try:
-            new_amount = float(data['amount'])
-            fine.amount = Decimal(str(new_amount))
+            fine_type = FineType.query.get(int(data['fine_type_id']))
         except (ValueError, TypeError):
-            pass
+            fine_type = None
+        if fine_type and fine_type.category:
+            # Changing the type restarts the weekly escalation at the new category's min price.
+            fine.fine_type_id = fine_type.id
+            new_amount = float(fine_type.category.min_price)
+            fine.amount = new_amount
+            fine.base_amount = new_amount
     officer = getattr(current_user, 'username', 'inconnu')
     notes = f'Ancien motif : « {old_reason} » ({int(old_amount)} KMF) → Nouveau : « {new_reason} » ({int(new_amount)} KMF)'
     db.session.add(VehicleHistory(
