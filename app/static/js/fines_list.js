@@ -608,7 +608,7 @@ function setupFineTypeIconPicker(){
     if(!grid) return;
     grid.innerHTML = FINE_TYPE_ICON_GROUPS.map(g => `
         <div class="w-100 text-muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;margin:${g===FINE_TYPE_ICON_GROUPS[0]?'0':'.35rem'} 0 .15rem;">${g.label}</div>
-        ${g.icons.map(icon => `<button type="button" class="btn btn-outline-secondary btn-sm" style="width:2.2rem;" data-icon-choice="${icon}">${icon}</button>`).join('')}
+        ${g.icons.map(icon => `<button type="button" class="btn btn-outline-secondary" style="width:2.8rem;height:2.8rem;font-size:1.3rem;padding:0;" data-icon-choice="${icon}">${icon}</button>`).join('')}
     `).join('');
     document.querySelectorAll('[data-icon-choice]').forEach(btn=>{
         btn.addEventListener('click', function(){
