@@ -471,7 +471,7 @@ function loadFineTypes(){
         }).catch(err=>{
             console.error('Erreur chargement types amandes',err);
             const tbody = document.getElementById('fine-types-tbody');
-            if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Erreur chargement</td></tr>';
+            if(tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Erreur chargement</td></tr>';
         });
 }
 
@@ -479,14 +479,19 @@ function renderFineTypesTable(items){
     const tbody = document.getElementById('fine-types-tbody');
     if(!tbody) return;
     if(!items || items.length===0){
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucun type</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Aucun type</td></tr>';
         return;
     }
     tbody.innerHTML = items.map((t,i)=>`<tr>
         <td class="text-center" style="font-size:1.1rem;">${t.icon || '<span class="text-muted small">—</span>'}</td>
         <td>${t.label}</td>
-        <td>${Math.round(t.amount)} KMF</td>
+        <td>${t.category_name ? `${t.category_name} <span class="text-muted small">(${Math.round(t.category_min_price)}–${Math.round(t.category_max_price)} KMF)</span>` : '<span class="text-muted">—</span>'}</td>
         <td>${t.article_code ? `<span class="badge bg-secondary">${t.article_code}</span>` : '<span class="text-muted">—</span>'}</td>
+        <td class="text-center">
+          <button type="button" class="btn btn-sm ${t.visible_mobile ? 'btn-outline-success' : 'btn-outline-secondary'}" data-toggle-mobile-id="${t.id}" data-current="${t.visible_mobile ? '1':'0'}" title="Cliquer pour basculer">
+            ${t.visible_mobile ? '📱 Visible' : '🚫 Masqué'}
+          </button>
+        </td>
         <td>
           <button class="btn btn-sm btn-outline-secondary me-1" data-edit-type-id="${t.id}">Éditer</button>
           <button class="btn btn-sm btn-outline-danger" data-delete-type-id="${t.id}">Supprimer</button>
@@ -510,20 +515,47 @@ function renderFineTypesTable(items){
             openEditFineType(id);
         });
     });
+    // bind mobile-visibility toggle buttons
+    document.querySelectorAll('[data-toggle-mobile-id]').forEach(btn=>{
+        btn.addEventListener('click', function(){
+            const id = this.dataset.toggleMobileId;
+            const next = this.dataset.current !== '1';
+            fetch(`/api/vehicles/fines/types/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ visible_mobile: next })
+            })
+                .then(r=>{ if(!r.ok) throw new Error('Erreur'); return r.json(); })
+                .then(()=>{ loadFineTypes(); })
+                .catch(()=>{ alert('Impossible de mettre à jour'); });
+        });
+    });
 }
 
-const FINE_TYPE_ICONS = [
-    '🚗','🏍️','🚲','🚚','🚌','🚕',
-    '🚦','🛑','🚫','⛔','🚸','🚧',
-    '🦺','⛑️','👶','💤',
-    '📱','🍺',
-    '🪪','📄','🧾',
-    '🛞','🔧','🛢️','💡','🔊',
-    '📷','🚨','⚠️','🧯',
+const FINE_TYPE_ICON_GROUPS = [
+    { label: 'Véhicules & engins', icons: ['🚗','🏍️','🛵','🚲','🚚','🚌','🚕','🚍','🏎️','🚜','🚐','🐄','🐐'] },
+    { label: 'Signalisation & circulation', icons: ['🚦','🚥','🛑','🚫','⛔','🚧','🛣️','🛤️','➖','🅿️','🚸','🚶','🚷','🏁','🔄','↩️','↪️','↔️','➡️','⬅️','⏩','🔀'] },
+    { label: 'Sécurité & comportement', icons: ['🦺','⛑️','👶','🧒','👥','🤲','🏃','🙅','✋','🏋️','🛡️','🩺','💤','🍺','📱','✅'] },
+    { label: 'Documents, identité & conformité', icons: ['🪪','📄','🧾','📋','🏷️','🔖','🆔','🪧','📝','📃','❌','🎭','🤥','✏️','🗑️','🔓','🎫','📇','🔍'] },
+    { label: 'Mécanique, éclairage & équipement', icons: ['🛞','🔧','🛢️','💡','🔦','🕯️','🏮','🔙','🪞','⚖️','📏','📐','⛓️','🧱','🔲','🔩','🛋️','📺','⏸️','📍'] },
+    { label: 'Son & avertisseurs', icons: ['🔊','📯','🔇','📢','📣','🗣️','🔕','📡'] },
+    { label: 'Formes & signaux colorés', icons: ['🔴','🟡','🟢','🟠','🔵','🔆','🔅','✨','🔺','🔻','⭕','🔶'] },
+    { label: 'Divers, situations & objets', icons: ['🏚️','🏢','🪑','📦','🫡','🚪','🪟','🌧️','💨','🌃','🌙','🧳','🔢','👁️','👔','👕','🚨','⚠️','🧯','📷','🚑','🚀','🌫️','💢','🪨','🤝','🛒','💥','⏱️','🎨','🗝️','🛠️'] },
 ];
+const FINE_TYPE_ICONS = FINE_TYPE_ICON_GROUPS.flatMap(g => g.icons);
 
-// Suggestion automatique d'icône à partir de mots-clés dans le motif. Ordre = priorité en cas de match multiple.
+// Suggestion automatique d'icône à partir de mots-clés dans le motif. Ordre = priorité en cas de match multiple ;
+// les phrases les plus spécifiques sont placées avant les mots-clés génériques pour avoir priorité.
 const FINE_TYPE_ICON_KEYWORDS = [
+    { icon: '🏷️', words: ['plaque du constructeur', 'plaque constructeur', 'indication de cylindree', 'indication de cylindrée'] },
+    { icon: '🛵', words: ['avertisseur a moto', 'avertisseur à moto', 'moto ou velomoteur', 'moto ou vélomoteur'] },
+    { icon: '📋', words: ['defaut de reception', 'défaut de réception', 'reception'] },
+    { icon: '📯', words: ['materiels roulants', 'matériels roulants'] },
+    { icon: '⚖️', words: ['poids total autorise', 'poids total autorisé', 'p.t.a.c', 'ptac'] },
+    { icon: '🗝️', words: ['moteur en marche', 'quitter son vehicule', 'quitter son véhicule'] },
+    { icon: '🚶', words: ['circulation de pietons', 'circulation de piétons', 'pietons sur la chaussee', 'piétons sur la chaussée'] },
+    { icon: '🛣️', words: ['se ranger a l\'approche', 'se ranger à l\'approche', 'ranger a l approche'] },
+    { icon: '🚸', words: ['traversee imprudente', 'traversée imprudente'] },
     { icon: '🏍️', words: ['moto', 'scooter', 'deux-roues', 'deux roues'] },
     { icon: '🚲', words: ['velo', 'vélo', 'bicyclette', 'cycliste'] },
     { icon: '🚚', words: ['camion', 'poids lourd', 'marchandise', 'surcharge'] },
@@ -574,9 +606,10 @@ let _fineTypeIconManual = false;
 function setupFineTypeIconPicker(){
     const grid = document.getElementById('fine-type-icon-grid');
     if(!grid) return;
-    grid.innerHTML = FINE_TYPE_ICONS.map(icon =>
-        `<button type="button" class="btn btn-outline-secondary btn-sm" style="width:2.2rem;" data-icon-choice="${icon}">${icon}</button>`
-    ).join('');
+    grid.innerHTML = FINE_TYPE_ICON_GROUPS.map(g => `
+        <div class="w-100 text-muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;margin:${g===FINE_TYPE_ICON_GROUPS[0]?'0':'.35rem'} 0 .15rem;">${g.label}</div>
+        ${g.icons.map(icon => `<button type="button" class="btn btn-outline-secondary btn-sm" style="width:2.2rem;" data-icon-choice="${icon}">${icon}</button>`).join('')}
+    `).join('');
     document.querySelectorAll('[data-icon-choice]').forEach(btn=>{
         btn.addEventListener('click', function(){
             setFineTypeIcon(this.dataset.iconChoice, true);
@@ -603,11 +636,13 @@ function submitFineTypeForm(e){
     e.preventDefault();
     const id = document.getElementById('fine-type-id').value;
     const label = document.getElementById('fine-type-label').value;
-    const amount = document.getElementById('fine-type-amount').value;
+    const category_id = document.getElementById('fine-type-category').value;
     const article_id = document.getElementById('fine-type-article').value || null;
     const icon = document.getElementById('fine-type-icon').value || null;
-    if(!label || !amount){ alert('Veuillez remplir label et montant'); return; }
-    const payload = { label, amount, article_id, icon };
+    const visibleMobileEl = document.getElementById('fine-type-visible-mobile');
+    const visible_mobile = visibleMobileEl ? visibleMobileEl.checked : true;
+    if(!label || !category_id){ alert('Veuillez remplir le motif et choisir une catégorie'); return; }
+    const payload = { label, category_id, article_id, icon, visible_mobile };
     const url = id ? `/api/vehicles/fines/types/${id}` : '/api/vehicles/fines/types';
     fetch(url, { method: id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
         .then(r=>{ if(!r.ok) return r.json().then(x=>{ throw x; }); return r.json(); })
@@ -637,11 +672,14 @@ function openEditFineType(id){
     if(!t) return alert('Type introuvable');
     document.getElementById('fine-type-id').value = t.id;
     document.getElementById('fine-type-label').value = t.label;
-    document.getElementById('fine-type-amount').value = t.amount;
+    const catSel = document.getElementById('fine-type-category');
+    if(catSel) catSel.value = t.category_id || '';
     // An existing icon was deliberately chosen — don't let further label edits auto-override it.
     setFineTypeIcon(t.icon || '', !!t.icon);
     const artSel = document.getElementById('fine-type-article');
     if(artSel) artSel.value = t.article_id || '';
+    const visibleMobileEl = document.getElementById('fine-type-visible-mobile');
+    if(visibleMobileEl) visibleMobileEl.checked = t.visible_mobile !== false;
     toggleFineTypeFormAddMode(false);
 }
 
@@ -718,12 +756,13 @@ function startEditReason(btn, fineId) {
 
     const options = types.map(t => {
         const selected = t.label.toLowerCase() === currentReason.toLowerCase() ? 'selected' : '';
-        return `<option value="${t.id}" data-amount="${t.amount}" data-label="${t.label}" ${selected}>${t.label} — ${Math.round(t.amount)} KMF</option>`;
+        const minPrice = t.category_min_price != null ? t.category_min_price : 0;
+        return `<option value="${t.id}" data-amount="${minPrice}" data-label="${t.label}" ${selected}>${t.label} — ${Math.round(minPrice)} KMF</option>`;
     }).join('');
 
-    // Trouver le montant du type actuel pour l'afficher dans le badge
+    // Trouver le prix min de la catégorie du type actuel pour l'afficher dans le badge
     const currentType = types.find(t => t.label.toLowerCase() === currentReason.toLowerCase());
-    const initialBadge = currentType ? Math.round(currentType.amount) + ' KMF' : '';
+    const initialBadge = currentType && currentType.category_min_price != null ? Math.round(currentType.category_min_price) + ' KMF' : '';
 
     cell.innerHTML = `
         <div class="d-flex align-items-center gap-1 flex-wrap">
@@ -756,13 +795,13 @@ function saveEditReason(btn, fineId) {
     if(!opt || !opt.value) { alert('Veuillez sélectionner un type d\'amende.'); return; }
 
     const newReason = opt.dataset.label;
-    const newAmount = parseFloat(opt.dataset.amount);
+    const fineTypeId = opt.value;
 
     btn.disabled = true;
     fetch(`/api/vehicles/fines/${fineId}/reason`, {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({reason: newReason, amount: newAmount})
+        body: JSON.stringify({reason: newReason, fine_type_id: fineTypeId})
     })
     .then(r => r.json())
     .then(d => {
