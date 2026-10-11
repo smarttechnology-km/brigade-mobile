@@ -315,6 +315,75 @@ def calculate_penalty_amount(days_late):
         return 0.0
 
 
+def _vignette_price_from_rates(vehicle, rates):
+    """Pure (query-free) part of calculate_vignette_price — picks the best-matching
+    rate for `vehicle` out of an already-fetched `rates` list. Split out so list
+    endpoints can fetch VignetteRate.query once for the whole page instead of once
+    per vehicle (see get_vignette_rates_for_calculation / the batch callers below)."""
+    if not vehicle:
+        return 0.0
+
+    vehicle_age = None
+    if vehicle.year:
+        try:
+            current_year = now_comoros().year
+            vehicle_age = current_year - int(vehicle.year)
+        except Exception:
+            vehicle_age = None
+
+    def matches(rate):
+        if vehicle.fiscal_class:
+            if rate.fiscal_class is not None and rate.fiscal_class != vehicle.fiscal_class:
+                return False
+        elif rate.fiscal_class is not None:
+            return False
+
+        if vehicle.cv_class:
+            if rate.cv_class is not None and rate.cv_class != vehicle.cv_class:
+                return False
+        elif rate.cv_class is not None:
+            return False
+
+        if vehicle.fuel_type:
+            if rate.fuel_type is not None and rate.fuel_type != vehicle.fuel_type:
+                return False
+        elif rate.fuel_type is not None:
+            return False
+
+        if vehicle_age is not None:
+            if rate.vehicle_age_min is not None and rate.vehicle_age_min > vehicle_age:
+                return False
+            if rate.vehicle_age_max is not None and rate.vehicle_age_max < vehicle_age:
+                return False
+        elif rate.vehicle_age_min is not None or rate.vehicle_age_max is not None:
+            return False
+
+        return True
+
+    candidates = [r for r in rates if r.is_active and matches(r)]
+    if not candidates:
+        return 0.0
+
+    def specificity_score(rate):
+        score = 0
+        if rate.fiscal_class is not None:
+            score += 10
+        if rate.cv_class is not None:
+            score += 10
+        if rate.fuel_type is not None:
+            score += 10
+        if rate.vehicle_age_min is not None or rate.vehicle_age_max is not None:
+            score += 5
+        return score
+
+    candidates.sort(key=specificity_score, reverse=True)
+
+    best_rate = candidates[0]
+    base_price = float(best_rate.price_kmf) if best_rate.price_kmf else 0.0
+    annual_ds = float(best_rate.annual_ds) if getattr(best_rate, 'annual_ds', None) is not None else 1000.0
+    return base_price + annual_ds
+
+
 def calculate_vignette_price(vehicle):
     """
     Calculate vignette price based on vehicle attributes using configured rates.
@@ -327,71 +396,10 @@ def calculate_vignette_price(vehicle):
     """
     if not vehicle:
         return 0.0
-
     try:
         from app.models import VignetteRate
-
-        # Get vehicle age
-        vehicle_age = None
-        if vehicle.year:
-            try:
-                current_year = now_comoros().year
-                vehicle_age = current_year - int(vehicle.year)
-            except Exception:
-                vehicle_age = None
-
-        query = VignetteRate.query.filter(VignetteRate.is_active == True)
-
-        # Match fiscal_class.
-        if vehicle.fiscal_class:
-            query = query.filter((VignetteRate.fiscal_class == vehicle.fiscal_class) | (VignetteRate.fiscal_class.is_(None)))
-        else:
-            query = query.filter(VignetteRate.fiscal_class.is_(None))
-
-        # Match cv_class.
-        if vehicle.cv_class:
-            query = query.filter((VignetteRate.cv_class == vehicle.cv_class) | (VignetteRate.cv_class.is_(None)))
-        else:
-            query = query.filter(VignetteRate.cv_class.is_(None))
-
-        # Match fuel_type.
-        if vehicle.fuel_type:
-            query = query.filter((VignetteRate.fuel_type == vehicle.fuel_type) | (VignetteRate.fuel_type.is_(None)))
-        else:
-            query = query.filter(VignetteRate.fuel_type.is_(None))
-
-        # Match age range.
-        if vehicle_age is not None:
-            query = query.filter(
-                (VignetteRate.vehicle_age_min.is_(None) | (VignetteRate.vehicle_age_min <= vehicle_age)) &
-                (VignetteRate.vehicle_age_max.is_(None) | (VignetteRate.vehicle_age_max >= vehicle_age))
-            )
-        else:
-            query = query.filter(VignetteRate.vehicle_age_min.is_(None), VignetteRate.vehicle_age_max.is_(None))
-
-        rates = query.all()
-        if not rates:
-            return 0.0
-
-        def specificity_score(rate):
-            score = 0
-            if rate.fiscal_class is not None:
-                score += 10
-            if rate.cv_class is not None:
-                score += 10
-            if rate.fuel_type is not None:
-                score += 10
-            if rate.vehicle_age_min is not None or rate.vehicle_age_max is not None:
-                score += 5
-            return score
-
-        rates.sort(key=specificity_score, reverse=True)
-
-        best_rate = rates[0]
-        base_price = float(best_rate.price_kmf) if best_rate.price_kmf else 0.0
-        annual_ds = float(best_rate.annual_ds) if getattr(best_rate, 'annual_ds', None) is not None else 1000.0
-        return base_price + annual_ds
-
+        rates = VignetteRate.query.filter(VignetteRate.is_active == True).all()
+        return _vignette_price_from_rates(vehicle, rates)
     except Exception:
         return 0.0
 
@@ -6510,13 +6518,21 @@ def get_vignette_vehicles():
         query = query.filter(Vehicle.owner_island == user_country)
     
     vehicles = query.order_by(Vehicle.license_plate).all()
-    
+
+    from app.models import VignetteRate
+    all_active_rates = VignetteRate.query.filter(VignetteRate.is_active == True).all()
+    vehicle_ids = [v.id for v in vehicles]
+    unpaid_fines_by_vehicle = {}
+    if vehicle_ids:
+        for f in Fine.query.filter(Fine.vehicle_id.in_(vehicle_ids), Fine.paid == False).all():
+            unpaid_fines_by_vehicle.setdefault(f.vehicle_id, []).append(f)
+
     vehicles_payload = []
     now = ensure_comoros(now_comoros())
-    
+
     for vehicle in vehicles:
         vehicle_data = vehicle.to_dict()
-        
+
         # Calculate vignette status
         vignette_expiry = vehicle.vignette_expiry or vehicle.vignette_payment_requested_expiry
         if isinstance(vignette_expiry, str):
@@ -6565,7 +6581,7 @@ def get_vignette_vehicles():
         vehicle_data['vignette_requested_expiry'] = pending_request_expiry.isoformat() if pending_request_expiry else None
 
         # Calculate vignette price based on vehicle attributes
-        vignette_price = calculate_vignette_price(vehicle)
+        vignette_price = _vignette_price_from_rates(vehicle, all_active_rates)
         vehicle_data['vignette_price'] = vignette_price
 
         payment_approved = bool(getattr(vehicle, 'vignette_payment_approved', False))
@@ -6608,7 +6624,7 @@ def get_vignette_vehicles():
             vehicle_data['penalty_amount'] = 0.0
 
         # Add fines amount
-        unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
+        unpaid_fines = unpaid_fines_by_vehicle.get(vehicle.id, [])
         total_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
         if payment_approved:
             # Payment approved: freeze what was included in the approved payment
@@ -6890,6 +6906,15 @@ def get_vignette_vehicles_without():
         query = query.filter(Vehicle.owner_island == user_country)
 
     vehicles = query.order_by(Vehicle.license_plate).all()
+
+    from app.models import VignetteRate
+    all_active_rates = VignetteRate.query.filter(VignetteRate.is_active == True).all()
+    vehicle_ids = [v.id for v in vehicles]
+    unpaid_fines_by_vehicle = {}
+    if vehicle_ids:
+        for f in Fine.query.filter(Fine.vehicle_id.in_(vehicle_ids), Fine.paid == False).all():
+            unpaid_fines_by_vehicle.setdefault(f.vehicle_id, []).append(f)
+
     vehicles_payload = []
     
     for vehicle in vehicles:
@@ -6901,7 +6926,7 @@ def get_vignette_vehicles_without():
         vehicle_data['vignette_status'] = 'pending' if payment_request_pending and not vehicle.vignette_expiry else 'no_vignette'
         
         # Calculate vignette price based on vehicle attributes
-        vignette_price = calculate_vignette_price(vehicle)
+        vignette_price = _vignette_price_from_rates(vehicle, all_active_rates)
         vehicle_data['vignette_price'] = vignette_price
 
         # QR activation is no longer bundled into the vignette payment — it's
@@ -6910,7 +6935,7 @@ def get_vignette_vehicles_without():
         vehicle_data['needs_qr_activation'] = vehicle.qr_code_expiry is None
 
         # Add unpaid fines amount
-        unpaid_fines = Fine.query.filter_by(vehicle_id=vehicle.id, paid=False).all()
+        unpaid_fines = unpaid_fines_by_vehicle.get(vehicle.id, [])
         total_fines_amount = sum(float(f.amount) if f.amount else 0 for f in unpaid_fines)
         vehicle_data['unpaid_fines_amount'] = total_fines_amount
         vehicle_data['unpaid_fines_count'] = len(unpaid_fines)
