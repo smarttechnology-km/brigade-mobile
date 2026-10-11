@@ -494,6 +494,119 @@ def fine_to_block_payload(fine):
     }
 
 
+def get_insurance_block_info_for_vehicles(vehicles, action="ajouter ou renouveler son assurance"):
+    """Batch equivalent of calling vehicle_has_unpaid_fines / get_first_unpaid_fine /
+    get_vehicle_block_reason_for_insurance / Vehicle.has_valid_technical_inspection for each
+    vehicle in a list — those do 1 (or more) fresh queries per vehicle, which turns a vehicle
+    list page into hundreds of round-trips (very slow on Render's free-tier DB). This fetches
+    all fines/inspections/drafts for the whole list in 3 queries total and replicates the exact
+    same per-vehicle logic in Python. Returns {vehicle_id: {'has_unpaid_fines', 'unpaid_fine',
+    'block_reason', 'has_valid_technical_inspection'}}."""
+    from app.models import TechnicalInspection, TechnicalInspectionDraft
+    from datetime import datetime as _datetime
+
+    result = {}
+    vehicle_ids = [v.id for v in vehicles]
+    if not vehicle_ids:
+        return result
+
+    unpaid_fine_by_vehicle = {}
+    for fine in (Fine.query
+                 .filter(Fine.vehicle_id.in_(vehicle_ids), Fine.paid == False)
+                 .order_by(Fine.vehicle_id, Fine.issued_at.desc())
+                 .all()):
+        unpaid_fine_by_vehicle.setdefault(fine.vehicle_id, fine)
+
+    inspections_by_vehicle = {}
+    for insp in (TechnicalInspection.query
+                 .filter(TechnicalInspection.vehicle_id.in_(vehicle_ids))
+                 .all()):
+        inspections_by_vehicle.setdefault(insp.vehicle_id, []).append(insp)
+
+    draft_vehicle_ids = {d.vehicle_id for d in (
+        TechnicalInspectionDraft.query
+        .filter(TechnicalInspectionDraft.vehicle_id.in_(vehicle_ids))
+        .all()
+    )}
+
+    now_date = now_comoros().date()
+
+    for vehicle in vehicles:
+        vid = vehicle.id
+        unpaid_fine = unpaid_fine_by_vehicle.get(vid)
+
+        # Technical-inspection validity + block message (same 4-part definition as
+        # Vehicle.has_valid_technical_inspection / get_vehicle_technical_inspection_block_message).
+        inspections = inspections_by_vehicle.get(vid, [])
+        approved = [i for i in inspections if i.status == 'approved']
+        if not approved:
+            vt_message = f"Ce véhicule n'a jamais fait de visite technique. Vous ne pouvez pas {action}."
+            has_valid_ti = False
+        else:
+            latest = max(approved, key=lambda i: i.issued_at or _datetime.min)
+            not_expired = bool(latest.expiry_date and latest.expiry_date >= now_date)
+            paid = bool(latest.payment_status == 'paid')
+            newer_cycle = any(
+                i.inspected_at and latest.inspected_at and i.inspected_at > latest.inspected_at
+                for i in inspections
+            )
+            new_cycle_in_progress = bool(vid in draft_vehicle_ids or newer_cycle)
+            has_valid_ti = bool(not_expired and latest.smarttech_print_validated and paid and not new_cycle_in_progress)
+
+            if not not_expired:
+                vt_message = f"La visite technique de ce véhicule a expiré. Vous ne pouvez pas {action}."
+            elif not latest.smarttech_print_validated or not paid:
+                vt_message = f"La visite technique de ce véhicule est en attente de validation. Vous ne pouvez pas {action}."
+            elif new_cycle_in_progress:
+                vt_message = f"Une nouvelle visite technique est en cours pour ce véhicule. Vous ne pouvez pas {action} en attendant sa validation."
+            else:
+                vt_message = None
+
+        if unpaid_fine:
+            fine_label = f"Amende #{unpaid_fine.id}"
+            if unpaid_fine.reason:
+                fine_label += f" - {unpaid_fine.reason}"
+            if unpaid_fine.amount is not None:
+                fine_label += f" ({format_kmf_amount(unpaid_fine.amount)} KMF)"
+            block_reason = f"{fine_label}. Vous devez d'abord la régler avant d'ajouter ou de modifier l'assurance."
+        elif vt_message:
+            block_reason = vt_message
+        else:
+            try:
+                qr_expired = vehicle.is_qr_code_expired()
+            except Exception:
+                qr_expired = False
+            inactive_reasons = []
+            if vehicle.status == 'inactive':
+                inactive_reasons.append(f"statut: {vehicle.status}")
+            if qr_expired:
+                inactive_reasons.append("QR code expiré")
+
+            if inactive_reasons:
+                block_reason = "Ce véhicule est inactif (" + " et ".join(inactive_reasons) + "). Vous ne pouvez pas l'ajouter à l'assurance tant qu'il n'est pas réactivé."
+            else:
+                now_dt = now_comoros()
+                now_dt_naive = now_dt.replace(tzinfo=None) if getattr(now_dt, 'tzinfo', None) else now_dt
+                has_insurance_company = bool(vehicle.insurance_company and vehicle.insurance_company.strip())
+                expiry_dt = vehicle.insurance_expiry
+                expiry_dt_naive = expiry_dt.replace(tzinfo=None) if (expiry_dt and getattr(expiry_dt, 'tzinfo', None)) else expiry_dt
+                has_active_insurance = has_insurance_company and (expiry_dt_naive is None or expiry_dt_naive >= now_dt_naive)
+
+                if has_active_insurance:
+                    block_reason = f"Ce véhicule a déjà une assurance active ({vehicle.insurance_company})." if vehicle.insurance_company else "Ce véhicule a déjà une assurance active."
+                else:
+                    block_reason = None
+
+        result[vid] = {
+            'has_unpaid_fines': unpaid_fine is not None,
+            'unpaid_fine': fine_to_block_payload(unpaid_fine),
+            'block_reason': block_reason,
+            'has_valid_technical_inspection': has_valid_ti,
+        }
+
+    return result
+
+
 def _is_noop_vehicle_update_history(action, notes):
     """Return True for old vehicle update history rows that only captured unchanged values."""
     action_text = (action or '').strip().lower()
@@ -6289,14 +6402,16 @@ def get_insurance_vehicles():
                 last_payments[p.vehicle_id] = p.paid_at
 
     assignment_map = {a.vehicle_id: a for a in assignments}
+    block_info = get_insurance_block_info_for_vehicles(vehicles)
 
     vehicles_payload = []
     for vehicle in vehicles:
         vehicle_data = vehicle.to_dict()
-        vehicle_data['has_unpaid_fines'] = vehicle_has_unpaid_fines(vehicle.id)
-        vehicle_data['block_reason'] = get_vehicle_block_reason_for_insurance(vehicle)
-        vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
-        vehicle_data['has_valid_technical_inspection'] = vehicle.has_valid_technical_inspection()
+        info = block_info.get(vehicle.id, {})
+        vehicle_data['has_unpaid_fines'] = info.get('has_unpaid_fines', False)
+        vehicle_data['block_reason'] = info.get('block_reason')
+        vehicle_data['unpaid_fine'] = info.get('unpaid_fine')
+        vehicle_data['has_valid_technical_inspection'] = info.get('has_valid_technical_inspection', False)
         lp = last_payments.get(vehicle.id)
         vehicle_data['last_payment_at'] = lp.isoformat() if lp else None
         a = assignment_map.get(vehicle.id)
@@ -7733,13 +7848,15 @@ def get_uninsured_vehicles():
         (Vehicle.owner_island == insurance_island)
     ).order_by(Vehicle.license_plate).all()
     
+    block_info = get_insurance_block_info_for_vehicles(uninsured)
     uninsured_payload = []
     for vehicle in uninsured:
         vehicle_data = vehicle.to_dict()
-        vehicle_data['has_unpaid_fines'] = vehicle_has_unpaid_fines(vehicle.id)
-        vehicle_data['block_reason'] = get_vehicle_block_reason_for_insurance(vehicle)
-        vehicle_data['unpaid_fine'] = fine_to_block_payload(get_first_unpaid_fine(vehicle.id))
-        vehicle_data['has_valid_technical_inspection'] = vehicle.has_valid_technical_inspection()
+        info = block_info.get(vehicle.id, {})
+        vehicle_data['has_unpaid_fines'] = info.get('has_unpaid_fines', False)
+        vehicle_data['block_reason'] = info.get('block_reason')
+        vehicle_data['unpaid_fine'] = info.get('unpaid_fine')
+        vehicle_data['has_valid_technical_inspection'] = info.get('has_valid_technical_inspection', False)
         uninsured_payload.append(vehicle_data)
 
     return jsonify({
