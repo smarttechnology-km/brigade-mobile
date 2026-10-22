@@ -2,6 +2,35 @@
 
 {% block title %}Archive Paiements - Mobile Money{% endblock %}
 
+{% block extra_css %}
+<style>
+.receipt-official { font-family: Georgia, 'Times New Roman', serif; border: 1px solid #334155; border-radius: 4px; padding: 24px; background: #fff; }
+.receipt-header { text-align: center; border-bottom: 3px double #334155; padding-bottom: 12px; margin-bottom: 14px; }
+.receipt-country { font-size: 11px; letter-spacing: 2px; color: #64748b; text-transform: uppercase; }
+.receipt-org { font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 4px; letter-spacing: 1px; }
+.receipt-org-sub { font-size: 10.5px; color: #64748b; margin-top: 2px; font-style: italic; }
+.receipt-title-bar { text-align: center; font-weight: 700; letter-spacing: 2px; background: #0f172a; color: #fff; padding: 7px; margin-bottom: 14px; font-size: 13px; border-radius: 2px; }
+.receipt-number-box { text-align: center; font-weight: 700; font-size: 15px; margin-bottom: 16px; font-family: 'Courier New', monospace; color: #0f172a; }
+.receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-family: Georgia, serif; }
+.receipt-table td { border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; }
+.receipt-table td:first-child { width: 45%; color: #334155; background: #f8fafc; font-weight: 600; }
+.receipt-table td:last-child { text-align: right; font-weight: 600; color: #0f172a; }
+.receipt-table tr.receipt-total-row td { font-size: 15px; font-weight: 800; border-top: 2px solid #334155; }
+.receipt-footer { display: flex; justify-content: space-between; margin-top: 36px; gap: 24px; }
+.receipt-footer-col { flex: 1; text-align: center; }
+.receipt-footer-label { font-size: 11px; color: #64748b; margin-bottom: 36px; }
+.receipt-footer-line { border-top: 1px solid #334155; padding-top: 4px; font-size: 11px; color: #64748b; }
+@media print {
+  @page { size: A5 landscape; margin: 10mm; }
+  nav.navbar, .sidebar-backdrop, aside.sidebar, main > .container { display: none !important; }
+  .modal-header, .modal-footer { display: none !important; }
+  body * { visibility: hidden; }
+  #ar-receipt-print, #ar-receipt-print * { visibility: visible; }
+  #ar-receipt-print { position: fixed; top: 0; left: 0; width: 100%; border: none; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
   <div class="row mb-3 align-items-center">
@@ -102,6 +131,33 @@
         </div>
       </div>
     </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Amendes permis payées</div>
+          <div class="fs-4 fw-bold text-danger" id="archive-lf-count">0</div>
+          <div class="small text-muted" id="archive-lf-total">0 KMF</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Licences Pro payées</div>
+          <div class="fs-4 fw-bold text-dark" id="archive-lp-count">0</div>
+          <div class="small text-muted" id="archive-lp-total">0 KMF</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Dossiers permis payés</div>
+          <div class="fs-4 fw-bold text-secondary" id="archive-dp-count">0</div>
+          <div class="small text-muted" id="archive-dp-total">0 KMF</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <ul class="nav nav-tabs mb-0" id="archiveTabs" role="tablist">
@@ -125,6 +181,21 @@
         <i class="fas fa-clipboard-check me-2 text-info"></i>Visite Technique
       </button>
     </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="lf-tab" data-bs-toggle="tab" data-bs-target="#lf-pane" type="button" role="tab" aria-controls="lf-pane" aria-selected="false">
+        <i class="fas fa-id-card me-2 text-danger"></i>Amendes Permis
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="lp-tab" data-bs-toggle="tab" data-bs-target="#lp-pane" type="button" role="tab" aria-controls="lp-pane" aria-selected="false">
+        <i class="fas fa-id-badge me-2"></i>Licence Pro
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="dp-tab" data-bs-toggle="tab" data-bs-target="#dp-pane" type="button" role="tab" aria-controls="dp-pane" aria-selected="false">
+        <i class="fas fa-folder-open me-2"></i>Dossiers Permis
+      </button>
+    </li>
   </ul>
 
   <div class="tab-content border border-top-0 rounded-bottom shadow-sm bg-white" id="archiveTabsContent">
@@ -143,10 +214,11 @@
                   <th>Date de paiement</th>
                   <th class="text-end">Montant</th>
                   <th>Payé par</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="archive-fines-tbody">
-                <tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>
+                <tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>
               </tbody>
             </table>
           </div>
@@ -170,10 +242,11 @@
                   <th class="text-end">Amendes incluses</th>
                   <th class="text-end">Total</th>
                   <th>Payé par</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="archive-vignettes-tbody">
-                <tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>
+                <tr><td colspan="10" class="text-center text-muted py-4">Chargement...</td></tr>
               </tbody>
             </table>
           </div>
@@ -192,12 +265,15 @@
                   <th>Immatriculation</th>
                   <th>Propriétaire</th>
                   <th>Île</th>
+                  <th>Reçu</th>
                   <th>Date de paiement</th>
                   <th class="text-end">Montant</th>
+                  <th>Payé par</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="archive-cg-tbody">
-                <tr><td colspan="6" class="text-center text-muted py-4">Chargement...</td></tr>
+                <tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>
               </tbody>
             </table>
           </div>
@@ -221,14 +297,136 @@
                   <th class="text-end">Montant</th>
                   <th>Canal</th>
                   <th>Payé par</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="archive-vt-tbody">
+                <tr><td colspan="10" class="text-center text-muted py-4">Chargement...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="lf-pane" role="tabpanel" aria-labelledby="lf-tab" tabindex="0">
+      <div class="card border-0 rounded-0">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>#</th>
+                  <th>N° Permis</th>
+                  <th>Titulaire</th>
+                  <th>Motif</th>
+                  <th>Reçu</th>
+                  <th>Date de paiement</th>
+                  <th class="text-end">Montant</th>
+                  <th>Payé par</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="archive-lf-tbody">
                 <tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>
               </tbody>
             </table>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="lp-pane" role="tabpanel" aria-labelledby="lp-tab" tabindex="0">
+      <div class="card border-0 rounded-0">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>#</th>
+                  <th>N° LP</th>
+                  <th>Titulaire</th>
+                  <th>Activité</th>
+                  <th>Reçu</th>
+                  <th>Date de paiement</th>
+                  <th class="text-end">Montant</th>
+                  <th>Payé par</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="archive-lp-tbody">
+                <tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="dp-pane" role="tabpanel" aria-labelledby="dp-tab" tabindex="0">
+      <div class="card border-0 rounded-0">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>#</th>
+                  <th>N° Dossier</th>
+                  <th>NIN</th>
+                  <th>Téléphone</th>
+                  <th>Île</th>
+                  <th>Reçu</th>
+                  <th>Date de paiement</th>
+                  <th class="text-end">Montant</th>
+                  <th>Payé par</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="archive-dp-tbody">
+                <tr><td colspan="10" class="text-center text-muted py-4">Chargement...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt modal (shared across all archive tabs) -->
+<div class="modal fade" id="arReceiptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-receipt me-2 text-success"></i>Reçu de paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="ar-receipt-print" class="receipt-official">
+          <div class="receipt-header">
+            <div class="receipt-org">S.I.G.V.A</div>
+            <div class="receipt-org-sub">Système Intégré de Gestion des Véhicules Automobiles</div>
+          </div>
+          <div class="receipt-title-bar" id="ar-receipt-title">REÇU DE PAIEMENT</div>
+          <div class="receipt-number-box">N° <span id="ar-receipt-number">—</span></div>
+          <table class="receipt-table">
+            <tbody id="ar-receipt-rows"></tbody>
+          </table>
+          <div class="receipt-footer">
+            <div class="receipt-footer-col">
+              <div class="receipt-footer-label">Agent / Payé par</div>
+              <div class="receipt-footer-line" id="ar-receipt-agent">—</div>
+            </div>
+            <div class="receipt-footer-col">
+              <div class="receipt-footer-label">Signature / Cachet</div>
+              <div class="receipt-footer-line">&nbsp;</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
       </div>
     </div>
   </div>

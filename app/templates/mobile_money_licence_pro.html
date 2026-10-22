@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Licence Pro - Mobile Money{% endblock %}
+
+{% block extra_css %}
+<style>
+.receipt-official { font-family: Georgia, 'Times New Roman', serif; border: 1px solid #334155; border-radius: 4px; padding: 24px; background: #fff; }
+.receipt-header { text-align: center; border-bottom: 3px double #334155; padding-bottom: 12px; margin-bottom: 14px; }
+.receipt-country { font-size: 11px; letter-spacing: 2px; color: #64748b; text-transform: uppercase; }
+.receipt-org { font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 4px; letter-spacing: 1px; }
+.receipt-org-sub { font-size: 10.5px; color: #64748b; margin-top: 2px; font-style: italic; }
+.receipt-title-bar { text-align: center; font-weight: 700; letter-spacing: 2px; background: #0f172a; color: #fff; padding: 7px; margin-bottom: 14px; font-size: 13px; border-radius: 2px; }
+.receipt-number-box { text-align: center; font-weight: 700; font-size: 15px; margin-bottom: 16px; font-family: 'Courier New', monospace; color: #0f172a; }
+.receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-family: Georgia, serif; }
+.receipt-table td { border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; }
+.receipt-table td:first-child { width: 45%; color: #334155; background: #f8fafc; font-weight: 600; }
+.receipt-table td:last-child { text-align: right; font-weight: 600; color: #0f172a; }
+.receipt-table tr.receipt-total-row td { font-size: 15px; font-weight: 800; border-top: 2px solid #334155; }
+.receipt-footer { display: flex; justify-content: space-between; margin-top: 36px; gap: 24px; }
+.receipt-footer-col { flex: 1; text-align: center; }
+.receipt-footer-label { font-size: 11px; color: #64748b; margin-bottom: 36px; }
+.receipt-footer-line { border-top: 1px solid #334155; padding-top: 4px; font-size: 11px; color: #64748b; }
+@media print {
+  @page { size: A5 landscape; margin: 10mm; }
+  nav.navbar, .sidebar-backdrop, aside.sidebar, main > .container { display: none !important; }
+  .modal-header, .modal-footer { display: none !important; }
+  body * { visibility: hidden; }
+  #lp-receipt-print, #lp-receipt-print * { visibility: visible; }
+  #lp-receipt-print { position: fixed; top: 0; left: 0; width: 100%; border: none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+      <h2><i class="fas fa-id-badge me-2"></i>Licence Professionnelle — Paiements en attente</h2>
+      <p class="text-muted mb-0">Demandes de Licence Professionnelle envoyées par le Directeur Technique, en attente de paiement.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+        <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
+          <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+        </a>
+        <span class="badge bg-warning text-dark align-self-center" id="lp-count">0 demande(s)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" id="lp-search" class="form-control" placeholder="Rechercher par N° LP ou titulaire...">
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="lp-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>N° LP</th>
+              <th>Titulaire</th>
+              <th>Activité</th>
+              <th>Zone d'activité</th>
+              <th>Montant</th>
+              <th>Demandé le</th>
+              <th>Statut</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="lp-tbody">
+            <tr><td colspan="9" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation modal -->
+<div class="modal fade" id="lpConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-check-circle me-2 text-success"></i>Confirmer le paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Confirmer la réception du paiement pour la Licence Professionnelle :</p>
+        <div class="alert alert-light border fw-semibold" id="lp-confirm-details">—</div>
+        <p class="text-muted small mb-0">Après confirmation, la demande passera en <strong>attente de validation</strong> du Directeur Général.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="lp-confirm-btn">
+          <i class="fas fa-check me-1"></i>Confirmer le paiement
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt modal -->
+<div class="modal fade" id="lpReceiptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-receipt me-2 text-success"></i>Reçu de paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="lp-receipt-print" class="receipt-official">
+          <div class="receipt-header">
+            <div class="receipt-org">S.I.G.V.A</div>
+            <div class="receipt-org-sub">Système Intégré de Gestion des Véhicules Automobiles</div>
+          </div>
+          <div class="receipt-title-bar">REÇU DE PAIEMENT — LICENCE PROFESSIONNELLE</div>
+          <div class="receipt-number-box">N° <span id="lp-receipt-number">—</span></div>
+          <table class="receipt-table">
+            <tbody>
+              <tr><td>N° LP</td><td id="lp-receipt-lp-number">—</td></tr>
+              <tr><td>Titulaire</td><td id="lp-receipt-holder">—</td></tr>
+              <tr><td>Activité</td><td id="lp-receipt-activite">—</td></tr>
+              <tr><td>Payé le</td><td id="lp-receipt-date">—</td></tr>
+              <tr class="receipt-total-row"><td>Montant payé</td><td id="lp-receipt-amount">—</td></tr>
+            </tbody>
+          </table>
+          <div class="receipt-footer">
+            <div class="receipt-footer-col">
+              <div class="receipt-footer-label">Agent Mobile Money</div>
+              <div class="receipt-footer-line" id="lp-receipt-agent">—</div>
+            </div>
+            <div class="receipt-footer-col">
+              <div class="receipt-footer-label">Signature / Cachet</div>
+              <div class="receipt-footer-line">&nbsp;</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _lpList = [];
+let _pendingLpId = null;
+
+async function loadLicencePro() {
+  try {
+    const res = await fetch('/api/mobile-money/licence-pro', { credentials: 'include' });
+    _lpList = await res.json();
+    renderLpTable(_lpList);
+    document.getElementById('lp-count').textContent = _lpList.length + ' demande(s)';
+  } catch (e) {
+    document.getElementById('lp-tbody').innerHTML =
+      '<tr><td colspan="9" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+  }
+}
+
+function renderLpTable(rows) {
+  const tbody = document.getElementById('lp-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-check-circle me-2 text-success"></i>Aucune demande en attente de paiement.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((lp, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td><strong class="font-monospace">${lp.lp_number || '—'}</strong></td>
+      <td>${(lp.holder_firstname || '') + ' ' + (lp.holder_name || '')}</td>
+      <td>${lp.activite_label || '—'}</td>
+      <td>${lp.zone_activite || '—'}</td>
+      <td>${lp.amount ? Number(lp.amount).toLocaleString() + ' KMF' : '<span class="text-muted">—</span>'}</td>
+      <td>${lp.requested_at || '—'}</td>
+      <td><span class="badge bg-warning text-dark">En attente de paiement</span></td>
+      <td>
+        <button class="btn btn-sm btn-success" onclick="openConfirmModal(${lp.id}, '${(lp.lp_number||'').replace(/'/g,"\\'")}', '${((lp.holder_firstname||'')+' '+(lp.holder_name||'')).replace(/'/g,"\\'")}')">
+          <i class="fas fa-check me-1"></i>Confirmer paiement
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openConfirmModal(id, lpNumber, holderName) {
+  _pendingLpId = id;
+  document.getElementById('lp-confirm-details').textContent = lpNumber + (holderName ? ' — ' + holderName : '');
+  new bootstrap.Modal(document.getElementById('lpConfirmModal')).show();
+}
+
+document.getElementById('lp-confirm-btn').addEventListener('click', async function () {
+  if (!_pendingLpId) return;
+  this.disabled = true;
+  this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Traitement...';
+  try {
+    const res = await fetch(`/api/mobile-money/licence-pro/${_pendingLpId}/confirm-payment`, {
+      method: 'POST', credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    bootstrap.Modal.getInstance(document.getElementById('lpConfirmModal')).hide();
+    openLpReceipt(data);
+    loadLicencePro();
+  } catch (e) {
+    alert(e.message || 'Erreur lors de la confirmation.');
+  } finally {
+    this.disabled = false;
+    this.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer le paiement';
+    _pendingLpId = null;
+  }
+});
+
+function openLpReceipt(lp) {
+  document.getElementById('lp-receipt-number').textContent = lp.receipt_number || '—';
+  document.getElementById('lp-receipt-lp-number').textContent = lp.lp_number || '—';
+  document.getElementById('lp-receipt-holder').textContent = ((lp.holder_firstname || '') + ' ' + (lp.holder_name || '')).trim() || '—';
+  document.getElementById('lp-receipt-activite').textContent = lp.activite_label || '—';
+  document.getElementById('lp-receipt-amount').textContent = lp.amount ? Number(lp.amount).toLocaleString() + ' KMF' : '—';
+  document.getElementById('lp-receipt-date').textContent = lp.paid_at || '—';
+  document.getElementById('lp-receipt-agent').textContent = lp.paid_by || '—';
+  new bootstrap.Modal(document.getElementById('lpReceiptModal')).show();
+}
+
+document.getElementById('lp-search').addEventListener('input', function () {
+  const q = this.value.toLowerCase();
+  renderLpTable(q ? _lpList.filter(lp =>
+    (lp.lp_number || '').toLowerCase().includes(q) ||
+    (lp.holder_name || '').toLowerCase().includes(q) ||
+    (lp.holder_firstname || '').toLowerCase().includes(q)
+  ) : _lpList);
+});
+
+document.addEventListener('DOMContentLoaded', loadLicencePro);
+
+// Auto-refresh on tab focus
+document.addEventListener('visibilitychange', function () { if (!document.hidden) loadLicencePro(); });
+</script>
+{% endblock %}

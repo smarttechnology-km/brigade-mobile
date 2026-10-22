@@ -182,23 +182,64 @@
       </div>
       <div class="modal-body">
 
+        <!-- Type de dossier -->
+        <div class="mb-3">
+          <label class="form-label small fw-semibold d-block">Type de dossier</label>
+          <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="dossier-type" id="dossier-type-nouveau" value="nouveau" checked onchange="onDossierTypeChange()">
+            <label class="btn btn-outline-primary btn-sm" for="dossier-type-nouveau"><i class="fas fa-user-plus me-1"></i>Nouveau permis</label>
+            <input type="radio" class="btn-check" name="dossier-type" id="dossier-type-renouvellement" value="renouvellement" onchange="onDossierTypeChange()">
+            <label class="btn btn-outline-primary btn-sm" for="dossier-type-renouvellement"><i class="fas fa-sync-alt me-1"></i>Renouvellement</label>
+          </div>
+        </div>
+
+        <!-- Recherche du permis existant (renouvellement uniquement) -->
+        <div id="renewal-search-wrap" class="d-none mb-3">
+          <label class="form-label small fw-semibold mb-1">Numéro du permis existant <span class="text-danger">*</span></label>
+          <div class="d-flex gap-2">
+            <input type="text" id="renewal-search-input" class="form-control" placeholder="Ex: 06 592" onkeydown="if(event.key==='Enter'){event.preventDefault();searchRenewalLicense();}">
+            <button type="button" class="btn btn-outline-primary" onclick="searchRenewalLicense()"><i class="fas fa-search me-1"></i>Rechercher</button>
+          </div>
+          <div id="renewal-search-results" class="mt-2 d-flex flex-column gap-2"></div>
+          <div id="renewal-selected-preview" class="d-none mt-2">
+            <div class="d-flex align-items-center gap-3 p-2 border rounded bg-light">
+              <img id="renewal-selected-photo" src="" style="width:40px;height:50px;object-fit:cover;border-radius:4px;" onerror="this.style.display='none'">
+              <div class="flex-fill">
+                <div class="fw-semibold small" id="renewal-selected-name"></div>
+                <div class="text-muted small font-monospace" id="renewal-selected-number"></div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearRenewalSelection()"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+          <input type="hidden" id="renewal-license-id">
+        </div>
+
         <!-- Contexte Step 1 -->
-        <div class="alert alert-info d-flex gap-2 py-2 mb-3" style="font-size:13.5px;">
+        <div class="alert alert-info d-flex gap-2 py-2 mb-3" style="font-size:13.5px;" id="step1-context-alert">
           <i class="fas fa-info-circle mt-1 flex-shrink-0"></i>
           <div>
             Le candidat doit soumettre l'ensemble des documents ci-dessous avant toute validation.
             Vérifiez chaque pièce physiquement et cochez uniquement les documents reçus et conformes.
-            La validation de cette étape génère automatiquement le numéro de dossier officiel.
+            Une fois ces 5 documents validés, le dossier passe en attente de paiement des frais de dossier
+            (à régler auprès d'un agent Mobile Money) ; le numéro de dossier officiel sera généré après
+            confirmation du reçu de paiement.
           </div>
         </div>
 
         <!-- Checklist documents -->
         <div class="border rounded p-3">
-          <div class="doc-check">
+          <div class="doc-check" id="doc-autoecole-wrap">
             <input type="checkbox" class="form-check-input doc-cb" id="doc-autoecole" onchange="checkDocProgress()">
             <label for="doc-autoecole">
               <span class="fw-semibold">Certificat d'Auto-école agréée</span>
               <span class="text-muted small d-block">Délivré par une auto-école reconnue par l'État</span>
+            </label>
+          </div>
+          <div class="doc-check d-none" id="doc-permis-wrap">
+            <input type="checkbox" class="form-check-input doc-cb" id="doc-permis" onchange="checkDocProgress()">
+            <label for="doc-permis">
+              <span class="fw-semibold">Permis</span>
+              <span class="text-muted small d-block">Ancienne carte physique du permis à renouveler</span>
             </label>
           </div>
           <div class="doc-check">
@@ -229,13 +270,6 @@
               <span class="text-muted small d-block">Pièce d'identité nationale en cours de validité</span>
             </label>
           </div>
-          <div class="doc-check">
-            <input type="checkbox" class="form-check-input doc-cb" id="doc-recu" onchange="checkDocProgress()">
-            <label for="doc-recu">
-              <span class="fw-semibold">Reçu de paiement</span>
-              <span class="text-muted small d-block">Preuve du règlement des frais de dossier</span>
-            </label>
-          </div>
         </div>
 
         <!-- Île + coordonnées candidat -->
@@ -264,17 +298,17 @@
           <div class="progress flex-fill" style="height:6px;">
             <div id="doc-progress-bar" class="progress-bar bg-success" style="width:0%;transition:width .3s;"></div>
           </div>
-          <span class="text-muted small"><span id="doc-checked-count">0</span>/6 documents vérifiés</span>
+          <span class="text-muted small"><span id="doc-checked-count">0</span>/5 documents vérifiés</span>
         </div>
 
         <!-- Aperçu numéro de dossier (affiché quand tout est coché) -->
         <div id="dossier-number-preview" class="mt-3 d-none">
-          <div class="alert alert-success d-flex align-items-center gap-3 py-2 mb-0">
-            <i class="fas fa-check-circle fa-lg"></i>
+          <div class="alert alert-warning d-flex align-items-center gap-3 py-2 mb-0">
+            <i class="fas fa-money-bill-wave fa-lg"></i>
             <div>
               <div class="fw-semibold small">Tous les documents sont vérifiés.</div>
-              <div class="small">Un numéro de dossier officiel sera généré automatiquement à l'enregistrement. <br>
-              <span class="text-muted">Le secrétaire devra inscrire ce numéro sur le chemisier cartonné du candidat.</span></div>
+              <div class="small">Le dossier passera en <strong>attente de paiement</strong> à l'enregistrement. Dirigez le candidat vers un agent Mobile Money (recherche par NIN) pour régler les frais de dossier. <br>
+              <span class="text-muted">Le numéro de dossier officiel sera généré une fois le reçu de paiement confirmé ici.</span></div>
             </div>
           </div>
         </div>
@@ -290,6 +324,40 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════
+     MODAL — Confirmer réception du reçu de paiement
+══════════════════════════════════════ -->
+<div class="modal fade" id="receiptConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-receipt me-2"></i>Reçu de paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-success d-flex gap-2 py-2 mb-3" style="font-size:13.5px;">
+          <i class="fas fa-check-circle mt-1 flex-shrink-0"></i>
+          <div>Le paiement des frais de dossier a été confirmé par un agent Mobile Money. Vérifiez que le candidat vous a remis son reçu papier avant de continuer.</div>
+        </div>
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td class="text-muted">N° Reçu</td><td class="text-end fw-semibold" id="rc-receipt-number">—</td></tr>
+            <tr><td class="text-muted">NIN</td><td class="text-end" id="rc-nin">—</td></tr>
+            <tr><td class="text-muted">Montant</td><td class="text-end fw-bold" id="rc-amount">—</td></tr>
+            <tr><td class="text-muted">Payé le</td><td class="text-end" id="rc-paid-at">—</td></tr>
+            <tr><td class="text-muted">Agent</td><td class="text-end" id="rc-paid-by">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-success" id="btn-confirm-receipt" onclick="submitReceiptConfirm()">
+          <i class="fas fa-check-double me-2"></i>Confirmer réception du reçu
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════
      MODAL — Détail dossier
@@ -331,10 +399,10 @@
         <p class="fw-semibold small text-uppercase text-muted mb-2" style="letter-spacing:.06em;">
           <i class="fas fa-user me-1"></i>Informations personnelles
         </p>
-        <div class="row g-2 mb-4">
+        <div class="row g-2 mb-2">
           <div class="col-md-3">
             <label class="form-label small">Nom <span class="text-danger">*</span></label>
-            <input type="text" id="s2-prenom" class="form-control" placeholder="Prénom">
+            <input type="text" id="s2-prenom" class="form-control text-uppercase" placeholder="PRÉNOM">
           </div>
           <div class="col-md-3">
             <label class="form-label small">Prénom <span class="text-danger">*</span></label>
@@ -346,9 +414,11 @@
           </div>
           <div class="col-md-3">
             <label class="form-label small">Lieu de naissance</label>
-            <input type="text" id="s2-lieu-naissance" class="form-control" placeholder="Ex: Moroni">
+            <input type="text" id="s2-lieu-naissance" class="form-control text-uppercase" placeholder="EX: MORONI">
           </div>
-          <div class="col-md-2">
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-3">
             <label class="form-label small">Sexe</label>
             <select id="s2-sexe" class="form-select">
               <option value="">—</option>
@@ -357,18 +427,34 @@
             </select>
           </div>
           <div class="col-md-3">
-            <label class="form-label small">Nationalité</label>
-            <input type="text" id="s2-nationalite" class="form-control" placeholder="Ex: Comorienne">
+            <label class="form-label small">Groupe sanguin</label>
+            <select id="s2-blood-group" class="form-select">
+              <option value="">—</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
           </div>
-          <div class="col-md-4">
-            <label class="form-label small">Adresse</label>
-            <input type="text" id="s2-adresse" class="form-control" placeholder="Adresse complète">
+          <div class="col-md-3">
+            <label class="form-label small">Nationalité</label>
+            <input type="text" id="s2-nationalite" class="form-control text-uppercase" placeholder="EX: COMORIENNE">
           </div>
           <div class="col-md-3">
             <label class="form-label small">Téléphone</label>
             <input type="tel" id="s2-tel" class="form-control" placeholder="Ex: 3321234">
           </div>
-          <div class="col-md-3">
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-8">
+            <label class="form-label small">Adresse</label>
+            <input type="text" id="s2-adresse" class="form-control text-uppercase" placeholder="ADRESSE COMPLÈTE">
+          </div>
+          <div class="col-md-4">
             <label class="form-label small">Île</label>
             <select id="s2-country" class="form-select">
               <option value="">— Sélectionner —</option>
@@ -376,6 +462,12 @@
               <option value="Anjouan">Anjouan</option>
               <option value="Moheli">Mohéli</option>
             </select>
+          </div>
+        </div>
+        <div class="row g-2 mb-4">
+          <div class="col-md-12">
+            <label class="form-label small">Notes</label>
+            <textarea id="s2-notes" class="form-control" rows="2" placeholder="Notes additionnelles sur le candidat"></textarea>
           </div>
         </div>
 
@@ -707,6 +799,12 @@ document.addEventListener('DOMContentLoaded', function() {
   loadDossiers();
   loadLicenseSettings();
   startRealtime();
+
+  /* ── Auto-majuscule — Informations personnelles (Étape 3) ── */
+  ['s2-prenom', 's2-nom', 's2-lieu-naissance', 's2-nationalite', 's2-adresse'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+  });
 });
 
 function loadLicenseSettings() {
@@ -875,7 +973,11 @@ function renderDossiersTable(data) {
 
     var statusBadge = d.status === 'complet'
       ? '<span class="badge bg-success">Complété</span>'
-      : `<span class="badge bg-primary">Étape ${step}/5</span>`;
+      : d.awaiting_payment
+        ? '<span class="badge bg-warning text-dark"><i class="fas fa-money-bill-wave me-1"></i>En attente de paiement</span>'
+        : d.awaiting_receipt_confirmation
+          ? '<span class="badge bg-info text-dark"><i class="fas fa-receipt me-1"></i>Reçu à confirmer</span>'
+          : `<span class="badge bg-primary">Étape ${step}/5</span>`;
 
     return `<tr style="cursor:pointer;" onclick="openDetail(${d.id})">
       <td class="fw-bold font-monospace text-primary" style="white-space:nowrap;">${d.dossier_number || '<span class="text-muted fst-italic small">—</span>'}</td>
@@ -914,6 +1016,8 @@ function stepProgress(d) {
 function statusBadge(d) {
   if (d.status === 'complet') return '<span class="badge bg-success">Complété</span>';
   if (d.status === 'rejete')  return '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejeté</span>';
+  if (d.awaiting_payment)     return '<span class="badge bg-warning text-dark"><i class="fas fa-money-bill-wave me-1"></i>En attente de paiement</span>';
+  if (d.awaiting_receipt_confirmation) return '<span class="badge bg-info text-dark"><i class="fas fa-receipt me-1"></i>Reçu à confirmer</span>';
   if (!d.dossier_number)      return '<span class="badge bg-secondary">Étape 1 en cours</span>';
   var step = d.current_step;
   return `<span class="badge bg-primary">Étape ${step}/6</span>`;
@@ -935,6 +1039,7 @@ function renderDossiers(data) {
                 ? `<div class="fw-bold text-primary" style="font-size:17px;letter-spacing:.04em;font-family:monospace;">${d.dossier_number}</div>`
                 : `<div class="text-muted small fst-italic">N° dossier en attente</div>`
               }
+              ${d.dossier_type === 'renouvellement' ? '<span class="badge bg-info-subtle text-info border border-info-subtle" style="font-size:10px;"><i class="fas fa-sync-alt me-1"></i>Renouvellement</span>' : ''}
               ${(d.nom || d.prenom)
                 ? `<div class="fw-semibold mt-1">${((d.prenom || '') + ' ' + (d.nom || '')).trim()}</div>`
                 : `<div class="text-muted small mt-1">Candidat non renseigné</div>`
@@ -955,6 +1060,8 @@ function renderDossiers(data) {
 }
 
 // ── New dossier modal ──────────────────
+var renewalSelectedLicense = null;
+
 function openNewDossier() {
   currentDossierId = null;
   document.querySelectorAll('.doc-cb').forEach(cb => cb.checked = false);
@@ -965,19 +1072,93 @@ function openNewDossier() {
   document.getElementById('doc-progress-bar').style.width = '0%';
   document.getElementById('btn-validate-step1').disabled = true;
   document.getElementById('dossier-number-preview').classList.add('d-none');
+  document.getElementById('dossier-type-nouveau').checked = true;
+  document.getElementById('dossier-type-nouveau').disabled = false;
+  document.getElementById('dossier-type-renouvellement').disabled = false;
+  clearRenewalSelection();
+  onDossierTypeChange();
   bootstrap.Modal.getOrCreateInstance(document.getElementById('newDossierModal')).show();
 }
 
+function currentDossierType() {
+  var checked = document.querySelector('input[name="dossier-type"]:checked');
+  return checked ? checked.value : 'nouveau';
+}
+
+function onDossierTypeChange() {
+  var isRenewal = currentDossierType() === 'renouvellement';
+  document.getElementById('renewal-search-wrap').classList.toggle('d-none', !isRenewal);
+  document.getElementById('doc-autoecole-wrap').classList.toggle('d-none', isRenewal);
+  document.getElementById('doc-permis-wrap').classList.toggle('d-none', !isRenewal);
+  // Un seul des deux (autoecole / permis) compte dans les 5 documents requis
+  document.getElementById('doc-autoecole').checked = false;
+  document.getElementById('doc-permis').checked = false;
+  checkDocProgress();
+}
+
+function searchRenewalLicense() {
+  var q = document.getElementById('renewal-search-input').value.trim();
+  var results = document.getElementById('renewal-search-results');
+  if (!q) { results.innerHTML = '<div class="text-danger small">Veuillez saisir un numéro de permis.</div>'; return; }
+  results.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-2"></i>Recherche…</div>';
+  fetch('/api/dossiers-permis/search-license?number=' + encodeURIComponent(q), { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(items) {
+      if (!items.length) {
+        results.innerHTML = '<div class="text-danger small"><i class="fas fa-times-circle me-1"></i>Aucun permis trouvé pour ce numéro.</div>';
+        return;
+      }
+      results.innerHTML = items.map(function(l) {
+        return `<div class="lp-result-card d-flex align-items-center justify-content-between" style="cursor:pointer;" onclick='selectRenewalLicense(${JSON.stringify(l).replace(/'/g, "&apos;")})'>
+            <div>
+                <div class="fw-semibold">${l.holder_firstname || ''} ${l.holder_name || ''}</div>
+                <div class="text-muted small font-monospace">${l.license_number}</div>
+            </div>
+            <i class="fas fa-chevron-right text-muted"></i>
+        </div>`;
+      }).join('');
+    });
+}
+
+function selectRenewalLicense(lic) {
+  renewalSelectedLicense = lic;
+  document.getElementById('renewal-license-id').value = lic.id;
+  document.getElementById('renewal-search-results').innerHTML = '';
+  document.getElementById('renewal-search-input').value = '';
+  document.getElementById('renewal-selected-preview').classList.remove('d-none');
+  document.getElementById('renewal-selected-photo').src = lic.photo_url || '';
+  document.getElementById('renewal-selected-name').textContent = ((lic.holder_firstname || '') + ' ' + (lic.holder_name || '')).trim();
+  document.getElementById('renewal-selected-number').textContent = lic.license_number;
+  // Pré-remplir ce qu'on connaît déjà (reste modifiable)
+  if (lic.holder_island) document.getElementById('s1-country').value = lic.holder_island;
+  if (lic.holder_phone) document.getElementById('s1-telephone').value = lic.holder_phone;
+  if (lic.nin) document.getElementById('s1-nin').value = lic.nin;
+  checkDocProgress();
+}
+
+function clearRenewalSelection() {
+  renewalSelectedLicense = null;
+  document.getElementById('renewal-license-id').value = '';
+  document.getElementById('renewal-selected-preview').classList.add('d-none');
+  document.getElementById('renewal-search-results').innerHTML = '';
+  document.getElementById('renewal-search-input').value = '';
+}
+
 function checkDocProgress() {
-  var checked = document.querySelectorAll('.doc-cb:checked').length;
+  var isRenewal = currentDossierType() === 'renouvellement';
+  var relevantCbs = isRenewal
+    ? ['doc-permis', 'doc-medical', 'doc-residence', 'doc-fiche', 'doc-cni']
+    : ['doc-autoecole', 'doc-medical', 'doc-residence', 'doc-fiche', 'doc-cni'];
+  var checked = relevantCbs.filter(function(id) { return document.getElementById(id).checked; }).length;
   document.getElementById('doc-checked-count').textContent = checked;
-  document.getElementById('doc-progress-bar').style.width = (checked / 6 * 100) + '%';
+  document.getElementById('doc-progress-bar').style.width = (checked / 5 * 100) + '%';
   var country    = document.getElementById('s1-country').value;
   var telephone  = (document.getElementById('s1-telephone').value || '').trim();
   var nin        = (document.getElementById('s1-nin').value || '').trim();
-  var allDone = checked >= 6 && !!country && !!telephone && !!nin;
+  var hasLicense = !isRenewal || !!document.getElementById('renewal-license-id').value;
+  var allDone = checked >= 5 && !!country && !!telephone && !!nin && hasLicense;
   document.getElementById('btn-validate-step1').disabled = !allDone;
-  document.getElementById('dossier-number-preview').classList.toggle('d-none', checked < 6);
+  document.getElementById('dossier-number-preview').classList.toggle('d-none', checked < 5);
 }
 
 function submitStep1() {
@@ -985,17 +1166,22 @@ function submitStep1() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Validation…';
 
+  var isRenewal = currentDossierType() === 'renouvellement';
   var payload = {
+    dossier_type:           isRenewal ? 'renouvellement' : 'nouveau',
     doc_autoecole:          document.getElementById('doc-autoecole').checked,
+    doc_permis:             document.getElementById('doc-permis').checked,
     doc_medical:            document.getElementById('doc-medical').checked,
     doc_residence:          document.getElementById('doc-residence').checked,
     doc_fiche_individuelle: document.getElementById('doc-fiche').checked,
     doc_carte_nationale:    document.getElementById('doc-cni').checked,
-    doc_recu_paiement:      document.getElementById('doc-recu').checked,
     country:                document.getElementById('s1-country').value,
     telephone:              (document.getElementById('s1-telephone').value || '').trim(),
     nin:                    (document.getElementById('s1-nin').value || '').trim(),
   };
+  if (isRenewal) {
+    payload.renewal_license_id = document.getElementById('renewal-license-id').value;
+  }
 
   var isEdit  = !!currentDossierId;
   var url     = isEdit ? '/api/dossiers-permis/' + currentDossierId : '/api/dossiers-permis';
@@ -1006,17 +1192,21 @@ function submitStep1() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  .then(r => r.json())
-  .then(function(data) {
+  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+  .then(function(res) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
+    if (!res.ok) { alert(res.data.error || 'Erreur lors de l\'enregistrement.'); return; }
+    var data = res.data;
     bootstrap.Modal.getOrCreateInstance(document.getElementById('newDossierModal')).hide();
     loadDossiers();
     if (!isEdit && data.dossier_number) {
       showDossierNumberAlert(data.dossier_number, payload.telephone);
+    } else if (!isEdit && data.awaiting_payment) {
+      showAwaitingPaymentAlert(data.nin, data.amount);
     } else if (isEdit) {
       showToast('Étape 1 mise à jour', 'success');
     }
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-save me-2"></i>Enregistrer';
   })
   .catch(function() {
     btn.disabled = false;
@@ -1032,6 +1222,11 @@ function openDetail(id) {
   var d = allDossiers.find(function(x) { return x.id === id; });
   if (!d) return;
   currentDossierId = d.id;
+
+  // Dossier pas encore payé : informer et proposer de modifier les documents
+  if (d.awaiting_payment) { openAwaitingPaymentInfo(id); return; }
+  // Payé, reçu pas encore confirmé par le secrétariat
+  if (d.awaiting_receipt_confirmation) { openReceiptConfirm(id); return; }
 
   // Navigation directe selon l'étape en cours
   if (d.step5_validated_at && !d.step6_validated_at && d.status === 'en_cours') {
@@ -1072,7 +1267,7 @@ function openDetail(id) {
       label: stepLabels[0],
       done: !!d.step1_validated_at, by: d.step1_validated_by, at: d.step1_validated_at,
       content: `<div class="row g-1 mt-1">
-        ${docRow('Certificat Auto-école agréée', d.doc_autoecole)}
+        ${d.dossier_type === 'renouvellement' ? docRow('Permis', d.doc_permis) : docRow('Certificat Auto-école agréée', d.doc_autoecole)}
         ${docRow('Certificat médical', d.doc_medical)}
         ${docRow('Certificat de résidence', d.doc_residence)}
         ${docRow('Fiche individuelle', d.doc_fiche_individuelle)}
@@ -1215,16 +1410,82 @@ function editStep(stepNum) {
   if (fns[stepNum - 1]) fns[stepNum - 1](currentDossierId);
 }
 
+function openAwaitingPaymentInfo(dossierId) {
+  var d = allDossiers.find(function(x){ return x.id === dossierId; });
+  if (!d) return;
+  if (!confirm('Documents validés. Ce dossier est en attente de paiement (NIN : ' + (d.nin || '—') + ', ' +
+      (d.amount ? Number(d.amount).toLocaleString() + ' KMF' : '') +
+      ').\n\nDirigez le candidat vers un agent Mobile Money.\n\nCliquez sur OK pour modifier les documents de ce dossier, ou Annuler pour fermer.')) {
+    return;
+  }
+  openStep1Edit(dossierId);
+}
+
+function openReceiptConfirm(dossierId) {
+  var d = allDossiers.find(function(x){ return x.id === dossierId; });
+  if (!d) return;
+  currentDossierId = dossierId;
+  document.getElementById('rc-receipt-number').textContent = d.receipt_number || '—';
+  document.getElementById('rc-nin').textContent = d.nin || '—';
+  document.getElementById('rc-amount').textContent = d.amount ? Number(d.amount).toLocaleString() + ' KMF' : '—';
+  document.getElementById('rc-paid-at').textContent = d.paid_at || '—';
+  document.getElementById('rc-paid-by').textContent = d.paid_by || '—';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('receiptConfirmModal')).show();
+}
+
+function submitReceiptConfirm() {
+  var btn = document.getElementById('btn-confirm-receipt');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Validation…';
+  fetch('/api/dossiers-permis/' + currentDossierId, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_recu_paiement: true }),
+  })
+  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+  .then(function(res) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check-double me-2"></i>Confirmer réception du reçu';
+    if (!res.ok) { alert(res.data.error || 'Erreur'); return; }
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('receiptConfirmModal')).hide();
+    loadDossiers();
+    if (res.data.dossier_number) {
+      showDossierNumberAlert(res.data.dossier_number, res.data.telephone);
+    } else {
+      showToast('Reçu confirmé', 'success');
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check-double me-2"></i>Confirmer réception du reçu';
+    alert('Erreur lors de la confirmation.');
+  });
+}
+
 function openStep1Edit(dossierId) {
   currentDossierId = dossierId;
   var d = allDossiers.find(function(x){ return x.id === dossierId; });
   if (!d) return;
+  var isRenewal = d.dossier_type === 'renouvellement';
+  document.getElementById('dossier-type-nouveau').checked        = !isRenewal;
+  document.getElementById('dossier-type-renouvellement').checked = isRenewal;
+  // Le type ne change plus une fois le dossier créé
+  document.getElementById('dossier-type-nouveau').disabled        = true;
+  document.getElementById('dossier-type-renouvellement').disabled = true;
+  onDossierTypeChange();
+  if (isRenewal && d.renewal_license_id) {
+    selectRenewalLicense({
+      id: d.renewal_license_id,
+      license_number: d.renewal_license_number,
+      holder_name: d.nom, holder_firstname: d.prenom, photo_url: d.photo_url || '',
+    });
+  }
   document.getElementById('doc-autoecole').checked = !!d.doc_autoecole;
+  document.getElementById('doc-permis').checked    = !!d.doc_permis;
   document.getElementById('doc-medical').checked   = !!d.doc_medical;
   document.getElementById('doc-residence').checked = !!d.doc_residence;
   document.getElementById('doc-fiche').checked     = !!d.doc_fiche_individuelle;
   document.getElementById('doc-cni').checked       = !!d.doc_carte_nationale;
-  document.getElementById('doc-recu').checked      = !!d.doc_recu_paiement;
   document.getElementById('s1-country').value      = d.country || '';
   document.getElementById('s1-telephone').value    = d.telephone || '';
   document.getElementById('s1-nin').value          = d.nin || '';
@@ -1243,8 +1504,10 @@ function openStep2(dossierId) {
   document.getElementById('s2-dob').value             = d ? (d.date_naissance || '') : '';
   document.getElementById('s2-lieu-naissance').value  = d ? (d.lieu_naissance || '') : '';
   document.getElementById('s2-sexe').value            = d ? (d.sexe || '') : '';
+  document.getElementById('s2-blood-group').value     = d ? (d.blood_group || '') : '';
   document.getElementById('s2-nationalite').value     = d ? (d.nationalite || '') : '';
   document.getElementById('s2-adresse').value         = d ? (d.holder_address || '') : '';
+  document.getElementById('s2-notes').value           = d ? (d.notes || '') : '';
   document.getElementById('s2-tel').value             = d ? (d.telephone || '') : '';
   document.getElementById('s2-country').value         = d ? (d.country || '') : '';
   document.getElementById('s2-type-permis').value     = d ? (d.type_permis || '') : '';
@@ -1338,13 +1601,14 @@ function submitStep2() {
   });
 
   var payload = {
-    nom:                    document.getElementById('s2-nom').value.trim(),
-    prenom:                 document.getElementById('s2-prenom').value.trim(),
+    nom:                    document.getElementById('s2-nom').value.trim().toUpperCase(),
+    prenom:                 document.getElementById('s2-prenom').value.trim().toUpperCase(),
     date_naissance:         document.getElementById('s2-dob').value || null,
-    lieu_naissance:         document.getElementById('s2-lieu-naissance').value.trim(),
+    lieu_naissance:         document.getElementById('s2-lieu-naissance').value.trim().toUpperCase(),
     sexe:                   document.getElementById('s2-sexe').value,
-    nationalite:            document.getElementById('s2-nationalite').value.trim(),
-    holder_address:         document.getElementById('s2-adresse').value.trim(),
+    blood_group:            document.getElementById('s2-blood-group').value,
+    nationalite:            document.getElementById('s2-nationalite').value.trim().toUpperCase(),
+    holder_address:         document.getElementById('s2-adresse').value.trim().toUpperCase(),
     telephone:              document.getElementById('s2-tel').value.trim(),
     country:                document.getElementById('s2-country').value,
     type_permis:            document.getElementById('s2-type-permis').value,
@@ -1353,6 +1617,7 @@ function submitStep2() {
     centre_immatriculation: document.getElementById('s2-centre').value.trim(),
     categories:             s2cats.join(','),
     category_details:       s2catDetails,
+    notes:                  document.getElementById('s2-notes').value.trim(),
   };
 
   fetch('/api/dossiers-permis/' + currentDossierId + '/step2', {
@@ -1475,6 +1740,7 @@ function openStep4(dossierId) {
   document.getElementById('s4-expiry-date').value    = d ? (d.expiry_date || '') : '';
   document.getElementById('s4-centre').value         = d ? (d.centre_immatriculation || '') : '';
   document.getElementById('s4-license-num').value    = d ? (d.license_number_proposed || '') : '';
+  document.getElementById('s4-license-num').readOnly = !!(d && d.dossier_type === 'renouvellement');
   document.getElementById('s4-status').value         = d ? (d.final_status || 'actif') : 'actif';
 
   // Catégories
@@ -1802,6 +2068,27 @@ function showDossierNumberAlert(num, telephone) {
       ${telHtml}
       <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:13px;color:#92400e;">
         <i class="fas fa-exclamation-triangle me-1"></i>N'oubliez pas d'inscrire le numéro de téléphone du candidat dans son dossier physique.
+      </div>
+      <button onclick="this.closest('div[style*=fixed]').remove()" style="background:#1d4ed8;color:#fff;border:none;border-radius:8px;padding:10px 32px;font-size:15px;font-weight:600;cursor:pointer;">
+        <i class="fas fa-check me-2"></i>Compris
+      </button>
+    </div>`;
+  document.body.appendChild(el);
+}
+
+// ── Avertissement "en attente de paiement" affiché après enregistrement ──
+function showAwaitingPaymentAlert(nin, amount) {
+  var el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+  el.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:40px 48px;text-align:center;max-width:460px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,.3);">
+      <div style="color:#d97706;font-size:3rem;margin-bottom:12px;"><i class="fas fa-money-bill-wave"></i></div>
+      <div style="font-size:15px;color:#374151;margin-bottom:8px;">Documents validés — Dossier en attente de paiement</div>
+      <div style="font-size:15px;color:#374151;font-weight:600;margin:16px 0 6px;">Dirigez le candidat vers un agent Mobile Money. Recherche par NIN :</div>
+      <div style="font-size:2rem;font-weight:900;color:#1d4ed8;letter-spacing:.06em;font-family:monospace;background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:10px 24px;margin-bottom:12px;">${nin || '—'}</div>
+      ${amount ? `<div style="font-size:1.1rem;font-weight:700;color:#92400e;margin-bottom:20px;">Montant à régler : ${Number(amount).toLocaleString()} KMF</div>` : ''}
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:13px;color:#92400e;">
+        <i class="fas fa-exclamation-triangle me-1"></i>Le numéro de dossier officiel sera généré ici une fois le reçu de paiement confirmé.
       </div>
       <button onclick="this.closest('div[style*=fixed]').remove()" style="background:#1d4ed8;color:#fff;border:none;border-radius:8px;padding:10px 32px;font-size:15px;font-weight:600;cursor:pointer;">
         <i class="fas fa-check me-2"></i>Compris

@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Dossiers Permis - Mobile Money{% endblock %}
+
+{% block extra_css %}
+<style>
+.receipt-official { font-family: Georgia, 'Times New Roman', serif; border: 1px solid #334155; border-radius: 4px; padding: 24px; background: #fff; }
+.receipt-header { text-align: center; border-bottom: 3px double #334155; padding-bottom: 12px; margin-bottom: 14px; }
+.receipt-country { font-size: 11px; letter-spacing: 2px; color: #64748b; text-transform: uppercase; }
+.receipt-org { font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 4px; letter-spacing: 1px; }
+.receipt-org-sub { font-size: 10.5px; color: #64748b; margin-top: 2px; font-style: italic; }
+.receipt-title-bar { text-align: center; font-weight: 700; letter-spacing: 2px; background: #0f172a; color: #fff; padding: 7px; margin-bottom: 14px; font-size: 13px; border-radius: 2px; }
+.receipt-number-box { text-align: center; font-weight: 700; font-size: 15px; margin-bottom: 16px; font-family: 'Courier New', monospace; color: #0f172a; }
+.receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-family: Georgia, serif; }
+.receipt-table td { border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; }
+.receipt-table td:first-child { width: 45%; color: #334155; background: #f8fafc; font-weight: 600; }
+.receipt-table td:last-child { text-align: right; font-weight: 600; color: #0f172a; }
+.receipt-table tr.receipt-total-row td { font-size: 15px; font-weight: 800; border-top: 2px solid #334155; }
+.receipt-footer { display: flex; justify-content: space-between; margin-top: 36px; gap: 24px; }
+.receipt-footer-col { flex: 1; text-align: center; }
+.receipt-footer-label { font-size: 11px; color: #64748b; margin-bottom: 36px; }
+.receipt-footer-line { border-top: 1px solid #334155; padding-top: 4px; font-size: 11px; color: #64748b; }
+@media print {
+  @page { size: A5 landscape; margin: 10mm; }
+  nav.navbar, .sidebar-backdrop, aside.sidebar, main > .container { display: none !important; }
+  .modal-header, .modal-footer { display: none !important; }
+  body * { visibility: hidden; }
+  #dos-receipt-print, #dos-receipt-print * { visibility: visible; }
+  #dos-receipt-print { position: fixed; top: 0; left: 0; width: 100%; border: none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-8">
+      <h2><i class="fas fa-folder-open me-2"></i>Dossiers Permis — Paiement des frais de dossier</h2>
+      <p class="text-muted mb-0">Dossiers de nouveau permis de conduire en attente de paiement des frais de dossier.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+        <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
+          <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+        </a>
+        <span class="badge bg-warning text-dark align-self-center" id="dos-count">0 dossier(s)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" id="dos-search-nin" class="form-control" placeholder="Rechercher par NIN...">
+        <button class="btn btn-outline-secondary" type="button" onclick="loadDossiers()"><i class="fas fa-rotate me-1"></i>Actualiser</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dos-results"></div>
+</div>
+
+<!-- Confirmation modal -->
+<div class="modal fade" id="dosConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-check-circle me-2 text-success"></i>Confirmer le paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Confirmer la réception du paiement des frais de dossier :</p>
+        <div class="alert alert-light border fw-semibold" id="dos-confirm-details">—</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="dos-confirm-btn">
+          <i class="fas fa-check me-1"></i>Confirmer le paiement
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt modal -->
+<div class="modal fade" id="dosReceiptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-receipt me-2 text-success"></i>Reçu de paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="dos-receipt-print" class="receipt-official">
+          <div class="receipt-header">
+            <div class="receipt-org">S.I.G.V.A</div>
+            <div class="receipt-org-sub">Système Intégré de Gestion des Véhicules Automobiles</div>
+          </div>
+          <div class="receipt-title-bar">REÇU DE PAIEMENT — FRAIS DE DOSSIER</div>
+          <div class="receipt-number-box">N° <span id="dos-receipt-number">—</span></div>
+          <table class="receipt-table">
+            <tbody>
+              <tr><td>NIN</td><td id="dos-receipt-nin">—</td></tr>
+              <tr><td>Téléphone</td><td id="dos-receipt-tel">—</td></tr>
+              <tr><td>Île</td><td id="dos-receipt-island">—</td></tr>
+              <tr><td>Payé le</td><td id="dos-receipt-date">—</td></tr>
+              <tr class="receipt-total-row"><td>Montant payé</td><td id="dos-receipt-amount">—</td></tr>
+            </tbody>
+          </table>
+          <div class="receipt-footer">
+            <div class="receipt-footer-col">
+              <div class="receipt-footer-label">Agent Mobile Money</div>
+              <div class="receipt-footer-line" id="dos-receipt-agent">—</div>
+            </div>
+            <div class="receipt-footer-col">
+              <div class="receipt-footer-label">Signature / Cachet</div>
+              <div class="receipt-footer-line">&nbsp;</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _dosAll = [];
+let _dosResults = [];
+let _pendingDosId = null;
+
+function loadDossiers() {
+  const results = document.getElementById('dos-results');
+  results.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</div>';
+
+  fetch('/api/mobile-money/license-dossiers', { credentials: 'include' })
+    .then(r => r.json())
+    .then(function (items) {
+      _dosAll = items;
+      document.getElementById('dos-count').textContent = items.length + ' dossier(s)';
+      filterDossiers();
+    })
+    .catch(function () {
+      results.innerHTML = '<div class="text-danger">Erreur de chargement.</div>';
+    });
+}
+
+function filterDossiers() {
+  const q = (document.getElementById('dos-search-nin').value || '').trim().toLowerCase();
+  const items = q ? _dosAll.filter(d => (d.nin || '').toLowerCase().includes(q)) : _dosAll;
+  renderResults(items);
+}
+
+function renderResults(items) {
+  _dosResults = items;
+  const results = document.getElementById('dos-results');
+  if (!items.length) {
+    results.innerHTML = '<div class="card border-0 shadow-sm"><div class="card-body text-center text-muted py-5"><i class="fas fa-folder-open me-2"></i>Aucun dossier en attente de paiement.</div></div>';
+    return;
+  }
+  results.innerHTML = items.map(function (d) {
+    let statusBadge, actionHtml;
+    if (!d.docs_checked_before_payment) {
+      statusBadge = '<span class="badge bg-secondary">Documents non vérifiés</span>';
+      actionHtml = '<span class="text-muted small">Le secrétariat doit d\'abord valider les 5 documents.</span>';
+    } else if (!d.paid) {
+      statusBadge = '<span class="badge bg-warning text-dark">En attente de paiement</span>';
+      actionHtml = `<button class="btn btn-sm btn-success" onclick='openConfirmModal(${d.id})'><i class="fas fa-check me-1"></i>Confirmer paiement</button>`;
+    } else {
+      statusBadge = '<span class="badge bg-success">Payé</span>';
+      actionHtml = `<button class="btn btn-sm btn-outline-secondary" onclick='openReceipt(${JSON.stringify(d).replace(/'/g, "&apos;")})'><i class="fas fa-receipt me-1"></i>Voir le reçu</button>`;
+    }
+    return `
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+              <div class="fw-bold font-monospace">NIN : ${d.nin || '—'}</div>
+              <div class="text-muted small">Téléphone : ${d.telephone || '—'} · Île : ${d.country || '—'}</div>
+              <div class="mt-1">${statusBadge}</div>
+            </div>
+            <div class="text-end">
+              <div class="fw-bold mb-2">${d.amount ? Number(d.amount).toLocaleString() + ' KMF' : '—'}</div>
+              ${actionHtml}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openConfirmModal(id) {
+  _pendingDosId = id;
+  const d = _dosResults.find(x => x.id === id);
+  document.getElementById('dos-confirm-details').textContent =
+    'NIN ' + (d ? d.nin : '') + ' — ' + (d ? Number(d.amount).toLocaleString() : 0) + ' KMF';
+  new bootstrap.Modal(document.getElementById('dosConfirmModal')).show();
+}
+
+document.getElementById('dos-confirm-btn').addEventListener('click', async function () {
+  if (!_pendingDosId) return;
+  this.disabled = true;
+  this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Traitement...';
+  try {
+    const res = await fetch(`/api/mobile-money/license-dossiers/${_pendingDosId}/confirm-payment`, {
+      method: 'POST', credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    bootstrap.Modal.getInstance(document.getElementById('dosConfirmModal')).hide();
+    openReceipt(data);
+    loadDossiers();
+  } catch (e) {
+    alert(e.message || 'Erreur lors de la confirmation.');
+  } finally {
+    this.disabled = false;
+    this.innerHTML = '<i class="fas fa-check me-1"></i>Confirmer le paiement';
+    _pendingDosId = null;
+  }
+});
+
+function openReceipt(d) {
+  document.getElementById('dos-receipt-number').textContent = d.receipt_number || '—';
+  document.getElementById('dos-receipt-nin').textContent = d.nin || '—';
+  document.getElementById('dos-receipt-tel').textContent = d.telephone || '—';
+  document.getElementById('dos-receipt-island').textContent = d.country || '—';
+  document.getElementById('dos-receipt-amount').textContent = d.amount ? Number(d.amount).toLocaleString() + ' KMF' : '—';
+  document.getElementById('dos-receipt-date').textContent = d.paid_at || '—';
+  document.getElementById('dos-receipt-agent').textContent = d.paid_by || '—';
+  new bootstrap.Modal(document.getElementById('dosReceiptModal')).show();
+}
+
+document.getElementById('dos-search-nin').addEventListener('input', filterDossiers);
+document.addEventListener('DOMContentLoaded', loadDossiers);
+document.addEventListener('visibilitychange', function () { if (!document.hidden) loadDossiers(); });
+</script>
+{% endblock %}

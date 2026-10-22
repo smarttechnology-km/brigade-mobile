@@ -13,6 +13,23 @@
     </div>
   </div>
 
+  <!-- Véhicule / Permis de conduire tabs -->
+  <ul class="nav nav-tabs mb-3" id="fines-top-tabs">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-fines-vehicule" type="button">
+        <i class="fas fa-car me-1"></i>Véhicule
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-fines-permis" type="button" id="tab-fines-permis-btn">
+        <i class="fas fa-id-card me-1"></i>Permis de conduire
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+  <!-- ═══════════════ Véhicule ═══════════════ -->
+  <div class="tab-pane show active" id="tab-fines-vehicule">
   <div class="row mb-3 align-items-center">
     <div class="col-12 col-md-6">
       <div class="input-group">
@@ -72,6 +89,72 @@
         </nav>
       </div>
     </div>
+  </div>
+  </div>
+
+  <!-- ═══════════════ Permis de conduire ═══════════════ -->
+  <div class="tab-pane" id="tab-fines-permis">
+  <div class="row mb-3 align-items-center">
+    <div class="col-12 col-md-6">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input id="license-fines-search" type="text" class="form-control" placeholder="Rechercher par N° permis ou titulaire..." />
+        <button class="btn btn-outline-secondary" type="button" id="clear-license-fines-search" title="Effacer la recherche" style="display:none;"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+    <div class="col-12 col-md-6 text-end">
+      {% if current_user.is_authenticated and (current_user.is_admin or current_user.role in ('judiciaire', 'policier', 'dgrtr')) %}
+      <button class="btn btn-outline-primary me-3" type="button" data-bs-toggle="modal" data-bs-target="#license-fine-settings-modal">
+        <i class="fas fa-cog me-1"></i> Paramètres Amendes Permis
+      </button>
+      {% endif %}
+      <div class="d-inline-block me-3" id="license-fines-filter-container">
+        <div class="btn-group btn-group-sm" role="group" id="license-fines-filter-group" aria-label="Filtres amendes permis">
+          <button type="button" class="btn btn-outline-secondary active" data-filter="all">Tous</button>
+          <button type="button" class="btn btn-outline-secondary" data-filter="paid">Payées</button>
+          <button type="button" class="btn btn-outline-secondary" data-filter="unpaid">Impayées</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover" id="license-fines-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>N° Permis</th>
+              <th>Titulaire</th>
+              <th>Montant</th>
+              <th>Motif</th>
+              <th>Agent</th>
+              <th>Émis le</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="license-fines-tbody">
+            <tr><td colspan="9" class="text-center text-muted">Chargement des données...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="text-muted small">
+          Affichage <span id="license-fines-pagination-start">0</span>-<span id="license-fines-pagination-end">0</span> sur <span id="license-fines-pagination-total">0</span> amende(s)
+        </div>
+        <nav aria-label="Pagination des amendes permis">
+          <ul class="pagination mb-0" id="license-fines-pagination-controls">
+            <li class="page-item"><a class="page-link" href="#" onclick="licenseFinesGoToPreviousPage(); return false;"><i class="fas fa-chevron-left"></i></a></li>
+            <li class="page-item"><span class="page-link" id="license-fines-page-info">Page 1</span></li>
+            <li class="page-item"><a class="page-link" href="#" onclick="licenseFinesGoToNextPage(); return false;"><i class="fas fa-chevron-right"></i></a></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </div>
+  </div>
   </div>
 </div>
 <!-- Photo de l'amende - modal centered -->
@@ -279,10 +362,239 @@
     </div>
   </div>
 </div>
+
+<!-- Paramètres des amendes (permis de conduire) - modal centered -->
+<div class="modal fade" id="license-fine-settings-modal" tabindex="-1" aria-labelledby="licenseFineSettingsLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="licenseFineSettingsLabel">Paramètres des amendes (permis de conduire)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-tabs mb-3" id="licenseFineSettingsTabs">
+          <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-lf-articles" type="button">
+              <i class="fas fa-book me-1"></i>Articles
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-lf-reasons" type="button">
+              <i class="fas fa-list me-1"></i>Motifs de réduction
+            </button>
+          </li>
+          {% if current_user.is_admin %}
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-lf-categories" type="button" id="tab-lf-categories-btn">
+              <i class="fas fa-layer-group me-1"></i>Classe de contravention
+            </button>
+          </li>
+          {% endif %}
+        </ul>
+
+        <div class="tab-content">
+          <!-- Tab 1 : Articles -->
+          <div class="tab-pane show active" id="tab-lf-articles">
+            <form id="lf-article-form" class="row g-2 align-items-end mb-3">
+              <input type="hidden" id="lf-article-id" />
+              <div class="col-md-3">
+                <label class="form-label small">N° Article</label>
+                <input type="text" id="lf-article-code" class="form-control" placeholder="Ex: Art. R234-2" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small">Description</label>
+                <input type="text" id="lf-article-description" class="form-control" placeholder="Texte de l'article (optionnel)" />
+              </div>
+              <div class="col-md-3 text-end">
+                <button type="button" id="lf-article-cancel" class="btn btn-outline-secondary me-2 d-none">Annuler</button>
+                <button type="submit" class="btn btn-outline-primary">Ajouter</button>
+              </div>
+            </form>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>N° Article</th>
+                    <th>Description</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="lf-articles-tbody">
+                  <tr><td colspan="3" class="text-center text-muted">Chargement...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab 2 : Motifs de réduction -->
+          <div class="tab-pane" id="tab-lf-reasons">
+            <form id="lf-reason-form" class="row g-2 align-items-end mb-3">
+              <input type="hidden" id="lf-reason-id" />
+              <input type="hidden" id="lf-reason-icon" />
+              <div class="col-md-1">
+                <label class="form-label small">Icône</label>
+                <div class="dropdown">
+                  <button type="button" id="lf-reason-icon-btn" class="btn btn-outline-secondary w-100" data-bs-toggle="dropdown" aria-expanded="false" title="Choisir une icône">
+                    <span id="lf-reason-icon-preview">🏷️</span>
+                  </button>
+                  <div class="dropdown-menu p-2" style="min-width:340px;max-width:380px;max-height:420px;overflow-y:auto;">
+                    <div class="d-flex flex-wrap gap-2" id="lf-reason-icon-grid"></div>
+                    <div class="dropdown-divider"></div>
+                    <button type="button" class="dropdown-item small text-muted" data-icon-choice="">Aucune icône</button>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small">Libellé du motif</label>
+                <input type="text" id="lf-reason-label" class="form-control" placeholder="Ex: Excès de vitesse" required />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">Points à déduire</label>
+                <div class="input-group">
+                  <input type="number" id="lf-reason-pts" class="form-control" min="1" max="20" value="1" />
+                  <span class="input-group-text">pts</span>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">Article</label>
+                <select id="lf-reason-article" class="form-select">
+                  <option value="">— aucun —</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">Classe contravention</label>
+                <select id="lf-reason-category" class="form-select">
+                  <option value="">— aucune —</option>
+                </select>
+              </div>
+              <div class="col-md-2 text-end">
+                <button type="button" id="lf-reason-cancel" class="btn btn-outline-secondary me-2 d-none">Annuler</button>
+                <button type="submit" class="btn btn-outline-primary">Ajouter</button>
+              </div>
+            </form>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>Icône</th>
+                    <th>Motif</th>
+                    <th>Points</th>
+                    <th>Article</th>
+                    <th>Classe</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="lf-reasons-tbody">
+                  <tr><td colspan="6" class="text-center text-muted">Chargement...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {% if current_user.is_admin %}
+          <!-- Tab 3 : Classe de contravention -->
+          <div class="tab-pane" id="tab-lf-categories">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <p class="text-muted small mb-0">
+                Chaque classe définit un prix min, un prix max et une augmentation par semaine, appliqués à l'amende créée automatiquement lors d'un retrait de points. Impayée, elle démarre au prix min et augmente chaque <strong>semaine</strong> jusqu'au prix max.
+              </p>
+              <button class="btn btn-sm btn-outline-secondary ms-3" id="btn-apply-lf-categories" title="Recalculer toutes les amendes impayées maintenant">
+                <i class="fas fa-sync-alt me-1"></i>Appliquer maintenant
+              </button>
+            </div>
+            <form id="lf-category-form" class="row g-2 align-items-end mb-3">
+              <div class="col-md-3">
+                <label class="form-label small">Nom de la classe</label>
+                <input type="text" id="lf-category-name" class="form-control" placeholder="Ex: Classe A" required />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">Prix min (KMF)</label>
+                <input type="number" min="1" step="0.01" id="lf-category-min" class="form-control" placeholder="Ex: 2000" required />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">Prix max (KMF)</label>
+                <input type="number" min="1" step="0.01" id="lf-category-max" class="form-control" placeholder="Ex: 10000" required />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">+ / semaine (KMF)</label>
+                <input type="number" min="1" step="0.01" id="lf-category-increment" class="form-control" placeholder="Ex: 1000" required />
+              </div>
+              <div class="col-md-3 text-end">
+                <button type="button" id="lf-category-cancel" class="btn btn-outline-secondary me-2 d-none">Annuler</button>
+                <button type="submit" id="lf-category-submit-btn" class="btn btn-outline-primary">
+                  <i class="fas fa-plus me-1"></i>Ajouter
+                </button>
+              </div>
+            </form>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead class="table-light">
+                  <tr>
+                    <th>Classe</th>
+                    <th>Prix min</th>
+                    <th>Prix max</th>
+                    <th>+ / semaine</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="lf-categories-tbody">
+                  <tr><td colspan="5" class="text-center text-muted">Chargement...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Réclamation (annuler/changer le motif d'un retrait de points) - modal centered -->
+<div class="modal fade" id="lf-reclamation-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-gavel text-warning me-2"></i>Réclamation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3" id="lf-reclamation-info"></p>
+        <div class="btn-group w-100 mb-3" role="group">
+          <input type="radio" class="btn-check" name="lf-reclamation-action" id="lf-reclamation-action-change" value="change_reason" checked>
+          <label class="btn btn-outline-primary btn-sm" for="lf-reclamation-action-change">Changer le motif</label>
+          <input type="radio" class="btn-check" name="lf-reclamation-action" id="lf-reclamation-action-cancel" value="cancel">
+          <label class="btn btn-outline-danger btn-sm" for="lf-reclamation-action-cancel">Annuler le retrait</label>
+        </div>
+        <div id="lf-reclamation-reason-wrap">
+          <label class="form-label fw-semibold">Nouveau motif</label>
+          <select id="lf-reclamation-reason-select" class="form-select"></select>
+        </div>
+        <div id="lf-reclamation-cancel-note" class="alert alert-warning small mb-0" style="display:none;">
+          Les points seront restitués, l'amende associée sera supprimée (si impayée), et cette infraction sera définitivement supprimée de l'historique.
+        </div>
+        <input type="hidden" id="lf-reclamation-history-id">
+        <input type="hidden" id="lf-reclamation-license-id">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-warning" id="lf-reclamation-confirm-btn">
+          <i class="fas fa-check me-1"></i>Confirmer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>window.IS_LICENSE_ADMIN = {{ 'true' if current_user.is_admin else 'false' }};</script>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/fines_list.js') }}"></script>
+<script src="{{ url_for('static', filename='js/license_fines.js') }}"></script>
 <script>
 // ── Catégorie des amendes ─────────────────────────────────────────────────────
 

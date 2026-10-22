@@ -2,6 +2,35 @@
 
 {% block title %}Dashboard Mobile Money{% endblock %}
 
+{% block extra_css %}
+<style>
+.receipt-official { font-family: Georgia, 'Times New Roman', serif; border: 1px solid #334155; border-radius: 4px; padding: 24px; background: #fff; }
+.receipt-header { text-align: center; border-bottom: 3px double #334155; padding-bottom: 12px; margin-bottom: 14px; }
+.receipt-country { font-size: 11px; letter-spacing: 2px; color: #64748b; text-transform: uppercase; }
+.receipt-org { font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 4px; letter-spacing: 1px; }
+.receipt-org-sub { font-size: 10.5px; color: #64748b; margin-top: 2px; font-style: italic; }
+.receipt-title-bar { text-align: center; font-weight: 700; letter-spacing: 2px; background: #0f172a; color: #fff; padding: 7px; margin-bottom: 14px; font-size: 13px; border-radius: 2px; }
+.receipt-number-box { text-align: center; font-weight: 700; font-size: 15px; margin-bottom: 16px; font-family: 'Courier New', monospace; color: #0f172a; }
+.receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-family: Georgia, serif; }
+.receipt-table td { border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; }
+.receipt-table td:first-child { width: 45%; color: #334155; background: #f8fafc; font-weight: 600; }
+.receipt-table td:last-child { text-align: right; font-weight: 600; color: #0f172a; }
+.receipt-table tr.receipt-total-row td { font-size: 15px; font-weight: 800; border-top: 2px solid #334155; }
+.receipt-footer { display: flex; justify-content: space-between; margin-top: 36px; gap: 24px; }
+.receipt-footer-col { flex: 1; text-align: center; }
+.receipt-footer-label { font-size: 11px; color: #64748b; margin-bottom: 36px; }
+.receipt-footer-line { border-top: 1px solid #334155; padding-top: 4px; font-size: 11px; color: #64748b; }
+@media print {
+  @page { size: A5 landscape; margin: 10mm; }
+  nav.navbar, .sidebar-backdrop, aside.sidebar, main > .container { display: none !important; }
+  .modal-header, .modal-footer { display: none !important; }
+  body * { visibility: hidden; }
+  #mm-receipt-print, #mm-receipt-print * { visibility: visible; }
+  #mm-receipt-print { position: fixed; top: 0; left: 0; width: 100%; border: none; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
   <div class="row mb-3 align-items-center">
@@ -20,6 +49,21 @@
     </div>
   </div>
 
+  <ul class="nav nav-tabs mb-3" id="mm-top-tabs">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#mm-tab-vehicule" type="button">
+        <i class="fas fa-car me-1"></i>Véhicule
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#mm-tab-permis" type="button" id="mm-tab-permis-btn">
+        <i class="fas fa-id-card me-1"></i>Permis de conduire
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+  <div class="tab-pane show active" id="mm-tab-vehicule">
   <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
       <div class="row g-2">
@@ -54,6 +98,46 @@
         </table>
       </div>
     </div>
+  </div>
+  </div>
+
+  <div class="tab-pane" id="mm-tab-permis">
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-2">
+        <div class="col-12">
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="mm-lf-search" class="form-control" placeholder="Rechercher par N° permis, titulaire ou date...">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="mm-lf-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>N° Permis</th>
+              <th>Titulaire</th>
+              <th>Infractions</th>
+              <th>Total</th>
+              <th>Dernière infraction</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="mm-lf-tbody">
+            <tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  </div>
   </div>
 </div>
 
@@ -118,8 +202,54 @@
     </div>
   </div>
 </div>
+
+<!-- Receipt modal -->
+<div class="modal fade" id="mmReceiptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-receipt me-2 text-success"></i>Reçu de paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="mm-receipt-print" class="receipt-official">
+          <div class="receipt-header">
+            <div class="receipt-org">S.I.G.V.A</div>
+            <div class="receipt-org-sub">Système Intégré de Gestion des Véhicules Automobiles</div>
+          </div>
+          <div class="receipt-title-bar" id="mm-receipt-title">REÇU DE PAIEMENT — AMENDE(S)</div>
+          <div class="receipt-number-box">N° <span id="mm-receipt-number">—</span></div>
+          <table class="receipt-table">
+            <tbody>
+              <tr><td id="mm-receipt-ref-label">Immatriculation</td><td id="mm-receipt-ref">—</td></tr>
+              <tr><td id="mm-receipt-name-label">Propriétaire</td><td id="mm-receipt-name">—</td></tr>
+              <tr><td>Nombre d'amendes</td><td id="mm-receipt-count">—</td></tr>
+              <tr><td>Payé le</td><td id="mm-receipt-date">—</td></tr>
+              <tr class="receipt-total-row"><td>Montant payé</td><td id="mm-receipt-amount">—</td></tr>
+            </tbody>
+          </table>
+          <div class="receipt-footer">
+            <div class="receipt-footer-col">
+              <div class="receipt-footer-label">Agent Mobile Money</div>
+              <div class="receipt-footer-line" id="mm-receipt-agent">—</div>
+            </div>
+            <div class="receipt-footer-col">
+              <div class="receipt-footer-label">Signature / Cachet</div>
+              <div class="receipt-footer-line">&nbsp;</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
+<script>const MM_CURRENT_USERNAME = {{ current_user.username | tojson }};</script>
 <script src="{{ url_for('static', filename='js/mobile_money_dashboard.js') }}"></script>
 {% endblock %}
