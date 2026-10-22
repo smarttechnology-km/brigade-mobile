@@ -2,6 +2,10 @@ let mmAllFines = [];
 let mmAllVehicles = [];
 let mmFilteredVehicles = [];
 let selectedVehicleId = null;
+let selectedKind = 'vehicle'; // 'vehicle' | 'license'
+let mmAllLicenseFines = [];
+let mmAllLicenses = [];
+let mmFilteredLicenses = [];
 let _mmdLastRefresh = Date.now();
 
 function _mmdUpdateLiveBadge() {
@@ -57,13 +61,26 @@ document.addEventListener('DOMContentLoaded', function () {
             const detailsModal = bootstrap.Modal.getInstance(detailsModalEl);
             if (detailsModal) detailsModal.hide();
             if (selectedVehicleId) {
-                openPayModal(selectedVehicleId);
+                if (selectedKind === 'license') mmOpenLicensePayModal(selectedVehicleId);
+                else openPayModal(selectedVehicleId);
             }
         });
     }
 
     loadUnpaidFines();
     setupDashboardAutoRefresh();
+
+    const lfSearchEl = document.getElementById('mm-lf-search');
+    if (lfSearchEl) {
+        lfSearchEl.addEventListener('input', function () { mmFilterLicenseRows(this.value || ''); });
+    }
+    const permisTabBtn = document.getElementById('mm-tab-permis-btn');
+    if (permisTabBtn) {
+        let loadedOnce = false;
+        permisTabBtn.addEventListener('shown.bs.tab', function () {
+            if (!loadedOnce) { loadedOnce = true; mmLoadUnpaidLicenseFines(); }
+        });
+    }
 });
 
 function loadUnpaidFines() {
@@ -257,6 +274,7 @@ function openDetailsModal(vehicleId) {
     const vehicle = mmAllVehicles.find(function (item) { return String(item.vehicle_id || item.license_plate) === String(vehicleId); });
     if (!vehicle) return;
 
+    selectedKind = 'vehicle';
     selectedVehicleId = vehicleId;
 
     const title = document.getElementById('mm-details-title');
@@ -304,6 +322,7 @@ function openDetailsModal(vehicleId) {
 }
 
 function openPayModal(vehicleId) {
+    selectedKind = 'vehicle';
     selectedVehicleId = vehicleId;
     const vehicle = mmAllVehicles.find(function (item) { return String(item.vehicle_id || item.license_plate) === String(vehicleId); });
     
@@ -323,6 +342,9 @@ function openPayModal(vehicleId) {
 }
 
 function submitManualPayment() {
+    if (selectedKind === 'license') {
+        return submitManualLicensePayment();
+    }
     if (!selectedVehicleId) return;
 
     // Check if vehicle has expired QR code
@@ -356,7 +378,212 @@ function submitManualPayment() {
                 alert(res.message || 'Paiement groupé confirmé');
             }
 
+            openMmReceipt({
+                title: 'REÇU DE PAIEMENT — AMENDE(S) VÉHICULE',
+                receiptNumber: (res.paid_items && res.paid_items[0] && res.paid_items[0].receipt_number) || ('FINE-' + res.vehicle_id + '-' + Math.floor(Date.now() / 1000)),
+                refLabel: 'Immatriculation',
+                ref: res.license_plate,
+                nameLabel: 'Propriétaire',
+                name: vehicle ? vehicle.owner_name : '',
+                count: res.paid_count,
+                amount: res.total_amount,
+            });
             loadUnpaidFines();
+        })
+        .catch(function (err) {
+            alert(err.message || 'Erreur lors de la confirmation du paiement');
+        });
+}
+
+function openMmReceipt(opts) {
+    document.getElementById('mm-receipt-title').textContent = opts.title || 'REÇU DE PAIEMENT — AMENDE(S)';
+    document.getElementById('mm-receipt-number').textContent = opts.receiptNumber || '—';
+    document.getElementById('mm-receipt-ref-label').textContent = opts.refLabel || 'Référence';
+    document.getElementById('mm-receipt-ref').textContent = opts.ref || '—';
+    document.getElementById('mm-receipt-name-label').textContent = opts.nameLabel || 'Titulaire';
+    document.getElementById('mm-receipt-name').textContent = opts.name || '—';
+    document.getElementById('mm-receipt-count').textContent = opts.count != null ? opts.count : '—';
+    document.getElementById('mm-receipt-amount').textContent = opts.amount != null ? Math.round(opts.amount).toLocaleString() + ' KMF' : '—';
+    const now = new Date();
+    document.getElementById('mm-receipt-date').textContent = now.toLocaleDateString('fr-FR') + ' ' + now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('mm-receipt-agent').textContent = (typeof MM_CURRENT_USERNAME !== 'undefined' && MM_CURRENT_USERNAME) || '—';
+    new bootstrap.Modal(document.getElementById('mmReceiptModal')).show();
+}
+
+// ── Permis de conduire (même page, onglet séparé) ──
+
+function mmLoadUnpaidLicenseFines() {
+    const tbody = document.getElementById('mm-lf-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>';
+
+    fetch('/api/licenses/fines?paid=false')
+        .then(function (r) { if (!r.ok) throw new Error('Erreur de chargement'); return r.json(); })
+        .then(function (data) {
+            mmAllLicenseFines = Array.isArray(data) ? data : [];
+            mmAllLicenses = mmGroupFinesByLicense(mmAllLicenseFines);
+            mmFilteredLicenses = mmAllLicenses.slice();
+            mmRenderLicenseTable(mmFilteredLicenses);
+        })
+        .catch(function () {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Erreur lors du chargement.</td></tr>';
+        });
+}
+
+function mmGroupFinesByLicense(fines) {
+    const groups = new Map();
+    (fines || []).forEach(function (fine) {
+        const key = String(fine.license_id);
+        if (!groups.has(key)) {
+            groups.set(key, {
+                license_id: fine.license_id,
+                license_number: fine.license_number || '',
+                holder_name: [fine.holder_firstname, fine.holder_name].filter(Boolean).join(' '),
+                total_amount: 0,
+                count: 0,
+                last_issued_at: null,
+                fines: []
+            });
+        }
+        const group = groups.get(key);
+        group.total_amount += Number(fine.amount || 0);
+        group.count += 1;
+        group.fines.push(fine);
+        const candidateDate = fine.issued_at ? new Date(fine.issued_at) : null;
+        if (candidateDate && (!group.last_issued_at || candidateDate > group.last_issued_at)) {
+            group.last_issued_at = candidateDate;
+        }
+    });
+    return Array.from(groups.values()).sort(function (a, b) {
+        const dateA = a.last_issued_at ? a.last_issued_at.getTime() : 0;
+        const dateB = b.last_issued_at ? b.last_issued_at.getTime() : 0;
+        return dateB - dateA;
+    });
+}
+
+function mmFilterLicenseRows(query) {
+    const q = (query || '').toLowerCase().trim();
+    if (!q) {
+        mmFilteredLicenses = mmAllLicenses.slice();
+    } else {
+        mmFilteredLicenses = mmAllLicenses.filter(function (lic) {
+            return (
+                (lic.license_number || '').toLowerCase().includes(q) ||
+                (lic.holder_name || '').toLowerCase().includes(q) ||
+                lic.fines.some(function (f) { return (f.reason_label || '').toLowerCase().includes(q); })
+            );
+        });
+    }
+    mmRenderLicenseTable(mmFilteredLicenses);
+}
+
+function mmRenderLicenseTable(items) {
+    const tbody = document.getElementById('mm-lf-tbody');
+    if (!tbody) return;
+    if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Aucun permis avec amende impayée.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = items.map(function (lic, idx) {
+        const issuedDate = lic.last_issued_at ? lic.last_issued_at.toLocaleDateString('fr-FR') : '-';
+        return '<tr>' +
+            '<td>' + (idx + 1) + '</td>' +
+            '<td>' + (lic.license_number || '') + '</td>' +
+            '<td>' + (lic.holder_name || '') + '</td>' +
+            '<td><span class="badge bg-primary">' + lic.count + '</span></td>' +
+            '<td>' + Math.round(lic.total_amount || 0) + ' KMF</td>' +
+            '<td>' + issuedDate + '</td>' +
+            '<td class="d-flex gap-1 flex-wrap">' +
+            '<button class="btn btn-sm btn-outline-secondary" data-lf-details-id="' + lic.license_id + '"><i class="fas fa-eye me-1"></i>Détails</button>' +
+            '<button class="btn btn-sm btn-success" data-lf-pay-id="' + lic.license_id + '"><i class="fas fa-check me-1"></i>Accepter Paiement</button>' +
+            '</td></tr>';
+    }).join('');
+
+    tbody.querySelectorAll('[data-lf-details-id]').forEach(function (btn) {
+        btn.addEventListener('click', function () { mmOpenLicenseDetailsModal(this.getAttribute('data-lf-details-id')); });
+    });
+    tbody.querySelectorAll('[data-lf-pay-id]').forEach(function (btn) {
+        btn.addEventListener('click', function () { mmOpenLicensePayModal(this.getAttribute('data-lf-pay-id')); });
+    });
+}
+
+function mmOpenLicenseDetailsModal(licenseId) {
+    const lic = mmAllLicenses.find(function (item) { return String(item.license_id) === String(licenseId); });
+    if (!lic) return;
+
+    selectedKind = 'license';
+    selectedVehicleId = licenseId;
+
+    const title = document.getElementById('mm-details-title');
+    const subtitle = document.getElementById('mm-details-subtitle');
+    const tbody = document.getElementById('mm-details-tbody');
+    if (title) title.textContent = 'Permis ' + (lic.license_number || '');
+    if (subtitle) subtitle.textContent = (lic.holder_name || '-') + ' • ' + lic.count + ' infraction(s) • ' + Math.round(lic.total_amount || 0) + ' KMF';
+
+    if (tbody) {
+        tbody.innerHTML = lic.fines.map(function (fine, index) {
+            return '<tr>' +
+                '<td>' + (index + 1) + '</td>' +
+                '<td>' + (fine.reason_label || '') + '</td>' +
+                '<td>' + Math.round(fine.amount || 0) + ' KMF</td>' +
+                '<td>' + (fine.issued_at_str || '') + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    const payBtn = document.getElementById('mm-open-pay-modal-btn');
+    if (payBtn) { payBtn.disabled = false; payBtn.classList.remove('disabled'); payBtn.title = ''; }
+
+    const modal = new bootstrap.Modal(document.getElementById('mmDetailsModal'));
+    modal.show();
+}
+
+function mmOpenLicensePayModal(licenseId) {
+    selectedKind = 'license';
+    selectedVehicleId = licenseId;
+    const lic = mmAllLicenses.find(function (item) { return String(item.license_id) === String(licenseId); });
+
+    const text = document.getElementById('mm-pay-text');
+    if (text && lic) {
+        text.textContent = 'Confirmer le paiement groupé du permis ' + (lic.license_number || '') + ' pour ' + lic.count + ' infraction(s) et ' + Math.round(lic.total_amount || 0) + ' KMF ?';
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('mmPayModal'));
+    modal.show();
+}
+
+function submitManualLicensePayment() {
+    if (!selectedVehicleId) return;
+    const method = document.getElementById('mm-pay-method').value || 'mobile_money_manual';
+
+    fetch('/api/licenses/' + selectedVehicleId + '/fines/pay-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_method: method })
+    })
+        .then(function (r) {
+            if (!r.ok) return r.json().then(function (x) { throw new Error(x.error || 'Erreur de paiement'); });
+            return r.json();
+        })
+        .then(function (res) {
+            const modalEl = document.getElementById('mmPayModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            if (window.showSuccess) window.showSuccess('Paiement groupé confirmé');
+            else alert('Paiement groupé confirmé');
+
+            const lic = mmAllLicenses.find(function (item) { return String(item.license_id) === String(selectedVehicleId); });
+            const firstFine = (res.fines && res.fines[0]) || {};
+            openMmReceipt({
+                title: 'REÇU DE PAIEMENT — AMENDE(S) PERMIS',
+                receiptNumber: firstFine.receipt_number || ('LF-' + selectedVehicleId + '-' + Math.floor(Date.now() / 1000)),
+                refLabel: 'N° Permis',
+                ref: lic ? lic.license_number : '',
+                nameLabel: 'Titulaire',
+                name: lic ? lic.holder_name : '',
+                count: res.paid_count,
+                amount: res.total_amount,
+            });
+            mmLoadUnpaidLicenseFines();
         })
         .catch(function (err) {
             alert(err.message || 'Erreur lors de la confirmation du paiement');

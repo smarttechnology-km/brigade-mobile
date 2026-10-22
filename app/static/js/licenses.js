@@ -422,202 +422,14 @@
             .catch(() => {});
     }
 
-    // ── Articles de retrait de point ─────────────────────────────────────
-    let _pointArticles = [];
-
-    window.loadPointArticles = async function loadPointArticles() {
-        try {
-            const r = await fetch('/api/licenses/point-articles', { credentials: 'same-origin' });
-            const data = r.ok ? await r.json() : [];
-            _pointArticles = data;
-            renderPointArticlesList();
-            const sel = document.getElementById('s-reason-article');
-            if (sel) {
-                const cur = sel.value;
-                sel.innerHTML = '<option value="">— aucun —</option>' +
-                    data.map(a => `<option value="${a.id}">${esc(a.code)}${a.description ? ' — ' + esc(a.description) : ''}</option>`).join('');
-                sel.value = cur;
-            }
-        } catch {}
-    };
-
-    function renderPointArticlesList() {
-        const el = document.getElementById('point-articles-list');
-        if (!el) return;
-        if (!_pointArticles.length) {
-            el.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Aucun article défini.</td></tr>';
-            return;
-        }
-        el.innerHTML = _pointArticles.map(a => `
-            <tr>
-                <td><strong>${esc(a.code)}</strong></td>
-                <td class="text-muted small">${esc(a.description || '—')}</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-warning me-1" onclick="editPointArticle(${a.id})" title="Modifier"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deletePointArticle(${a.id})" title="Supprimer"><i class="fas fa-trash"></i></button>
-                </td>
-            </tr>`).join('');
-    }
-
-    window.savePointArticle = async function () {
-        const editingId  = document.getElementById('s-article-editing-id').value;
-        const code       = document.getElementById('s-article-code').value.trim();
-        const description = document.getElementById('s-article-description').value.trim();
-        if (!code) { alert('N° article obligatoire.'); return; }
-        const url    = editingId ? `/api/licenses/point-articles/${editingId}` : '/api/licenses/point-articles';
-        const method = editingId ? 'PUT' : 'POST';
-        const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, credentials: 'same-origin', body: JSON.stringify({ code, description }) });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) { alert(d.error || 'Erreur'); return; }
-        resetPointArticleForm();
-        loadPointArticles();
-    };
-
-    window.editPointArticle = function (id) {
-        const a = _pointArticles.find(x => x.id === id);
-        if (!a) return;
-        document.getElementById('s-article-editing-id').value = a.id;
-        document.getElementById('s-article-code').value        = a.code;
-        document.getElementById('s-article-description').value = a.description || '';
-        const btn = document.getElementById('s-article-submit-btn');
-        if (btn) { btn.innerHTML = '<i class="fas fa-save me-1"></i>Modifier'; btn.className = 'btn btn-warning'; }
-        document.getElementById('s-article-cancel-btn')?.classList.remove('d-none');
-    };
-
-    window.cancelEditPointArticle = function () { resetPointArticleForm(); };
-
-    window.deletePointArticle = async function (id) {
-        if (!confirm('Supprimer cet article ?')) return;
-        await fetch(`/api/licenses/point-articles/${id}`, { method: 'DELETE', credentials: 'same-origin' });
-        resetPointArticleForm();
-        loadPointArticles();
-    };
-
-    function resetPointArticleForm() {
-        document.getElementById('s-article-editing-id').value = '';
-        document.getElementById('s-article-code').value = '';
-        document.getElementById('s-article-description').value = '';
-        const btn = document.getElementById('s-article-submit-btn');
-        if (btn) { btn.innerHTML = '<i class="fas fa-plus me-1"></i>Ajouter'; btn.className = 'btn btn-outline-primary'; }
-        document.getElementById('s-article-cancel-btn')?.classList.add('d-none');
-    }
-
-    // ── Motifs de réduction : icônes ────────────────────────────────────────
-    const REASON_ICONS = [
-        '🍺','🍷','🥃','💊','🙅',
-        '🚗','🚌','🏍️','🚲',
-        '🛣️','🚧','↔️','🚦','🛑','🅿️',
-        '🪪','🚫','🚑','🩹','🪟',
-        '📱','🦺','⛑️','👶','💤','🔊','⚠️',
-    ];
-
-    // Suggestion automatique d'icône à partir de mots-clés dans le motif. Ordre = priorité en cas de match multiple.
-    const REASON_ICON_KEYWORDS = [
-        { icon: '🍺', words: ['0.20', '0,20', '0.2 litre', '0,2 litre'] },
-        { icon: '🥃', words: ['0.8', '0,8'] },
-        { icon: '🍷', words: ['0.5', '0,5'] },
-        { icon: '🍺', words: ['alcool', 'ivresse', 'alcoolemie', 'alcoolémie'] },
-        { icon: '💊', words: ['stupefiant', 'stupéfiant', 'drogue', 'salivaire', 'sanguine'] },
-        { icon: '🙅', words: ['depistage', 'dépistage', 'depister', 'dépister'] },
-        { icon: '🚌', words: ['transport'] },
-        { icon: '🚗', words: ['vitesse', 'exces', 'excès', 'acceleration', 'accélération'] },
-        { icon: '🛣️', words: ['ligne continue', 'chevauchement'] },
-        { icon: '🚧', words: ['terre-plein', 'terre plein'] },
-        { icon: '↔️', words: ['distance de securite', 'distance de sécurité', 'distances de securite', 'distances de sécurité'] },
-        { icon: '🚦', words: ['priorite', 'priorité', 'feu rouge', 'cedez', 'cédez'] },
-        { icon: '🛑', words: ['stop', 'arret', 'arrêt'] },
-        { icon: '🅿️', words: ['stationnement', 'parking'] },
-        { icon: '🚫', words: ['suspension', 'conduire malgre', 'conduire malgré'] },
-        { icon: '🪪', words: ['permis', 'identite', 'identité'] },
-        { icon: '🚑', words: ['blessure', 'blessures', 'accident', 'interruption de travail'] },
-        { icon: '🪟', words: ['vitre', 'vitres', 'transparence', 'pare-brise'] },
-        { icon: '🏍️', words: ['moto', 'scooter'] },
-        { icon: '🚲', words: ['velo', 'vélo', 'cycliste'] },
-        { icon: '📱', words: ['telephone', 'téléphone', 'portable'] },
-        { icon: '🦺', words: ['ceinture'] },
-        { icon: '⛑️', words: ['casque'] },
-        { icon: '👶', words: ['siege enfant', 'siège enfant', 'enfant'] },
-        { icon: '💤', words: ['fatigue', 'somnolence', 'endormi'] },
-        { icon: '🔊', words: ['bruit', 'klaxon', 'echappement', 'échappement'] },
-    ];
-
-    function _normalizeForMatch(s) {
-        return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    }
-
-    function suggestReasonIcon(label) {
-        const norm = _normalizeForMatch(label);
-        if (!norm) return '';
-        for (const entry of REASON_ICON_KEYWORDS) {
-            if (entry.words.some(w => norm.includes(_normalizeForMatch(w)))) return entry.icon;
-        }
-        return '';
-    }
-
-    let _reasonIconManual = false;
-
-    function setupReasonIconPicker() {
-        const grid = document.getElementById('s-reason-icon-grid');
-        if (!grid) return;
-        grid.innerHTML = REASON_ICONS.map(icon =>
-            `<button type="button" class="btn btn-outline-secondary btn-sm" style="width:2.2rem;" data-reason-icon-choice="${icon}">${icon}</button>`
-        ).join('');
-        document.querySelectorAll('[data-reason-icon-choice]').forEach(btn => {
-            btn.addEventListener('click', function () {
-                setReasonIcon(this.dataset.reasonIconChoice, true);
-            });
-        });
-        const labelInput = document.getElementById('s-reason-label');
-        if (labelInput) {
-            labelInput.addEventListener('input', function () {
-                if (_reasonIconManual) return;
-                setReasonIcon(suggestReasonIcon(this.value), false);
-            });
-        }
-    }
-
-    function setReasonIcon(icon, manual) {
-        const hidden  = document.getElementById('s-reason-icon');
-        const preview = document.getElementById('s-reason-icon-preview');
-        if (hidden) hidden.value = icon || '';
-        if (preview) preview.textContent = icon || '🏷️';
-        _reasonIconManual = !!manual;
-    }
-
     // ── Motifs de réduction ───────────────────────────────────────────────
+    // Articles/Motifs are now managed from "Gestion des Amendes" (page Amendes).
+    // _reasons is still needed here to populate the point-reduction modal's dropdown.
     window.loadReasons = function loadReasons() {
-        loadPointArticles().then(() => {
-            fetch('/api/licenses/point-reasons', { credentials: 'same-origin' })
-                .then(r => r.ok ? r.json() : [])
-                .then(data => {
-                    _reasons = data;
-                    renderReasonsList();
-                }).catch(() => {});
-        });
-    }
-
-    function renderReasonsList() {
-        const el = document.getElementById('reasons-list');
-        if (!el) return;
-        if (!_reasons.length) {
-            el.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Aucun motif défini.</td></tr>';
-            return;
-        }
-        el.innerHTML = _reasons.map((r, i) => `
-            <tr>
-                <td class="text-center" style="font-size:1.1rem;">${r.icon || '<span class="text-muted small">—</span>'}</td>
-                <td>${esc(r.label)}</td>
-                <td><span class="badge bg-danger">−${r.points_to_deduct} pt${r.points_to_deduct > 1 ? 's' : ''}</span></td>
-                <td>${r.article_code ? `<span class="badge bg-secondary">${esc(r.article_code)}</span>` : '<span class="text-muted">—</span>'}</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-warning me-1" onclick="editReason(this)" data-id="${r.id}" data-label="${esc(r.label)}" data-pts="${r.points_to_deduct}" data-article="${r.article_id || ''}" data-icon="${r.icon || ''}" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteReason(${r.id})" title="Supprimer">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
-            </tr>`).join('');
+        fetch('/api/licenses/point-reasons', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : [])
+            .then(data => { _reasons = data; })
+            .catch(() => {});
     }
 
     function loadStatusRules() {
@@ -867,89 +679,20 @@
         document.getElementById('s-temp_months').value    = _settings.temp_validity_months;
         document.getElementById('s-permanent_years').value = _settings.permanent_validity_years;
         document.getElementById('s-directeur_general_name').value = _settings.directeur_general_name || '';
+        document.getElementById('s-renewal_dossier_fee').value = _settings.renewal_dossier_fee || 0;
+        document.getElementById('s-renewal_license_price').value = _settings.renewal_license_price || 0;
+        document.getElementById('s-new_dossier_fee').value = _settings.new_dossier_fee || 0;
+        document.getElementById('s-new_license_price').value = _settings.new_license_price || 0;
         renderSignaturePreview();
         populateCategoryValidityForm();
 
-        // Reset to "Général" tab and show save button
+        // Reset to "Général" tab
         const generalTab = document.getElementById('tab-general-btn');
         if (generalTab) bootstrap.Tab.getOrCreateInstance(generalTab).show();
         document.getElementById('settings-save-btn')?.classList.remove('d-none');
 
-        // Toggle save button visibility based on active tab (it doesn't apply to
-        // "Motifs de réduction", which has its own inline add/edit controls)
-        const tabBtns = document.querySelectorAll('#settings-tabs .nav-link');
-        tabBtns.forEach(btn => {
-            btn.addEventListener('shown.bs.tab', () => {
-                document.getElementById('settings-save-btn')?.classList.toggle('d-none', btn.id === 'tab-reasons-btn');
-            });
-        });
-
         loadStatusRules();
         new bootstrap.Modal(document.getElementById('settingsModal')).show();
-    };
-
-    function resetReasonForm() {
-        document.getElementById('s-reason-label').value      = '';
-        document.getElementById('s-reason-pts').value        = '1';
-        document.getElementById('s-reason-editing-id').value = '';
-        setReasonIcon('');
-        const artSel = document.getElementById('s-reason-article');
-        if (artSel) artSel.value = '';
-        const submitBtn = document.getElementById('s-reason-submit-btn');
-        if (submitBtn) { submitBtn.innerHTML = '<i class="fas fa-plus me-1"></i>Ajouter'; submitBtn.className = 'btn btn-outline-primary'; }
-        document.getElementById('s-reason-cancel-btn')?.classList.add('d-none');
-    }
-
-    window.addReason = async function () {
-        const label      = document.getElementById('s-reason-label').value.trim();
-        const pts        = parseInt(document.getElementById('s-reason-pts').value) || 1;
-        const article_id = document.getElementById('s-reason-article')?.value || null;
-        const icon       = document.getElementById('s-reason-icon')?.value || null;
-        const editingId  = document.getElementById('s-reason-editing-id').value;
-        if (!label) { alert('Libellé obligatoire.'); return; }
-
-        const isEdit = !!editingId;
-        const url    = isEdit ? `/api/licenses/point-reasons/${editingId}` : '/api/licenses/point-reasons';
-        const method = isEdit ? 'PUT' : 'POST';
-
-        const r = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ label, points_to_deduct: pts, article_id: article_id || null, icon }),
-        });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) { alert(d.error || 'Erreur'); return; }
-        resetReasonForm();
-        loadReasons();
-    };
-
-    window.editReason = function (el) {
-        const id         = el.dataset.id;
-        const label      = el.dataset.label;
-        const pts        = el.dataset.pts;
-        const article_id = el.dataset.article || '';
-        const icon       = el.dataset.icon || '';
-        document.getElementById('s-reason-label').value      = label;
-        document.getElementById('s-reason-pts').value        = pts;
-        document.getElementById('s-reason-editing-id').value = id;
-        // An existing icon was deliberately chosen — don't let further label edits auto-override it.
-        setReasonIcon(icon, !!icon);
-        const artSel = document.getElementById('s-reason-article');
-        if (artSel) artSel.value = article_id;
-        const submitBtn = document.getElementById('s-reason-submit-btn');
-        if (submitBtn) { submitBtn.innerHTML = '<i class="fas fa-save me-1"></i>Modifier'; submitBtn.className = 'btn btn-warning'; }
-        document.getElementById('s-reason-cancel-btn')?.classList.remove('d-none');
-        document.getElementById('s-reason-label').focus();
-    };
-
-    window.cancelEditReason = function () { resetReasonForm(); };
-
-    window.deleteReason = async function (id) {
-        if (!confirm('Supprimer ce motif ?')) return;
-        await fetch(`/api/licenses/point-reasons/${id}`, { method: 'DELETE', credentials: 'same-origin' });
-        resetReasonForm();
-        loadReasons();
     };
 
     window.saveSettings = async function () {
@@ -966,6 +709,10 @@
                     permanent_validity_years: parseInt(document.getElementById('s-permanent_years').value) || 10,
                     directeur_general_name: document.getElementById('s-directeur_general_name').value.trim(),
                     category_validity: getCategoryValidityConfig(),
+                    renewal_dossier_fee: parseFloat(document.getElementById('s-renewal_dossier_fee').value) || 0,
+                    renewal_license_price: parseFloat(document.getElementById('s-renewal_license_price').value) || 0,
+                    new_dossier_fee: parseFloat(document.getElementById('s-new_dossier_fee').value) || 0,
+                    new_license_price: parseFloat(document.getElementById('s-new_license_price').value) || 0,
                 }),
             });
             const d = await r.json().catch(() => ({}));
@@ -1432,7 +1179,7 @@
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(rows => {
                 if (!rows.length) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Aucun retrait de points enregistré.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucun retrait de points enregistré.</td></tr>';
                     return;
                 }
                 const max = _settings.initial_points || 12;
@@ -1442,10 +1189,6 @@
                     const deductCell = isReset
                         ? `<span class="badge bg-success">↺ Réinitialisation</span>`
                         : `<span class="badge bg-danger">−${r.points_deducted}</span>`;
-                    const canReclaim = r.reclaimable && window.CURRENT_USER_ROLE === 'administrateur';
-                    const actionCell = canReclaim
-                        ? `<button class="btn btn-sm btn-outline-warning" title="Réclamation" onclick="openReclamationModal(${r.id}, ${licId}, '${esc(r.reason_label)}', ${r.points_deducted}, '${esc(r.created_at)}')"><i class="fas fa-gavel"></i></button>`
-                        : '<span class="text-muted">—</span>';
                     return `
                     <tr>
                         <td class="text-muted small">${r.created_at}</td>
@@ -1454,12 +1197,11 @@
                         <td>${deductCell}</td>
                         <td><span class="badge ${ptsCls(r.points_after)}">${r.points_after}/${max}</span></td>
                         <td class="text-muted small">${esc(r.created_by || '—')}</td>
-                        <td>${actionCell}</td>
                     </tr>`;
                 }).join('');
             })
             .catch(() => {
-                if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erreur de chargement.</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erreur de chargement.</td></tr>';
             });
     }
 
@@ -1504,59 +1246,8 @@
             });
     };
 
-    /* ── Réclamation ── */
-    window.openReclamationModal = function (historyId, licId, reasonLabel, pointsDeducted, createdAt) {
-        document.getElementById('reclamation-history-id').value = historyId;
-        document.getElementById('reclamation-license-id').value = licId;
-        document.getElementById('reclamation-info').textContent =
-            `Infraction « ${reasonLabel} » (−${pointsDeducted} pts) du ${createdAt}.`;
-        document.getElementById('reclamation-action-change').checked = true;
-        const sel = document.getElementById('reclamation-reason-select');
-        sel.innerHTML = _reasons.map(r => `<option value="${r.id}">${esc(r.label)} (−${r.points_to_deduct} pts)</option>`).join('');
-        onReclamationActionChange();
-        new bootstrap.Modal(document.getElementById('reclamationModal')).show();
-    };
-
-    window.onReclamationActionChange = function () {
-        const isCancel = document.getElementById('reclamation-action-cancel').checked;
-        document.getElementById('reclamation-reason-wrap').style.display = isCancel ? 'none' : '';
-        document.getElementById('reclamation-cancel-note').style.display = isCancel ? '' : 'none';
-    };
-
-    window.submitReclamation = async function () {
-        const historyId = document.getElementById('reclamation-history-id').value;
-        const licId     = document.getElementById('reclamation-license-id').value;
-        const action    = document.querySelector('input[name="reclamation-action"]:checked').value;
-        const body = { action };
-        if (action === 'change_reason') {
-            const reasonId = document.getElementById('reclamation-reason-select').value;
-            if (!reasonId) { alert('Sélectionnez un motif.'); return; }
-            body.reason_id = reasonId;
-        } else if (!confirm('Confirmer l\'annulation de ce retrait de points ? Cette action est irréversible.')) {
-            return;
-        }
-        const btn = document.getElementById('reclamation-confirm-btn');
-        btn.disabled = true;
-        try {
-            const r = await fetch(`/api/licenses/point-history/${historyId}/reclamation`, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            const d = await r.json().catch(() => ({}));
-            if (!r.ok) { alert(d.error || 'Erreur'); return; }
-            bootstrap.Modal.getInstance(document.getElementById('reclamationModal'))?.hide();
-            loadPointHistory(licId);
-            loadLicenses(false);
-            loadStats();
-            loadTabCounts();
-        } catch (e) {
-            alert('Erreur réseau.');
-        } finally {
-            btn.disabled = false;
-        }
-    };
+    // Réclamation (annuler/changer le motif d'un retrait de points) is now handled
+    // from "Gestion des Amendes" > "Permis de conduire", attached to the fine it created.
 
     /* ── Delete ── */
     window.deleteLicense = function (id, num) {
@@ -1858,8 +1549,8 @@
 
     /* ── Init ── */
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts(); setupReasonIconPicker(); });
+        document.addEventListener('DOMContentLoaded', () => { loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts(); });
     } else {
-        loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts(); setupReasonIconPicker();
+        loadSettings(); loadReasons(); loadLicenses(true); loadStats(); loadTabCounts();
     }
 })();

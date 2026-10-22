@@ -226,9 +226,25 @@ function approveVignettePayment() {
                 alert(res.message || 'Paiement de vignette approuvé');
             }
 
+            openVignetteReceipt(res);
             loadVignettePayments();
         })
         .catch(function (err) {
             alert(err.message || 'Erreur lors de l’approbation du paiement');
         });
+}
+
+function openVignetteReceipt(res) {
+    const v = res.vehicle || {};
+    const paidAt = v.vignette_last_paid_at ? new Date(v.vignette_last_paid_at) : new Date();
+    document.getElementById('mmv-receipt-number').textContent = 'VIGN-' + v.id + '-' + Math.floor(paidAt.getTime() / 1000);
+    document.getElementById('mmv-receipt-plate').textContent = v.license_plate || '—';
+    document.getElementById('mmv-receipt-owner').textContent = v.owner_name || '—';
+    document.getElementById('mmv-receipt-price').textContent = Number(res.vignette_price || 0).toLocaleString() + ' KMF';
+    document.getElementById('mmv-receipt-penalty').textContent = Number(res.penalty_amount || 0).toLocaleString() + ' KMF';
+    document.getElementById('mmv-receipt-fines').textContent = Number(res.unpaid_fines_amount || 0).toLocaleString() + ' KMF';
+    document.getElementById('mmv-receipt-total').textContent = Number(res.total_amount || 0).toLocaleString() + ' KMF';
+    document.getElementById('mmv-receipt-date').textContent = paidAt.toLocaleDateString('fr-FR') + ' ' + paidAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('mmv-receipt-agent').textContent = v.vignette_last_paid_by || '—';
+    new bootstrap.Modal(document.getElementById('mmvReceiptModal')).show();
 }
