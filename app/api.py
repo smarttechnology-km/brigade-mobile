@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file, redirect, g, current_app
-from app.models import User, Vehicle, VehicleOwner, Fine, FineType, FineCategory, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest, Alert, AlertPhoto, VehicleInsuranceAssignment, LicenseDossier
+from app.models import User, Vehicle, VehicleOwner, Fine, FineType, FineCategory, Phone, PhoneUsage, PhotoSubmission, Insurance, VehicleTransfer, VignetteSetting, PhotoSubmissionReason, VehicleHistory, DriverLicense, LicenseSetting, PointReductionReason, PointReductionHistory, LicenseStatusRule, LicensePrintRequest, Alert, AlertPhoto, VehicleInsuranceAssignment, LicenseDossier, LicenseFine
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from flask_login import login_required, current_user
@@ -3505,6 +3505,12 @@ def api_licenses_settings_put():
         s.directeur_general_name = (data['directeur_general_name'] or '').strip() or None
     if 'category_validity' in data:
         s.category_validity = json.dumps(data['category_validity']) if data['category_validity'] else None
+    for field in ('renewal_dossier_fee', 'renewal_license_price', 'new_dossier_fee', 'new_license_price'):
+        if field in data:
+            try:
+                setattr(s, field, max(0, float(data[field])))
+            except (ValueError, TypeError):
+                pass
     # Propagate new initial_points to all existing licenses
     DriverLicense.query.update({'points': s.initial_points})
     # Recompute every license's expiry_date from its own issue_date using the
@@ -3635,9 +3641,11 @@ def api_point_reasons_create():
     except (ValueError, TypeError):
         pts = 1
     article_id = data.get('article_id') or None
+    category_id = data.get('category_id') or None
     icon = (data.get('icon') or '').strip() or None
     r = PointReductionReason(label=label, points_to_deduct=pts, icon=icon,
-                             article_id=int(article_id) if article_id else None)
+                             article_id=int(article_id) if article_id else None,
+                             category_id=int(category_id) if category_id else None)
     db.session.add(r)
     db.session.commit()
     return jsonify(r.to_dict()), 201
@@ -3656,6 +3664,8 @@ def api_point_reasons_update(reason_id):
         r.points_to_deduct = int(data['points_to_deduct'])
     if 'article_id' in data:
         r.article_id = int(data['article_id']) if data['article_id'] else None
+    if 'category_id' in data:
+        r.category_id = int(data['category_id']) if data['category_id'] else None
     if 'icon' in data:
         r.icon = (data.get('icon') or '').strip() or None
     db.session.commit()
@@ -3671,6 +3681,262 @@ def api_point_reasons_delete(reason_id):
     db.session.delete(r)
     db.session.commit()
     return jsonify({'ok': True})
+
+
+@api_bp.route('/licenses/point-categories', methods=['GET'])
+@login_required
+def api_point_categories_list():
+    from app.models import PointReductionCategory
+    categories = PointReductionCategory.query.order_by(PointReductionCategory.min_price).all()
+    return jsonify([c.to_dict() for c in categories])
+
+
+def _validate_point_category_payload(data):
+    name = (data.get('name') or '').strip()
+    min_price = data.get('min_price')
+    max_price = data.get('max_price')
+    weekly_increment = data.get('weekly_increment')
+    if not name:
+        return None, ('Le nom de la classe est requis', 400)
+    try:
+        min_price = float(min_price)
+        max_price = float(max_price)
+        weekly_increment = float(weekly_increment)
+    except (ValueError, TypeError):
+        return None, ('Prix min/max/augmentation invalides', 400)
+    if min_price <= 0 or max_price <= 0 or weekly_increment <= 0:
+        return None, ('Les prix et l\'augmentation doivent être positifs', 400)
+    if max_price < min_price:
+        return None, ('Le prix max doit être supérieur ou égal au prix min', 400)
+    return (name, min_price, max_price, weekly_increment), None
+
+
+@api_bp.route('/licenses/point-categories', methods=['POST'])
+@login_required
+def api_point_categories_create():
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import PointReductionCategory
+    data = request.get_json() or {}
+    parsed, error = _validate_point_category_payload(data)
+    if error:
+        return jsonify({'error': error[0]}), error[1]
+    name, min_price, max_price, weekly_increment = parsed
+    category = PointReductionCategory(name=name, min_price=min_price, max_price=max_price, weekly_increment=weekly_increment)
+    db.session.add(category)
+    db.session.commit()
+    return jsonify(category.to_dict()), 201
+
+
+@api_bp.route('/licenses/point-categories/<int:category_id>', methods=['PUT'])
+@login_required
+def api_point_categories_update(category_id):
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import PointReductionCategory
+    category = PointReductionCategory.query.get_or_404(category_id)
+    data = request.get_json() or {}
+    parsed, error = _validate_point_category_payload(data)
+    if error:
+        return jsonify({'error': error[0]}), error[1]
+    name, min_price, max_price, weekly_increment = parsed
+    category.name = name
+    category.min_price = min_price
+    category.max_price = max_price
+    category.weekly_increment = weekly_increment
+    db.session.commit()
+
+    try:
+        from app.tasks import apply_license_fine_weekly_escalation
+        apply_license_fine_weekly_escalation()
+    except Exception as e:
+        print(f"⚠️ apply_license_fine_weekly_escalation after category update: {e}")
+
+    return jsonify(category.to_dict()), 200
+
+
+@api_bp.route('/licenses/point-categories/<int:category_id>', methods=['DELETE'])
+@login_required
+def api_point_categories_delete(category_id):
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import PointReductionCategory
+    category = PointReductionCategory.query.get_or_404(category_id)
+    if PointReductionReason.query.filter_by(category_id=category_id).first():
+        return jsonify({'error': 'Cette classe est utilisée par au moins un motif de réduction'}), 409
+    db.session.delete(category)
+    db.session.commit()
+    return jsonify({'message': 'Classe supprimée'}), 200
+
+
+@api_bp.route('/licenses/point-categories/apply-now', methods=['POST'])
+@login_required
+def api_point_categories_apply_now():
+    if not _is_license_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+    try:
+        from app.tasks import apply_license_fine_weekly_escalation
+        apply_license_fine_weekly_escalation()
+        return jsonify({'message': 'Majorations appliquées'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def _apply_license_fine_payment(fine, paid_by):
+    fine.paid = True
+    fine.paid_at = now_comoros()
+    fine.paid_by = paid_by
+    fine.receipt_number = f"LRC-{fine.id}-{int(fine.paid_at.timestamp())}"
+
+
+@api_bp.route('/licenses/fines', methods=['GET'])
+@login_required
+def api_license_fines_list():
+    allowed_roles = ('administrateur', 'judiciaire', 'policier', 'mobile_money_agent', 'dgrtr')
+    role = getattr(current_user, 'role', None)
+    if role not in allowed_roles and not getattr(current_user, 'is_admin', False):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    q = request.args.get('q', type=str)
+    paid = request.args.get('paid', type=str)
+    country = request.args.get('country', type=str)
+
+    query = LicenseFine.query.join(DriverLicense, LicenseFine.license_id == DriverLicense.id)
+    query = apply_island_filter(query, DriverLicense.holder_island, force_country=country)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            (DriverLicense.license_number.ilike(like)) |
+            (DriverLicense.holder_name.ilike(like)) |
+            (DriverLicense.holder_firstname.ilike(like))
+        )
+    if paid is not None:
+        if paid.lower() in ('1', 'true', 'yes'):
+            query = query.filter(LicenseFine.paid.is_(True))
+        elif paid.lower() in ('0', 'false', 'no'):
+            query = query.filter(LicenseFine.paid.is_(False))
+
+    fines = query.order_by(LicenseFine.issued_at.desc()).all()
+    return jsonify([f.to_dict() for f in fines])
+
+
+@api_bp.route('/licenses/<int:license_id>/fines/pay-all', methods=['POST'])
+@login_required
+def api_license_fines_pay_all(license_id):
+    allowed_roles = ('administrateur', 'judiciaire', 'policier', 'mobile_money_agent', 'dgrtr')
+    role = getattr(current_user, 'role', None)
+    if role not in allowed_roles and not getattr(current_user, 'is_admin', False):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    lic = DriverLicense.query.get_or_404(license_id)
+    unpaid_fines = LicenseFine.query.filter_by(license_id=lic.id, paid=False).order_by(LicenseFine.issued_at.asc()).all()
+    if not unpaid_fines:
+        return jsonify({'error': 'Aucune amende impayée pour ce permis'}), 400
+
+    data = request.get_json(silent=True) or request.form or {}
+    paid_by = data.get('paid_by') or (current_user.username if current_user and current_user.is_authenticated else None)
+
+    total_amount = 0.0
+    for fine in unpaid_fines:
+        total_amount += float(fine.amount or 0)
+        _apply_license_fine_payment(fine, paid_by)
+    db.session.commit()
+
+    return jsonify({
+        'paid_count': len(unpaid_fines),
+        'total_amount': total_amount,
+        'fines': [f.to_dict() for f in unpaid_fines],
+    }), 200
+
+
+@api_bp.route('/licenses/fines/stats', methods=['GET'])
+@login_required
+def get_license_fines_stats():
+    """Statistiques des amendes de permis (mirrors /api/vehicles/fines/stats)."""
+    from sqlalchemy import func
+    from datetime import timedelta
+
+    country = request.args.get('country', type=str)
+
+    try:
+        base_query = db.session.query(LicenseFine).join(DriverLicense, LicenseFine.license_id == DriverLicense.id)
+        base_query = apply_island_filter(base_query, DriverLicense.holder_island, force_country=country)
+
+        total_fines = base_query.with_entities(func.count(LicenseFine.id)).scalar() or 0
+        paid_fines = base_query.filter(LicenseFine.paid == True).with_entities(func.count(LicenseFine.id)).scalar() or 0
+        unpaid_fines = total_fines - paid_fines
+
+        total_amount_result = base_query.with_entities(func.coalesce(func.sum(LicenseFine.amount), 0)).scalar()
+        total_amount = float(total_amount_result) if total_amount_result else 0
+
+        paid_amount_result = base_query.filter(LicenseFine.paid == True).with_entities(func.coalesce(func.sum(LicenseFine.amount), 0)).scalar()
+        paid_amount = float(paid_amount_result) if paid_amount_result else 0
+
+        unpaid_amount = total_amount - paid_amount
+
+        officer_stats = base_query.with_entities(
+            LicenseFine.officer,
+            func.count(LicenseFine.id).label('count'),
+            func.coalesce(func.sum(LicenseFine.amount), 0).label('total_amount')
+        ).filter(LicenseFine.officer.isnot(None)).group_by(LicenseFine.officer).order_by(func.count(LicenseFine.id).desc()).all()
+
+        now = now_comoros()
+        monthly_stats = []
+        for i in range(11, -1, -1):
+            month_start = (now - timedelta(days=30 * i)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
+
+            month_query = base_query.filter(
+                LicenseFine.issued_at >= month_start,
+                LicenseFine.issued_at <= month_end
+            )
+            month_fines = month_query.with_entities(func.count(LicenseFine.id)).scalar() or 0
+            month_paid = month_query.filter(LicenseFine.paid == True).with_entities(func.count(LicenseFine.id)).scalar() or 0
+
+            monthly_stats.append({
+                'month': month_start.strftime('%Y-%m'),
+                'total': month_fines,
+                'paid': month_paid,
+                'unpaid': month_fines - month_paid
+            })
+
+        reason_stats = base_query.with_entities(
+            LicenseFine.reason_label,
+            func.count(LicenseFine.id).label('count'),
+            func.coalesce(func.sum(LicenseFine.amount), 0).label('total_amount')
+        ).group_by(LicenseFine.reason_label).order_by(func.count(LicenseFine.id).desc()).limit(10).all()
+
+        thirty_days_ago = now - timedelta(days=30)
+        recent_payments = base_query.filter(
+            LicenseFine.paid_at >= thirty_days_ago
+        ).with_entities(func.count(LicenseFine.id)).scalar() or 0
+
+        return jsonify({
+            'general': {
+                'total_fines': total_fines,
+                'paid_fines': paid_fines,
+                'unpaid_fines': unpaid_fines,
+                'total_amount': total_amount,
+                'paid_amount': paid_amount,
+                'unpaid_amount': unpaid_amount
+            },
+            'officers': [{
+                'name': stat[0] or 'Non spécifié',
+                'count': stat[1],
+                'total_amount': float(stat[2]) if stat[2] else 0
+            } for stat in officer_stats],
+            'monthly': monthly_stats,
+            'reasons': [{
+                'reason': stat[0] or 'Non spécifié',
+                'count': stat[1],
+                'total_amount': float(stat[2]) if stat[2] else 0
+            } for stat in reason_stats],
+            'recent_payments': recent_payments
+        })
+
+    except Exception as e:
+        print(f"Erreur dans get_license_fines_stats: {str(e)}")
+        return jsonify({'error': f'Erreur serveur: {str(e)}'}), 500
 
 
 @api_bp.route('/licenses/status-rules', methods=['GET'])
@@ -3761,12 +4027,31 @@ def api_licenses_reduce_points(license_id):
         created_by      = current_user.username,
     )
     db.session.add(history)
+    db.session.flush()  # assigns history.id, needed below
+
+    license_fine = None
+    if reason.category:
+        amount = float(reason.category.min_price)
+        license_fine = LicenseFine(
+            license_id=lic.id,
+            amount=amount,
+            base_amount=amount,
+            reason_id=reason.id,
+            reason_label=reason.label,
+            history_id=history.id,
+            officer=current_user.username,
+        )
+        db.session.add(license_fine)
+
     db.session.commit()
 
     log_user_history(current_user, 'Points retirés', f'Permis {lic.license_number} - {lic.holder_name}: -{reason.points_to_deduct} pts ({reason.label})')
 
     send_async(send_point_reduction_notification, ref(lic), reason.points_to_deduct, after, reason.label)
-    return jsonify(lic.to_dict())
+    result = lic.to_dict()
+    if license_fine:
+        result['license_fine'] = license_fine.to_dict()
+    return jsonify(result)
 
 
 @api_bp.route('/licenses/<int:license_id>/reset-points', methods=['POST'])
@@ -3859,6 +4144,9 @@ def api_licenses_point_history_reclamation(history_id):
     if action == 'cancel':
         lic.points = restored
         _apply_status_rules(lic, restored)
+        linked_fine = LicenseFine.query.filter_by(history_id=history.id, paid=False).first()
+        if linked_fine:
+            db.session.delete(linked_fine)
         db.session.delete(history)
         db.session.commit()
         return jsonify(lic.to_dict())
@@ -3873,6 +4161,19 @@ def api_licenses_point_history_reclamation(history_id):
         history.reason_label    = new_reason.label
         lic.points = new_after
         _apply_status_rules(lic, new_after)
+
+        linked_fine = LicenseFine.query.filter_by(history_id=history.id, paid=False).first()
+        if linked_fine:
+            if new_reason.category:
+                new_amount = float(new_reason.category.min_price)
+                linked_fine.reason_id = new_reason.id
+                linked_fine.reason_label = new_reason.label
+                linked_fine.amount = new_amount
+                linked_fine.base_amount = new_amount
+            else:
+                # New reason has no priced category — the fine no longer applies.
+                db.session.delete(linked_fine)
+
         db.session.commit()
         return jsonify(lic.to_dict())
 
@@ -3989,7 +4290,10 @@ def api_licenses_list():
         )
 
     total   = query.count()
-    items   = query.order_by(DriverLicense.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    # Tri par numéro de permis (du plus grand au plus petit), en ignorant les espaces
+    # pour comparer numériquement malgré les formats hétérogènes ("06 592" / "73773").
+    license_number_as_int = db.func.cast(db.func.replace(DriverLicense.license_number, ' ', ''), db.Integer)
+    items   = query.order_by(license_number_as_int.desc()).offset((page - 1) * per_page).limit(per_page).all()
     ids     = [l.id for l in items]
 
     # Statut d'impression par permis (batch, évite N+1)
@@ -4150,7 +4454,12 @@ def api_licenses_scan(license_id):
     if not user or user.role not in ['policier', 'administrateur', 'judiciaire']:
         return jsonify({'error': 'Accès refusé'}), 403
     lic = DriverLicense.query.get_or_404(license_id)
-    return jsonify(lic.to_dict())
+    data = lic.to_dict()
+    unpaid_fines = LicenseFine.query.filter_by(license_id=lic.id, paid=False).order_by(LicenseFine.issued_at.desc()).all()
+    data['unpaid_fines_count'] = len(unpaid_fines)
+    data['unpaid_fines_amount'] = sum(float(f.amount) for f in unpaid_fines)
+    data['unpaid_fines'] = [f.to_dict() for f in unpaid_fines]
+    return jsonify(data)
 
 
 @api_bp.route('/licenses/public-scan', methods=['GET'])
@@ -4189,6 +4498,9 @@ def api_licenses_public_scan():
         for r in reasons
     }
 
+    fines = LicenseFine.query.filter_by(license_id=lic.id).all()
+    fine_by_history = {f.history_id: f for f in fines if f.history_id}
+
     data = lic.to_dict()
     data['point_history'] = []
     for h in history:
@@ -4196,6 +4508,10 @@ def api_licenses_public_scan():
         info = article_map.get(h.reason_label, {})
         row['article_code'] = info.get('article_code')
         row['article_description'] = info.get('article_description')
+        fine = fine_by_history.get(h.id)
+        row['fine_paid'] = fine.paid if fine else None
+        row['fine_amount'] = float(fine.amount) if fine else None
+        row['fine_paid_at'] = fine.paid_at.strftime('%d/%m/%Y %H:%M') if (fine and fine.paid_at) else None
         data['point_history'].append(row)
     # is_registered tells the citizen app whether this license is already claimed by
     # SOME account, without leaking the actual phone number of whoever holds it.
@@ -4257,9 +4573,28 @@ def api_mobile_reduce_points(license_id):
         created_by      = user.username,
     )
     db.session.add(history)
+    db.session.flush()  # assigns history.id, needed below
+
+    license_fine = None
+    if reason.category:
+        amount = float(reason.category.min_price)
+        license_fine = LicenseFine(
+            license_id=lic.id,
+            amount=amount,
+            base_amount=amount,
+            reason_id=reason.id,
+            reason_label=reason.label,
+            history_id=history.id,
+            officer=user.username,
+        )
+        db.session.add(license_fine)
+
     db.session.commit()
     send_async(send_point_reduction_notification, ref(lic), reason.points_to_deduct, after, reason.label)
-    return jsonify(lic.to_dict())
+    result = lic.to_dict()
+    if license_fine:
+        result['license_fine'] = license_fine.to_dict()
+    return jsonify(result)
 
 
 @api_bp.route('/licenses/<int:license_id>', methods=['PUT'])
@@ -5619,7 +5954,8 @@ def create_licence_pro():
     if LicenceProRequest.query.filter_by(lp_number=lp_number).first():
         return jsonify({'error': f"Le numéro '{lp_number}' est déjà utilisé."}), 400
 
-    years = LicenceProSetting.get().years_for(activite_type)
+    settings = LicenceProSetting.get()
+    years = settings.years_for(activite_type)
     validity_date = now_comoros().date() + relativedelta(years=years)
 
     req = LicenceProRequest(
@@ -5629,6 +5965,8 @@ def create_licence_pro():
         zone_activite=zone_activite,
         validity_date=validity_date,
         requested_by=current_user.username,
+        status='en_attente_paiement',
+        amount=settings.price_for(activite_type),
     )
     db.session.add(req)
     db.session.commit()
@@ -5638,15 +5976,16 @@ def create_licence_pro():
 @api_bp.route('/licence-pro/<int:req_id>', methods=['PUT'])
 @login_required
 def update_licence_pro(req_id):
-    """Directeur Technique edits a licence pro request that is still pending DG validation."""
+    """Directeur Technique edits a licence pro request that hasn't been validated yet
+    (still awaiting payment or awaiting DG validation)."""
     if not _is_licence_pro_dt():
         return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
 
     from app.models import LicenceProRequest, LICENCE_PRO_ACTIVITES, LicenceProSetting
     from dateutil.relativedelta import relativedelta
     req = LicenceProRequest.query.get_or_404(req_id)
-    if req.status != 'pending':
-        return jsonify({'error': 'Seules les demandes en attente peuvent être modifiées.'}), 409
+    if req.status != 'en_attente_paiement':
+        return jsonify({'error': 'Seules les demandes en attente de paiement peuvent être modifiées.'}), 409
 
     data = request.get_json() or {}
     lp_number = (data.get('lp_number') or '').strip()
@@ -5666,13 +6005,15 @@ def update_licence_pro(req_id):
     if existing:
         return jsonify({'error': f"Le numéro '{lp_number}' est déjà utilisé."}), 400
 
-    years = LicenceProSetting.get().years_for(activite_type)
+    settings = LicenceProSetting.get()
+    years = settings.years_for(activite_type)
     validity_date = now_comoros().date() + relativedelta(years=years)
 
     req.lp_number = lp_number
     req.activite_type = activite_type
     req.zone_activite = zone_activite
     req.validity_date = validity_date
+    req.amount = settings.price_for(activite_type)
     db.session.commit()
     return jsonify(req.to_dict())
 
@@ -5680,18 +6021,59 @@ def update_licence_pro(req_id):
 @api_bp.route('/licence-pro/<int:req_id>', methods=['DELETE'])
 @login_required
 def delete_licence_pro(req_id):
-    """Directeur Technique deletes a licence pro request that is still pending DG validation."""
+    """Directeur Technique deletes a licence pro request that hasn't been paid yet."""
     if not _is_licence_pro_dt():
         return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
 
     from app.models import LicenceProRequest
     req = LicenceProRequest.query.get_or_404(req_id)
-    if req.status != 'pending':
-        return jsonify({'error': 'Seules les demandes en attente peuvent être supprimées.'}), 409
+    if req.status != 'en_attente_paiement':
+        return jsonify({'error': 'Seules les demandes en attente de paiement peuvent être supprimées.'}), 409
 
     db.session.delete(req)
     db.session.commit()
     return jsonify({'success': True})
+
+
+@api_bp.route('/mobile-money/licence-pro', methods=['GET'])
+@login_required
+def api_mm_licence_pro_pending():
+    """Licence Pro requests awaiting payment, for a Mobile Money agent to collect."""
+    if getattr(current_user, 'role', None) != 'mobile_money_agent':
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import LicenceProRequest
+    q = request.args.get('q', '').strip()
+    query = LicenceProRequest.query.filter_by(status='en_attente_paiement').join(DriverLicense)
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            DriverLicense.holder_name.ilike(like),
+            DriverLicense.holder_firstname.ilike(like),
+            LicenceProRequest.lp_number.ilike(like),
+        ))
+    items = query.order_by(LicenceProRequest.requested_at.asc()).all()
+    return jsonify([r.to_dict() for r in items])
+
+
+@api_bp.route('/mobile-money/licence-pro/<int:req_id>/confirm-payment', methods=['POST'])
+@login_required
+def api_mm_licence_pro_confirm_payment(req_id):
+    """Mobile Money agent confirms payment for a Licence Pro request — moves it into
+    the Directeur Général's validation queue ('pending')."""
+    if getattr(current_user, 'role', None) != 'mobile_money_agent':
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import LicenceProRequest
+    req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status != 'en_attente_paiement':
+        return jsonify({'error': 'Cette demande n\'est pas (ou plus) en attente de paiement.'}), 409
+
+    req.paid = True
+    req.paid_at = now_comoros()
+    req.paid_by = current_user.username
+    req.receipt_number = f'LP-{req.id}-{int(req.paid_at.timestamp())}'
+    req.status = 'pending'
+    db.session.commit()
+    return jsonify(req.to_dict())
 
 
 @api_bp.route('/licence-pro/settings', methods=['GET'])
@@ -5729,6 +6111,23 @@ def update_licence_pro_settings():
         if years < 1:
             return jsonify({'error': 'La durée de validité doit être au moins 1 an.'}), 400
         setattr(settings, col, years)
+
+    price_field_map = {
+        'price_taxi_ville': 'price_taxi_ville',
+        'price_transport_commun': 'price_transport_commun',
+        'price_proprietaire_exploitant': 'price_proprietaire_exploitant',
+    }
+    for key, col in price_field_map.items():
+        if key not in data:
+            continue
+        try:
+            price = float(data[key])
+        except (ValueError, TypeError):
+            return jsonify({'error': f"Valeur invalide pour '{key}'."}), 400
+        if price < 0:
+            return jsonify({'error': 'Le prix ne peut pas être négatif.'}), 400
+        setattr(settings, col, price)
+
     db.session.commit()
     return jsonify(settings.to_dict())
 
@@ -5742,6 +6141,8 @@ def validate_licence_pro(req_id):
 
     from app.models import LicenceProRequest
     req = LicenceProRequest.query.get_or_404(req_id)
+    if req.status == 'en_attente_paiement':
+        return jsonify({'error': 'Cette demande est en attente de paiement et ne peut pas encore être validée.'}), 409
     if req.status != 'pending':
         return jsonify({'error': 'Cette demande a déjà été traitée.'}), 409
 
@@ -5864,6 +6265,22 @@ def count_dossiers_pending_signature():
     return jsonify({'pending_count': count})
 
 
+@api_bp.route('/dossiers-permis/search-license', methods=['GET'])
+@login_required
+def dossiers_permis_search_license():
+    """Search an existing DriverLicense by number, to attach a renouvellement dossier
+    to it (and pre-fill the dossier with whatever data that license already has)."""
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    number = request.args.get('number', '').strip()
+    if not number:
+        return jsonify([])
+    results = DriverLicense.query.filter(
+        DriverLicense.license_number.ilike(f'%{number}%')
+    ).order_by(DriverLicense.holder_name.asc()).limit(20).all()
+    return jsonify([l.to_dict() for l in results])
+
+
 @api_bp.route('/dossiers-permis', methods=['POST'])
 @login_required
 def create_dossier_permis():
@@ -5871,9 +6288,26 @@ def create_dossier_permis():
         return jsonify({'error': 'Accès refusé'}), 403
 
     data = request.get_json() or {}
+    dossier_type = data.get('dossier_type') or 'nouveau'
+    if dossier_type not in ('nouveau', 'renouvellement'):
+        return jsonify({'error': "Type de dossier invalide."}), 400
+
+    settings = LicenseSetting.get()
+
+    renewal_license = None
+    if dossier_type == 'renouvellement':
+        renewal_license_id = data.get('renewal_license_id')
+        if not renewal_license_id:
+            return jsonify({'error': "Veuillez sélectionner le permis existant à renouveler."}), 400
+        renewal_license = DriverLicense.query.get(renewal_license_id)
+        if not renewal_license:
+            return jsonify({'error': 'Permis introuvable.'}), 404
 
     d = LicenseDossier(
+        dossier_type=dossier_type,
+        renewal_license_id=renewal_license.id if renewal_license else None,
         doc_autoecole=bool(data.get('doc_autoecole')),
+        doc_permis=bool(data.get('doc_permis')),
         doc_medical=bool(data.get('doc_medical')),
         doc_residence=bool(data.get('doc_residence')),
         doc_fiche_individuelle=bool(data.get('doc_fiche_individuelle')),
@@ -5884,6 +6318,32 @@ def create_dossier_permis():
         nin=(data.get('nin') or '').strip() or None,
         created_by=current_user.username,
     )
+
+    if dossier_type == 'renouvellement':
+        d.amount = (settings.renewal_dossier_fee or 0) + (settings.renewal_license_price or 0)
+        # Pré-remplir avec les données déjà connues du permis existant — le secrétariat
+        # n'aura qu'à compléter ce qui manque (photo, NIN, etc.) aux étapes suivantes.
+        d.nom                    = renewal_license.holder_name
+        d.prenom                 = renewal_license.holder_firstname
+        d.date_naissance         = renewal_license.date_of_birth
+        d.lieu_naissance         = renewal_license.lieu_naissance
+        d.sexe                   = renewal_license.sexe
+        d.blood_group            = renewal_license.blood_group
+        d.nationalite            = renewal_license.nationalite
+        d.holder_address         = renewal_license.holder_address
+        d.centre_immatriculation = renewal_license.centre_immatriculation
+        d.type_permis            = renewal_license.type_permis
+        d.categories             = renewal_license.categories
+        d.category_details       = renewal_license.category_details
+        d.photo_filename         = renewal_license.photo_filename
+        d.license_number_proposed = renewal_license.license_number
+        d.final_status           = renewal_license.status
+        if not d.country:
+            d.country = renewal_license.holder_island
+        if not d.nin:
+            d.nin = renewal_license.nin
+    else:
+        d.amount = (settings.new_dossier_fee or 0) + (settings.new_license_price or 0)
 
     if d.all_docs_checked:
         d.dossier_number   = _generate_dossier_number()
@@ -5927,6 +6387,7 @@ def validate_dossier_step2(dossier_id):
     d.date_naissance         = parse_date(data.get('date_naissance', ''))
     d.lieu_naissance         = (data.get('lieu_naissance') or '').strip() or None
     d.sexe                   = data.get('sexe') or None
+    d.blood_group            = data.get('blood_group') or None
     d.nationalite            = (data.get('nationalite') or '').strip() or None
     d.holder_address         = (data.get('holder_address') or '').strip() or None
     d.telephone              = (data.get('telephone') or '').strip() or None
@@ -5936,6 +6397,7 @@ def validate_dossier_step2(dossier_id):
     d.expiry_date            = parse_date(data.get('expiry_date', ''))
     d.centre_immatriculation = (data.get('centre_immatriculation') or '').strip() or None
     d.categories             = (data.get('categories') or '').strip() or None
+    d.notes                  = (data.get('notes') or '').strip() or None
 
     import json as _json
     cat_details = data.get('category_details') or {}
@@ -6001,7 +6463,12 @@ def validate_dossier_step4(dossier_id):
     if not license_num:
         return jsonify({'error': 'Numéro de permis obligatoire'}), 400
     existing = DriverLicense.query.filter_by(license_number=license_num).first()
-    if existing:
+    if d.dossier_type == 'renouvellement':
+        # Pour un renouvellement, le numéro doit être EXACTEMENT celui du permis lié —
+        # pas de conflit puisque c'est le même enregistrement qui sera mis à jour.
+        if not existing or existing.id != d.renewal_license_id:
+            return jsonify({'error': "Ce numéro ne correspond pas au permis en cours de renouvellement."}), 400
+    elif existing:
         return jsonify({'error': 'Ce numéro de permis existe déjà'}), 400
 
     from datetime import date as _date
@@ -6071,34 +6538,39 @@ def validate_dossier_step6(dossier_id):
     if not d.license_number_proposed:
         return jsonify({'error': 'Numéro de permis manquant'}), 400
 
-    if DriverLicense.query.filter_by(license_number=d.license_number_proposed).first():
-        return jsonify({'error': 'Ce numéro de permis existe déjà dans le système'}), 400
-
     settings = LicenseSetting.get()
+    is_renewal = d.dossier_type == 'renouvellement'
 
-    lic = DriverLicense(
-        license_number         = d.license_number_proposed,
-        holder_name            = d.nom,
-        holder_firstname       = d.prenom,
-        date_of_birth          = d.date_naissance,
-        lieu_naissance         = d.lieu_naissance,
-        sexe                   = d.sexe,
-        nationalite            = d.nationalite,
-        holder_address         = d.holder_address,
-        holder_phone           = d.telephone,
-        holder_island          = d.country,
-        centre_immatriculation = d.centre_immatriculation,
-        type_permis            = d.type_permis or 'permanent',
-        issue_date             = d.issue_date,
-        expiry_date            = d.expiry_date,
-        categories             = d.categories,
-        category_details       = d.category_details,
-        photo_filename         = d.photo_filename,
-        status                 = d.final_status or 'actif',
-        points                 = settings.initial_points,
-        created_by             = current_user.username,
-    )
-    db.session.add(lic)
+    if is_renewal:
+        lic = DriverLicense.query.get(d.renewal_license_id)
+        if not lic or lic.license_number != d.license_number_proposed:
+            return jsonify({'error': "Le permis à renouveler est introuvable ou ne correspond plus."}), 400
+    else:
+        if DriverLicense.query.filter_by(license_number=d.license_number_proposed).first():
+            return jsonify({'error': 'Ce numéro de permis existe déjà dans le système'}), 400
+        lic = DriverLicense(license_number=d.license_number_proposed, points=settings.initial_points, created_by=current_user.username)
+        db.session.add(lic)
+
+    lic.holder_name            = d.nom
+    lic.holder_firstname       = d.prenom
+    lic.date_of_birth          = d.date_naissance
+    lic.lieu_naissance         = d.lieu_naissance
+    lic.sexe                   = d.sexe
+    lic.blood_group            = d.blood_group
+    lic.nationalite            = d.nationalite
+    lic.holder_address         = d.holder_address
+    lic.holder_phone           = d.telephone
+    lic.nin                    = d.nin
+    lic.holder_island          = d.country
+    lic.centre_immatriculation = d.centre_immatriculation
+    lic.type_permis            = d.type_permis or 'permanent'
+    lic.issue_date             = d.issue_date
+    lic.expiry_date            = d.expiry_date
+    lic.categories             = d.categories
+    lic.category_details       = d.category_details
+    lic.photo_filename         = d.photo_filename
+    lic.status                 = d.final_status or 'actif'
+    lic.notes                  = d.notes
     db.session.flush()
 
     missing = lic.missing_required_fields_for_print()
@@ -6151,6 +6623,9 @@ def update_dossier_permis(dossier_id):
     d    = LicenseDossier.query.get_or_404(dossier_id)
     data = request.get_json() or {}
 
+    if data.get('doc_recu_paiement') and not d.paid:
+        return jsonify({'error': "Le paiement n'a pas encore été confirmé par un agent Mobile Money."}), 400
+
     for field in ('doc_autoecole', 'doc_medical', 'doc_residence',
                   'doc_fiche_individuelle', 'doc_carte_nationale', 'doc_recu_paiement'):
         if field in data:
@@ -6168,6 +6643,47 @@ def update_dossier_permis(dossier_id):
         d.step1_validated_by = current_user.username
         d.current_step     = 2
 
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+@api_bp.route('/mobile-money/license-dossiers', methods=['GET'])
+@login_required
+def api_mm_license_dossiers_search():
+    """List license dossiers awaiting payment (or awaiting the secretariat's receipt
+    confirmation), for a Mobile Money agent to collect the dossier fee once the first
+    5 documents have been verified. Optionally narrowed by NIN."""
+    if getattr(current_user, 'role', None) != 'mobile_money_agent':
+        return jsonify({'error': 'Accès refusé'}), 403
+    nin = request.args.get('nin', '').strip()
+    query = (LicenseDossier.query
+             .filter(LicenseDossier.status == 'en_cours')
+             .filter(LicenseDossier.step1_validated_at.is_(None)))
+    if nin:
+        query = query.filter(LicenseDossier.nin.ilike(f'%{nin}%'))
+    items = query.order_by(LicenseDossier.created_at.asc()).all()
+    items = [d for d in items if d.docs_checked_before_payment]
+    return jsonify([d.to_dict() for d in items])
+
+
+@api_bp.route('/mobile-money/license-dossiers/<int:dossier_id>/confirm-payment', methods=['POST'])
+@login_required
+def api_mm_license_dossier_confirm_payment(dossier_id):
+    """Mobile Money agent confirms payment of the dossier fee. The secretariat still
+    has to check 'Reçu de paiement' on the dossier afterwards (once they have the
+    printed receipt in hand) to actually close out step 1."""
+    if getattr(current_user, 'role', None) != 'mobile_money_agent':
+        return jsonify({'error': 'Accès refusé'}), 403
+    d = LicenseDossier.query.get_or_404(dossier_id)
+    if not d.docs_checked_before_payment:
+        return jsonify({'error': "Les documents du dossier n'ont pas encore tous été vérifiés."}), 409
+    if d.paid:
+        return jsonify({'error': 'Ce dossier a déjà été payé.'}), 409
+
+    d.paid = True
+    d.paid_at = now_comoros()
+    d.paid_by = current_user.username
+    d.receipt_number = f'DOS-{d.id}-{int(d.paid_at.timestamp())}'
     db.session.commit()
     return jsonify(d.to_dict())
 

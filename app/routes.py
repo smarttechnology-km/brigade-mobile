@@ -1333,6 +1333,9 @@ def api_mm_cg_confirm_payment(cg_id):
     if cg.status != 'en_attente_paiement':
         return jsonify({'error': 'Statut invalide pour cette action'}), 400
     cg.status = 'en_attente'
+    cg.paid_at = now_comoros()
+    cg.paid_by = current_user.username
+    cg.receipt_number = f'CG-{cg.id}-{int(cg.paid_at.timestamp())}'
     db.session.commit()
     return jsonify({'success': True, 'carte_grise': cg.to_dict()})
 
@@ -1343,6 +1346,23 @@ def mobile_money_visite_technique_page():
     """Page for mobile money agents to collect payment for technical inspections,
     before the judiciaire fills in the checklist (inspector already assigned)."""
     return render_template('mobile_money_visite_technique.html')
+
+
+@main_bp.route('/mobile-money-licence-pro')
+@roles_required('mobile_money_agent')
+def mobile_money_licence_pro_page():
+    """Page for mobile money agents to collect payment for Licence Professionnelle
+    requests, before they move into the Directeur Général's validation queue."""
+    return render_template('mobile_money_licence_pro.html')
+
+
+@main_bp.route('/mobile-money-dossiers-permis')
+@roles_required('mobile_money_agent')
+def mobile_money_dossiers_permis_page():
+    """Page for mobile money agents to collect the dossier fee for new driver's
+    license applications (searched by NIN), once the first 5 documents have been
+    verified by the secretariat."""
+    return render_template('mobile_money_dossiers_permis.html')
 
 
 @main_bp.route('/api/mobile-money/visite-technique/pending', methods=['GET'])
@@ -3741,14 +3761,14 @@ def public_track(token):
 
 
 @main_bp.route('/payments')
-@roles_required('policier')
+@roles_required()
 def payments_page():
     """Page de gestion des paiements des amandes"""
     return render_template('payments.html')
 
 
 @main_bp.route('/payments/settings')
-@roles_required('judiciaire', 'policier')
+@roles_required('judiciaire')
 def payments_settings_page():
     """Paramètres de la gestion des paiements."""
     accounts_query = User.query.filter_by(role='mobile_money_agent')
@@ -7302,7 +7322,7 @@ def get_vignette_daily_report():
 
 @vehicle_bp.route('/mobile-money-archive', methods=['GET'])
 @login_required
-@roles_required('mobile_money_agent')
+@roles_required('mobile_money_agent', 'administrateur', 'dgrtr')
 def get_mobile_money_archive():
     """Return archived paid fines and paid vignettes for Mobile Money agents.
 
@@ -7445,30 +7465,34 @@ def get_mobile_money_archive():
 
     # Cartes grises payées via mobile money (statut en_attente ou signee)
     from app.models import CarteGrise
+    cg_paid_at_expr = func.coalesce(CarteGrise.paid_at, CarteGrise.signature_requested_at)
     cg_filters = [
         CarteGrise.status.in_(['en_attente', 'signee']),
         CarteGrise.signature_requested_at.isnot(None),
     ]
     if start_date:
-        cg_filters.append(CarteGrise.signature_requested_at >= start_date)
+        cg_filters.append(cg_paid_at_expr >= start_date)
     if end_date:
-        cg_filters.append(CarteGrise.signature_requested_at <= end_date)
+        cg_filters.append(cg_paid_at_expr <= end_date)
     cg_query = CarteGrise.query.filter(*cg_filters).join(Vehicle)
     if user_country:
         cg_query = cg_query.filter(Vehicle.owner_island == user_country)
 
     cg_archive = []
     cg_total = 0.0
-    for cg in cg_query.order_by(CarteGrise.signature_requested_at.desc()).all():
+    for cg in cg_query.order_by(cg_paid_at_expr.desc()).all():
         v = cg.vehicle
         amount = float(cg.prix or 0.0)
+        effective_paid_at = cg.paid_at or cg.signature_requested_at
         cg_archive.append({
             'id': cg.id,
             'license_plate': v.license_plate if v else '-',
             'owner_name': v.owner_name if v else '-',
             'owner_island': v.owner_island if v else '-',
             'amount': amount,
-            'paid_at': cg.signature_requested_at.isoformat() if cg.signature_requested_at else None,
+            'paid_at': effective_paid_at.isoformat() if effective_paid_at else None,
+            'paid_by': cg.paid_by or '-',
+            'receipt_number': cg.receipt_number or '-',
             'status': cg.status,
             'signed_at': cg.signed_at.strftime('%d/%m/%Y %H:%M') if cg.signed_at else None,
         })
@@ -7504,6 +7528,105 @@ def get_mobile_money_archive():
         })
         vt_total += amount
 
+    # Amendes de permis payées (mobile agent ou app citoyen)
+    from app.models import LicenseFine
+    lf_filters = [
+        LicenseFine.paid == True,
+        LicenseFine.paid_at.isnot(None),
+    ]
+    if start_date:
+        lf_filters.append(LicenseFine.paid_at >= start_date)
+    if end_date:
+        lf_filters.append(LicenseFine.paid_at <= end_date)
+    if other_system_usernames:
+        lf_filters.append(db.or_(
+            LicenseFine.paid_by.in_(mobile_agent_usernames),
+            LicenseFine.paid_by.notin_(other_system_usernames),
+        ))
+    else:
+        lf_filters.append(LicenseFine.paid_by.isnot(None))
+    lf_query = LicenseFine.query.filter(*lf_filters)
+
+    license_fine_archive = []
+    license_fines_total = 0.0
+    for lf in lf_query.order_by(LicenseFine.paid_at.desc()).all():
+        raw_paid_by = lf.paid_by or '-'
+        if raw_paid_by not in mobile_agent_usernames and not raw_paid_by.startswith('App Citoyen /'):
+            paid_by_display = f'App Citoyen / {raw_paid_by}'
+        else:
+            paid_by_display = raw_paid_by
+        lic = lf.license
+        holder_name = f"{lic.holder_firstname or ''} {lic.holder_name or ''}".strip() if lic else '-'
+        license_fine_archive.append({
+            'id': lf.id,
+            'license_number': lic.license_number if lic else '-',
+            'holder_name': holder_name or '-',
+            'reason_label': lf.reason_label,
+            'receipt_number': lf.receipt_number,
+            'amount': float(lf.amount or 0.0),
+            'paid_at': lf.paid_at.isoformat() if lf.paid_at else None,
+            'paid_by': paid_by_display,
+        })
+        license_fines_total += float(lf.amount or 0.0)
+
+    # Licences Professionnelles payées (agent Mobile Money uniquement)
+    from app.models import LicenceProRequest, LICENCE_PRO_ACTIVITES
+    lp_filters = [
+        LicenceProRequest.paid == True,
+        LicenceProRequest.paid_at.isnot(None),
+    ]
+    if start_date:
+        lp_filters.append(LicenceProRequest.paid_at >= start_date)
+    if end_date:
+        lp_filters.append(LicenceProRequest.paid_at <= end_date)
+    lp_query = LicenceProRequest.query.filter(*lp_filters)
+
+    licence_pro_archive = []
+    licence_pro_total = 0.0
+    for lp in lp_query.order_by(LicenceProRequest.paid_at.desc()).all():
+        lic = lp.license
+        holder_name = f"{lic.holder_firstname or ''} {lic.holder_name or ''}".strip() if lic else '-'
+        licence_pro_archive.append({
+            'id': lp.id,
+            'lp_number': lp.lp_number,
+            'holder_name': holder_name or '-',
+            'holder_island': lic.holder_island if lic else None,
+            'activite_label': LICENCE_PRO_ACTIVITES.get(lp.activite_type, {}).get('label', ''),
+            'receipt_number': lp.receipt_number,
+            'amount': float(lp.amount or 0.0),
+            'paid_at': lp.paid_at.isoformat() if lp.paid_at else None,
+            'paid_by': lp.paid_by or '-',
+        })
+        licence_pro_total += float(lp.amount or 0.0)
+
+    # Dossiers de nouveaux permis payés (agent Mobile Money uniquement)
+    from app.models import LicenseDossier
+    ld_filters = [
+        LicenseDossier.paid == True,
+        LicenseDossier.paid_at.isnot(None),
+    ]
+    if start_date:
+        ld_filters.append(LicenseDossier.paid_at >= start_date)
+    if end_date:
+        ld_filters.append(LicenseDossier.paid_at <= end_date)
+    ld_query = LicenseDossier.query.filter(*ld_filters)
+
+    dossier_permis_archive = []
+    dossier_permis_total = 0.0
+    for ld in ld_query.order_by(LicenseDossier.paid_at.desc()).all():
+        dossier_permis_archive.append({
+            'id': ld.id,
+            'dossier_number': ld.dossier_number or '-',
+            'nin': ld.nin or '-',
+            'telephone': ld.telephone or '-',
+            'country': ld.country or '-',
+            'receipt_number': ld.receipt_number,
+            'amount': float(ld.amount or 0.0),
+            'paid_at': ld.paid_at.isoformat() if ld.paid_at else None,
+            'paid_by': ld.paid_by or '-',
+        })
+        dossier_permis_total += float(ld.amount or 0.0)
+
     return jsonify({
         'start_date': start_date.isoformat() if start_date else None,
         'end_date': end_date.isoformat() if end_date else None,
@@ -7518,12 +7641,21 @@ def get_mobile_money_archive():
             'cg_total': round(cg_total, 2),
             'vt_count': len(vt_archive),
             'vt_total': round(vt_total, 2),
-            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines + cg_total + vt_total, 2),
+            'license_fines_count': len(license_fine_archive),
+            'license_fines_total': round(license_fines_total, 2),
+            'licence_pro_count': len(licence_pro_archive),
+            'licence_pro_total': round(licence_pro_total, 2),
+            'dossier_permis_count': len(dossier_permis_archive),
+            'dossier_permis_total': round(dossier_permis_total, 2),
+            'overall_total': round(direct_fines_total + vignette_total + vignette_penalties + vignette_included_fines + cg_total + vt_total + license_fines_total + licence_pro_total + dossier_permis_total, 2),
         },
         'direct_paid_fines': direct_paid_fines,
         'vignette_archive': vignette_archive,
         'cg_archive': cg_archive,
         'vt_archive': vt_archive,
+        'license_fine_archive': license_fine_archive,
+        'licence_pro_archive': licence_pro_archive,
+        'dossier_permis_archive': dossier_permis_archive,
     })
 
 

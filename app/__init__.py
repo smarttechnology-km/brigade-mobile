@@ -217,7 +217,7 @@ def create_app():
         tasks_set_app(app)
 
         # Add the exoneration task to run every hour
-        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_weekly_escalation, send_technical_inspection_appointment_reminders
+        from app.tasks import process_exonerated_fines, regenerate_phone_qr_codes, check_vehicle_qr_code_expiry, send_expiry_notifications, apply_fine_weekly_escalation, apply_license_fine_weekly_escalation, send_technical_inspection_appointment_reminders
         scheduler.add_job(
             func=process_exonerated_fines,
             trigger=IntervalTrigger(hours=1),
@@ -259,6 +259,15 @@ def create_app():
             trigger=CronTrigger(hour=9, minute=0),
             id='apply_fine_weekly_escalation',
             name='Apply weekly category-based price escalation to unpaid fines daily at 09:00 AM',
+            replace_existing=True
+        )
+
+        # Apply weekly category-based price escalation to unpaid license fines daily at 09:00 AM
+        scheduler.add_job(
+            func=apply_license_fine_weekly_escalation,
+            trigger=CronTrigger(hour=9, minute=0),
+            id='apply_license_fine_weekly_escalation',
+            name='Apply weekly category-based price escalation to unpaid license fines daily at 09:00 AM',
             replace_existing=True
         )
 
@@ -428,6 +437,20 @@ def create_app():
                             if 'icon' not in reason_columns:
                                 conn.execute(text("ALTER TABLE point_reduction_reasons ADD COLUMN icon VARCHAR(10)"))
                                 logger.info("Added point_reduction_reasons.icon column")
+                            if 'category_id' not in reason_columns:
+                                conn.execute(text("ALTER TABLE point_reduction_reasons ADD COLUMN category_id INTEGER REFERENCES point_reduction_categories(id)"))
+                                logger.info("Added point_reduction_reasons.category_id column")
+
+                        # Patch license_fines table (link back to the point-reduction history
+                        # row that created it, so a reclamation can cancel/update the fine too)
+                        license_fines_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='license_fines'")
+                        ).first() is not None
+                        if license_fines_table_exists:
+                            lf_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(license_fines)")).fetchall()}
+                            if 'history_id' not in lf_columns:
+                                conn.execute(text("ALTER TABLE license_fines ADD COLUMN history_id INTEGER REFERENCES point_reduction_history(id)"))
+                                logger.info("Added license_fines.history_id column")
 
                         # Patch payments table
                         payments_table_exists = conn.execute(
@@ -757,6 +780,18 @@ def create_app():
                     if 'category_validity' not in ls_cols:
                         conn.execute(text("ALTER TABLE license_settings ADD COLUMN category_validity TEXT"))
                         logger.info("Added missing license_settings.category_validity column")
+                    if 'renewal_dossier_fee' not in ls_cols:
+                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN renewal_dossier_fee FLOAT NOT NULL DEFAULT 0"))
+                        logger.info("Added missing license_settings.renewal_dossier_fee column")
+                    if 'renewal_license_price' not in ls_cols:
+                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN renewal_license_price FLOAT NOT NULL DEFAULT 0"))
+                        logger.info("Added missing license_settings.renewal_license_price column")
+                    if 'new_dossier_fee' not in ls_cols:
+                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN new_dossier_fee FLOAT NOT NULL DEFAULT 0"))
+                        logger.info("Added missing license_settings.new_dossier_fee column")
+                    if 'new_license_price' not in ls_cols:
+                        conn.execute(text("ALTER TABLE license_settings ADD COLUMN new_license_price FLOAT NOT NULL DEFAULT 0"))
+                        logger.info("Added missing license_settings.new_license_price column")
 
                     lpr_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='license_print_requests'")
@@ -846,6 +881,16 @@ def create_app():
                             'rejected_by':          "ALTER TABLE license_dossiers ADD COLUMN rejected_by VARCHAR(100)",
                             'rejection_reason':     "ALTER TABLE license_dossiers ADD COLUMN rejection_reason TEXT",
                             'nin':                  "ALTER TABLE license_dossiers ADD COLUMN nin VARCHAR(50)",
+                            'amount':               "ALTER TABLE license_dossiers ADD COLUMN amount FLOAT",
+                            'paid':                 "ALTER TABLE license_dossiers ADD COLUMN paid BOOLEAN NOT NULL DEFAULT 0",
+                            'paid_at':              "ALTER TABLE license_dossiers ADD COLUMN paid_at DATETIME",
+                            'paid_by':              "ALTER TABLE license_dossiers ADD COLUMN paid_by VARCHAR(100)",
+                            'receipt_number':       "ALTER TABLE license_dossiers ADD COLUMN receipt_number VARCHAR(100)",
+                            'blood_group':          "ALTER TABLE license_dossiers ADD COLUMN blood_group VARCHAR(5)",
+                            'notes':                "ALTER TABLE license_dossiers ADD COLUMN notes TEXT",
+                            'dossier_type':         "ALTER TABLE license_dossiers ADD COLUMN dossier_type VARCHAR(20) NOT NULL DEFAULT 'nouveau'",
+                            'doc_permis':           "ALTER TABLE license_dossiers ADD COLUMN doc_permis BOOLEAN NOT NULL DEFAULT 0",
+                            'renewal_license_id':   "ALTER TABLE license_dossiers ADD COLUMN renewal_license_id INTEGER REFERENCES driver_licenses(id)",
                         }
                         for col, sql in ld_col_defs.items():
                             if col not in ld_cols:
@@ -878,6 +923,9 @@ def create_app():
                             'civilite':               "ALTER TABLE carte_grise ADD COLUMN civilite VARCHAR(10)",
                             'carte_bleue':            "ALTER TABLE carte_grise ADD COLUMN carte_bleue BOOLEAN NOT NULL DEFAULT 0",
                             'qr_price':               "ALTER TABLE carte_grise ADD COLUMN qr_price INTEGER NOT NULL DEFAULT 0",
+                            'paid_at':                "ALTER TABLE carte_grise ADD COLUMN paid_at DATETIME",
+                            'paid_by':                "ALTER TABLE carte_grise ADD COLUMN paid_by VARCHAR(100)",
+                            'receipt_number':         "ALTER TABLE carte_grise ADD COLUMN receipt_number VARCHAR(100)",
                         }
                         for col, sql in cg_col_defs.items():
                             if col not in cg_cols:
@@ -904,6 +952,33 @@ def create_app():
                                 if col not in lpr_cols:
                                     conn.execute(text(sql))
                                     logger.info(f"Added licence_pro_requests.{col} column")
+                            lpr_payment_col_defs = {
+                                'amount':         "ALTER TABLE licence_pro_requests ADD COLUMN amount FLOAT",
+                                'paid':           "ALTER TABLE licence_pro_requests ADD COLUMN paid BOOLEAN NOT NULL DEFAULT 0",
+                                'paid_at':        "ALTER TABLE licence_pro_requests ADD COLUMN paid_at DATETIME",
+                                'paid_by':        "ALTER TABLE licence_pro_requests ADD COLUMN paid_by VARCHAR(100)",
+                                'receipt_number': "ALTER TABLE licence_pro_requests ADD COLUMN receipt_number VARCHAR(100)",
+                            }
+                            for col, sql in lpr_payment_col_defs.items():
+                                if col not in lpr_cols:
+                                    conn.execute(text(sql))
+                                    logger.info(f"Added licence_pro_requests.{col} column")
+
+                        # licence_pro_settings patches (per-activité pricing)
+                        lps_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='licence_pro_settings'")
+                        ).first() is not None
+                        if lps_table_exists:
+                            lps_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(licence_pro_settings)")).fetchall()}
+                            lps_price_col_defs = {
+                                'price_taxi_ville':               "ALTER TABLE licence_pro_settings ADD COLUMN price_taxi_ville FLOAT NOT NULL DEFAULT 0",
+                                'price_transport_commun':         "ALTER TABLE licence_pro_settings ADD COLUMN price_transport_commun FLOAT NOT NULL DEFAULT 0",
+                                'price_proprietaire_exploitant':  "ALTER TABLE licence_pro_settings ADD COLUMN price_proprietaire_exploitant FLOAT NOT NULL DEFAULT 0",
+                            }
+                            for col, sql in lps_price_col_defs.items():
+                                if col not in lps_cols:
+                                    conn.execute(text(sql))
+                                    logger.info(f"Added licence_pro_settings.{col} column")
 
             elif 'postgresql' in str(app.config.get('SQLALCHEMY_DATABASE_URI', '')):
                 with db.engine.begin() as conn:
@@ -1021,6 +1096,10 @@ def create_app():
                         "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS directeur_signature_filename VARCHAR(255)",
                         "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS permanent_validity_years INTEGER NOT NULL DEFAULT 10",
                         "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS category_validity TEXT",
+                        "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS renewal_dossier_fee FLOAT NOT NULL DEFAULT 0",
+                        "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS renewal_license_price FLOAT NOT NULL DEFAULT 0",
+                        "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS new_dossier_fee FLOAT NOT NULL DEFAULT 0",
+                        "ALTER TABLE license_settings ADD COLUMN IF NOT EXISTS new_license_price FLOAT NOT NULL DEFAULT 0",
                         # license_print_requests
                         "ALTER TABLE license_print_requests ADD COLUMN IF NOT EXISTS unit_price FLOAT NOT NULL DEFAULT 0",
                         # alerts
@@ -1036,6 +1115,8 @@ def create_app():
                         # point_reduction_reasons
                         "ALTER TABLE point_reduction_reasons ADD COLUMN IF NOT EXISTS article_id INTEGER",
                         "ALTER TABLE point_reduction_reasons ADD COLUMN IF NOT EXISTS icon VARCHAR(10)",
+                        "ALTER TABLE point_reduction_reasons ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES point_reduction_categories(id)",
+                        "ALTER TABLE license_fines ADD COLUMN IF NOT EXISTS history_id INTEGER REFERENCES point_reduction_history(id)",
                         # license_dossiers
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS nom VARCHAR(150)",
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS prenom VARCHAR(100)",
@@ -1077,6 +1158,16 @@ def create_app():
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS rejected_by VARCHAR(100)",
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS nin VARCHAR(50)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS amount FLOAT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS paid BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS paid_by VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(100)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS blood_group VARCHAR(5)",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS notes TEXT",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS dossier_type VARCHAR(20) NOT NULL DEFAULT 'nouveau'",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS doc_permis BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS renewal_license_id INTEGER",
                         # carte_grise_setting
                         "ALTER TABLE carte_grise_setting ADD COLUMN IF NOT EXISTS signature_filename VARCHAR(255)",
                         "ALTER TABLE carte_grise_setting ADD COLUMN IF NOT EXISTS island VARCHAR(50) NOT NULL DEFAULT 'Grande Comore'",
@@ -1091,6 +1182,9 @@ def create_app():
                         "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS civilite VARCHAR(10)",
                         "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS carte_bleue BOOLEAN NOT NULL DEFAULT FALSE",
                         "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS qr_price INTEGER NOT NULL DEFAULT 0",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS paid_by VARCHAR(100)",
+                        "ALTER TABLE carte_grise ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(100)",
                         # smart_tech_accounts
                         "ALTER TABLE smart_tech_accounts ADD COLUMN IF NOT EXISTS employee_id INTEGER",
                         "ALTER TABLE smart_tech_accounts ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'admin'",
@@ -1108,6 +1202,15 @@ def create_app():
                         "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS reprint_requested_at TIMESTAMP",
                         "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS reprint_approved_by VARCHAR(100)",
                         "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS reprint_approved_at TIMESTAMP",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS amount FLOAT",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS paid BOOLEAN NOT NULL DEFAULT FALSE",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS paid_by VARCHAR(100)",
+                        "ALTER TABLE licence_pro_requests ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(100)",
+                        # licence_pro_settings
+                        "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_taxi_ville FLOAT NOT NULL DEFAULT 0",
+                        "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_transport_commun FLOAT NOT NULL DEFAULT 0",
+                        "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_proprietaire_exploitant FLOAT NOT NULL DEFAULT 0",
                     ]
                     for sql in pg_patches:
                         try:

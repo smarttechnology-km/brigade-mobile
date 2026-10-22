@@ -376,3 +376,47 @@ def apply_fine_weekly_escalation():
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error in apply_fine_weekly_escalation: {e}")
+
+
+def apply_license_fine_weekly_escalation():
+    """
+    Daily job (09:00) — license-fine counterpart of apply_fine_weekly_escalation.
+    For every unpaid LicenseFine linked to a PointReductionReason/PointReductionCategory,
+    set the amount to min(category.min_price + weeks_elapsed * category.weekly_increment,
+    category.max_price).
+    """
+    app = get_app()
+    with app.app_context():
+        try:
+            from app.timezone_utils import ensure_comoros
+            from app.models import LicenseFine
+
+            unpaid_fines = LicenseFine.query.filter_by(paid=False).filter(LicenseFine.reason_id.isnot(None)).all()
+            now = ensure_comoros(now_comoros())
+            updated = 0
+
+            for fine in unpaid_fines:
+                if not fine.issued_at or not fine.reason or not fine.reason.category:
+                    continue
+
+                category = fine.reason.category
+                issued = ensure_comoros(fine.issued_at)
+                weeks_elapsed = (now - issued).days // 7
+
+                if not fine.base_amount:
+                    fine.base_amount = fine.amount
+
+                new_amount = round(min(
+                    float(category.min_price) + weeks_elapsed * float(category.weekly_increment),
+                    float(category.max_price)
+                ), 2)
+                if abs(float(fine.amount) - new_amount) >= 0.01:
+                    fine.amount = new_amount
+                    updated += 1
+
+            db.session.commit()
+            logger.info(f"apply_license_fine_weekly_escalation: updated {updated} fine(s)")
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error in apply_license_fine_weekly_escalation: {e}")

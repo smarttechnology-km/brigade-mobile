@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app, url_for, render_template, send_file
 from app import db
-from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting, QRCodePayment, SmartTechSetting, HuriDestinationSetting, FineType
+from app.models import Payment, Fine, Vehicle, VehicleHistory, VignetteSetting, QRCodePayment, SmartTechSetting, HuriDestinationSetting, FineType, DriverLicense, LicenseFine
 from datetime import datetime, timedelta
 import io
 import json
@@ -776,6 +776,59 @@ def create_payment():
             'vehicle': vehicle.to_dict(),
         })
 
+    if payment_type == 'license_fines':
+        license_id = data.get('license_id')
+        if not license_id:
+            return jsonify({'error': 'license_id is required for license fine payments'}), 400
+        lic = DriverLicense.query.get(license_id)
+        if not lic:
+            return jsonify({'error': 'License not found'}), 404
+        if not fines_ids:
+            return jsonify({'error': 'No fines specified'}), 400
+
+        license_fines = LicenseFine.query.filter(
+            LicenseFine.id.in_(fines_ids),
+            LicenseFine.license_id == lic.id,
+            LicenseFine.paid == False
+        ).all()
+        if not license_fines:
+            return jsonify({'error': 'Fines not found'}), 404
+
+        total = sum([float(f.amount) for f in license_fines])
+        payload = {
+            'type': 'license_fine_request',
+            'payment_type': 'license_fines',
+            'license_id': lic.id,
+            'fine_ids': [f.id for f in license_fines],
+        }
+
+        payment = Payment(
+            amount=total,
+            currency='KMF',
+            status='pending',
+            license_plate=lic.license_number,
+            owner_name=f"{lic.holder_firstname or ''} {lic.holder_name or ''}".strip() or lic.license_number,
+            payer_name=payer_name,
+            payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('permis'),
+            fines=json.dumps(payload)
+        )
+        db.session.add(payment)
+        db.session.commit()
+
+        checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
+
+        return jsonify({
+            'payment_id': payment.id,
+            'confirm_token': payment.confirm_token,
+            'checkout_url': checkout_url,
+            'amount': round(float(total), 2),
+            'currency': 'KMF',
+            'status': 'pending',
+            'payment_type': 'license_fines',
+            'license': lic.to_dict(),
+        })
+
     if not fines_ids:
         return jsonify({'error': 'No fines specified'}), 400
 
@@ -1033,6 +1086,18 @@ def webhook():
                     notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF (par {citizen_label})"
                 ))
                 db.session.commit()
+        elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'license_fine_request':
+            payment_time = payment.paid_at or now_comoros()
+            citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
+            fine_ids = fine_payload.get('fine_ids') or []
+            for fid in fine_ids:
+                f = LicenseFine.query.get(int(fid))
+                if f and not f.paid:
+                    f.paid = True
+                    f.paid_at = payment_time
+                    f.paid_by = citizen_label
+                    f.receipt_number = f'LRC-{f.id}-{int(payment_time.timestamp())}'
+            db.session.commit()
         else:
             citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
             for fid in fine_payload:

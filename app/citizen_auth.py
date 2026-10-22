@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app, Response, render_template
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
-from app.models import db, Vehicle, User, VehicleOwner, Fine, VehicleTransfer, DriverLicense, PointReductionHistory
+from app.models import db, Vehicle, User, VehicleOwner, Fine, VehicleTransfer, DriverLicense, PointReductionHistory, LicenseFine
 from app import limiter
 from app.sms_service import SMSService
 from app.push_notifications import send_expo_push_notification
@@ -674,11 +674,23 @@ def get_my_license():
                    .filter_by(license_id=lic.id)
                    .order_by(PointReductionHistory.created_at.desc())
                    .all())
+        fines = (LicenseFine.query
+                 .filter_by(license_id=lic.id)
+                 .order_by(LicenseFine.issued_at.desc())
+                 .all())
+
+        fine_by_history = {f.history_id: f for f in fines if f.history_id}
+
         data = lic.to_dict()
-        data['point_history'] = [
-            {k: v for k, v in h.to_dict().items() if k != 'created_by'}
-            for h in history
-        ]
+        data['point_history'] = []
+        for h in history:
+            row = {k: v for k, v in h.to_dict().items() if k != 'created_by'}
+            fine = fine_by_history.get(h.id)
+            row['fine_paid'] = fine.paid if fine else None
+            row['fine_amount'] = float(fine.amount) if fine else None
+            row['fine_paid_at'] = fine.paid_at.strftime('%d/%m/%Y %H:%M') if (fine and fine.paid_at) else None
+            data['point_history'].append(row)
+        data['fines'] = [f.to_dict() for f in fines]
         return jsonify({'license': data})
     except Exception as e:
         print(f"❌ get_my_license error: {e}")

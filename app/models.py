@@ -1873,9 +1873,10 @@ LICENCE_PRO_ACTIVITES = {
 
 class LicenceProRequest(db.Model):
     """A 'Licence Professionnelle' (taxi driver permit) request for an existing
-    DriverLicense holder. Workflow: directeur_technique creates it (pending) →
-    directeur_general validates it (validated, DG signature now applies) →
-    directeur_technique prints it (printed) → shows up in 'Licence Pro Complet'."""
+    DriverLicense holder. Workflow: directeur_technique creates it (en_attente_paiement)
+    → a Mobile Money agent collects payment (pending) → directeur_general validates it
+    (validated, DG signature now applies) → directeur_technique prints it (printed) →
+    shows up in 'Licence Pro Complet'."""
     __tablename__ = 'licence_pro_requests'
     id              = db.Column(db.Integer, primary_key=True)
     license_id      = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False, index=True)
@@ -1883,9 +1884,14 @@ class LicenceProRequest(db.Model):
     activite_type   = db.Column(db.String(30), nullable=True)  # taxi_ville | transport_commun | proprietaire_exploitant
     zone_activite   = db.Column(db.String(255), nullable=False)
     validity_date   = db.Column(db.Date, nullable=False)
-    status          = db.Column(db.String(20), nullable=False, default='pending', index=True)  # pending | validated | printed
+    status          = db.Column(db.String(20), nullable=False, default='en_attente_paiement', index=True)  # en_attente_paiement | pending | validated | printed
     requested_by    = db.Column(db.String(100), nullable=False)
     requested_at    = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    amount          = db.Column(db.Float, nullable=True)  # snapshot of LicenceProSetting.price_for(activite_type) at creation
+    paid            = db.Column(db.Boolean, nullable=False, default=False)
+    paid_at         = db.Column(db.DateTime, nullable=True)
+    paid_by         = db.Column(db.String(100), nullable=True)  # mobile money agent username
+    receipt_number  = db.Column(db.String(100), nullable=True)
     validated_by    = db.Column(db.String(100), nullable=True)
     validated_at    = db.Column(db.DateTime, nullable=True)
     printed_by      = db.Column(db.String(100), nullable=True)
@@ -1922,6 +1928,11 @@ class LicenceProRequest(db.Model):
             'status':          self.status,
             'requested_by':    self.requested_by,
             'requested_at':    self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else '',
+            'amount':          float(self.amount) if self.amount is not None else 0,
+            'paid':            self.paid,
+            'paid_at':         self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else '',
+            'paid_by':         self.paid_by or '',
+            'receipt_number':  self.receipt_number or '',
             'validated_by':    self.validated_by or '',
             'validated_at':    self.validated_at.strftime('%d/%m/%Y %H:%M') if self.validated_at else '',
             'printed_by':      self.printed_by or '',
@@ -1944,6 +1955,9 @@ class LicenceProSetting(db.Model):
     validity_years_taxi_ville = db.Column(db.Integer, nullable=False, default=1)
     validity_years_transport_commun = db.Column(db.Integer, nullable=False, default=1)
     validity_years_proprietaire_exploitant = db.Column(db.Integer, nullable=False, default=1)
+    price_taxi_ville = db.Column(db.Float, nullable=False, default=0)
+    price_transport_commun = db.Column(db.Float, nullable=False, default=0)
+    price_proprietaire_exploitant = db.Column(db.Float, nullable=False, default=0)
 
     @classmethod
     def get(cls):
@@ -1961,11 +1975,21 @@ class LicenceProSetting(db.Model):
             'proprietaire_exploitant': self.validity_years_proprietaire_exploitant,
         }.get(activite_type, 1)
 
+    def price_for(self, activite_type):
+        return {
+            'taxi_ville': self.price_taxi_ville,
+            'transport_commun': self.price_transport_commun,
+            'proprietaire_exploitant': self.price_proprietaire_exploitant,
+        }.get(activite_type, 0)
+
     def to_dict(self):
         return {
             'taxi_ville': self.validity_years_taxi_ville,
             'transport_commun': self.validity_years_transport_commun,
             'proprietaire_exploitant': self.validity_years_proprietaire_exploitant,
+            'price_taxi_ville': self.price_taxi_ville or 0,
+            'price_transport_commun': self.price_transport_commun or 0,
+            'price_proprietaire_exploitant': self.price_proprietaire_exploitant or 0,
         }
 
 
@@ -1985,16 +2009,42 @@ class PointReductionArticle(db.Model):
         }
 
 
+class PointReductionCategory(db.Model):
+    """A price range (min/max, in KMF) that a point-reduction reason ("classe de
+    contravention") belongs to. Drives the weekly escalation of unpaid license fines,
+    mirroring FineCategory for vehicle fines: week 1 = min_price, week N =
+    min(min_price + (N-1) * weekly_increment, max_price)."""
+    __tablename__ = 'point_reduction_categories'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    min_price = db.Column(db.Numeric(10, 2), nullable=False)
+    max_price = db.Column(db.Numeric(10, 2), nullable=False)
+    weekly_increment = db.Column(db.Numeric(10, 2), nullable=False, default=5000)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'min_price': float(self.min_price),
+            'max_price': float(self.max_price),
+            'weekly_increment': float(self.weekly_increment),
+            'created_at': self.created_at.isoformat(),
+        }
+
+
 class PointReductionReason(db.Model):
     __tablename__ = 'point_reduction_reasons'
     id               = db.Column(db.Integer, primary_key=True)
     label            = db.Column(db.String(200), nullable=False)
     points_to_deduct = db.Column(db.Integer, nullable=False, default=1)
     article_id       = db.Column(db.Integer, db.ForeignKey('point_reduction_articles.id'), nullable=True)
+    category_id      = db.Column(db.Integer, db.ForeignKey('point_reduction_categories.id'), nullable=True)
     icon             = db.Column(db.String(10), nullable=True)  # emoji, shown in the reasons table
     created_at       = db.Column(db.DateTime, nullable=False, default=now_comoros)
 
     article = db.relationship('PointReductionArticle', backref='reasons', lazy=True)
+    category = db.relationship('PointReductionCategory', backref='reasons', lazy=True)
 
     def to_dict(self):
         return {
@@ -2003,6 +2053,10 @@ class PointReductionReason(db.Model):
             'points_to_deduct': self.points_to_deduct,
             'article_id': self.article_id,
             'article_code': self.article.code if self.article else None,
+            'category_id': self.category_id,
+            'category_name': self.category.name if self.category else None,
+            'category_min_price': float(self.category.min_price) if self.category else None,
+            'category_max_price': float(self.category.max_price) if self.category else None,
             'icon': self.icon,
         }
 
@@ -2048,6 +2102,61 @@ class PointReductionHistory(db.Model):
         }
 
 
+class LicenseFine(db.Model):
+    """A fine tied to a driver's license point reduction — the license-system
+    counterpart of `Fine` (which is tied to a Vehicle). Created automatically when
+    a point reduction is applied for a reason that has a `PointReductionCategory`
+    priced; escalates weekly like vehicle fines (see app/tasks.py)."""
+    __tablename__ = 'license_fines'
+    id = db.Column(db.Integer, primary_key=True)
+    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False, index=True)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    base_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    reason_id = db.Column(db.Integer, db.ForeignKey('point_reduction_reasons.id'), nullable=True)
+    reason_label = db.Column(db.String(255), nullable=False)
+    history_id = db.Column(db.Integer, db.ForeignKey('point_reduction_history.id'), nullable=True, index=True)
+    officer = db.Column(db.String(100))
+    paid = db.Column(db.Boolean, default=False)
+    paid_at = db.Column(db.DateTime)
+    paid_by = db.Column(db.String(100), nullable=True)
+    receipt_number = db.Column(db.String(100), nullable=True)
+    notes = db.Column(db.Text)
+    issued_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    license = db.relationship('DriverLicense', backref=db.backref('fines', lazy='dynamic'))
+    reason = db.relationship('PointReductionReason', backref=db.backref('fines', lazy='dynamic'))
+
+    def to_dict(self):
+        from datetime import timedelta
+        from app.timezone_utils import now_comoros as _now_comoros, ensure_comoros as _ensure_comoros
+        category = self.reason.category if self.reason else None
+        in_window = bool(self.issued_at) and _now_comoros() <= _ensure_comoros(self.issued_at) + timedelta(days=7)
+        return {
+            'id': self.id,
+            'license_id': self.license_id,
+            'license_number': self.license.license_number if self.license else None,
+            'holder_name': self.license.holder_name if self.license else None,
+            'holder_firstname': self.license.holder_firstname if self.license else None,
+            'amount': float(self.amount),
+            'base_amount': float(self.base_amount) if self.base_amount else float(self.amount),
+            'reason_id': self.reason_id,
+            'history_id': self.history_id,
+            'reclaimable': bool(self.history_id) and not self.paid and in_window,
+            'category_min_price': float(category.min_price) if category else None,
+            'category_max_price': float(category.max_price) if category else None,
+            'reason_label': self.reason_label,
+            'officer': self.officer,
+            'paid': self.paid,
+            'paid_at': self.paid_at.isoformat() if self.paid_at else None,
+            'paid_at_str': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else None,
+            'paid_by': self.paid_by,
+            'receipt_number': self.receipt_number,
+            'notes': self.notes,
+            'issued_at': self.issued_at.isoformat(),
+            'issued_at_str': self.issued_at.strftime('%d/%m/%Y %H:%M') if self.issued_at else None,
+        }
+
+
 class LicenseSetting(db.Model):
     __tablename__ = 'license_settings'
     id                   = db.Column(db.Integer, primary_key=True)
@@ -2057,6 +2166,10 @@ class LicenseSetting(db.Model):
     directeur_general_name = db.Column(db.String(150), nullable=True)
     directeur_signature_filename = db.Column(db.String(255), nullable=True)
     category_validity = db.Column(db.Text, nullable=True)
+    renewal_dossier_fee = db.Column(db.Float, nullable=False, default=0)
+    renewal_license_price = db.Column(db.Float, nullable=False, default=0)
+    new_dossier_fee = db.Column(db.Float, nullable=False, default=0)
+    new_license_price = db.Column(db.Float, nullable=False, default=0)
 
     @property
     def directeur_signature_url(self):
@@ -2084,6 +2197,10 @@ class LicenseSetting(db.Model):
             'directeur_signature_filename': self.directeur_signature_filename or '',
             'directeur_signature_url': self.directeur_signature_url,
             'category_validity': cat_validity,
+            'renewal_dossier_fee': self.renewal_dossier_fee or 0,
+            'renewal_license_price': self.renewal_license_price or 0,
+            'new_dossier_fee': self.new_dossier_fee or 0,
+            'new_license_price': self.new_license_price or 0,
         }
 
 
@@ -2322,6 +2439,9 @@ class LicenseDossier(db.Model):
     __tablename__ = 'license_dossiers'
     id               = db.Column(db.Integer, primary_key=True)
     dossier_number   = db.Column(db.String(30), unique=True, nullable=True, index=True)
+    dossier_type     = db.Column(db.String(20), nullable=False, default='nouveau')  # 'nouveau' | 'renouvellement'
+    # Renouvellement : permis existant qu'on renouvelle/complète (au lieu d'en créer un nouveau à l'étape 6)
+    renewal_license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=True, index=True)
 
     # Informations du candidat (saisies à l'étape 2)
     nom                    = db.Column(db.String(150), nullable=True)
@@ -2329,11 +2449,13 @@ class LicenseDossier(db.Model):
     date_naissance         = db.Column(db.Date, nullable=True)
     lieu_naissance         = db.Column(db.String(150), nullable=True)
     sexe                   = db.Column(db.String(10), nullable=True)
+    blood_group            = db.Column(db.String(5), nullable=True)
     nationalite            = db.Column(db.String(100), nullable=True)
     holder_address         = db.Column(db.String(255), nullable=True)
     telephone              = db.Column(db.String(30), nullable=True)
     nin                    = db.Column(db.String(50), nullable=True)
     country                = db.Column(db.String(50), nullable=True)
+    notes                  = db.Column(db.Text, nullable=True)
     # Détails du permis (étape 2)
     license_number_proposed = db.Column(db.String(50), nullable=True)
     type_permis            = db.Column(db.String(20), nullable=True)
@@ -2345,6 +2467,7 @@ class LicenseDossier(db.Model):
 
     # Étape 1 — Validation des documents
     doc_autoecole          = db.Column(db.Boolean, nullable=False, default=False)
+    doc_permis             = db.Column(db.Boolean, nullable=False, default=False)  # renouvellement : remplace doc_autoecole
     doc_medical            = db.Column(db.Boolean, nullable=False, default=False)
     doc_residence          = db.Column(db.Boolean, nullable=False, default=False)
     doc_fiche_individuelle = db.Column(db.Boolean, nullable=False, default=False)
@@ -2352,6 +2475,15 @@ class LicenseDossier(db.Model):
     doc_recu_paiement      = db.Column(db.Boolean, nullable=False, default=False)
     step1_validated_at     = db.Column(db.DateTime, nullable=True)
     step1_validated_by     = db.Column(db.String(100), nullable=True)
+
+    # Paiement des frais de dossier (collecté par un agent Mobile Money une fois les
+    # 5 premiers documents validés ; une fois payé, le secrétariat coche "Reçu de
+    # paiement" ci-dessus pour clôturer l'étape 1).
+    amount         = db.Column(db.Float, nullable=True)  # snapshot LicenseSetting.new_dossier_fee + new_license_price
+    paid           = db.Column(db.Boolean, nullable=False, default=False)
+    paid_at        = db.Column(db.DateTime, nullable=True)
+    paid_by        = db.Column(db.String(100), nullable=True)  # mobile money agent username
+    receipt_number = db.Column(db.String(100), nullable=True)
 
     # Step 3 — Photo du candidat
     photo_filename         = db.Column(db.String(255), nullable=True)
@@ -2396,12 +2528,34 @@ class LicenseDossier(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=now_comoros, onupdate=now_comoros)
 
     license = db.relationship('DriverLicense', foreign_keys=[license_id])
+    renewal_license = db.relationship('DriverLicense', foreign_keys=[renewal_license_id])
 
     @property
     def all_docs_checked(self):
+        return self.docs_checked_before_payment and self.doc_recu_paiement
+
+    @property
+    def docs_checked_before_payment(self):
+        """The 5 physical documents verified before the dossier can be paid for
+        (everything except the payment receipt itself). For a renouvellement,
+        the old physical license card ("Permis") replaces the Auto-école certificate."""
+        if self.dossier_type == 'renouvellement':
+            return all([self.doc_permis, self.doc_medical, self.doc_residence,
+                        self.doc_fiche_individuelle, self.doc_carte_nationale])
         return all([self.doc_autoecole, self.doc_medical, self.doc_residence,
-                    self.doc_fiche_individuelle, self.doc_carte_nationale,
-                    self.doc_recu_paiement])
+                    self.doc_fiche_individuelle, self.doc_carte_nationale])
+
+    @property
+    def awaiting_payment(self):
+        # Only relevant while step 1 hasn't been validated yet — dossiers created
+        # before the payment step existed already have step1_validated_at set and
+        # must not be flagged as unpaid just because the new `paid` column defaults
+        # to False for them.
+        return not self.step1_validated_at and self.docs_checked_before_payment and not self.paid
+
+    @property
+    def awaiting_receipt_confirmation(self):
+        return not self.step1_validated_at and self.paid and not self.doc_recu_paiement
 
     def _ui_current_step(self):
         # Ordre UI : step1 → step3(photo) → step2(info) → step4(vérif) → step5(signature DG) → step6(impression)
@@ -2421,16 +2575,22 @@ class LicenseDossier(db.Model):
         return {
             'id': self.id,
             'dossier_number': self.dossier_number or '',
+            'dossier_type': self.dossier_type or 'nouveau',
+            'renewal_license_id': self.renewal_license_id,
+            'renewal_license_number': self.renewal_license.license_number if self.renewal_license else '',
+            'doc_permis': self.doc_permis,
             'nom': self.nom or '',
             'prenom': self.prenom or '',
             'date_naissance': self.date_naissance.strftime('%Y-%m-%d') if self.date_naissance else '',
             'lieu_naissance': self.lieu_naissance or '',
             'sexe': self.sexe or '',
+            'blood_group': self.blood_group or '',
             'nationalite': self.nationalite or '',
             'holder_address': self.holder_address or '',
             'telephone': self.telephone or '',
             'nin': self.nin or '',
             'country': self.country or '',
+            'notes': self.notes or '',
             'license_number_proposed': self.license_number_proposed or '',
             'type_permis': self.type_permis or '',
             'issue_date': self.issue_date.strftime('%Y-%m-%d') if self.issue_date else '',
@@ -2447,6 +2607,14 @@ class LicenseDossier(db.Model):
             'doc_fiche_individuelle': self.doc_fiche_individuelle,
             'doc_carte_nationale': self.doc_carte_nationale,
             'doc_recu_paiement': self.doc_recu_paiement,
+            'amount': float(self.amount) if self.amount is not None else 0,
+            'paid': self.paid,
+            'paid_at': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else '',
+            'paid_by': self.paid_by or '',
+            'receipt_number': self.receipt_number or '',
+            'docs_checked_before_payment': self.docs_checked_before_payment,
+            'awaiting_payment': self.awaiting_payment,
+            'awaiting_receipt_confirmation': self.awaiting_receipt_confirmation,
             'step1_validated_at': self.step1_validated_at.strftime('%d/%m/%Y %H:%M') if self.step1_validated_at else '',
             'step1_validated_by': self.step1_validated_by or '',
             'step2_validated_at': self.step2_validated_at.strftime('%d/%m/%Y %H:%M') if self.step2_validated_at else '',
@@ -2501,6 +2669,11 @@ class CarteGrise(db.Model):
     signed_at                  = db.Column(db.DateTime)
     signed_by                  = db.Column(db.String(100))
 
+    # Paiement des frais (collecté par un agent Mobile Money pendant 'en_attente_paiement')
+    paid_at         = db.Column(db.DateTime)
+    paid_by         = db.Column(db.String(100))
+    receipt_number  = db.Column(db.String(100))
+
     created_at  = db.Column(db.DateTime, default=now_comoros)
     updated_at  = db.Column(db.DateTime, default=now_comoros, onupdate=now_comoros)
     created_by  = db.Column(db.String(100))
@@ -2529,6 +2702,9 @@ class CarteGrise(db.Model):
             'signature_requested_by': self.signature_requested_by or '',
             'signed_at': self.signed_at.strftime('%d/%m/%Y %H:%M') if self.signed_at else '',
             'signed_by': self.signed_by or '',
+            'paid_at': self.paid_at.strftime('%d/%m/%Y %H:%M') if self.paid_at else '',
+            'paid_by': self.paid_by or '',
+            'receipt_number': self.receipt_number or '',
             'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else '',
             'created_by': self.created_by or '',
             'updated_at': self.updated_at.strftime('%d/%m/%Y %H:%M') if self.updated_at else '',
