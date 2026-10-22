@@ -4292,8 +4292,18 @@ def api_licenses_list():
     total   = query.count()
     # Tri par numéro de permis (du plus grand au plus petit), en ignorant les espaces
     # pour comparer numériquement malgré les formats hétérogènes ("06 592" / "73773").
-    license_number_as_int = db.func.cast(db.func.replace(DriverLicense.license_number, ' ', ''), db.Integer)
-    items   = query.order_by(license_number_as_int.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    # SQLite est permissif : CAST('150824BIS' AS INTEGER) renvoie 150824 sans erreur.
+    # Postgres est strict et lève une exception sur ce même cast — il faut donc d'abord
+    # ne garder que le préfixe numérique (et NULLIF le vide en NULL) avant de caster.
+    cleaned_number = db.func.replace(DriverLicense.license_number, ' ', '')
+    if db.engine.dialect.name == 'postgresql':
+        digits_only = db.func.regexp_replace(cleaned_number, '[^0-9].*$', '')
+        license_number_as_int = db.func.cast(db.func.nullif(digits_only, ''), db.BigInteger)
+        order_clause = license_number_as_int.desc().nullslast()
+    else:
+        license_number_as_int = db.func.cast(cleaned_number, db.Integer)
+        order_clause = license_number_as_int.desc()
+    items   = query.order_by(order_clause).offset((page - 1) * per_page).limit(per_page).all()
     ids     = [l.id for l in items]
 
     # Statut d'impression par permis (batch, évite N+1)
