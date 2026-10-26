@@ -1197,7 +1197,10 @@ def api_deletion_request_approve(req_id):
                 from app.models import (VehicleHistory, VehicleOwner, Fine,
                                          QRCodePayment, VehicleInsuranceAssignment,
                                          ExoneratedVehicle, VehicleTransfer,
-                                         CarteGrise, PhotoSubmission)
+                                         CarteGrise, PhotoSubmission,
+                                         VehicleEditRequest, TechnicalInspection,
+                                         TechnicalInspectionDraft, VehicleWarning,
+                                         TechnicalInspectionAppointment)
                 vid = vehicle.id
 
                 # Nullify nullable FK on PhotoSubmission (preserve submission records)
@@ -1210,6 +1213,11 @@ def api_deletion_request_approve(req_id):
                 VehicleInsuranceAssignment.query.filter_by(vehicle_id=vid).delete()
                 ExoneratedVehicle.query.filter_by(vehicle_id=vid).delete()
                 VehicleTransfer.query.filter_by(vehicle_id=vid).delete()
+                VehicleEditRequest.query.filter_by(vehicle_id=vid).delete()
+                TechnicalInspection.query.filter_by(vehicle_id=vid).delete()
+                TechnicalInspectionDraft.query.filter_by(vehicle_id=vid).delete()
+                VehicleWarning.query.filter_by(vehicle_id=vid).delete()
+                TechnicalInspectionAppointment.query.filter_by(vehicle_id=vid).delete()
 
                 # Many-to-many association table (alert_vehicles)
                 from sqlalchemy import text
@@ -1229,6 +1237,7 @@ def api_deletion_request_approve(req_id):
         elif req.object_type == 'license':
             lic = DriverLicense.query.get(req.object_id)
             if lic:
+                from app.models import LicenseEditRequest, LicenceProRequest, LicenseFine
                 if lic.photo_filename:
                     try:
                         from app.cloudinary_utils import delete_file as cloud_delete
@@ -1236,6 +1245,12 @@ def api_deletion_request_approve(req_id):
                     except Exception:
                         pass
                 LicensePrintRequest.query.filter_by(license_id=lic.id).delete()
+                LicenseEditRequest.query.filter_by(license_id=lic.id).delete()
+                LicenceProRequest.query.filter_by(license_id=lic.id).delete()
+                LicenseFine.query.filter_by(license_id=lic.id).delete()
+                # Un dossier de renouvellement qui pointait vers ce permis garde une
+                # trace de la demande, juste détachée (FK nullable) du permis supprimé.
+                LicenseDossier.query.filter_by(renewal_license_id=lic.id).update({'renewal_license_id': None})
                 dossier = LicenseDossier.query.filter_by(license_id=lic.id).first()
                 if dossier:
                     db.session.delete(dossier)

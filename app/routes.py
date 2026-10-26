@@ -5783,7 +5783,10 @@ def delete_vehicle(vehicle_id):
     if vehicle.qr_pending_approval:
         from app.models import (VehicleHistory, VehicleOwner, Fine, QRCodePayment,
                                  VehicleInsuranceAssignment, ExoneratedVehicle,
-                                 VehicleTransfer, CarteGrise, PhotoSubmission)
+                                 VehicleTransfer, CarteGrise, PhotoSubmission,
+                                 VehicleEditRequest, TechnicalInspection,
+                                 TechnicalInspectionDraft, VehicleWarning,
+                                 TechnicalInspectionAppointment)
         vid = vehicle.id
         PhotoSubmission.query.filter_by(vehicle_id=vid).update({'vehicle_id': None})
         VehicleHistory.query.filter_by(vehicle_id=vid).delete()
@@ -5792,6 +5795,11 @@ def delete_vehicle(vehicle_id):
         VehicleInsuranceAssignment.query.filter_by(vehicle_id=vid).delete()
         ExoneratedVehicle.query.filter_by(vehicle_id=vid).delete()
         VehicleTransfer.query.filter_by(vehicle_id=vid).delete()
+        VehicleEditRequest.query.filter_by(vehicle_id=vid).delete()
+        TechnicalInspection.query.filter_by(vehicle_id=vid).delete()
+        TechnicalInspectionDraft.query.filter_by(vehicle_id=vid).delete()
+        VehicleWarning.query.filter_by(vehicle_id=vid).delete()
+        TechnicalInspectionAppointment.query.filter_by(vehicle_id=vid).delete()
         from sqlalchemy import text
         db.session.execute(text('DELETE FROM alert_vehicles WHERE vehicle_id = :vid'), {'vid': vid})
         cg = CarteGrise.query.filter_by(vehicle_id=vid).first()
