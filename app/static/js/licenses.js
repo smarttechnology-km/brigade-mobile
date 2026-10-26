@@ -1543,6 +1543,82 @@
         win.print();
     };
 
+    let _searchLastData = null;
+
+    window.searchLicensesByNumber = function () {
+        const q = document.getElementById('perf-search-q').value.trim();
+        const emptyEl = document.getElementById('perf-search-empty');
+        const loadingEl = document.getElementById('perf-search-loading');
+        const contentEl = document.getElementById('perf-search-content');
+        if (!q) {
+            emptyEl.style.display = '';
+            loadingEl.style.display = 'none';
+            contentEl.style.display = 'none';
+            return;
+        }
+        emptyEl.style.display = 'none';
+        loadingEl.style.display = '';
+        contentEl.style.display = 'none';
+        fetch('/api/licenses/search-by-number?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : Promise.reject(r))
+            .then(d => {
+                _searchLastData = d;
+                const tbody = document.getElementById('perf-search-tbody');
+                if (!d.results.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Aucun permis trouvé.</td></tr>';
+                } else {
+                    tbody.innerHTML = d.results.map((r, i) => `<tr>
+                        <td>${i + 1}</td>
+                        <td class="fw-bold">${escapeHtml(r.license_number)}</td>
+                        <td>${escapeHtml(((r.holder_name || '') + ' ' + (r.holder_firstname || '')).trim())}</td>
+                        <td>${escapeHtml(r.created_by_full_name)}</td>
+                        <td>${escapeHtml(r.created_at || '—')}</td>
+                    </tr>`).join('');
+                }
+                document.getElementById('perf-search-total').textContent = `${d.results.length} permis trouvé(s)`;
+                loadingEl.style.display = 'none';
+                contentEl.style.display = '';
+            })
+            .catch(() => {
+                loadingEl.innerHTML = '<div class="text-danger py-3 text-center">Erreur de chargement</div>';
+            });
+    };
+
+    window.printLicenseSearch = function () {
+        if (!_searchLastData || !_searchLastData.results.length) return;
+        const d = _searchLastData;
+        const rows = d.results.map((r, i) => `<tr>
+            <td>${i + 1}</td>
+            <td style="font-weight:bold;">${escapeHtml(r.license_number)}</td>
+            <td>${escapeHtml(((r.holder_name || '') + ' ' + (r.holder_firstname || '')).trim())}</td>
+            <td>${escapeHtml(r.created_by_full_name)}</td>
+            <td>${escapeHtml(r.created_at || '—')}</td>
+        </tr>`).join('');
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html><head><title>Recherche permis — ${escapeHtml(d.query)}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
+                h2 { margin-bottom: 2px; }
+                p.sub { color: #666; margin-top: 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+                th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 0.9rem; }
+                th { background: #f0f0f0; text-align: left; }
+            </style>
+            </head><body>
+            <h2>Recherche de permis par numéro</h2>
+            <p class="sub">Recherche : "${escapeHtml(d.query)}" — ${d.results.length} résultat(s)</p>
+            <table>
+                <thead><tr><th>#</th><th>N° Permis</th><th>Titulaire</th><th>Saisi par</th><th>Date de saisie</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            </body></html>
+        `);
+        win.document.close();
+        win.focus();
+        win.print();
+    };
+
     function escapeHtml(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
