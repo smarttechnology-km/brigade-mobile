@@ -5343,6 +5343,45 @@ def api_licenses_performance_daily():
     })
 
 
+@api_bp.route('/licenses/search-by-number', methods=['GET'])
+@login_required
+def api_licenses_search_by_number():
+    """Recherche de permis par sous-chaîne du numéro, avec l'employé qui l'a
+    saisi — réservé au directeur général et à l'administrateur (onglet
+    'Recherche par numéro' du modal Performances DGRTR)."""
+    if not _is_license_dg_or_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    q = (request.args.get('q') or '').strip()
+    if not q:
+        return jsonify({'query': q, 'results': []})
+
+    cleaned = q.replace(' ', '')
+    licenses = DriverLicense.query.filter(
+        db.func.replace(DriverLicense.license_number, ' ', '').ilike(f'%{cleaned}%')
+    ).order_by(DriverLicense.license_number).all()
+
+    usernames = [l.created_by for l in licenses if l.created_by]
+    users_by_username = {
+        u.username: u for u in User.query.filter(User.username.in_(usernames)).all()
+    } if usernames else {}
+
+    results = []
+    for l in licenses:
+        u = users_by_username.get(l.created_by) if l.created_by else None
+        results.append({
+            'id': l.id,
+            'license_number': l.license_number,
+            'holder_name': l.holder_name,
+            'holder_firstname': l.holder_firstname,
+            'created_by': l.created_by,
+            'created_by_full_name': (u.full_name if u and u.full_name else l.created_by) or '—',
+            'created_at': l.created_at.strftime('%d/%m/%Y %H:%M') if l.created_at else None,
+        })
+
+    return jsonify({'query': q, 'results': results})
+
+
 # ── Alertes (accidents, recherches de véhicule, travaux...) ──────────────────
 
 def _sanitize_description_html(html):
