@@ -1,46 +1,131 @@
 {% extends "base.html" %}
 {% block content %}
 
-<style>
-.lar-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px;
-  border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
-.lar-badge-pending  { background:#fef3c7; color:#d97706; }
-.lar-badge-approved { background:#dcfce7; color:#15803d; }
-.lar-badge-rejected { background:#fee2e2; color:#b91c1c; }
-.lar-card {
-  background:#fff; border:1px solid #e5e7eb; border-radius:10px;
-  padding:16px 18px; margin-bottom:12px; display:flex; gap:16px;
-}
-.lar-photo { width:84px; height:84px; border-radius:8px; object-fit:cover; background:#f3f4f6;
-  border:1px solid #e5e7eb; flex-shrink:0; }
-.lar-photo-placeholder { width:84px; height:84px; border-radius:8px; background:#f3f4f6;
-  border:1px solid #e5e7eb; flex-shrink:0; display:flex; align-items:center; justify-content:center;
-  color:#9ca3af; font-size:24px; }
-.lar-field-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:4px 16px; margin-top:8px; }
-.lar-field-label { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:.03em; }
-.lar-field-value { font-size:13.5px; color:#111827; font-weight:600; }
-.lar-tab { background:none; border:none; border-bottom:3px solid transparent;
-  padding:8px 16px; font-size:13.5px; font-weight:600; color:#6b7280; cursor:pointer; }
-.lar-tab.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
-</style>
+<div class="container py-4">
 
-<div class="container-fluid py-4 px-4">
-  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
-    <div>
-      <h2 class="mb-0"><i class="fas fa-user-check me-2"></i>Permis existants à valider</h2>
-      <small class="text-muted">Ajouts de permis soumis par les employés DGRTR d'Anjouan et de Mohéli</small>
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h2><i class="fas fa-user-check me-2"></i>Permis existants à valider</h2>
+      <p class="text-muted mb-0">Ajouts de permis soumis par les employés DGRTR d'Anjouan et de Mohéli</p>
+    </div>
+    <div class="col-md-4 text-end">
+      {% if current_user.is_admin or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_general') %}
+      <div class="dropdown d-inline-block">
+        <button class="btn btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="fas fa-print me-2"></i>Imprimer
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="#" onclick="printLarByStatus('pending'); return false;"><i class="fas fa-clock me-2"></i>En attente</a></li>
+          <li><a class="dropdown-item" href="#" onclick="printLarByStatus('verified'); return false;"><i class="fas fa-check-double me-2"></i>Vérifier</a></li>
+          <li><a class="dropdown-item" href="#" onclick="printLarByStatus('rejected'); return false;"><i class="fas fa-times-circle me-2"></i>Rejetée</a></li>
+        </ul>
+      </div>
+      {% endif %}
     </div>
   </div>
 
-  <ul class="nav mb-3" id="lar-tabs">
-    <li class="nav-item"><button class="lar-tab active" data-status="pending" onclick="larSwitchTab('pending', this)">En attente</button></li>
-    <li class="nav-item"><button class="lar-tab" data-status="approved" onclick="larSwitchTab('approved', this)">Validés</button></li>
-    <li class="nav-item"><button class="lar-tab" data-status="rejected" onclick="larSwitchTab('rejected', this)">Rejetés</button></li>
+  <!-- Stats cards -->
+  <div class="row mb-4 g-3">
+    <div class="col-6 col-md">
+      <div class="card h-100" style="border-left:4px solid #6c757d;">
+        <div class="card-body py-3 px-3">
+          <div class="text-muted small">Total soumis</div>
+          <h3 class="mb-0 fw-bold" id="lar-stat-total">—</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md">
+      <div class="card h-100 border-left-warning">
+        <div class="card-body py-3 px-3">
+          <div class="text-muted small">En attente (DT)</div>
+          <h3 class="mb-0 fw-bold" id="lar-stat-pending">—</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md">
+      <div class="card h-100" style="border-left:4px solid #0dcaf0;">
+        <div class="card-body py-3 px-3">
+          <div class="text-muted small">Vérifiés (DG)</div>
+          <h3 class="mb-0 fw-bold" id="lar-stat-verified">—</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md">
+      <div class="card h-100 border-left-success">
+        <div class="card-body py-3 px-3">
+          <div class="text-muted small">Validés</div>
+          <h3 class="mb-0 fw-bold" id="lar-stat-approved">—</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md">
+      <div class="card h-100 border-left-danger">
+        <div class="card-body py-3 px-3">
+          <div class="text-muted small">Rejetés</div>
+          <h3 class="mb-0 fw-bold" id="lar-stat-rejected">—</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="row mb-3 g-2">
+    <div class="col-md-6">
+      <div class="input-group">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input id="lar-search-input" type="text" class="form-control" placeholder="Numéro de permis, nom du titulaire…" oninput="larRenderCurrent()">
+      </div>
+    </div>
+  </div>
+
+  <!-- Onglets -->
+  <ul class="nav nav-tabs mb-3" id="lar-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" data-status="pending" onclick="larSwitchTab('pending', this)" type="button">
+        <i class="fas fa-clock me-1"></i>En attente
+        <span class="badge bg-warning text-dark ms-1" id="lar-tab-count-pending">—</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" data-status="verified" onclick="larSwitchTab('verified', this)" type="button">
+        <i class="fas fa-check-double me-1"></i>Vérifier
+        <span class="badge bg-info ms-1" id="lar-tab-count-verified">—</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" data-status="rejected" onclick="larSwitchTab('rejected', this)" type="button">
+        <i class="fas fa-times-circle me-1"></i>Rejetée
+        <span class="badge bg-danger ms-1" id="lar-tab-count-rejected">—</span>
+      </button>
+    </li>
   </ul>
 
-  <div id="lar-list">
-    <div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+  <!-- Table -->
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>N° Permis</th>
+              <th>Titulaire</th>
+              <th>Île</th>
+              <th>Soumis par</th>
+              <th>Date</th>
+              <th>Statut / Suivi</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="lar-tbody">
+            <tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
+
 </div>
 
 <!-- Reject modal -->
@@ -64,103 +149,206 @@
   </div>
 </div>
 
+<!-- Details modal -->
+<div class="modal fade" id="larDetailsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-id-card me-2"></i>Détails du permis soumis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="lar-details-body">
+      </div>
+      <div class="modal-footer" id="lar-details-footer">
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
+const LAR_IS_DT = {{ 'true' if (current_user.is_admin or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_technique')) else 'false' }};
+const LAR_IS_DG = {{ 'true' if (current_user.is_admin or (current_user.role == 'dgrtr' and current_user.dgrtr_type == 'directeur_general')) else 'false' }};
+
 let larCurrentStatus = 'pending';
 let larRejectingId = null;
+let larDataByStatus = { pending: [], verified: [], rejected: [] };
 
 function larEsc(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function larSwitchTab(status, btn) {
   larCurrentStatus = status;
-  document.querySelectorAll('#lar-tabs .lar-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#lar-tabs .nav-link').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  larLoad();
+  larLoad(status);
 }
 
-function larBadge(status) {
-  if (status === 'approved') return '<span class="lar-badge lar-badge-approved"><i class="fas fa-check-circle"></i> Validé</span>';
-  if (status === 'rejected') return '<span class="lar-badge lar-badge-rejected"><i class="fas fa-times-circle"></i> Rejeté</span>';
-  return '<span class="lar-badge lar-badge-pending"><i class="fas fa-clock"></i> En attente</span>';
+function larLoadStats() {
+  fetch('/api/license-add-requests/stats', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d) return;
+      document.getElementById('lar-stat-total').textContent = d.total;
+      document.getElementById('lar-stat-pending').textContent = d.pending;
+      document.getElementById('lar-stat-verified').textContent = d.verified;
+      document.getElementById('lar-stat-approved').textContent = d.approved;
+      document.getElementById('lar-stat-rejected').textContent = d.rejected;
+      document.getElementById('lar-tab-count-pending').textContent = d.pending;
+      document.getElementById('lar-tab-count-verified').textContent = d.verified;
+      document.getElementById('lar-tab-count-rejected').textContent = d.rejected;
+    })
+    .catch(() => {});
+}
+
+let larAllById = {};
+
+function larLoad(status) {
+  const tbody = document.getElementById('lar-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+  fetch(`/api/license-add-requests?status=${status}`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(reqs => {
+      larDataByStatus[status] = reqs;
+      reqs.forEach(r => { larAllById[r.id] = r; });
+      larRenderCurrent();
+    })
+    .catch(() => {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+    });
 }
 
 function larField(label, value) {
   if (!value) return '';
-  return `<div><div class="lar-field-label">${larEsc(label)}</div><div class="lar-field-value">${larEsc(value)}</div></div>`;
+  return `<div class="col-6 col-md-4 mb-2"><div class="small text-muted text-uppercase" style="font-size:11px;letter-spacing:.03em;">${larEsc(label)}</div><div class="fw-bold">${larEsc(value)}</div></div>`;
 }
 
-function larLoad() {
-  const list = document.getElementById('lar-list');
-  list.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
-  fetch(`/api/license-add-requests?status=${larCurrentStatus}`, { credentials: 'same-origin' })
-    .then(r => r.ok ? r.json() : [])
-    .then(reqs => {
-      if (!reqs.length) {
-        list.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune demande.</div>';
-        return;
-      }
-      list.innerHTML = reqs.map(r => {
-        const d = r.data || {};
-        const photo = r.photo_url
-          ? `<img class="lar-photo" src="${larEsc(r.photo_url)}" alt="Photo">`
-          : `<div class="lar-photo-placeholder"><i class="fas fa-user"></i></div>`;
+function larViewDetails(id) {
+  const r = larAllById[id];
+  if (!r) return;
+  const d = r.data || {};
+  const photo = r.photo_url
+    ? `<img src="${larEsc(r.photo_url)}" alt="Photo" style="width:110px;height:140px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;">`
+    : `<div style="width:110px;height:140px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:2rem;"><i class="fas fa-user"></i></div>`;
 
-        const fields = [
-          larField('NIN', d.nin),
-          larField('Téléphone', d.holder_phone),
-          larField('Sexe', d.sexe),
-          larField('Date de naissance', d.date_of_birth),
-          larField('Lieu de naissance', d.lieu_naissance),
-          larField('Groupe sanguin', d.blood_group),
-          larField('Type de permis', d.type_permis),
-          larField('Catégories', d.categories),
-          larField('Date de début', d.issue_date),
-          larField("Centre d'immatriculation", d.centre_immatriculation),
-        ].join('');
+  const fields = [
+    larField('N° Permis', d.license_number),
+    larField('Nom', d.holder_name),
+    larField('Prénom', d.holder_firstname),
+    larField('Île', d.holder_island),
+    larField('Téléphone', d.holder_phone),
+    larField('NIN', d.nin),
+    larField('Sexe', d.sexe),
+    larField('Nationalité', d.nationalite),
+    larField('Date de naissance', d.date_of_birth),
+    larField('Lieu de naissance', d.lieu_naissance),
+    larField('Adresse', d.holder_address),
+    larField('Groupe sanguin', d.blood_group),
+    larField('Type de permis', d.type_permis),
+    larField('Catégories', d.categories),
+    larField('Date de début', d.issue_date),
+    larField("Date d'expiration", d.expiry_date),
+    larField("Centre d'immatriculation", d.centre_immatriculation),
+    larField('Points', d.points),
+    larField('Statut', d.status),
+    larField('Notes', d.notes),
+  ].join('');
 
-        const actions = (r.status === 'pending') ? `
-          <div class="mt-3 d-flex gap-2">
-            <button class="btn btn-sm btn-success" onclick="larApprove(${r.id})"><i class="fas fa-check me-1"></i>Confirmer</button>
-            <button class="btn btn-sm btn-outline-danger" onclick="larOpenReject(${r.id})"><i class="fas fa-times me-1"></i>Rejeter</button>
-          </div>` : '';
+  document.getElementById('lar-details-body').innerHTML = `
+    <div class="d-flex gap-3 mb-3">
+      ${photo}
+      <div class="flex-grow-1">
+        <div class="small text-muted">Soumis par <strong>${larEsc(r.requested_by)}</strong> (${larEsc(r.requested_island)}) le ${larEsc(r.requested_at)}</div>
+        ${larStatusBadge(r.status)}
+      </div>
+    </div>
+    <div class="row">${fields}</div>
+  `;
 
-        const reviewInfo = r.status !== 'pending' ? `
-          <div class="mt-2 small text-muted">
-            ${r.status === 'approved' ? 'Validé' : 'Rejeté'} par <strong>${larEsc(r.reviewed_by)}</strong> le ${larEsc(r.reviewed_at)}
-            ${r.review_comment ? `<br>Motif : ${larEsc(r.review_comment)}` : ''}
-          </div>` : '';
+  let footer = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>';
+  if (r.status === 'pending' && LAR_IS_DT) {
+    footer = `
+      <button type="button" class="btn btn-outline-danger" onclick="bootstrap.Modal.getInstance(document.getElementById('larDetailsModal')).hide(); larOpenReject(${r.id});"><i class="fas fa-times me-1"></i>Rejeter</button>
+      <button type="button" class="btn btn-info text-white" onclick="bootstrap.Modal.getInstance(document.getElementById('larDetailsModal')).hide(); larVerify(${r.id});"><i class="fas fa-check-double me-1"></i>Vérifier</button>` + footer;
+  } else if (r.status === 'verified' && LAR_IS_DG) {
+    footer = `
+      <button type="button" class="btn btn-outline-danger" onclick="bootstrap.Modal.getInstance(document.getElementById('larDetailsModal')).hide(); larOpenReject(${r.id});"><i class="fas fa-times me-1"></i>Rejeter</button>
+      <button type="button" class="btn btn-success" onclick="bootstrap.Modal.getInstance(document.getElementById('larDetailsModal')).hide(); larApprove(${r.id});"><i class="fas fa-check me-1"></i>Valider</button>` + footer;
+  }
+  document.getElementById('lar-details-footer').innerHTML = footer;
 
-        return `
-        <div class="lar-card">
-          ${photo}
-          <div class="flex-grow-1">
-            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-              <div>
-                <strong>${larEsc(r.license_number)}</strong> — ${larEsc(r.holder_name)} ${larEsc(r.holder_firstname || '')}
-                <span class="text-muted small ms-2">${larEsc(r.holder_island || r.requested_island || '')}</span>
-              </div>
-              ${larBadge(r.status)}
-            </div>
-            <div class="small text-muted mt-1">Soumis par <strong>${larEsc(r.requested_by)}</strong> (${larEsc(r.requested_island)}) le ${larEsc(r.requested_at)}</div>
-            <div class="lar-field-grid">${fields}</div>
-            ${reviewInfo}
-            ${actions}
-          </div>
-        </div>`;
-      }).join('');
-    })
-    .catch(() => {
-      list.innerHTML = '<div class="text-center text-danger py-4">Erreur de chargement.</div>';
-    });
+  new bootstrap.Modal(document.getElementById('larDetailsModal')).show();
+}
+
+function larStatusBadge(status) {
+  if (status === 'verified') return '<span class="badge bg-info">Vérifié</span>';
+  if (status === 'rejected') return '<span class="badge bg-danger">Rejeté</span>';
+  if (status === 'approved') return '<span class="badge bg-success">Validé</span>';
+  return '<span class="badge bg-warning text-dark">En attente</span>';
+}
+
+function larRenderCurrent() {
+  const tbody = document.getElementById('lar-tbody');
+  const q = (document.getElementById('lar-search-input').value || '').trim().toLowerCase();
+  let reqs = larDataByStatus[larCurrentStatus] || [];
+  if (q) {
+    reqs = reqs.filter(r =>
+      (r.license_number || '').toLowerCase().includes(q) ||
+      (r.holder_name || '').toLowerCase().includes(q) ||
+      (r.holder_firstname || '').toLowerCase().includes(q)
+    );
+  }
+
+  if (!reqs.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune demande.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = reqs.map((r, i) => {
+    let tracking = `Soumis par <strong>${larEsc(r.requested_by)}</strong> le ${larEsc(r.requested_at)}`;
+    if (r.verified_by) tracking += `<br>Vérifié par <strong>${larEsc(r.verified_by)}</strong> le ${larEsc(r.verified_at)}`;
+    if (r.status === 'rejected') tracking += `<br>Rejeté par <strong>${larEsc(r.rejected_by)}</strong> le ${larEsc(r.rejected_at)}${r.rejection_reason ? `<br>Motif : ${larEsc(r.rejection_reason)}` : ''}`;
+    if (r.status === 'approved') tracking += `<br>Validé par <strong>${larEsc(r.approved_by)}</strong> le ${larEsc(r.approved_at)}`;
+
+    let actions = `<button class="btn btn-sm btn-outline-secondary" onclick="larViewDetails(${r.id})"><i class="fas fa-eye me-1"></i>Détails</button>`;
+    if (r.status === 'pending' && LAR_IS_DT) {
+      actions += `
+        <button class="btn btn-sm btn-info text-white ms-1" onclick="larVerify(${r.id})"><i class="fas fa-check-double me-1"></i>Vérifier</button>
+        <button class="btn btn-sm btn-outline-danger ms-1" onclick="larOpenReject(${r.id})"><i class="fas fa-times me-1"></i>Rejeter</button>`;
+    } else if (r.status === 'verified' && LAR_IS_DG) {
+      actions += `
+        <button class="btn btn-sm btn-success ms-1" onclick="larApprove(${r.id})"><i class="fas fa-check me-1"></i>Valider</button>
+        <button class="btn btn-sm btn-outline-danger ms-1" onclick="larOpenReject(${r.id})"><i class="fas fa-times me-1"></i>Rejeter</button>`;
+    }
+
+    return `
+      <tr>
+        <td>${i + 1}</td>
+        <td class="fw-bold">${larEsc(r.license_number)}</td>
+        <td>${larEsc(((r.holder_name || '') + ' ' + (r.holder_firstname || '')).trim())}</td>
+        <td>${larEsc(r.holder_island || '')}</td>
+        <td>${larEsc(r.requested_by)}</td>
+        <td>${larEsc(r.requested_at)}</td>
+        <td>${larStatusBadge(r.status)}<div class="small text-muted mt-1">${tracking}</div></td>
+        <td class="text-nowrap">${actions}</td>
+      </tr>`;
+  }).join('');
+}
+
+function larVerify(id) {
+  if (!confirm('Marquer cette demande comme vérifiée ? Elle sera transmise au Directeur Général pour validation finale.')) return;
+  fetch(`/api/license-add-requests/${id}/verify`, { method: 'POST', credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => { larLoadStats(); larLoad(larCurrentStatus); })
+    .catch(d => alert(d.error || 'Erreur.'));
 }
 
 function larApprove(id) {
-  if (!confirm('Confirmer ce permis ? Il deviendra un permis actif dans le système.')) return;
+  if (!confirm('Valider ce permis ? Il deviendra un permis actif dans le système.')) return;
   fetch(`/api/license-add-requests/${id}/approve`, { method: 'POST', credentials: 'same-origin' })
     .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
-    .then(() => larLoad())
+    .then(() => { larLoadStats(); larLoad(larCurrentStatus); })
     .catch(d => alert(d.error || 'Erreur.'));
 }
 
@@ -188,11 +376,72 @@ document.getElementById('lar-reject-confirm-btn').addEventListener('click', func
     .then(() => {
       bootstrap.Modal.getInstance(document.getElementById('larRejectModal')).hide();
       larRejectingId = null;
-      larLoad();
+      larLoadStats();
+      larLoad(larCurrentStatus);
     })
     .catch(d => alert(d.error || 'Erreur.'));
 });
 
-larLoad();
+const LAR_PRINT_TITLES = {
+  pending: 'Permis en attente de vérification',
+  verified: 'Permis vérifiés — en attente de validation du Directeur Général',
+  rejected: 'Permis rejetés',
+};
+
+function printLarByStatus(status) {
+  fetch(`/api/license-add-requests?status=${status}`, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(reqs => {
+      if (!reqs.length) { alert('Aucun permis dans cet onglet.'); return; }
+
+      const extraHeaders = status === 'pending' ? ''
+        : status === 'verified' ? '<th>Vérifié par</th>'
+        : '<th>Rejeté par</th><th>Motif</th>';
+
+      const rows = reqs.map((r, i) => {
+        const extraCells = status === 'pending' ? ''
+          : status === 'verified' ? `<td>${larEsc(r.verified_by)} — ${larEsc(r.verified_at)}</td>`
+          : `<td>${larEsc(r.rejected_by)} — ${larEsc(r.rejected_at)}</td><td>${larEsc(r.rejection_reason || '—')}</td>`;
+        return `<tr>
+          <td>${i + 1}</td>
+          <td style="font-weight:bold;">${larEsc(r.license_number)}</td>
+          <td>${larEsc(((r.holder_name || '') + ' ' + (r.holder_firstname || '')).trim())}</td>
+          <td>${larEsc(r.holder_island || '')}</td>
+          <td>${larEsc(r.requested_by)}</td>
+          <td>${larEsc(r.requested_at)}</td>
+          ${extraCells}
+        </tr>`;
+      }).join('');
+
+      const title = LAR_PRINT_TITLES[status] || 'Permis';
+      const win = window.open('', '_blank');
+      win.document.write(`
+        <html><head><title>${title}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 24px; color: #222; }
+          h2 { margin-bottom: 2px; }
+          p.sub { color: #666; margin-top: 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 0.9rem; }
+          th { background: #f0f0f0; text-align: left; }
+        </style>
+        </head><body>
+        <h2>${title}</h2>
+        <p class="sub">${reqs.length} permis — imprimé le ${new Date().toLocaleDateString('fr-FR')}</p>
+        <table>
+          <thead><tr><th>#</th><th>N° Permis</th><th>Titulaire</th><th>Île</th><th>Soumis par</th><th>Date</th>${extraHeaders}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </body></html>
+      `);
+      win.document.close();
+      win.focus();
+      win.print();
+    })
+    .catch(() => alert('Erreur lors du chargement.'));
+}
+
+larLoadStats();
+larLoad('pending');
 </script>
 {% endblock %}
