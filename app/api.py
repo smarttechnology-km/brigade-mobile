@@ -2661,6 +2661,9 @@ def api_sidebar_pending_counts():
     else:
         lp_count = 0
 
+    from app.models import LicenseAddRequest
+    license_add_count = LicenseAddRequest.query.filter_by(status='pending').count() if is_dg else 0
+
     return jsonify({
         'photo': photo_count,
         'ver': ver_count,
@@ -2668,6 +2671,7 @@ def api_sidebar_pending_counts():
         'dossier_sig': dossier_sig_count,
         'vt': vt_count,
         'lp': lp_count,
+        'license_add': license_add_count,
     })
 
 
@@ -4358,6 +4362,28 @@ def api_licenses_create():
     if getattr(current_user, 'role', '') == 'judiciaire' and getattr(current_user, 'country', None):
         data['holder_island'] = current_user.country
 
+    # DGRTR employés basés à Anjouan ou Mohéli : l'ajout d'un permis existant doit
+    # être validé par le Directeur Général avant de devenir un permis réel — on ne
+    # crée donc pas encore le DriverLicense, seulement une demande en attente.
+    if (getattr(current_user, 'role', '') == 'dgrtr'
+            and getattr(current_user, 'dgrtr_type', None) == 'employe'
+            and getattr(current_user, 'country', None) in ('Anjouan', 'Moheli')):
+        from app.models import LicenseAddRequest
+        data['license_number'] = num
+        data['holder_name'] = name
+        add_req = LicenseAddRequest(
+            submitted_data=json.dumps(data),
+            requested_by=current_user.username,
+            requested_island=current_user.country,
+        )
+        db.session.add(add_req)
+        db.session.commit()
+        return jsonify({
+            'pending_validation': True,
+            'request_id': add_req.id,
+            'message': 'Permis soumis pour validation du Directeur Général.',
+        }), 202
+
     lic = DriverLicense(
         license_number        = num,
         holder_name           = name,
@@ -5059,6 +5085,164 @@ def api_licenses_photo(license_id):
     lic.photo_filename = filename
     db.session.commit()
     return jsonify({'photo_url': cloud_file_url(filename, 'license_photos')})
+
+
+@api_bp.route('/license-add-requests/<int:req_id>/photo', methods=['POST'])
+@login_required
+def api_license_add_request_photo(req_id):
+    from app.models import LicenseAddRequest
+    req = LicenseAddRequest.query.get_or_404(req_id)
+    if req.requested_by != current_user.username and not current_user.is_admin:
+        return jsonify({'error': 'Accès refusé'}), 403
+    if req.status != 'pending':
+        return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+    file = request.files.get('photo')
+    if not file or not file.filename:
+        return jsonify({'error': 'Aucun fichier reçu'}), 400
+    ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+        return jsonify({'error': 'Format non autorisé (jpg, png, webp)'}), 400
+    from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload, delete_file as cloud_delete, file_url as cloud_file_url
+    if req.photo_filename:
+        cloud_delete(req.photo_filename, local_folder='license_photos')
+    if is_cloudinary_enabled():
+        filename = cloud_upload(file, 'license_photos')
+    else:
+        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'license_photos')
+        os.makedirs(upload_dir, exist_ok=True)
+        filename = f'{uuid.uuid4().hex}{ext}'
+        file.save(os.path.join(upload_dir, filename))
+    req.photo_filename = filename
+    db.session.commit()
+    return jsonify({'photo_url': cloud_file_url(filename, 'license_photos')})
+
+
+# ── License add requests (Anjouan / Mohéli employés) ──────────────────────────
+
+def _is_license_add_reviewer():
+    return current_user.is_admin or (
+        getattr(current_user, 'role', '') == 'dgrtr'
+        and getattr(current_user, 'dgrtr_type', None) == 'directeur_general'
+    )
+
+
+@api_bp.route('/license-add-requests', methods=['GET'])
+@login_required
+def list_license_add_requests():
+    from app.models import LicenseAddRequest
+    if _is_license_employe():
+        query = LicenseAddRequest.query.filter_by(requested_by=current_user.username)
+    elif _is_license_add_reviewer():
+        query = LicenseAddRequest.query
+    else:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    status_filter = request.args.get('status')
+    if status_filter:
+        query = query.filter(LicenseAddRequest.status == status_filter)
+
+    reqs = query.order_by(LicenseAddRequest.requested_at.desc()).all()
+    return jsonify([r.to_dict() for r in reqs])
+
+
+@api_bp.route('/license-add-requests/<int:req_id>/approve', methods=['POST'])
+@login_required
+def approve_license_add_request(req_id):
+    from app.models import LicenseAddRequest
+    if not _is_license_add_reviewer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = LicenseAddRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+
+    data = json.loads(req.submitted_data)
+    num = (data.get('license_number') or '').strip().upper()
+    if DriverLicense.query.filter_by(license_number=num).first():
+        return jsonify({'error': 'Ce numéro de permis existe déjà.'}), 400
+
+    lic = DriverLicense(
+        license_number         = num,
+        holder_name            = (data.get('holder_name') or '').strip(),
+        holder_firstname       = (data.get('holder_firstname') or '').strip() or None,
+        holder_phone           = (data.get('holder_phone') or '').strip() or None,
+        nin                    = (data.get('nin') or '').strip() or None,
+        holder_island          = data.get('holder_island') or None,
+        holder_address         = (data.get('holder_address') or '').strip() or None,
+        nationalite            = (data.get('nationalite') or '').strip() or None,
+        sexe                   = data.get('sexe') or None,
+        blood_group            = (data.get('blood_group') or '').strip() or None,
+        points                 = data.get('points') or LicenseSetting.get().initial_points,
+        lieu_naissance         = (data.get('lieu_naissance') or '').strip() or None,
+        centre_immatriculation = (data.get('centre_immatriculation') or '').strip() or None,
+        type_permis            = data.get('type_permis') or 'permanent',
+        categories             = (data.get('categories') or '').strip() or None,
+        category_details       = json.dumps(data.get('category_details')) if data.get('category_details') else None,
+        status                 = data.get('status') or 'actif',
+        notes                  = (data.get('notes') or '').strip() or None,
+        photo_filename         = req.photo_filename,
+        created_by             = req.requested_by,
+    )
+    for field, fmt in [('date_of_birth', '%Y-%m-%d'), ('issue_date', '%Y-%m-%d'), ('expiry_date', '%Y-%m-%d')]:
+        val = data.get(field)
+        if val:
+            try:
+                setattr(lic, field, datetime.strptime(val, fmt).date())
+            except ValueError:
+                pass
+    db.session.add(lic)
+    db.session.flush()
+
+    missing = lic.missing_required_fields_for_print()
+    if not missing:
+        from app.models import SmartTechSetting
+        db.session.add(LicensePrintRequest(
+            license_id   = lic.id,
+            requested_by = req.requested_by,
+            status       = 'pending',
+            unit_price   = float(SmartTechSetting.get('license_print_price', 0)),
+        ))
+
+    req.status = 'approved'
+    req.reviewed_by = current_user.username
+    req.reviewed_at = now_comoros()
+    req.license_id = lic.id
+    db.session.commit()
+
+    log_user_history(
+        current_user, 'Permis existant validé',
+        f'Permis {num} - {lic.holder_name} (demande de {req.requested_by}, île {req.requested_island})'
+    )
+    return jsonify(req.to_dict())
+
+
+@api_bp.route('/license-add-requests/<int:req_id>/reject', methods=['POST'])
+@login_required
+def reject_license_add_request(req_id):
+    from app.models import LicenseAddRequest
+    if not _is_license_add_reviewer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = LicenseAddRequest.query.get_or_404(req_id)
+    if req.status != 'pending':
+        return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+
+    data = request.get_json(silent=True) or {}
+    comment = (data.get('comment') or '').strip()
+    if not comment:
+        return jsonify({'error': 'Motif de rejet obligatoire.'}), 400
+
+    if req.photo_filename:
+        from app.cloudinary_utils import delete_file as cloud_delete
+        try:
+            cloud_delete(req.photo_filename, local_folder='license_photos')
+        except Exception:
+            pass
+
+    req.status = 'rejected'
+    req.reviewed_by = current_user.username
+    req.reviewed_at = now_comoros()
+    req.review_comment = comment
+    db.session.commit()
+    return jsonify(req.to_dict())
 
 
 # ── License print requests ────────────────────────────────────────────────────

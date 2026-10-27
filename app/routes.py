@@ -1579,6 +1579,14 @@ def dgrtr_add_license():
     return render_template('dgrtr_add_license.html')
 
 
+@main_bp.route('/dgrtr/validation-permis-existant')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_license_add_requests():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_general':
+        abort(403)
+    return render_template('dgrtr_license_add_requests.html')
+
+
 @main_bp.route('/dgrtr/photo-permis')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_photo_license():

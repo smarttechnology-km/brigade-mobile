@@ -1817,6 +1817,52 @@ class LicenseEditRequest(db.Model):
         }
 
 
+class LicenseAddRequest(db.Model):
+    """An employé's submission of an existing driver's license to digitize via
+    'Ajouter un permis existant', pending Directeur Général approval. Required
+    for employés based in Anjouan or Mohéli — no DriverLicense row exists until
+    the request is approved, so a pending submission never shows up anywhere
+    else in the app (search, stats, fines, print...)."""
+    __tablename__ = 'license_add_requests'
+    id = db.Column(db.Integer, primary_key=True)
+    submitted_data = db.Column(db.Text, nullable=False)  # JSON: same fields as POST /api/licenses
+    photo_filename = db.Column(db.String(255), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending / approved / rejected
+    requested_by = db.Column(db.String(100), nullable=False)
+    requested_island = db.Column(db.String(50), nullable=True)
+    requested_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    reviewed_by = db.Column(db.String(100), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    review_comment = db.Column(db.Text, nullable=True)
+    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=True)  # set once approved
+
+    license = db.relationship('DriverLicense', backref=db.backref('add_requests', lazy='dynamic'))
+
+    @property
+    def photo_url(self):
+        return _cloud_url(self.photo_filename, 'license_photos')
+
+    def to_dict(self):
+        data = json.loads(self.submitted_data) if self.submitted_data else {}
+        return {
+            'id': self.id,
+            'data': data,
+            'license_number': data.get('license_number'),
+            'holder_name': data.get('holder_name'),
+            'holder_firstname': data.get('holder_firstname'),
+            'holder_island': data.get('holder_island'),
+            'photo_url': self.photo_url,
+            'status': self.status,
+            'requested_by': self.requested_by,
+            'requested_island': self.requested_island,
+            'requested_at': self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else None,
+            'reviewed_by': self.reviewed_by,
+            'reviewed_at': self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else None,
+            'review_comment': self.review_comment,
+            'license_id': self.license_id,
+        }
+
+
 class LicensePrintRequest(db.Model):
     __tablename__ = 'license_print_requests'
     id           = db.Column(db.Integer, primary_key=True)
