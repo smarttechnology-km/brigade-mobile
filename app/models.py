@@ -1819,21 +1819,27 @@ class LicenseEditRequest(db.Model):
 
 class LicenseAddRequest(db.Model):
     """An employé's submission of an existing driver's license to digitize via
-    'Ajouter un permis existant', pending Directeur Général approval. Required
-    for employés based in Anjouan or Mohéli — no DriverLicense row exists until
-    the request is approved, so a pending submission never shows up anywhere
-    else in the app (search, stats, fines, print...)."""
+    'Ajouter un permis existant', required for employés based in Anjouan or
+    Mohéli. Two-stage approval: Directeur Technique vérifie d'abord (pending ->
+    verified / rejected), puis Directeur Général valide les vérifiées (verified
+    -> approved, qui crée le DriverLicense). No DriverLicense row exists until
+    approved, so a pending/verified submission never shows up anywhere else in
+    the app (search, stats, fines, print...)."""
     __tablename__ = 'license_add_requests'
     id = db.Column(db.Integer, primary_key=True)
     submitted_data = db.Column(db.Text, nullable=False)  # JSON: same fields as POST /api/licenses
     photo_filename = db.Column(db.String(255), nullable=True)
-    status = db.Column(db.String(20), nullable=False, default='pending')  # pending / approved / rejected
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending / verified / rejected / approved
     requested_by = db.Column(db.String(100), nullable=False)
     requested_island = db.Column(db.String(50), nullable=True)
     requested_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
-    reviewed_by = db.Column(db.String(100), nullable=True)
-    reviewed_at = db.Column(db.DateTime, nullable=True)
-    review_comment = db.Column(db.Text, nullable=True)
+    verified_by = db.Column(db.String(100), nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=True)
+    rejected_by = db.Column(db.String(100), nullable=True)
+    rejected_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
+    approved_by = db.Column(db.String(100), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
     license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=True)  # set once approved
 
     license = db.relationship('DriverLicense', backref=db.backref('add_requests', lazy='dynamic'))
@@ -1856,9 +1862,13 @@ class LicenseAddRequest(db.Model):
             'requested_by': self.requested_by,
             'requested_island': self.requested_island,
             'requested_at': self.requested_at.strftime('%d/%m/%Y %H:%M') if self.requested_at else None,
-            'reviewed_by': self.reviewed_by,
-            'reviewed_at': self.reviewed_at.strftime('%d/%m/%Y %H:%M') if self.reviewed_at else None,
-            'review_comment': self.review_comment,
+            'verified_by': self.verified_by,
+            'verified_at': self.verified_at.strftime('%d/%m/%Y %H:%M') if self.verified_at else None,
+            'rejected_by': self.rejected_by,
+            'rejected_at': self.rejected_at.strftime('%d/%m/%Y %H:%M') if self.rejected_at else None,
+            'rejection_reason': self.rejection_reason,
+            'approved_by': self.approved_by,
+            'approved_at': self.approved_at.strftime('%d/%m/%Y %H:%M') if self.approved_at else None,
             'license_id': self.license_id,
         }
 

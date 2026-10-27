@@ -1582,7 +1582,7 @@ def dgrtr_add_license():
 @main_bp.route('/dgrtr/validation-permis-existant')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_license_add_requests():
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) != 'directeur_general':
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_technique', 'directeur_general'):
         abort(403)
     return render_template('dgrtr_license_add_requests.html')
 

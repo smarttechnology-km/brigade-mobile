@@ -2662,7 +2662,12 @@ def api_sidebar_pending_counts():
         lp_count = 0
 
     from app.models import LicenseAddRequest
-    license_add_count = LicenseAddRequest.query.filter_by(status='pending').count() if is_dg else 0
+    if is_dt:
+        license_add_count = LicenseAddRequest.query.filter_by(status='pending').count()
+    elif is_dg:
+        license_add_count = LicenseAddRequest.query.filter_by(status='verified').count()
+    else:
+        license_add_count = 0
 
     return jsonify({
         'photo': photo_count,
@@ -5118,8 +5123,17 @@ def api_license_add_request_photo(req_id):
 
 
 # ── License add requests (Anjouan / Mohéli employés) ──────────────────────────
+# Two-stage approval: Directeur Technique vérifie (pending -> verified/rejected),
+# puis Directeur Général valide les vérifiées (verified -> approved).
 
-def _is_license_add_reviewer():
+def _is_license_add_dt():
+    return current_user.is_admin or (
+        getattr(current_user, 'role', '') == 'dgrtr'
+        and getattr(current_user, 'dgrtr_type', None) == 'directeur_technique'
+    )
+
+
+def _is_license_add_dg():
     return current_user.is_admin or (
         getattr(current_user, 'role', '') == 'dgrtr'
         and getattr(current_user, 'dgrtr_type', None) == 'directeur_general'
@@ -5132,7 +5146,7 @@ def list_license_add_requests():
     from app.models import LicenseAddRequest
     if _is_license_employe():
         query = LicenseAddRequest.query.filter_by(requested_by=current_user.username)
-    elif _is_license_add_reviewer():
+    elif _is_license_add_dt() or _is_license_add_dg():
         query = LicenseAddRequest.query
     else:
         return jsonify({'error': 'Accès refusé'}), 403
@@ -5145,15 +5159,53 @@ def list_license_add_requests():
     return jsonify([r.to_dict() for r in reqs])
 
 
-@api_bp.route('/license-add-requests/<int:req_id>/approve', methods=['POST'])
+@api_bp.route('/license-add-requests/stats', methods=['GET'])
 @login_required
-def approve_license_add_request(req_id):
+def stats_license_add_requests():
     from app.models import LicenseAddRequest
-    if not _is_license_add_reviewer():
+    if not (_is_license_add_dt() or _is_license_add_dg()):
+        return jsonify({'error': 'Accès refusé'}), 403
+    counts = dict(
+        db.session.query(LicenseAddRequest.status, db.func.count(LicenseAddRequest.id))
+        .group_by(LicenseAddRequest.status).all()
+    )
+    return jsonify({
+        'pending': counts.get('pending', 0),
+        'verified': counts.get('verified', 0),
+        'rejected': counts.get('rejected', 0),
+        'approved': counts.get('approved', 0),
+        'total': sum(counts.values()),
+    })
+
+
+@api_bp.route('/license-add-requests/<int:req_id>/verify', methods=['POST'])
+@login_required
+def verify_license_add_request(req_id):
+    """Directeur Technique : première vérification. Ne crée pas encore le permis."""
+    from app.models import LicenseAddRequest
+    if not _is_license_add_dt():
         return jsonify({'error': 'Accès refusé'}), 403
     req = LicenseAddRequest.query.get_or_404(req_id)
     if req.status != 'pending':
         return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+
+    req.status = 'verified'
+    req.verified_by = current_user.username
+    req.verified_at = now_comoros()
+    db.session.commit()
+    return jsonify(req.to_dict())
+
+
+@api_bp.route('/license-add-requests/<int:req_id>/approve', methods=['POST'])
+@login_required
+def approve_license_add_request(req_id):
+    """Directeur Général : validation finale d'une demande déjà vérifiée par le DT — crée le permis."""
+    from app.models import LicenseAddRequest
+    if not _is_license_add_dg():
+        return jsonify({'error': 'Accès refusé'}), 403
+    req = LicenseAddRequest.query.get_or_404(req_id)
+    if req.status != 'verified':
+        return jsonify({'error': "Cette demande doit d'abord être vérifiée par le Directeur Technique."}), 400
 
     data = json.loads(req.submitted_data)
     num = (data.get('license_number') or '').strip().upper()
@@ -5203,14 +5255,15 @@ def approve_license_add_request(req_id):
         ))
 
     req.status = 'approved'
-    req.reviewed_by = current_user.username
-    req.reviewed_at = now_comoros()
+    req.approved_by = current_user.username
+    req.approved_at = now_comoros()
     req.license_id = lic.id
     db.session.commit()
 
     log_user_history(
         current_user, 'Permis existant validé',
-        f'Permis {num} - {lic.holder_name} (demande de {req.requested_by}, île {req.requested_island})'
+        f'Permis {num} - {lic.holder_name} (demande de {req.requested_by}, île {req.requested_island}, '
+        f'vérifiée par {req.verified_by})'
     )
     return jsonify(req.to_dict())
 
@@ -5218,12 +5271,15 @@ def approve_license_add_request(req_id):
 @api_bp.route('/license-add-requests/<int:req_id>/reject', methods=['POST'])
 @login_required
 def reject_license_add_request(req_id):
+    """Rejet par le DT (sur une demande en attente) ou le DG (sur une demande déjà vérifiée)."""
     from app.models import LicenseAddRequest
-    if not _is_license_add_reviewer():
-        return jsonify({'error': 'Accès refusé'}), 403
     req = LicenseAddRequest.query.get_or_404(req_id)
-    if req.status != 'pending':
-        return jsonify({'error': "Cette demande n'est plus en attente."}), 400
+    if req.status == 'pending' and not _is_license_add_dt():
+        return jsonify({'error': 'Accès refusé'}), 403
+    if req.status == 'verified' and not _is_license_add_dg():
+        return jsonify({'error': 'Accès refusé'}), 403
+    if req.status not in ('pending', 'verified'):
+        return jsonify({'error': "Cette demande ne peut plus être rejetée."}), 400
 
     data = request.get_json(silent=True) or {}
     comment = (data.get('comment') or '').strip()
@@ -5238,9 +5294,9 @@ def reject_license_add_request(req_id):
             pass
 
     req.status = 'rejected'
-    req.reviewed_by = current_user.username
-    req.reviewed_at = now_comoros()
-    req.review_comment = comment
+    req.rejected_by = current_user.username
+    req.rejected_at = now_comoros()
+    req.rejection_reason = comment
     db.session.commit()
     return jsonify(req.to_dict())
 
@@ -5564,6 +5620,45 @@ def api_licenses_search_by_number():
         })
 
     return jsonify({'query': q, 'results': results})
+
+
+@api_bp.route('/licenses/search-by-length', methods=['GET'])
+@login_required
+def api_licenses_search_by_length():
+    """Recherche de permis par nombre de caractères du numéro (espaces compris),
+    avec l'employé qui l'a saisi — réservé au directeur général et à
+    l'administrateur (onglet 'Par nombre de caractères' du modal Performances DGRTR)."""
+    if not _is_license_dg_or_admin():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    length_raw = (request.args.get('length') or '').strip()
+    if not length_raw or not length_raw.isdigit():
+        return jsonify({'error': 'Nombre de caractères invalide'}), 400
+    length = int(length_raw)
+
+    licenses = DriverLicense.query.filter(
+        db.func.length(DriverLicense.license_number) == length
+    ).order_by(DriverLicense.license_number).all()
+
+    usernames = [l.created_by for l in licenses if l.created_by]
+    users_by_username = {
+        u.username: u for u in User.query.filter(User.username.in_(usernames)).all()
+    } if usernames else {}
+
+    results = []
+    for l in licenses:
+        u = users_by_username.get(l.created_by) if l.created_by else None
+        results.append({
+            'id': l.id,
+            'license_number': l.license_number,
+            'holder_name': l.holder_name,
+            'holder_firstname': l.holder_firstname,
+            'created_by': l.created_by,
+            'created_by_full_name': (u.full_name if u and u.full_name else l.created_by) or '—',
+            'created_at': l.created_at.strftime('%d/%m/%Y %H:%M') if l.created_at else None,
+        })
+
+    return jsonify({'length': length, 'results': results})
 
 
 # ── Alertes (accidents, recherches de véhicule, travaux...) ──────────────────
