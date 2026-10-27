@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.lar-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px;
+  border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+.lar-badge-pending  { background:#fef3c7; color:#d97706; }
+.lar-badge-approved { background:#dcfce7; color:#15803d; }
+.lar-badge-rejected { background:#fee2e2; color:#b91c1c; }
+.lar-card {
+  background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+  padding:16px 18px; margin-bottom:12px; display:flex; gap:16px;
+}
+.lar-photo { width:84px; height:84px; border-radius:8px; object-fit:cover; background:#f3f4f6;
+  border:1px solid #e5e7eb; flex-shrink:0; }
+.lar-photo-placeholder { width:84px; height:84px; border-radius:8px; background:#f3f4f6;
+  border:1px solid #e5e7eb; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  color:#9ca3af; font-size:24px; }
+.lar-field-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:4px 16px; margin-top:8px; }
+.lar-field-label { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:.03em; }
+.lar-field-value { font-size:13.5px; color:#111827; font-weight:600; }
+.lar-tab { background:none; border:none; border-bottom:3px solid transparent;
+  padding:8px 16px; font-size:13.5px; font-weight:600; color:#6b7280; cursor:pointer; }
+.lar-tab.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
+</style>
+
+<div class="container-fluid py-4 px-4">
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-user-check me-2"></i>Permis existants à valider</h2>
+      <small class="text-muted">Ajouts de permis soumis par les employés DGRTR d'Anjouan et de Mohéli</small>
+    </div>
+  </div>
+
+  <ul class="nav mb-3" id="lar-tabs">
+    <li class="nav-item"><button class="lar-tab active" data-status="pending" onclick="larSwitchTab('pending', this)">En attente</button></li>
+    <li class="nav-item"><button class="lar-tab" data-status="approved" onclick="larSwitchTab('approved', this)">Validés</button></li>
+    <li class="nav-item"><button class="lar-tab" data-status="rejected" onclick="larSwitchTab('rejected', this)">Rejetés</button></li>
+  </ul>
+
+  <div id="lar-list">
+    <div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+  </div>
+</div>
+
+<!-- Reject modal -->
+<div class="modal fade" id="larRejectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rejeter l'ajout de ce permis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label small">Motif du rejet <span class="text-danger">*</span></label>
+        <textarea id="lar-reject-comment" class="form-control" rows="3" placeholder="Ex : numéro incohérent, document manquant, doublon..."></textarea>
+        <div id="lar-reject-error" class="text-danger small mt-1" style="display:none;">Le motif est obligatoire.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger" id="lar-reject-confirm-btn">Rejeter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let larCurrentStatus = 'pending';
+let larRejectingId = null;
+
+function larEsc(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function larSwitchTab(status, btn) {
+  larCurrentStatus = status;
+  document.querySelectorAll('#lar-tabs .lar-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  larLoad();
+}
+
+function larBadge(status) {
+  if (status === 'approved') return '<span class="lar-badge lar-badge-approved"><i class="fas fa-check-circle"></i> Validé</span>';
+  if (status === 'rejected') return '<span class="lar-badge lar-badge-rejected"><i class="fas fa-times-circle"></i> Rejeté</span>';
+  return '<span class="lar-badge lar-badge-pending"><i class="fas fa-clock"></i> En attente</span>';
+}
+
+function larField(label, value) {
+  if (!value) return '';
+  return `<div><div class="lar-field-label">${larEsc(label)}</div><div class="lar-field-value">${larEsc(value)}</div></div>`;
+}
+
+function larLoad() {
+  const list = document.getElementById('lar-list');
+  list.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>';
+  fetch(`/api/license-add-requests?status=${larCurrentStatus}`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(reqs => {
+      if (!reqs.length) {
+        list.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Aucune demande.</div>';
+        return;
+      }
+      list.innerHTML = reqs.map(r => {
+        const d = r.data || {};
+        const photo = r.photo_url
+          ? `<img class="lar-photo" src="${larEsc(r.photo_url)}" alt="Photo">`
+          : `<div class="lar-photo-placeholder"><i class="fas fa-user"></i></div>`;
+
+        const fields = [
+          larField('NIN', d.nin),
+          larField('Téléphone', d.holder_phone),
+          larField('Sexe', d.sexe),
+          larField('Date de naissance', d.date_of_birth),
+          larField('Lieu de naissance', d.lieu_naissance),
+          larField('Groupe sanguin', d.blood_group),
+          larField('Type de permis', d.type_permis),
+          larField('Catégories', d.categories),
+          larField('Date de début', d.issue_date),
+          larField("Centre d'immatriculation", d.centre_immatriculation),
+        ].join('');
+
+        const actions = (r.status === 'pending') ? `
+          <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-sm btn-success" onclick="larApprove(${r.id})"><i class="fas fa-check me-1"></i>Confirmer</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="larOpenReject(${r.id})"><i class="fas fa-times me-1"></i>Rejeter</button>
+          </div>` : '';
+
+        const reviewInfo = r.status !== 'pending' ? `
+          <div class="mt-2 small text-muted">
+            ${r.status === 'approved' ? 'Validé' : 'Rejeté'} par <strong>${larEsc(r.reviewed_by)}</strong> le ${larEsc(r.reviewed_at)}
+            ${r.review_comment ? `<br>Motif : ${larEsc(r.review_comment)}` : ''}
+          </div>` : '';
+
+        return `
+        <div class="lar-card">
+          ${photo}
+          <div class="flex-grow-1">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+              <div>
+                <strong>${larEsc(r.license_number)}</strong> — ${larEsc(r.holder_name)} ${larEsc(r.holder_firstname || '')}
+                <span class="text-muted small ms-2">${larEsc(r.holder_island || r.requested_island || '')}</span>
+              </div>
+              ${larBadge(r.status)}
+            </div>
+            <div class="small text-muted mt-1">Soumis par <strong>${larEsc(r.requested_by)}</strong> (${larEsc(r.requested_island)}) le ${larEsc(r.requested_at)}</div>
+            <div class="lar-field-grid">${fields}</div>
+            ${reviewInfo}
+            ${actions}
+          </div>
+        </div>`;
+      }).join('');
+    })
+    .catch(() => {
+      list.innerHTML = '<div class="text-center text-danger py-4">Erreur de chargement.</div>';
+    });
+}
+
+function larApprove(id) {
+  if (!confirm('Confirmer ce permis ? Il deviendra un permis actif dans le système.')) return;
+  fetch(`/api/license-add-requests/${id}/approve`, { method: 'POST', credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => larLoad())
+    .catch(d => alert(d.error || 'Erreur.'));
+}
+
+function larOpenReject(id) {
+  larRejectingId = id;
+  document.getElementById('lar-reject-comment').value = '';
+  document.getElementById('lar-reject-error').style.display = 'none';
+  new bootstrap.Modal(document.getElementById('larRejectModal')).show();
+}
+
+document.getElementById('lar-reject-confirm-btn').addEventListener('click', function () {
+  if (!larRejectingId) return;
+  const comment = document.getElementById('lar-reject-comment').value.trim();
+  if (!comment) {
+    document.getElementById('lar-reject-error').style.display = 'block';
+    return;
+  }
+  fetch(`/api/license-add-requests/${larRejectingId}/reject`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment }),
+  })
+    .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d)))
+    .then(() => {
+      bootstrap.Modal.getInstance(document.getElementById('larRejectModal')).hide();
+      larRejectingId = null;
+      larLoad();
+    })
+    .catch(d => alert(d.error || 'Erreur.'));
+});
+
+larLoad();
+</script>
+{% endblock %}

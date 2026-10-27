@@ -478,8 +478,28 @@ async function saveLicenseDgrtr() {
     var data = await r.json().catch(function(){ return {}; });
     if (!r.ok) throw new Error(data.error || 'Erreur');
 
-    var licId = data.id;
     var photoBlob = window._photoCroppedBlob || (document.getElementById('f-photo').files[0] || null);
+
+    if (data.pending_validation) {
+      var reqId = data.request_id;
+      if (photoBlob && reqId) {
+        var fdReq = new FormData();
+        fdReq.append('photo', photoBlob, 'photo.jpg');
+        await fetch('/api/license-add-requests/' + reqId + '/photo', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: fdReq,
+        });
+      }
+      window._photoCroppedBlob = null;
+      showAlert('Permis soumis pour validation du Directeur Général. Il sera actif après confirmation.', 'success');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-save me-1"></i>Enregistrer';
+      setTimeout(function(){ window.location.reload(); }, 1500);
+      return;
+    }
+
+    var licId = data.id;
     if (photoBlob && licId) {
       var fd = new FormData();
       fd.append('photo', photoBlob, 'photo.jpg');
