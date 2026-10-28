@@ -5,7 +5,7 @@ from functools import wraps
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from app import db
-from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine, VehicleHistory, VehicleOwner, VehicleTransfer
+from app.models import Vehicle, User, Phone, Insurance, InsuranceAccount, VehicleInsuranceAssignment, Fine, VehicleHistory, VehicleOwner, VehicleTransfer, MM_AGENT_SECTIONS
 from decimal import Decimal
 import qrcode
 import io
@@ -826,6 +826,47 @@ def roles_required(*allowed_roles):
     return deco
 
 
+def mm_section_required(section):
+    """Restrict a page/endpoint dedicated to a single mobile-money section (e.g.
+    'cartes_grises') to agents who have been granted that section. Admins and
+    agents with no restriction configured (mm_sections empty) always pass."""
+    def deco(f):
+        @wraps(f)
+        @roles_required('mobile_money_agent')
+        def wrapped(*args, **kwargs):
+            if not current_user.has_mm_section(section):
+                abort(403)
+            return f(*args, **kwargs)
+        return wrapped
+    return deco
+
+
+# Maps each mobile-money section key to its dedicated page route, so an agent
+# restricted to a subset of sections can be sent straight there instead of the
+# overview Dashboard (reserved for agents with full access).
+MM_SECTION_ROUTES = {
+    'amendes': 'main.mobile_money_amendes_page',
+    'vignettes': 'main.mobile_money_vignettes_page',
+    'cartes_grises': 'main.mobile_money_cartes_grises_page',
+    'visite_technique': 'main.mobile_money_visite_technique_page',
+    'licence_pro': 'main.mobile_money_licence_pro_page',
+    'dossiers_permis': 'main.mobile_money_dossiers_permis_page',
+    'archive': 'main.mobile_money_archive_page',
+}
+
+
+def mm_agent_landing_url(user):
+    """Where a mobile_money_agent should land (on '/' or right after login): the
+    overview Dashboard if they have every section, otherwise their first allowed
+    section page, or the profile page if none has been granted at all."""
+    if user.has_full_mm_access:
+        return url_for('main.mobile_money_dashboard')
+    for key, _ in MM_AGENT_SECTIONS:
+        if user.has_mm_section(key):
+            return url_for(MM_SECTION_ROUTES[key])
+    return url_for('main.profile_page')
+
+
 @main_bp.route('/uploads/<path:filename>')
 def serve_upload(filename):
     """Serve files from UPLOAD_FOLDER (persistent disk on Render, static/ in dev)."""
@@ -848,9 +889,10 @@ def index():
     if getattr(current_user, 'role', None) == 'agent_impot':
         return redirect(url_for('main.vignette_dashboard'))
 
-    # Redirect mobile money agents to their payment dashboard
+    # Redirect mobile money agents to their payment dashboard (or their first
+    # allowed section page, if they don't have access to every section)
     if getattr(current_user, 'role', None) == 'mobile_money_agent':
-        return redirect(url_for('main.mobile_money_dashboard'))
+        return redirect(mm_agent_landing_url(current_user))
     
     return render_template('index.html')
 
@@ -1232,12 +1274,15 @@ def insurance_sigva_receipt(month):
 @main_bp.route('/mobile-money-dashboard')
 @roles_required('mobile_money_agent')
 def mobile_money_dashboard():
-    """Overview/aperçu dashboard for mobile money agents."""
+    """Overview/aperçu dashboard for mobile money agents — reserved for agents
+    with full access; a restricted agent is sent to their first allowed section."""
+    if not current_user.has_full_mm_access:
+        return redirect(mm_agent_landing_url(current_user))
     return render_template('mobile_money_apercu.html')
 
 
 @main_bp.route('/mobile-money-amendes')
-@roles_required('mobile_money_agent')
+@mm_section_required('amendes')
 def mobile_money_amendes_page():
     """Fine payment confirmation page for mobile money agents."""
     return render_template('mobile_money_dashboard.html')
@@ -1290,14 +1335,14 @@ def api_mm_stats():
 
 
 @main_bp.route('/mobile-money-vignettes')
-@roles_required('mobile_money_agent')
+@mm_section_required('vignettes')
 def mobile_money_vignettes_page():
     """Dashboard for mobile money agents to accept vignette renewal payments."""
     return render_template('mobile_money_vignettes.html')
 
 
 @main_bp.route('/mobile-money-cartes-grises')
-@roles_required('mobile_money_agent')
+@mm_section_required('cartes_grises')
 def mobile_money_cartes_grises_page():
     from app.models import SmartTechSetting
     cg_price = float(SmartTechSetting.get('carte_grise_price', 0) or 0)
@@ -1305,7 +1350,7 @@ def mobile_money_cartes_grises_page():
 
 
 @main_bp.route('/api/mobile-money/cartes-grises', methods=['GET'])
-@roles_required('mobile_money_agent')
+@mm_section_required('cartes_grises')
 def api_mm_cartes_grises_list():
     from app.models import CarteGrise, Vehicle
     cgs = (CarteGrise.query
@@ -1326,7 +1371,7 @@ def api_mm_cartes_grises_list():
 
 
 @main_bp.route('/api/mobile-money/cartes-grises/<int:cg_id>/confirm-payment', methods=['POST'])
-@roles_required('mobile_money_agent')
+@mm_section_required('cartes_grises')
 def api_mm_cg_confirm_payment(cg_id):
     from app.models import CarteGrise
     cg = CarteGrise.query.get_or_404(cg_id)
@@ -1341,7 +1386,7 @@ def api_mm_cg_confirm_payment(cg_id):
 
 
 @main_bp.route('/mobile-money-visite-technique')
-@roles_required('mobile_money_agent')
+@mm_section_required('visite_technique')
 def mobile_money_visite_technique_page():
     """Page for mobile money agents to collect payment for technical inspections,
     before the judiciaire fills in the checklist (inspector already assigned)."""
@@ -1349,7 +1394,7 @@ def mobile_money_visite_technique_page():
 
 
 @main_bp.route('/mobile-money-licence-pro')
-@roles_required('mobile_money_agent')
+@mm_section_required('licence_pro')
 def mobile_money_licence_pro_page():
     """Page for mobile money agents to collect payment for Licence Professionnelle
     requests, before they move into the Directeur Général's validation queue."""
@@ -1357,7 +1402,7 @@ def mobile_money_licence_pro_page():
 
 
 @main_bp.route('/mobile-money-dossiers-permis')
-@roles_required('mobile_money_agent')
+@mm_section_required('dossiers_permis')
 def mobile_money_dossiers_permis_page():
     """Page for mobile money agents to collect the dossier fee for new driver's
     license applications (searched by NIN), once the first 5 documents have been
@@ -1366,7 +1411,7 @@ def mobile_money_dossiers_permis_page():
 
 
 @main_bp.route('/api/mobile-money/visite-technique/pending', methods=['GET'])
-@roles_required('mobile_money_agent')
+@mm_section_required('visite_technique')
 def api_mm_visite_technique_pending():
     """Technical inspection drafts (inspector assigned) still awaiting payment."""
     from app.models import TechnicalInspectionDraft
@@ -1392,7 +1437,7 @@ def api_mm_visite_technique_pending():
 
 
 @main_bp.route('/api/mobile-money/visite-technique/<int:draft_id>/confirm-payment', methods=['POST'])
-@roles_required('mobile_money_agent')
+@mm_section_required('visite_technique')
 def api_mm_confirm_visite_technique_payment(draft_id):
     """Collect payment in person for a technical inspection draft (before the checklist)."""
     from app.models import TechnicalInspectionDraft
@@ -1413,7 +1458,7 @@ def api_mm_confirm_visite_technique_payment(draft_id):
 
 
 @main_bp.route('/mobile-money-archive')
-@roles_required('mobile_money_agent')
+@mm_section_required('archive')
 def mobile_money_archive_page():
     """Archive page for mobile money agents showing paid fines and paid vignettes."""
     return render_template('mobile_money_archive.html')
@@ -2858,6 +2903,8 @@ def list_all_fines():
     role = getattr(current_user, 'role', None)
     if role not in allowed_roles and not getattr(current_user, 'is_admin', False):
         abort(403)
+    if role == 'mobile_money_agent' and not current_user.has_mm_section('amendes'):
+        abort(403)
 
     # optional filters
     q = request.args.get('q', type=str)
@@ -3207,6 +3254,8 @@ def pay_all_fines_for_vehicle(vehicle_id):
     allowed_roles = ('administrateur', 'judiciaire', 'policier', 'mobile_money_agent')
     role = getattr(current_user, 'role', None)
     if role not in allowed_roles and not getattr(current_user, 'is_admin', False):
+        return jsonify({'error': 'Accès refusé'}), 403
+    if role == 'mobile_money_agent' and not current_user.has_mm_section('amendes'):
         return jsonify({'error': 'Accès refusé'}), 403
 
     vehicle = Vehicle.query.get_or_404(vehicle_id)
@@ -3809,7 +3858,8 @@ def payments_settings_page():
         mobile_money_accounts=mobile_money_accounts,
         status=status,
         message=message,
-        q=q
+        q=q,
+        MM_AGENT_SECTIONS=MM_AGENT_SECTIONS
     )
 
 
@@ -3825,6 +3875,11 @@ def create_mobile_money_agent_account():
     phone = (data.get('phone') or '').strip()
     email = (data.get('email') or '').strip()
     country = (data.get('country') or '').strip()
+    valid_section_keys = {key for key, _ in MM_AGENT_SECTIONS}
+    selected_sections = [
+        s for s in (data.getlist('sections') if hasattr(data, 'getlist') else (data.get('sections') or []))
+        if s in valid_section_keys
+    ]
 
     if not username or not password:
         return redirect(url_for(
@@ -3864,7 +3919,8 @@ def create_mobile_money_agent_account():
         email=email or None,
         country=country,
         region=creator_region,
-        is_active=True
+        is_active=True,
+        mm_sections=json.dumps(selected_sections)
     )
     account.set_password(password)
     db.session.add(account)
@@ -3907,6 +3963,11 @@ def update_mobile_money_agent_account(user_id):
     country = (data.get('country') or '').strip()
     password = data.get('password') or ''
     redirect_q = (data.get('q') or '').strip()
+    valid_section_keys = {key for key, _ in MM_AGENT_SECTIONS}
+    selected_sections = [
+        s for s in (data.getlist('sections') if hasattr(data, 'getlist') else (data.get('sections') or []))
+        if s in valid_section_keys
+    ]
 
     if not username or not country:
         return redirect(url_for(
@@ -3938,6 +3999,7 @@ def update_mobile_money_agent_account(user_id):
     account.phone = phone or None
     account.email = email or None
     account.country = country
+    account.mm_sections = json.dumps(selected_sections)
     if password:
         account.set_password(password)
 
@@ -6527,6 +6589,8 @@ def get_insurance_alerts():
 @roles_required('agent_impot', 'mobile_money_agent')
 def get_vignette_vehicles():
     """Get vehicles with vignettes for tax agents"""
+    if getattr(current_user, 'role', None) == 'mobile_money_agent' and not current_user.has_mm_section('vignettes'):
+        abort(403)
     # Get country/region filter from current user
     user_country = getattr(current_user, 'country', None)
 
@@ -6685,7 +6749,7 @@ def get_vignette_vehicles():
 
 @vehicle_bp.route('/<int:vehicle_id>/vignette/payment-approve', methods=['POST'])
 @login_required
-@roles_required('mobile_money_agent')
+@mm_section_required('vignettes')
 def approve_vignette_payment(vehicle_id):
     """Approve a manual payment for an expired vignette renewal."""
     from app.models import VehicleHistory
@@ -7345,6 +7409,8 @@ def get_mobile_money_archive():
     Paid fines that were already included in a vignette payment are kept only in the
     vignette archive section, not in the direct fines archive.
     """
+    if getattr(current_user, 'role', None) == 'mobile_money_agent' and not current_user.has_mm_section('archive'):
+        abort(403)
     start_date_str = request.args.get('start_date', '')
     end_date_str = request.args.get('end_date', '')
     show_all = request.args.get('all', '').lower() == 'true'

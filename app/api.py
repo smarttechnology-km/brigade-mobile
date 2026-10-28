@@ -3805,6 +3805,8 @@ def api_license_fines_list():
     role = getattr(current_user, 'role', None)
     if role not in allowed_roles and not getattr(current_user, 'is_admin', False):
         return jsonify({'error': 'Accès refusé'}), 403
+    if role == 'mobile_money_agent' and not current_user.has_mm_section('amendes'):
+        return jsonify({'error': 'Accès refusé'}), 403
 
     q = request.args.get('q', type=str)
     paid = request.args.get('paid', type=str)
@@ -3835,6 +3837,8 @@ def api_license_fines_pay_all(license_id):
     allowed_roles = ('administrateur', 'judiciaire', 'policier', 'mobile_money_agent', 'dgrtr')
     role = getattr(current_user, 'role', None)
     if role not in allowed_roles and not getattr(current_user, 'is_admin', False):
+        return jsonify({'error': 'Accès refusé'}), 403
+    if role == 'mobile_money_agent' and not current_user.has_mm_section('amendes'):
         return jsonify({'error': 'Accès refusé'}), 403
 
     lic = DriverLicense.query.get_or_404(license_id)
@@ -6367,7 +6371,7 @@ def delete_licence_pro(req_id):
 @login_required
 def api_mm_licence_pro_pending():
     """Licence Pro requests awaiting payment, for a Mobile Money agent to collect."""
-    if getattr(current_user, 'role', None) != 'mobile_money_agent':
+    if getattr(current_user, 'role', None) != 'mobile_money_agent' or not current_user.has_mm_section('licence_pro'):
         return jsonify({'error': 'Accès refusé'}), 403
     from app.models import LicenceProRequest
     q = request.args.get('q', '').strip()
@@ -6388,7 +6392,7 @@ def api_mm_licence_pro_pending():
 def api_mm_licence_pro_confirm_payment(req_id):
     """Mobile Money agent confirms payment for a Licence Pro request — moves it into
     the Directeur Général's validation queue ('pending')."""
-    if getattr(current_user, 'role', None) != 'mobile_money_agent':
+    if getattr(current_user, 'role', None) != 'mobile_money_agent' or not current_user.has_mm_section('licence_pro'):
         return jsonify({'error': 'Accès refusé'}), 403
     from app.models import LicenceProRequest
     req = LicenceProRequest.query.get_or_404(req_id)
@@ -6621,6 +6625,11 @@ def create_dossier_permis():
         return jsonify({'error': "Type de dossier invalide."}), 400
 
     settings = LicenseSetting.get()
+
+    is_dgrtr_employe = (getattr(current_user, 'role', '') == 'dgrtr'
+                         and getattr(current_user, 'dgrtr_type', None) == 'employe')
+    if is_dgrtr_employe and dossier_type == 'nouveau':
+        data['country'] = current_user.country
 
     renewal_license = None
     if dossier_type == 'renouvellement':
@@ -6942,6 +6951,55 @@ def reject_dossier_permis(dossier_id):
     return jsonify(d.to_dict())
 
 
+@api_bp.route('/dossiers-permis/<int:dossier_id>', methods=['DELETE'])
+@login_required
+def delete_dossier_permis(dossier_id):
+    """Suppression définitive d'un dossier, réservée à l'administrateur. Les frais
+    de dossier (payés ou non) disparaissent avec la ligne. Si le dossier est un
+    'nouveau permis' déjà complété (Étape 6), le permis créé par ce dossier est
+    supprimé avec toutes ses traces (amendes, licence pro, impressions, points).
+    Pour un renouvellement, le permis existant renouvelé n'est jamais touché —
+    seul le dossier (et son paiement) est supprimé."""
+    if getattr(current_user, 'role', '') != 'administrateur':
+        return jsonify({'error': 'Seul un administrateur peut supprimer un dossier.'}), 403
+
+    d = LicenseDossier.query.get_or_404(dossier_id)
+
+    license_to_delete = None
+    if d.dossier_type == 'nouveau' and d.license_id:
+        license_to_delete = DriverLicense.query.get(d.license_id)
+
+    try:
+        db.session.delete(d)
+        db.session.flush()
+
+        if license_to_delete:
+            from app.models import LicenseEditRequest, LicenceProRequest, LicenseFine, PointReductionHistory
+            lic_id = license_to_delete.id
+            if license_to_delete.photo_filename:
+                try:
+                    from app.cloudinary_utils import delete_file as cloud_delete
+                    cloud_delete(license_to_delete.photo_filename, local_folder='license_photos')
+                except Exception:
+                    pass
+            LicensePrintRequest.query.filter_by(license_id=lic_id).delete()
+            LicenseEditRequest.query.filter_by(license_id=lic_id).delete()
+            LicenceProRequest.query.filter_by(license_id=lic_id).delete()
+            LicenseFine.query.filter_by(license_id=lic_id).delete()
+            PointReductionHistory.query.filter_by(license_id=lic_id).delete()
+            # Un autre dossier de renouvellement en cours pourrait viser ce permis —
+            # on le détache plutôt que de le laisser pointer vers un permis supprimé.
+            LicenseDossier.query.filter_by(renewal_license_id=lic_id).update({'renewal_license_id': None})
+            db.session.delete(license_to_delete)
+
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'success': True})
+
+
 @api_bp.route('/dossiers-permis/<int:dossier_id>', methods=['PATCH'])
 @login_required
 def update_dossier_permis(dossier_id):
@@ -6953,6 +7011,11 @@ def update_dossier_permis(dossier_id):
 
     if data.get('doc_recu_paiement') and not d.paid:
         return jsonify({'error': "Le paiement n'a pas encore été confirmé par un agent Mobile Money."}), 400
+
+    is_dgrtr_employe = (getattr(current_user, 'role', '') == 'dgrtr'
+                         and getattr(current_user, 'dgrtr_type', None) == 'employe')
+    if is_dgrtr_employe and d.dossier_type == 'nouveau':
+        data['country'] = current_user.country
 
     for field in ('doc_autoecole', 'doc_medical', 'doc_residence',
                   'doc_fiche_individuelle', 'doc_carte_nationale', 'doc_recu_paiement'):
@@ -6981,7 +7044,7 @@ def api_mm_license_dossiers_search():
     """List license dossiers awaiting payment (or awaiting the secretariat's receipt
     confirmation), for a Mobile Money agent to collect the dossier fee once the first
     5 documents have been verified. Optionally narrowed by NIN."""
-    if getattr(current_user, 'role', None) != 'mobile_money_agent':
+    if getattr(current_user, 'role', None) != 'mobile_money_agent' or not current_user.has_mm_section('dossiers_permis'):
         return jsonify({'error': 'Accès refusé'}), 403
     nin = request.args.get('nin', '').strip()
     query = (LicenseDossier.query
@@ -7000,7 +7063,7 @@ def api_mm_license_dossier_confirm_payment(dossier_id):
     """Mobile Money agent confirms payment of the dossier fee. The secretariat still
     has to check 'Reçu de paiement' on the dossier afterwards (once they have the
     printed receipt in hand) to actually close out step 1."""
-    if getattr(current_user, 'role', None) != 'mobile_money_agent':
+    if getattr(current_user, 'role', None) != 'mobile_money_agent' or not current_user.has_mm_section('dossiers_permis'):
         return jsonify({'error': 'Accès refusé'}), 403
     d = LicenseDossier.query.get_or_404(dossier_id)
     if not d.docs_checked_before_payment:

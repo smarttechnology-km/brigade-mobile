@@ -45,7 +45,8 @@ def login():
         if isinstance(current_user, InsuranceAccount):
             return redirect(url_for('main.insurance_dashboard'))
         if getattr(current_user, 'role', None) == 'mobile_money_agent':
-            return redirect(url_for('main.mobile_money_dashboard'))
+            from app.routes import mm_agent_landing_url
+            return redirect(mm_agent_landing_url(current_user))
         if getattr(current_user, 'role', None) == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
             return redirect(url_for('main.dgrtr_dashboard'))
         return redirect(url_for('main.index'))
@@ -90,7 +91,8 @@ def login():
             
             next_page = request.args.get('next')
             if getattr(user, 'role', None) == 'mobile_money_agent':
-                return redirect(next_page or url_for('main.mobile_money_dashboard'))
+                from app.routes import mm_agent_landing_url
+                return redirect(next_page or mm_agent_landing_url(user))
             if getattr(user, 'role', None) == 'dgrtr' and getattr(user, 'dgrtr_type', None) not in ('directeur_regional', 'directeur_general'):
                 return redirect(next_page or url_for('main.dgrtr_dashboard'))
             return redirect(next_page or url_for('main.index'))

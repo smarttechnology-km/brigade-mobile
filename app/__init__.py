@@ -329,6 +329,11 @@ def create_app():
                                 text("ALTER TABLE users ADD COLUMN web_access_enabled BOOLEAN NOT NULL DEFAULT 1")
                             )
                             logger.info("Added missing users.web_access_enabled column for SQLite compatibility")
+                        if 'mm_sections' not in existing_columns:
+                            conn.execute(
+                                text("ALTER TABLE users ADD COLUMN mm_sections TEXT")
+                            )
+                            logger.info("Added missing users.mm_sections column for SQLite compatibility")
 
                     vehicle_owners_table_exists = conn.execute(
                         text("SELECT name FROM sqlite_master WHERE type='table' AND name='vehicle_owners'")
@@ -1023,6 +1028,7 @@ def create_app():
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0",
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS dgrtr_type VARCHAR(30)",
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS web_access_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS mm_sections TEXT",
                         # vehicle_owners
                         "ALTER TABLE vehicle_owners ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0",
                         "ALTER TABLE vehicle_owners ADD COLUMN IF NOT EXISTS current_device_id VARCHAR(128)",

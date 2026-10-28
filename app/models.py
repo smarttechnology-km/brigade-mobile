@@ -37,6 +37,10 @@ class User(UserMixin, db.Model):
     web_access_enabled = db.Column(db.Boolean, nullable=False, default=True)
     session_version = db.Column(db.Integer, nullable=False, default=0)  # Incremented on each login to invalidate old tokens
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    # mobile_money_agent accounts only: JSON list of allowed section keys (see
+    # MM_AGENT_SECTIONS). Null/empty means full access — keeps existing accounts
+    # created before this restriction working exactly as before.
+    mm_sections = db.Column(db.Text, nullable=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -52,8 +56,50 @@ class User(UserMixin, db.Model):
     def is_insurance_account(self):
         return False
 
+    @property
+    def mm_sections_list(self):
+        if not self.mm_sections:
+            return []
+        try:
+            return json.loads(self.mm_sections)
+        except (TypeError, ValueError):
+            return []
+
+    def has_mm_section(self, key):
+        """Whether a mobile_money_agent account can access a given section.
+        Always True for any other role, and for an agent with no restriction set."""
+        if self.role != 'mobile_money_agent':
+            return True
+        if not self.mm_sections:
+            return True
+        return key in self.mm_sections_list
+
+    @property
+    def has_full_mm_access(self):
+        """Whether a mobile_money_agent sees the overview Dashboard — reserved for
+        agents with every section granted (explicitly or via the legacy null = all)."""
+        if self.role != 'mobile_money_agent':
+            return True
+        if not self.mm_sections:
+            return True
+        all_keys = {key for key, _ in MM_AGENT_SECTIONS}
+        return all_keys.issubset(set(self.mm_sections_list))
+
     def __repr__(self):
         return f'<User {self.username}>'
+
+
+# Sections an admin/judiciaire/policier can grant to a mobile_money_agent account
+# when creating or editing it. Key = used in access checks + sidebar; label = UI text.
+MM_AGENT_SECTIONS = [
+    ('amendes', 'Paiement Amendes'),
+    ('vignettes', 'Paiement Vignettes'),
+    ('cartes_grises', 'Cartes Grises'),
+    ('visite_technique', 'Visite Technique'),
+    ('licence_pro', 'Licence Pro'),
+    ('dossiers_permis', 'Dossiers Permis'),
+    ('archive', 'Archive Paiements'),
+]
 
 
 class UserHistory(db.Model):
