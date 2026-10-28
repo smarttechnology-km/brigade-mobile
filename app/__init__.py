@@ -981,7 +981,6 @@ def create_app():
                                     logger.info(f"Added licence_pro_settings.{col} column")
 
             elif 'postgresql' in str(app.config.get('SQLALCHEMY_DATABASE_URI', '')):
-                with db.engine.begin() as conn:
                     pg_patches = [
                         # driver_licenses
                         "ALTER TABLE driver_licenses ADD COLUMN IF NOT EXISTS nationalite VARCHAR(100)",
@@ -1211,12 +1210,25 @@ def create_app():
                         "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_taxi_ville FLOAT NOT NULL DEFAULT 0",
                         "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_transport_commun FLOAT NOT NULL DEFAULT 0",
                         "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_proprietaire_exploitant FLOAT NOT NULL DEFAULT 0",
+                        # license_add_requests
+                        "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS verified_by VARCHAR(100)",
+                        "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP",
+                        "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS rejected_by VARCHAR(100)",
+                        "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP",
+                        "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+                        "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS approved_by VARCHAR(100)",
+                        "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP",
                     ]
+                    # Each patch runs in its own transaction: on Postgres, one failed
+                    # statement poisons the rest of a shared transaction (every later
+                    # statement then fails with InFailedSqlTransaction) even though the
+                    # except below looks like it isolates failures per-statement.
                     for sql in pg_patches:
                         try:
-                            conn.execute(text(sql))
+                            with db.engine.begin() as conn:
+                                conn.execute(text(sql))
                         except Exception as _pg_e:
-                            logger.warning(f"PG schema patch skipped: {_pg_e}")
+                            logger.warning(f"PG schema patch skipped: {sql} -> {_pg_e}")
                     logger.info("PostgreSQL schema patches applied")
 
         except Exception as e:
