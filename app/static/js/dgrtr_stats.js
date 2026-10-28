@@ -8,13 +8,26 @@ function dsApplyPeriod(period) {
 document.addEventListener('DOMContentLoaded', function () {
     var periodSelect = document.getElementById('ds-period');
     var refreshBtn = document.getElementById('ds-refresh-btn');
+    var exportBtn = document.getElementById('ds-export-btn');
     var searchInput = document.getElementById('ds-search');
     var islandSelect = document.getElementById('ds-island');
+    var payerSelect = document.getElementById('ds-payer');
+    var dateFrom = document.getElementById('ds-date-from');
+    var dateTo = document.getElementById('ds-date-to');
 
-    if (periodSelect) periodSelect.addEventListener('change', dsLoadData);
+    if (periodSelect) periodSelect.addEventListener('change', function () {
+        var isCustom = periodSelect.value === 'custom';
+        document.getElementById('ds-date-from-wrap').classList.toggle('d-none', !isCustom);
+        document.getElementById('ds-date-to-wrap').classList.toggle('d-none', !isCustom);
+        if (!isCustom) dsLoadData();
+    });
+    if (dateFrom) dateFrom.addEventListener('change', dsLoadData);
+    if (dateTo) dateTo.addEventListener('change', dsLoadData);
     if (refreshBtn) refreshBtn.addEventListener('click', dsLoadData);
+    if (exportBtn) exportBtn.addEventListener('click', dsExportCsv);
     if (searchInput) searchInput.addEventListener('input', dsRenderTables);
     if (islandSelect) islandSelect.addEventListener('change', dsRenderTables);
+    if (payerSelect) payerSelect.addEventListener('change', dsRenderTables);
 
     dsLoadData();
 });
@@ -22,7 +35,13 @@ document.addEventListener('DOMContentLoaded', function () {
 function dsLoadData() {
     var period = (document.getElementById('ds-period') || {}).value || '30';
     var query = new URLSearchParams();
-    if (period === 'all') {
+    if (period === 'custom') {
+        var fromVal = (document.getElementById('ds-date-from') || {}).value;
+        var toVal = (document.getElementById('ds-date-to') || {}).value;
+        if (!fromVal || !toVal) return; // attendre que les deux dates soient renseignées
+        query.set('start_date', fromVal);
+        query.set('end_date', toVal);
+    } else if (period === 'all') {
         query.set('all', 'true');
     } else if (period === 'today') {
         var today = new Date().toLocaleDateString('en-CA');
@@ -61,6 +80,7 @@ function dsLoadData() {
         })
         .then(function (data) {
             dsDataCache = data || { cg_archive: [], vt_archive: [], licence_pro_archive: [], dossier_permis_archive: [], totals: {} };
+            dsPopulatePayerOptions();
             dsRenderTables();
         })
         .catch(function (err) {
@@ -79,9 +99,34 @@ function dsMatchIsland(islandValue, selected) {
     return (islandValue || '') === selected;
 }
 
+function dsMatchPayer(paidBy, selected) {
+    if (!selected) return true;
+    return (paidBy || '') === selected;
+}
+
+function dsPopulatePayerOptions() {
+    var select = document.getElementById('ds-payer');
+    if (!select) return;
+    var previous = select.value;
+    var all = [].concat(
+        dsDataCache.cg_archive || [],
+        dsDataCache.vt_archive || [],
+        dsDataCache.licence_pro_archive || [],
+        dsDataCache.dossier_permis_archive || []
+    );
+    var names = Array.from(new Set(all.map(function (item) { return item.paid_by; })
+        .filter(function (p) { return p && p !== '-'; })
+    )).sort(function (a, b) { return a.localeCompare(b); });
+
+    select.innerHTML = '<option value="">Tous les agents</option>' +
+        names.map(function (name) { return '<option value="' + dsEsc(name) + '">' + dsEsc(name) + '</option>'; }).join('');
+    if (names.indexOf(previous) !== -1) select.value = previous;
+}
+
 function dsRenderTables() {
     var search = (document.getElementById('ds-search').value || '').toLowerCase().trim();
     var island = (document.getElementById('ds-island') || {}).value || '';
+    var payer = (document.getElementById('ds-payer') || {}).value || '';
     var cgBody = document.getElementById('ds-cg-tbody');
     var vtBody = document.getElementById('ds-vt-tbody');
     var lpBody = document.getElementById('ds-lp-tbody');
@@ -89,24 +134,28 @@ function dsRenderTables() {
 
     var cgs = (dsDataCache.cg_archive || []).filter(function (item) {
         if (!dsMatchIsland(item.owner_island, island)) return false;
+        if (!dsMatchPayer(item.paid_by, payer)) return false;
         if (!search) return true;
         return [item.license_plate, item.owner_name, item.owner_island, item.receipt_number, item.paid_by]
             .some(function (f) { return String(f || '').toLowerCase().includes(search); });
     });
     var vts = (dsDataCache.vt_archive || []).filter(function (item) {
         if (!dsMatchIsland(item.owner_island, island)) return false;
+        if (!dsMatchPayer(item.paid_by, payer)) return false;
         if (!search) return true;
         return [item.license_plate, item.owner_name, item.owner_island, item.paid_by]
             .some(function (f) { return String(f || '').toLowerCase().includes(search); });
     });
     var licencePros = (dsDataCache.licence_pro_archive || []).filter(function (item) {
         if (!dsMatchIsland(item.holder_island, island)) return false;
+        if (!dsMatchPayer(item.paid_by, payer)) return false;
         if (!search) return true;
         return [item.lp_number, item.holder_name, item.activite_label, item.receipt_number, item.paid_by]
             .some(function (f) { return String(f || '').toLowerCase().includes(search); });
     });
     var dossierPermis = (dsDataCache.dossier_permis_archive || []).filter(function (item) {
         if (!dsMatchIsland(item.country, island)) return false;
+        if (!dsMatchPayer(item.paid_by, payer)) return false;
         if (!search) return true;
         return [item.dossier_number, item.nin, item.telephone, item.country, item.receipt_number, item.paid_by]
             .some(function (f) { return String(f || '').toLowerCase().includes(search); });
@@ -219,6 +268,66 @@ function dsUpdateSummaryCards() {
     document.getElementById('ds-lp-total').textContent = dsKMF(dsSum(dsFilteredLicencePros));
     document.getElementById('ds-dp-count').textContent = dsFilteredDossierPermis.length;
     document.getElementById('ds-dp-total').textContent = dsKMF(dsSum(dsFilteredDossierPermis));
+}
+
+function dsExportCsv() {
+    var activePane = document.querySelector('#dsTabsContent .tab-pane.active');
+    if (!activePane) return;
+
+    var config = {
+        'ds-cg-pane': {
+            filename: 'cartes_grises',
+            headers: ['Immatriculation', 'Propriétaire', 'Île', 'Reçu', 'Date de paiement', 'Montant (KMF)', 'Payé par'],
+            rows: dsFilteredCgs.map(function (item) {
+                return [item.license_plate, item.owner_name, item.owner_island, item.receipt_number, dsDate(item.paid_at), item.amount, item.paid_by];
+            }),
+        },
+        'ds-vt-pane': {
+            filename: 'visites_techniques',
+            headers: ['Immatriculation', 'Propriétaire', 'Île', 'Date RDV', 'Heure', 'Montant (KMF)', 'Canal', 'Payé par'],
+            rows: dsFilteredVts.map(function (item) {
+                return [item.license_plate, item.owner_name, item.owner_island, item.appointment_date, item.appointment_time, item.amount,
+                    item.channel === 'app_citoyen' ? 'App Citoyen' : 'Agent Huri Money', item.paid_by];
+            }),
+        },
+        'ds-lp-pane': {
+            filename: 'licences_pro',
+            headers: ['N° LP', 'Titulaire', 'Activité', 'Reçu', 'Date de paiement', 'Montant (KMF)', 'Payé par'],
+            rows: dsFilteredLicencePros.map(function (item) {
+                return [item.lp_number, item.holder_name, item.activite_label, item.receipt_number, dsDate(item.paid_at), item.amount, item.paid_by];
+            }),
+        },
+        'ds-dp-pane': {
+            filename: 'dossiers_permis',
+            headers: ['N° Dossier', 'NIN', 'Téléphone', 'Île', 'Reçu', 'Date de paiement', 'Montant (KMF)', 'Payé par'],
+            rows: dsFilteredDossierPermis.map(function (item) {
+                return [item.dossier_number, item.nin, item.telephone, item.country, item.receipt_number, dsDate(item.paid_at), item.amount, item.paid_by];
+            }),
+        },
+    };
+
+    var cfg = config[activePane.id];
+    if (!cfg) return;
+    if (!cfg.rows.length) { alert('Aucune donnée à exporter pour cet onglet.'); return; }
+
+    var csvEscape = function (value) {
+        var str = String(value === null || value === undefined ? '' : value);
+        if (/[",;\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
+        return str;
+    };
+    var lines = [cfg.headers.map(csvEscape).join(';')]
+        .concat(cfg.rows.map(function (row) { return row.map(csvEscape).join(';'); }));
+    var csvContent = '﻿' + lines.join('\r\n'); // BOM pour une ouverture correcte dans Excel
+
+    var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = cfg.filename + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 function dsKMF(amount) {
