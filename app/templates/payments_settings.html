@@ -62,6 +62,7 @@
                   <th>Nom</th>
                   <th>Téléphone</th>
                   <th>Pays</th>
+                  <th>Accès</th>
                   <th>Statut</th>
                   <th>Créé le</th>
                   <th>Actions</th>
@@ -75,6 +76,20 @@
                     <td>{{ account.full_name or '-' }}</td>
                     <td>{{ account.phone or '-' }}</td>
                     <td>{{ account.country or '-' }}</td>
+                    <td>
+                      {% set acc_sections = account.mm_sections_list %}
+                      {% if not account.mm_sections %}
+                        <span class="badge bg-info">Tous les accès</span>
+                      {% elif not acc_sections %}
+                        <span class="badge bg-secondary">Aucun accès</span>
+                      {% else %}
+                        {% for key, label in MM_AGENT_SECTIONS %}
+                          {% if key in acc_sections %}
+                            <span class="badge bg-light text-dark border">{{ label }}</span>
+                          {% endif %}
+                        {% endfor %}
+                      {% endif %}
+                    </td>
                     <td>
                       {% if account.is_active %}
                         <span class="badge bg-success">Actif</span>
@@ -96,6 +111,7 @@
                           data-phone="{{ account.phone or '' }}"
                           data-email="{{ account.email or '' }}"
                           data-country="{{ account.country or '' }}"
+                          data-sections="{{ '__all__' if not account.mm_sections else account.mm_sections_list|join(',') }}"
                           onclick="prefillEditAgentModal(this)">
                           Modifier
                         </button>
@@ -121,7 +137,7 @@
                   {% endfor %}
                 {% else %}
                   <tr>
-                    <td colspan="7" class="text-center text-muted py-4">Aucun compte agent Mobile Money pour le moment.</td>
+                    <td colspan="8" class="text-center text-muted py-4">Aucun compte agent Mobile Money pour le moment.</td>
                   </tr>
                 {% endif %}
               </tbody>
@@ -172,6 +188,21 @@
               <option value="Moheli" {% if current_user.country == 'Moheli' %}selected{% endif %}>Mohéli</option>
             </select>
           </div>
+          <div class="mb-0">
+            <label class="form-label d-flex justify-content-between align-items-center">
+              <span>Sections accessibles <span class="text-danger">*</span></span>
+              <a href="#" class="small" onclick="toggleAllSections('create', true); return false;">Tout cocher</a>
+            </label>
+            <div class="border rounded p-2">
+              {% for key, label in MM_AGENT_SECTIONS %}
+              <div class="form-check">
+                <input class="form-check-input mm-section-cb mm-section-cb-create" type="checkbox" name="sections" value="{{ key }}" id="create-section-{{ key }}">
+                <label class="form-check-label" for="create-section-{{ key }}">{{ label }}</label>
+              </div>
+              {% endfor %}
+            </div>
+            <small class="text-muted">Le compte ne verra et n'aura accès qu'aux sections cochées (le Dashboard reste toujours visible).</small>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
@@ -220,9 +251,24 @@
               <option value="Moheli">Mohéli</option>
             </select>
           </div>
-          <div class="mb-0">
+          <div class="mb-3">
             <label for="edit-password" class="form-label">Nouveau mot de passe <span class="text-muted">(optionnel)</span></label>
             <input type="password" id="edit-password" name="password" class="form-control">
+          </div>
+          <div class="mb-0">
+            <label class="form-label d-flex justify-content-between align-items-center">
+              <span>Sections accessibles <span class="text-danger">*</span></span>
+              <a href="#" class="small" onclick="toggleAllSections('edit', true); return false;">Tout cocher</a>
+            </label>
+            <div class="border rounded p-2">
+              {% for key, label in MM_AGENT_SECTIONS %}
+              <div class="form-check">
+                <input class="form-check-input mm-section-cb mm-section-cb-edit" type="checkbox" name="sections" value="{{ key }}" id="edit-section-{{ key }}">
+                <label class="form-check-label" for="edit-section-{{ key }}">{{ label }}</label>
+              </div>
+              {% endfor %}
+            </div>
+            <small class="text-muted">Le compte ne verra et n'aura accès qu'aux sections cochées (le Dashboard reste toujours visible).</small>
           </div>
         </div>
         <div class="modal-footer">
@@ -252,6 +298,18 @@
     document.getElementById('edit-email').value = email;
     document.getElementById('edit-country').value = country;
     document.getElementById('edit-password').value = '';
+
+    const sectionsAttr = button.getAttribute('data-sections') || '';
+    const selected = sectionsAttr === '__all__' ? null : sectionsAttr.split(',').filter(Boolean);
+    document.querySelectorAll('.mm-section-cb-edit').forEach(function(cb) {
+      cb.checked = selected === null ? true : selected.indexOf(cb.value) !== -1;
+    });
+  }
+
+  function toggleAllSections(which, checked) {
+    document.querySelectorAll('.mm-section-cb-' + which).forEach(function(cb) {
+      cb.checked = checked;
+    });
   }
 </script>
 {% endblock %}

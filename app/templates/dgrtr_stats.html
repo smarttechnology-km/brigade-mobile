@@ -56,7 +56,16 @@
             <option value="month">Ce mois</option>
             <option value="year">Cette année</option>
             <option value="all">Tous</option>
+            <option value="custom">Personnalisé</option>
           </select>
+        </div>
+        <div class="col-md-2 d-none" id="ds-date-from-wrap">
+          <label class="form-label small fw-semibold">Du</label>
+          <input type="date" id="ds-date-from" class="form-control">
+        </div>
+        <div class="col-md-2 d-none" id="ds-date-to-wrap">
+          <label class="form-label small fw-semibold">Au</label>
+          <input type="date" id="ds-date-to" class="form-control">
         </div>
         <div class="col-md-2">
           <label class="form-label small fw-semibold">Île</label>
@@ -67,13 +76,22 @@
             <option value="Moheli">Mohéli</option>
           </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">Payé par</label>
+          <select id="ds-payer" class="form-select">
+            <option value="">Tous les agents</option>
+          </select>
+        </div>
+        <div class="col-md-3">
           <label class="form-label small fw-semibold">Recherche</label>
           <input type="text" id="ds-search" class="form-control" placeholder="Immatriculation, titulaire, N°, reçu...">
         </div>
-        <div class="col-md-2 d-grid">
-          <button class="btn btn-outline-primary" id="ds-refresh-btn">
+        <div class="col-md-3 d-flex gap-2">
+          <button class="btn btn-outline-primary flex-fill" id="ds-refresh-btn">
             <i class="fas fa-rotate me-1"></i>Actualiser
+          </button>
+          <button class="btn btn-outline-success flex-fill" id="ds-export-btn">
+            <i class="fas fa-file-csv me-1"></i>Exporter
           </button>
         </div>
       </div>

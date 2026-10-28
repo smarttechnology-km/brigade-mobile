@@ -40,9 +40,11 @@
     </div>
     <div class="col-md-4 text-md-end mt-3 mt-md-0">
       <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+        {% if current_user.has_full_mm_access %}
         <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
           <i class="fas fa-tachometer-alt me-1"></i>Dashboard
         </a>
+        {% endif %}
         <span class="badge bg-warning text-dark align-self-center" id="dos-count">0 dossier(s)</span>
       </div>
     </div>

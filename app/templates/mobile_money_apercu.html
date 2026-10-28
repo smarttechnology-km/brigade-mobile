@@ -143,6 +143,7 @@
     </div>
   </div>
   <div class="row">
+    {% if current_user.has_mm_section('amendes') %}
     <div class="col-md-3 mb-3">
       <a href="/mobile-money-amendes" class="card text-decoration-none" style="transition:box-shadow .15s;">
         <div class="card-body d-flex align-items-center gap-3">
@@ -154,6 +155,8 @@
         </div>
       </a>
     </div>
+    {% endif %}
+    {% if current_user.has_mm_section('vignettes') %}
     <div class="col-md-3 mb-3">
       <a href="/mobile-money-vignettes" class="card text-decoration-none">
         <div class="card-body d-flex align-items-center gap-3">
@@ -165,6 +168,8 @@
         </div>
       </a>
     </div>
+    {% endif %}
+    {% if current_user.has_mm_section('cartes_grises') %}
     <div class="col-md-3 mb-3">
       <a href="/mobile-money-cartes-grises" class="card text-decoration-none">
         <div class="card-body d-flex align-items-center gap-3">
@@ -176,6 +181,8 @@
         </div>
       </a>
     </div>
+    {% endif %}
+    {% if current_user.has_mm_section('archive') %}
     <div class="col-md-3 mb-3">
       <a href="/mobile-money-archive" class="card text-decoration-none">
         <div class="card-body d-flex align-items-center gap-3">
@@ -187,6 +194,7 @@
         </div>
       </a>
     </div>
+    {% endif %}
   </div>
 
 </div>

@@ -371,6 +371,7 @@
       </div>
       <div class="modal-body" id="detail-body">Chargement…</div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-outline-danger me-auto d-none" id="detail-delete-btn" onclick="deleteDossier(currentDossierId)"><i class="fas fa-trash-alt me-2"></i>Supprimer le dossier</button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
         <button type="button" class="btn btn-outline-danger d-none" id="detail-reject-btn" onclick="openRejectModal()"><i class="fas fa-times-circle me-2"></i>Rejeter</button>
         <button type="button" class="btn btn-outline-secondary d-none" id="detail-prev-btn"><i class="fas fa-arrow-left me-2"></i><span id="detail-prev-label"></span></button>
@@ -986,7 +987,10 @@ function renderDossiersTable(data) {
       <td>${stepDots}</td>
       <td>${statusBadge}</td>
       <td class="small text-muted" style="white-space:nowrap;">${d.created_at}</td>
-      <td class="text-end"><button class="btn btn-sm btn-outline-primary py-0" onclick="event.stopPropagation();openDetail(${d.id})"><i class="fas fa-eye me-1"></i>Voir</button></td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-primary py-0" onclick="event.stopPropagation();openDetail(${d.id})"><i class="fas fa-eye me-1"></i>Voir</button>
+        ${IS_ADMIN ? `<button class="btn btn-sm btn-outline-danger py-0 ms-1" title="Supprimer" onclick="event.stopPropagation();deleteDossier(${d.id})"><i class="fas fa-trash-alt"></i></button>` : ''}
+      </td>
     </tr>`;
   }).join('');
 }
@@ -1053,7 +1057,10 @@ function renderDossiers(data) {
           <div class="mt-2">
             ${stepProgress(d)}
           </div>
-          <div class="text-muted small mt-2"><i class="fas fa-calendar-alt me-1"></i>${d.created_at}</div>
+          <div class="d-flex justify-content-between align-items-center mt-2">
+            <div class="text-muted small"><i class="fas fa-calendar-alt me-1"></i>${d.created_at}</div>
+            ${IS_ADMIN ? `<button class="btn btn-sm btn-outline-danger py-0" title="Supprimer" onclick="event.stopPropagation();deleteDossier(${d.id})"><i class="fas fa-trash-alt"></i></button>` : ''}
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -1093,6 +1100,11 @@ function onDossierTypeChange() {
   // Un seul des deux (autoecole / permis) compte dans les 5 documents requis
   document.getElementById('doc-autoecole').checked = false;
   document.getElementById('doc-permis').checked = false;
+  // Employé DGRTR : sur un nouveau permis, l'île est fixée à son île d'affectation
+  var countrySelect = document.getElementById('s1-country');
+  var lockCountry = !isRenewal && !IS_ADMIN && DGRTR_TYPE === 'employe' && !!DGRTR_COUNTRY;
+  countrySelect.disabled = lockCountry;
+  if (lockCountry) countrySelect.value = DGRTR_COUNTRY;
   checkDocProgress();
 }
 
@@ -1390,6 +1402,9 @@ function openDetail(id) {
     (d.current_step === 5 && (IS_ADMIN || DGRTR_TYPE === 'directeur_general'))
   );
   rejectBtn.classList.toggle('d-none', !canReject);
+
+  // Bouton Supprimer : réservé à l'administrateur, quel que soit l'état du dossier
+  document.getElementById('detail-delete-btn').classList.toggle('d-none', !IS_ADMIN);
 
   // Bandeau rejeté
   var rejectedBanner = '';
@@ -2040,6 +2055,30 @@ function confirmReject() {
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-times-circle me-2"></i>Confirmer le rejet';
   });
+}
+
+// ── Suppression (admin uniquement) ─────
+function deleteDossier(id) {
+  var dossierId = id || currentDossierId;
+  var d = allDossiers.find(function(x) { return x.id === dossierId; });
+  var warning = 'Supprimer définitivement ce dossier ? Les frais de dossier (payés ou non) seront effacés.';
+  if (d && d.dossier_type === 'nouveau' && d.license_id) {
+    warning += '\n\nCe dossier a déjà créé un permis — ce permis et toutes ses traces (amendes, licence pro, impressions, points) seront supprimés avec lui.';
+  } else if (d && d.dossier_type === 'renouvellement') {
+    warning += '\n\nLe permis existant concerné par ce renouvellement ne sera pas touché.';
+  }
+  warning += '\n\nCette action est irréversible.';
+  if (!confirm(warning)) return;
+
+  fetch('/api/dossiers-permis/' + dossierId, { method: 'DELETE' })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(res) {
+      if (!res.ok) { alert(res.data.error || 'Erreur lors de la suppression.'); return; }
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).hide();
+      loadDossiers();
+      showToast('Dossier supprimé', 'danger');
+    })
+    .catch(function() { alert('Erreur réseau.'); });
 }
 
 function docRow(label, checked) {
