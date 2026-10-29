@@ -291,7 +291,15 @@ function renderVehiclesTable(sourceVehicles = vehiclesCache) {
                 `;
             }
         }
-        
+
+        if (typeof IS_ADMIN !== 'undefined' && IS_ADMIN && vehicle.vignette_payment_approved) {
+            actionButtonsContent += `
+                <button class="btn btn-sm btn-outline-danger ms-1" title="Supprimer ce paiement de vignette" onclick="deleteVignettePayment(${vehicle.id})">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            `;
+        }
+
         const actionButtons = `<div class="d-flex gap-2 flex-nowrap">${actionButtonsContent}</div>`;
         
         // Get penalty amount from API response
@@ -565,6 +573,27 @@ function openViewVehicleModal(vehicleId) {
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('viewVehicleModal'));
     modal.show();
+}
+
+function deleteVignettePayment(vehicleId) {
+    const vehicle = vehiclesCache.find(v => v.id === vehicleId);
+    if (!vehicle) return;
+
+    const warning = `Supprimer le paiement de vignette de ${vehicle.license_plate} ?\n\n` +
+        `Le véhicule redeviendra "Pas de vignette" (la date d'expiration précédente n'est pas connue, ` +
+        `il ne peut pas repasser à "Expirée").\n\n` +
+        `Les amendes qui avaient été incluses dans ce paiement (s'il y en a) redeviendront impayées, et le reçu ` +
+        `correspondant sera supprimé (il ne sera plus disponible via "Retélécharger un reçu" dans l'app citoyenne).\n\n` +
+        `Cette action est irréversible.`;
+    if (!confirm(warning)) return;
+
+    fetch(`/api/vehicles/${vehicleId}/vignette/payment`, { method: 'DELETE' })
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok) { alert(data.error || 'Erreur lors de la suppression.'); return; }
+            loadDashboardData();
+        })
+        .catch(() => alert('Erreur réseau.'));
 }
 
 function renewVignette(vehicleId) {

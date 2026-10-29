@@ -61,8 +61,18 @@ document.addEventListener('DOMContentLoaded', function () {
         searchInput.addEventListener('input', renderArchiveTables);
     }
 
+    const islandScopeEl = document.getElementById('mm-island-scope');
+    if (islandScopeEl) {
+        islandScopeEl.addEventListener('change', loadArchiveData);
+    }
+
     loadArchiveData();
 });
+
+function mmIslandScope() {
+    const el = document.getElementById('mm-island-scope');
+    return el ? el.value : 'mine';
+}
 
 function loadArchiveData() {
     const startDate = (document.getElementById('archive-start-date') || {}).value || '';
@@ -70,6 +80,7 @@ function loadArchiveData() {
     const period = (document.getElementById('archive-period') || {}).value || '30';
 
     const query = new URLSearchParams();
+    query.set('island_scope', mmIslandScope());
     if (period === 'all') {
         query.set('all', 'true');
     } else {

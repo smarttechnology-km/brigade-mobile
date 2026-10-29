@@ -51,7 +51,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
     loadVignettePayments();
     setupVignetteAutoRefresh();
+
+    const islandScopeEl = document.getElementById('mm-island-scope');
+    if (islandScopeEl) {
+        islandScopeEl.addEventListener('change', loadVignettePayments);
+    }
 });
+
+function mmIslandScope() {
+    const el = document.getElementById('mm-island-scope');
+    return el ? el.value : 'mine';
+}
 
 function loadVignettePayments() {
     const tbody = document.getElementById('mm-vignette-tbody');
@@ -59,7 +69,7 @@ function loadVignettePayments() {
         tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Chargement...</td></tr>';
     }
 
-    fetch('/api/vehicles/vignette-vehicles', { credentials: 'same-origin' })
+    fetch('/api/vehicles/vignette-vehicles?island_scope=' + mmIslandScope(), { credentials: 'same-origin' })
         .then(function (r) {
             if (!r.ok) throw new Error('Erreur de chargement');
             return r.json();

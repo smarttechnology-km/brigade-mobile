@@ -74,14 +74,26 @@ document.addEventListener('DOMContentLoaded', function () {
     if (lfSearchEl) {
         lfSearchEl.addEventListener('input', function () { mmFilterLicenseRows(this.value || ''); });
     }
+    let permisLoadedOnce = false;
     const permisTabBtn = document.getElementById('mm-tab-permis-btn');
     if (permisTabBtn) {
-        let loadedOnce = false;
         permisTabBtn.addEventListener('shown.bs.tab', function () {
-            if (!loadedOnce) { loadedOnce = true; mmLoadUnpaidLicenseFines(); }
+            if (!permisLoadedOnce) { permisLoadedOnce = true; mmLoadUnpaidLicenseFines(); }
+        });
+    }
+    const islandScopeEl = document.getElementById('mm-island-scope');
+    if (islandScopeEl) {
+        islandScopeEl.addEventListener('change', function () {
+            loadUnpaidFines();
+            if (permisLoadedOnce) mmLoadUnpaidLicenseFines();
         });
     }
 });
+
+function mmIslandScope() {
+    const el = document.getElementById('mm-island-scope');
+    return el ? el.value : 'mine';
+}
 
 function loadUnpaidFines() {
     const tbody = document.getElementById('mm-tbody');
@@ -89,7 +101,7 @@ function loadUnpaidFines() {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>';
     }
 
-    fetch('/api/vehicles/fines/all?paid=false')
+    fetch('/api/vehicles/fines/all?paid=false&island_scope=' + mmIslandScope())
         .then(function (r) {
             if (!r.ok) {
                 throw new Error('Erreur de chargement');
@@ -416,7 +428,7 @@ function mmLoadUnpaidLicenseFines() {
     const tbody = document.getElementById('mm-lf-tbody');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>';
 
-    fetch('/api/licenses/fines?paid=false')
+    fetch('/api/licenses/fines?paid=false&island_scope=' + mmIslandScope())
         .then(function (r) { if (!r.ok) throw new Error('Erreur de chargement'); return r.json(); })
         .then(function (data) {
             mmAllLicenseFines = Array.isArray(data) ? data : [];
