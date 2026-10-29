@@ -293,37 +293,39 @@ def calculate_penalty_amount(days_late):
     """
     if not days_late or days_late <= 0:
         return 0.0
-    
+
     try:
         from app.models import PenaltyRate
-        
-        # Find applicable penalty rate for these days
-        penalty_rate = PenaltyRate.query.filter(
-            PenaltyRate.is_active == True,
-            PenaltyRate.days_late_min <= days_late,
-            PenaltyRate.days_late_max >= days_late
-        ).first()
-        
-        if not penalty_rate:
-            # No configured penalty for these days
-            return 0.0
-        
-        # Calculate: (days_late - previous_max_days) × penalty_per_day
-        previous_max = 0
-        prev_rates = PenaltyRate.query.filter(
-            PenaltyRate.is_active == True,
-            PenaltyRate.days_late_max < penalty_rate.days_late_min
-        ).order_by(PenaltyRate.days_late_max.desc()).first()
-
-        if prev_rates:
-            previous_max = prev_rates.days_late_max
-
-        penalty_per_day = float(penalty_rate.penalty_per_day)
-        penalty_days = max(0, days_late - previous_max)
-        return float(penalty_days * penalty_per_day)
-
+        rates = PenaltyRate.query.filter(PenaltyRate.is_active == True).all()
+        return _penalty_amount_from_rates(days_late, rates)
     except Exception:
         return 0.0
+
+
+def _penalty_amount_from_rates(days_late, rates):
+    """Pure (query-free) part of calculate_penalty_amount — picks the
+    best-matching rate out of an already-fetched `rates` list. Split out so
+    list endpoints (e.g. get_vignette_vehicles) can fetch PenaltyRate.query
+    once for the whole page instead of twice per vehicle (N+1 queries)."""
+    if not days_late or days_late <= 0:
+        return 0.0
+
+    active_rates = [r for r in rates if r.is_active]
+    penalty_rate = next(
+        (r for r in active_rates if r.days_late_min <= days_late <= r.days_late_max),
+        None
+    )
+    if not penalty_rate:
+        return 0.0
+
+    previous_max = 0
+    prev_candidates = [r for r in active_rates if r.days_late_max < penalty_rate.days_late_min]
+    if prev_candidates:
+        previous_max = max(r.days_late_max for r in prev_candidates)
+
+    penalty_per_day = float(penalty_rate.penalty_per_day)
+    penalty_days = max(0, days_late - previous_max)
+    return float(penalty_days * penalty_per_day)
 
 
 def _vignette_price_from_rates(vehicle, rates):
@@ -6650,8 +6652,9 @@ def get_vignette_vehicles():
     
     vehicles = query.order_by(Vehicle.license_plate).all()
 
-    from app.models import VignetteRate
+    from app.models import VignetteRate, PenaltyRate
     all_active_rates = VignetteRate.query.filter(VignetteRate.is_active == True).all()
+    all_penalty_rates = PenaltyRate.query.filter(PenaltyRate.is_active == True).all()
     vehicle_ids = [v.id for v in vehicles]
     unpaid_fines_by_vehicle = {}
     if vehicle_ids:
@@ -6660,6 +6663,7 @@ def get_vignette_vehicles():
 
     vehicles_payload = []
     now = ensure_comoros(now_comoros())
+    renewal_opening = get_renewal_opening_datetime()
 
     for vehicle in vehicles:
         vehicle_data = vehicle.to_dict()
@@ -6728,7 +6732,6 @@ def get_vignette_vehicles():
         vehicle_data['needs_qr_activation'] = vehicle.qr_code_expiry is None
 
         # Determine renewal period status
-        renewal_opening = get_renewal_opening_datetime()
         in_renewal_period = (
             renewal_opening is not None
             and now >= renewal_opening
@@ -6748,7 +6751,7 @@ def get_vignette_vehicles():
         elif vignette_expiry and vignette_expiry < now:
             # Vignette is expired: calculate current penalty based on days overdue
             days_late = (now - vignette_expiry).days
-            penalty_amount = calculate_penalty_amount(days_late)
+            penalty_amount = _penalty_amount_from_rates(days_late, all_penalty_rates)
             vehicle_data['penalty_amount'] = penalty_amount
         else:
             # Vignette still valid (renewal window or active): no current penalty
