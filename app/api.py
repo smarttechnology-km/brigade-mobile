@@ -55,6 +55,17 @@ def apply_island_filter(query, island_field, force_country=None):
     return query
 
 
+def mm_agent_island_filter(query, island_field):
+    """A mobile_money_agent sees only their own island's pending payments by
+    default; passing ?island_scope=all (the 'Toutes les îles' option) lifts
+    this and shows every island, same as before this restriction existed."""
+    if (getattr(current_user, 'role', None) == 'mobile_money_agent'
+            and current_user.country
+            and request.args.get('island_scope', 'mine') != 'all'):
+        query = query.filter(island_field == current_user.country)
+    return query
+
+
 def check_island_access(island):
     """Check if current user has access to data from a specific island.
     Raises 403 Forbidden if judiciaire user doesn't have access.
@@ -3814,6 +3825,7 @@ def api_license_fines_list():
 
     query = LicenseFine.query.join(DriverLicense, LicenseFine.license_id == DriverLicense.id)
     query = apply_island_filter(query, DriverLicense.holder_island, force_country=country)
+    query = mm_agent_island_filter(query, DriverLicense.holder_island)
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -6376,6 +6388,7 @@ def api_mm_licence_pro_pending():
     from app.models import LicenceProRequest
     q = request.args.get('q', '').strip()
     query = LicenceProRequest.query.filter_by(status='en_attente_paiement').join(DriverLicense)
+    query = mm_agent_island_filter(query, DriverLicense.holder_island)
     if q:
         like = f'%{q}%'
         query = query.filter(db.or_(
@@ -7050,6 +7063,7 @@ def api_mm_license_dossiers_search():
     query = (LicenseDossier.query
              .filter(LicenseDossier.status == 'en_cours')
              .filter(LicenseDossier.step1_validated_at.is_(None)))
+    query = mm_agent_island_filter(query, LicenseDossier.country)
     if nin:
         query = query.filter(LicenseDossier.nin.ilike(f'%{nin}%'))
     items = query.order_by(LicenseDossier.created_at.asc()).all()

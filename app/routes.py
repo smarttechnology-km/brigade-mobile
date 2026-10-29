@@ -172,6 +172,17 @@ def apply_island_filter(query, island_field, force_country=None):
         query = query.filter(island_field == current_user.country)
     return query
 
+def mm_agent_island_filter(query, island_field):
+    """A mobile_money_agent sees only their own island's pending payments by
+    default; passing ?island_scope=all (the 'Toutes les îles' option) lifts
+    this and shows every island, same as before this restriction existed."""
+    if (getattr(current_user, 'role', None) == 'mobile_money_agent'
+            and current_user.country
+            and request.args.get('island_scope', 'mine') != 'all'):
+        query = query.filter(island_field == current_user.country)
+    return query
+
+
 def check_island_access(island):
     """Check if current user has access to data from a specific island.
     Raises 403 Forbidden if judiciaire or policier user doesn't have access.
@@ -1353,11 +1364,11 @@ def mobile_money_cartes_grises_page():
 @mm_section_required('cartes_grises')
 def api_mm_cartes_grises_list():
     from app.models import CarteGrise, Vehicle
-    cgs = (CarteGrise.query
-           .filter(CarteGrise.status == 'en_attente_paiement')
-           .join(Vehicle)
-           .order_by(CarteGrise.signature_requested_at.desc())
-           .all())
+    query = (CarteGrise.query
+             .filter(CarteGrise.status == 'en_attente_paiement')
+             .join(Vehicle))
+    query = mm_agent_island_filter(query, Vehicle.owner_island)
+    cgs = query.order_by(CarteGrise.signature_requested_at.desc()).all()
     result = []
     for cg in cgs:
         v = cg.vehicle
@@ -1419,6 +1430,7 @@ def api_mm_visite_technique_pending():
     query = (TechnicalInspectionDraft.query
              .filter_by(payment_status='unpaid')
              .join(Vehicle))
+    query = mm_agent_island_filter(query, Vehicle.owner_island)
     if q:
         query = query.filter(
             db.or_(
@@ -2919,6 +2931,7 @@ def list_all_fines():
 
     query = Fine.query.join(Vehicle)
     query = apply_island_filter(query, Vehicle.owner_island, force_country=country)
+    query = mm_agent_island_filter(query, Vehicle.owner_island)
     if q:
         like = f"%{q}%"
         query = query.filter((Vehicle.license_plate.ilike(like)) | (Vehicle.owner_name.ilike(like)))
@@ -3902,9 +3915,17 @@ def create_mobile_money_agent_account():
             message='Le pays est obligatoire.'
         ))
 
+    is_all_islands = country == 'ALL_ISLANDS'
+    if is_all_islands and getattr(current_user, 'role', None) != 'administrateur':
+        return redirect(url_for(
+            'main.payments_settings_page',
+            status='error',
+            message='Seul un administrateur peut créer un compte "Toutes les îles".'
+        ))
+
     creator_country = getattr(current_user, 'country', None)
     creator_region = getattr(current_user, 'region', None)
-    if creator_country and country != creator_country:
+    if not is_all_islands and creator_country and country != creator_country:
         return redirect(url_for(
             'main.payments_settings_page',
             status='error',
@@ -3917,7 +3938,7 @@ def create_mobile_money_agent_account():
         full_name=full_name or None,
         phone=phone or None,
         email=email or None,
-        country=country,
+        country=None if is_all_islands else country,
         region=creator_region,
         is_active=True,
         mm_sections=json.dumps(selected_sections)
@@ -3986,7 +4007,16 @@ def update_mobile_money_agent_account(user_id):
             message='Ce nom utilisateur existe déjà.'
         ))
 
-    if user_country and user_role in ('judiciaire', 'policier') and country != user_country:
+    is_all_islands = country == 'ALL_ISLANDS'
+    if is_all_islands and user_role != 'administrateur':
+        return redirect(url_for(
+            'main.payments_settings_page',
+            q=redirect_q,
+            status='error',
+            message='Seul un administrateur peut définir un compte "Toutes les îles".'
+        ))
+
+    if not is_all_islands and user_country and user_role in ('judiciaire', 'policier') and country != user_country:
         return redirect(url_for(
             'main.payments_settings_page',
             q=redirect_q,
@@ -3998,7 +4028,7 @@ def update_mobile_money_agent_account(user_id):
     account.full_name = full_name or None
     account.phone = phone or None
     account.email = email or None
-    account.country = country
+    account.country = None if is_all_islands else country
     account.mm_sections = json.dumps(selected_sections)
     if password:
         account.set_password(password)
@@ -6594,11 +6624,12 @@ def get_vignette_vehicles():
     # Get country/region filter from current user
     user_country = getattr(current_user, 'country', None)
 
-    # Mobile Money agents should be able to see transactions across all islands
-    # (do not apply the country filter for this role)
-    if getattr(current_user, 'role', None) == 'mobile_money_agent':
+    # Mobile Money agents default to their own island; 'Toutes les îles'
+    # (island_scope=all) shows every island, like before this restriction existed.
+    if (getattr(current_user, 'role', None) == 'mobile_money_agent'
+            and request.args.get('island_scope', 'mine') == 'all'):
         user_country = None
-    
+
     # Base query: vehicles with an active vignette or a pending payment request
     query = Vehicle.query.filter(
         Vehicle.qr_pending_approval == False,
@@ -6888,6 +6919,82 @@ def approve_vignette_payment(vehicle_id):
         'unpaid_fines_amount': round(unpaid_fines_amount, 2),
         'qr_activation_price': round(qr_activation_price, 2),
         'total_amount': round(total_amount, 2)
+    })
+
+
+@vehicle_bp.route('/<int:vehicle_id>/vignette/payment', methods=['DELETE'])
+@login_required
+def delete_vignette_payment(vehicle_id):
+    """Annule un paiement de vignette déjà approuvé — réservé à l'administrateur.
+    Remet le véhicule à l'état non payé (il n'y a pas d'historique des dates
+    d'expiration précédentes, donc il redevient 'Pas de vignette' et non
+    'Expirée'), remet en impayé les amendes qui avaient été incluses dans ce
+    paiement, et supprime le reçu (Payment) ainsi que la trace dans
+    l'historique du véhicule."""
+    if getattr(current_user, 'role', None) != 'administrateur':
+        return jsonify({'error': 'Seul un administrateur peut supprimer un paiement de vignette.'}), 403
+
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    if not vehicle.vignette_payment_approved and not vehicle.vignette_last_paid_at:
+        return jsonify({'error': "Ce véhicule n'a pas de paiement de vignette à supprimer."}), 400
+
+    from app.models import VehicleHistory, Payment
+
+    # Amendes incluses (regroupées) dans ce paiement -> redeviennent impayées
+    bundled_fines = Fine.query.filter(
+        Fine.vehicle_id == vehicle.id,
+        Fine.paid == True,
+        Fine.receipt_number.like(f'VIGN-{vehicle.id}-%')
+    ).all()
+    for f in bundled_fines:
+        f.paid = False
+        f.paid_at = None
+        f.paid_by = None
+        f.receipt_number = None
+
+    # Reçu (utilisé par l'app citoyenne pour "Retélécharger un reçu")
+    deleted_payment = False
+    if vehicle.vignette_last_paid_at:
+        candidates = Payment.query.filter(
+            Payment.license_plate == vehicle.license_plate,
+            Payment.paid_at == vehicle.vignette_last_paid_at,
+        ).all()
+        for p in candidates:
+            try:
+                payload = json.loads(p.fines or '{}')
+            except (TypeError, ValueError):
+                payload = {}
+            if payload.get('type') == 'vignette_request' and payload.get('vehicle_id') == vehicle.id:
+                db.session.delete(p)
+                deleted_payment = True
+
+    # Dernière ligne d'historique correspondant à ce paiement
+    last_history = (VehicleHistory.query
+                     .filter_by(vehicle_id=vehicle.id, action='Paiement vignette approuvé')
+                     .order_by(VehicleHistory.created_at.desc())
+                     .first())
+    if last_history:
+        db.session.delete(last_history)
+
+    vehicle.vignette_payment_approved = False
+    vehicle.vignette_payment_approved_at = None
+    vehicle.vignette_payment_approved_by = None
+    vehicle.vignette_payment_method = None
+    vehicle.vignette_expiry = None
+    vehicle.vignette_last_paid_at = None
+    vehicle.vignette_last_paid_by = None
+    vehicle.vignette_last_paid_vignette_amount = 0.0
+    vehicle.vignette_last_paid_penalty_amount = 0.0
+    vehicle.vignette_last_paid_fines_amount = 0.0
+    vehicle.vignette_last_paid_qr_amount = 0.0
+    vehicle.vignette_last_paid_total_amount = 0.0
+
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'vehicle': vehicle.to_dict(),
+        'fines_reverted': len(bundled_fines),
+        'payment_deleted': deleted_payment,
     })
 
 
@@ -7439,9 +7546,10 @@ def get_mobile_money_archive():
         end_date = end_date.replace(hour=23, minute=59, second=59)
     user_country = getattr(current_user, 'country', None)
 
-    # Mobile Money agents should be able to see transactions across all islands
-    # (do not apply the country filter for this role)
-    if getattr(current_user, 'role', None) == 'mobile_money_agent':
+    # Mobile Money agents default to their own island; 'Toutes les îles'
+    # (island_scope=all) shows every island, like before this restriction existed.
+    if (getattr(current_user, 'role', None) == 'mobile_money_agent'
+            and request.args.get('island_scope', 'mine') == 'all'):
         user_country = None
 
     # Show transactions made by mobile_money_agent accounts OR from the citizen app (Huri Money).
