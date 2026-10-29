@@ -39,7 +39,11 @@
       <p class="text-muted mb-0">Demandes de carte grise envoyées par les judiciaires, en attente de confirmation de paiement.</p>
     </div>
     <div class="col-md-4 text-md-end mt-3 mt-md-0">
-      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap align-items-center">
+        <select id="mm-island-scope" class="form-select form-select-sm" style="width:auto;">
+          <option value="mine">Mon île{% if current_user.country %} ({{ current_user.country }}){% endif %}</option>
+          <option value="all">Toutes les îles</option>
+        </select>
         {% if current_user.has_full_mm_access %}
         <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
           <i class="fas fa-tachometer-alt me-1"></i>Dashboard
@@ -159,9 +163,14 @@
 let _cgList = [];
 let _pendingCgId = null;
 
+function mmIslandScope() {
+  const el = document.getElementById('mm-island-scope');
+  return el ? el.value : 'mine';
+}
+
 async function loadCarteGrises() {
   try {
-    const res = await fetch('/api/mobile-money/cartes-grises', { credentials: 'include' });
+    const res = await fetch('/api/mobile-money/cartes-grises?island_scope=' + mmIslandScope(), { credentials: 'include' });
     _cgList = await res.json();
     renderCgTable(_cgList);
     document.getElementById('cg-count').textContent = _cgList.length + ' demande(s)';
@@ -244,7 +253,11 @@ document.getElementById('cg-search').addEventListener('input', function () {
   ) : _cgList);
 });
 
-document.addEventListener('DOMContentLoaded', loadCarteGrises);
+document.addEventListener('DOMContentLoaded', function () {
+  loadCarteGrises();
+  const islandScopeEl = document.getElementById('mm-island-scope');
+  if (islandScopeEl) islandScopeEl.addEventListener('change', loadCarteGrises);
+});
 
 // Auto-refresh on tab focus
 document.addEventListener('visibilitychange', function () { if (!document.hidden) loadCarteGrises(); });

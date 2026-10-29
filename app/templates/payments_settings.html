@@ -75,7 +75,7 @@
                     <td>{{ account.username }}</td>
                     <td>{{ account.full_name or '-' }}</td>
                     <td>{{ account.phone or '-' }}</td>
-                    <td>{{ account.country or '-' }}</td>
+                    <td>{{ account.country or 'Toutes les îles' }}</td>
                     <td>
                       {% set acc_sections = account.mm_sections_list %}
                       {% if not account.mm_sections %}
@@ -110,7 +110,7 @@
                           data-full-name="{{ account.full_name or '' }}"
                           data-phone="{{ account.phone or '' }}"
                           data-email="{{ account.email or '' }}"
-                          data-country="{{ account.country or '' }}"
+                          data-country="{{ account.country or 'ALL_ISLANDS' }}"
                           data-sections="{{ '__all__' if not account.mm_sections else account.mm_sections_list|join(',') }}"
                           onclick="prefillEditAgentModal(this)">
                           Modifier
@@ -186,6 +186,9 @@
               <option value="Grande Comore" {% if current_user.country == 'Grande Comore' %}selected{% endif %}>Grande Comore</option>
               <option value="Anjouan" {% if current_user.country == 'Anjouan' %}selected{% endif %}>Anjouan</option>
               <option value="Moheli" {% if current_user.country == 'Moheli' %}selected{% endif %}>Mohéli</option>
+              {% if current_user.role == 'administrateur' %}
+              <option value="ALL_ISLANDS">Toutes les îles</option>
+              {% endif %}
             </select>
           </div>
           <div class="mb-0">
@@ -249,6 +252,9 @@
               <option value="Grande Comore">Grande Comore</option>
               <option value="Anjouan">Anjouan</option>
               <option value="Moheli">Mohéli</option>
+              {% if current_user.role == 'administrateur' %}
+              <option value="ALL_ISLANDS">Toutes les îles</option>
+              {% endif %}
             </select>
           </div>
           <div class="mb-3">

@@ -39,7 +39,11 @@
       <p class="text-muted mb-0">Encaissez le paiement des visites techniques, une fois l'inspecteur assigné et avant le rapport.</p>
     </div>
     <div class="col-md-4 text-md-end mt-3 mt-md-0">
-      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap align-items-center">
+        <select id="mm-island-scope" class="form-select form-select-sm" style="width:auto;">
+          <option value="mine">Mon île{% if current_user.country %} ({{ current_user.country }}){% endif %}</option>
+          <option value="all">Toutes les îles</option>
+        </select>
         <span class="badge bg-warning text-dark align-self-center" id="vt-mm-pending-count">0 en attente</span>
         {% if current_user.has_full_mm_access %}
         <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
@@ -180,10 +184,17 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   document.getElementById('vt-mm-pending-confirm-btn').addEventListener('click', vtMmConfirmPending);
   loadPendingInspections();
+  var islandScopeEl = document.getElementById('mm-island-scope');
+  if (islandScopeEl) islandScopeEl.addEventListener('change', loadPendingInspections);
 });
 
+function mmIslandScope() {
+  var el = document.getElementById('mm-island-scope');
+  return el ? el.value : 'mine';
+}
+
 function loadPendingInspections() {
-  fetch('/api/mobile-money/visite-technique/pending', { credentials: 'same-origin' })
+  fetch('/api/mobile-money/visite-technique/pending?island_scope=' + mmIslandScope(), { credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (items) {
       vtMmAllItems = items || [];

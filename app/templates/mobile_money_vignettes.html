@@ -39,7 +39,11 @@
       <p class="text-muted mb-0">Véhicules dont la vignette est expirée. Approuvez le paiement pour autoriser le renouvellement côté agent d'impôt.</p>
     </div>
     <div class="col-md-4 text-md-end mt-3 mt-md-0">
-      <div class="d-flex gap-2 justify-content-md-end flex-wrap">
+      <div class="d-flex gap-2 justify-content-md-end flex-wrap align-items-center">
+        <select id="mm-island-scope" class="form-select form-select-sm" style="width:auto;">
+          <option value="mine">Mon île{% if current_user.country %} ({{ current_user.country }}){% endif %}</option>
+          <option value="all">Toutes les îles</option>
+        </select>
         {% if current_user.has_full_mm_access %}
         <a href="/mobile-money-dashboard" class="btn btn-outline-primary btn-sm">
           <i class="fas fa-tachometer-alt me-1"></i>Dashboard
