@@ -188,5 +188,6 @@
     </div>
 </div>
 
+<script>var IS_ADMIN = {{ (current_user.role == 'administrateur') | tojson }};</script>
 <script src="{{ url_for('static', filename='js/vignette-dashboard.js') }}"></script>
 {% endblock %}
