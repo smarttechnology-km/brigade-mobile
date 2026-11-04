@@ -6209,6 +6209,174 @@ def _generate_dossier_number():
     return f'{prefix}{n:04d}'
 
 
+# ─────────────────────────────────────────────
+#  Police — Enquête de moralité (préalable à une Licence Professionnelle)
+# ─────────────────────────────────────────────
+
+def _is_morality_officer():
+    return current_user.role == 'administrateur' or getattr(current_user, 'role', '') == 'policier'
+
+
+def _generate_morality_attestation_number():
+    from app.models import MoralityInquiry
+    year = now_comoros().year
+    prefix = f'EM-{year}-'
+    last = MoralityInquiry.query.filter(
+        MoralityInquiry.attestation_number.like(f'{prefix}%')
+    ).order_by(MoralityInquiry.id.desc()).first()
+    n = 1
+    if last and last.attestation_number:
+        try:
+            n = int(last.attestation_number.split('-')[-1]) + 1
+        except (ValueError, IndexError):
+            pass
+    return f'{prefix}{n:04d}'
+
+
+@api_bp.route('/morality-inquiries/search-license', methods=['GET'])
+@login_required
+def morality_inquiries_search_license():
+    """Search an existing DriverLicense by number, for a police officer to start
+    an enquête de moralité (préalable à une Licence Professionnelle)."""
+    if not _is_morality_officer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    like = f'%{q}%'
+    query = DriverLicense.query.filter(DriverLicense.license_number.ilike(like))
+    query = apply_island_filter(query, DriverLicense.holder_island)
+    results = query.order_by(DriverLicense.holder_name.asc()).limit(20).all()
+    return jsonify([l.to_dict() for l in results])
+
+
+@api_bp.route('/morality-inquiries', methods=['GET'])
+@login_required
+def list_morality_inquiries():
+    """Enquêtes de moralité — soit l'historique d'un permis donné (license_id,
+    pour que l'officier voie toute tentative précédente avant de décider), soit
+    une liste filtrée par résultat (ex: result=passed pour l'onglet 'Validées')."""
+    if not _is_morality_officer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import MoralityInquiry
+    license_id = request.args.get('license_id', type=int)
+    if license_id:
+        items = (MoralityInquiry.query
+                 .filter_by(license_id=license_id)
+                 .order_by(MoralityInquiry.checked_at.desc())
+                 .all())
+        return jsonify([i.to_dict() for i in items])
+
+    result_filter = (request.args.get('result') or '').strip()
+    q = (request.args.get('q') or '').strip()
+    query = MoralityInquiry.query.join(DriverLicense)
+    if result_filter:
+        query = query.filter(MoralityInquiry.result == result_filter)
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            DriverLicense.license_number.ilike(like),
+            DriverLicense.holder_name.ilike(like),
+            DriverLicense.holder_firstname.ilike(like),
+        ))
+    query = apply_island_filter(query, DriverLicense.holder_island)
+    items = query.order_by(MoralityInquiry.checked_at.desc()).limit(300).all()
+    return jsonify([i.to_dict() for i in items])
+
+
+@api_bp.route('/morality-inquiries/<int:inquiry_id>', methods=['GET'])
+@login_required
+def get_morality_inquiry(inquiry_id):
+    """Fetch one enquête de moralité — used by the attestation print page."""
+    if not _is_morality_officer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import MoralityInquiry
+    inquiry = MoralityInquiry.query.get_or_404(inquiry_id)
+    return jsonify(inquiry.to_dict())
+
+
+@api_bp.route('/morality-inquiries/<int:inquiry_id>', methods=['DELETE'])
+@login_required
+def delete_morality_inquiry(inquiry_id):
+    """Supprime une enquête de moralité validée — réservé à la police/l'administrateur,
+    et seulement tant qu'aucune demande de Licence Professionnelle n'en a encore été
+    créée (elle serait alors déjà passée au-delà de l'onglet 'Nouvelle demande')."""
+    if not _is_morality_officer():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import MoralityInquiry
+    inquiry = MoralityInquiry.query.get_or_404(inquiry_id)
+    if inquiry.consumed_at:
+        return jsonify({'error': "Cette enquête a déjà donné lieu à une demande de Licence Professionnelle et ne peut plus être supprimée."}), 400
+    db.session.delete(inquiry)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@api_bp.route('/morality-inquiries', methods=['POST'])
+@login_required
+def create_morality_inquiry():
+    """A police officer records the result of an enquête de moralité for a given
+    driver's license. A 'passed' result expires after LicenceProSetting's
+    configured duration, and stays usable until then (or until a Licence
+    Professionnelle request is created from it, which consumes it)."""
+    if not _is_morality_officer():
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    from app.models import MoralityInquiry, LicenceProSetting, LICENCE_PRO_ACTIVITES
+    from dateutil.relativedelta import relativedelta
+
+    data = request.get_json() or {}
+    license_id = data.get('license_id')
+    activite_type = (data.get('activite_type') or '').strip()
+    result = (data.get('result') or '').strip()
+    notes = (data.get('notes') or '').strip()
+
+    if not license_id:
+        return jsonify({'error': 'license_id requis'}), 400
+    if activite_type not in LICENCE_PRO_ACTIVITES:
+        return jsonify({'error': "L'activité professionnelle demandée est requise."}), 400
+    if result not in ('passed', 'failed'):
+        return jsonify({'error': "Le résultat doit être 'passed' ou 'failed'."}), 400
+    if result == 'failed' and not notes:
+        return jsonify({'error': 'Le motif du refus est requis.'}), 400
+
+    lic = DriverLicense.query.get(license_id)
+    if not lic:
+        return jsonify({'error': 'Permis introuvable.'}), 404
+
+    # Bloque une nouvelle validation tant que la dernière enquête validée pour ce
+    # permis n'est pas expirée — qu'elle ait déjà été utilisée pour une demande de
+    # Licence Professionnelle (consumed_at) ou pas. Seule l'expiration doit permettre
+    # de refaire l'enquête, pas la simple consommation.
+    latest_passed = (MoralityInquiry.query
+                      .filter_by(license_id=license_id, result='passed')
+                      .order_by(MoralityInquiry.checked_at.desc())
+                      .first())
+    if latest_passed and not latest_passed.is_expired:
+        status_label = "déjà utilisée pour une demande de Licence Professionnelle" if latest_passed.consumed_at else "déjà validée"
+        return jsonify({
+            'error': f"Ce conducteur a une enquête de moralité {status_label} (attestation "
+                     f"{latest_passed.attestation_number}), valable jusqu'au "
+                     f"{latest_passed.expires_at.strftime('%d/%m/%Y')}."
+        }), 400
+
+    inquiry = MoralityInquiry(
+        license_id=license_id,
+        activite_type=activite_type,
+        result=result,
+        notes=notes or None,
+        checked_by=current_user.username,
+    )
+    if result == 'passed':
+        settings = LicenceProSetting.get()
+        inquiry.expires_at = now_comoros() + relativedelta(months=settings.morality_validity_months or 6)
+        inquiry.attestation_number = _generate_morality_attestation_number()
+
+    db.session.add(inquiry)
+    db.session.commit()
+    return jsonify(inquiry.to_dict()), 201
+
+
 def _is_licence_pro_dt():
     return current_user.role == 'administrateur' or (
         getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_technique'
@@ -6239,6 +6407,23 @@ def licence_pro_search_license():
         DriverLicense.license_number.ilike(like)
     ).order_by(DriverLicense.holder_name.asc()).limit(20).all()
     return jsonify([l.to_dict() for l in results])
+
+
+@api_bp.route('/licence-pro/morality-inquiries/pending', methods=['GET'])
+@login_required
+def list_pending_morality_inquiries_for_lp():
+    """Enquêtes de moralité validées par la police, non expirées et pas encore
+    utilisées — affichées côté Directeur Technique dans 'Nouvelle demande' pour
+    continuer directement le circuit d'une Licence Professionnelle."""
+    if not _is_licence_pro_dt_or_dg():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import MoralityInquiry
+    items = (MoralityInquiry.query
+             .filter_by(result='passed', consumed_at=None)
+             .order_by(MoralityInquiry.checked_at.desc())
+             .all())
+    usable = [i for i in items if i.is_usable]
+    return jsonify([i.to_dict() for i in usable])
 
 
 @api_bp.route('/licence-pro', methods=['GET'])
@@ -6294,9 +6479,21 @@ def create_licence_pro():
     if not lic:
         return jsonify({'error': 'Permis introuvable.'}), 404
 
-    from app.models import LicenceProRequest
+    from app.models import LicenceProRequest, MoralityInquiry
     if LicenceProRequest.query.filter_by(lp_number=lp_number).first():
         return jsonify({'error': f"Le numéro '{lp_number}' est déjà utilisé."}), 400
+
+    morality_inquiry = (MoralityInquiry.query
+                         .filter_by(license_id=license_id, result='passed', consumed_at=None)
+                         .order_by(MoralityInquiry.checked_at.desc())
+                         .first())
+    if not morality_inquiry or not morality_inquiry.is_usable:
+        return jsonify({'error': "Ce conducteur doit d'abord passer l'enquête de moralité (police) avant une demande de Licence Professionnelle."}), 400
+
+    # L'activité doit correspondre à celle vérifiée par la police lors de l'enquête
+    # de moralité — on l'impose côté serveur plutôt que de faire confiance au client.
+    if morality_inquiry.activite_type:
+        activite_type = morality_inquiry.activite_type
 
     settings = LicenceProSetting.get()
     years = settings.years_for(activite_type)
@@ -6313,70 +6510,15 @@ def create_licence_pro():
         amount=settings.price_for(activite_type),
     )
     db.session.add(req)
+    db.session.flush()
+
+    morality_inquiry.consumed_at = now_comoros()
+    morality_inquiry.consumed_by_request_id = req.id
+
     db.session.commit()
     return jsonify(req.to_dict()), 201
 
 
-@api_bp.route('/licence-pro/<int:req_id>', methods=['PUT'])
-@login_required
-def update_licence_pro(req_id):
-    """Directeur Technique edits a licence pro request that hasn't been validated yet
-    (still awaiting payment or awaiting DG validation)."""
-    if not _is_licence_pro_dt():
-        return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
-
-    from app.models import LicenceProRequest, LICENCE_PRO_ACTIVITES, LicenceProSetting
-    from dateutil.relativedelta import relativedelta
-    req = LicenceProRequest.query.get_or_404(req_id)
-    if req.status != 'en_attente_paiement':
-        return jsonify({'error': 'Seules les demandes en attente de paiement peuvent être modifiées.'}), 409
-
-    data = request.get_json() or {}
-    lp_number = (data.get('lp_number') or '').strip()
-    activite_type = (data.get('activite_type') or '').strip()
-    zone_activite = (data.get('zone_activite') or '').strip()
-
-    if not lp_number:
-        return jsonify({'error': 'Le numéro de licence (N° LP) est requis.'}), 400
-    if activite_type not in LICENCE_PRO_ACTIVITES:
-        return jsonify({'error': "L'activité professionnelle demandée est requise."}), 400
-    if not zone_activite:
-        return jsonify({'error': "La zone d'activité est requise."}), 400
-
-    existing = LicenceProRequest.query.filter(
-        LicenceProRequest.lp_number == lp_number, LicenceProRequest.id != req_id
-    ).first()
-    if existing:
-        return jsonify({'error': f"Le numéro '{lp_number}' est déjà utilisé."}), 400
-
-    settings = LicenceProSetting.get()
-    years = settings.years_for(activite_type)
-    validity_date = now_comoros().date() + relativedelta(years=years)
-
-    req.lp_number = lp_number
-    req.activite_type = activite_type
-    req.zone_activite = zone_activite
-    req.validity_date = validity_date
-    req.amount = settings.price_for(activite_type)
-    db.session.commit()
-    return jsonify(req.to_dict())
-
-
-@api_bp.route('/licence-pro/<int:req_id>', methods=['DELETE'])
-@login_required
-def delete_licence_pro(req_id):
-    """Directeur Technique deletes a licence pro request that hasn't been paid yet."""
-    if not _is_licence_pro_dt():
-        return jsonify({'error': 'Réservé au Directeur Technique.'}), 403
-
-    from app.models import LicenceProRequest
-    req = LicenceProRequest.query.get_or_404(req_id)
-    if req.status != 'en_attente_paiement':
-        return jsonify({'error': 'Seules les demandes en attente de paiement peuvent être supprimées.'}), 409
-
-    db.session.delete(req)
-    db.session.commit()
-    return jsonify({'success': True})
 
 
 @api_bp.route('/mobile-money/licence-pro', methods=['GET'])
@@ -6472,6 +6614,15 @@ def update_licence_pro_settings():
         if price < 0:
             return jsonify({'error': 'Le prix ne peut pas être négatif.'}), 400
         setattr(settings, col, price)
+
+    if 'morality_validity_months' in data:
+        try:
+            months = int(data['morality_validity_months'])
+        except (ValueError, TypeError):
+            return jsonify({'error': "Valeur invalide pour 'morality_validity_months'."}), 400
+        if months < 1:
+            return jsonify({'error': "La durée de validité de l'enquête de moralité doit être au moins 1 mois."}), 400
+        settings.morality_validity_months = months
 
     db.session.commit()
     return jsonify(settings.to_dict())

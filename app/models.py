@@ -2048,6 +2048,61 @@ class LicenceProRequest(db.Model):
         }
 
 
+class MoralityInquiry(db.Model):
+    """Enquête de moralité menée par la police — condition préalable à une demande
+    de Licence Professionnelle. Une fois validée (result='passed') et tant qu'elle
+    n'est pas expirée ni consommée, elle apparaît côté Directeur Technique dans
+    'Nouvelle demande' ; créer la LicenceProRequest la consomme définitivement."""
+    __tablename__ = 'morality_inquiries'
+    id = db.Column(db.Integer, primary_key=True)
+    license_id = db.Column(db.Integer, db.ForeignKey('driver_licenses.id'), nullable=False, index=True)
+    activite_type = db.Column(db.String(30), nullable=True)  # taxi_ville | transport_commun | proprietaire_exploitant
+    result = db.Column(db.String(20), nullable=False)  # 'passed' | 'failed'
+    notes = db.Column(db.Text, nullable=True)
+    checked_by = db.Column(db.String(100), nullable=False)
+    checked_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    attestation_number = db.Column(db.String(50), unique=True, nullable=True)
+    consumed_at = db.Column(db.DateTime, nullable=True)
+    consumed_by_request_id = db.Column(db.Integer, db.ForeignKey('licence_pro_requests.id'), nullable=True)
+
+    license = db.relationship('DriverLicense', backref=db.backref('morality_inquiries', lazy='dynamic'))
+
+    @property
+    def is_expired(self):
+        if not self.expires_at:
+            return False
+        from app.timezone_utils import ensure_comoros
+        return now_comoros() > ensure_comoros(self.expires_at)
+
+    @property
+    def is_usable(self):
+        return self.result == 'passed' and not self.consumed_at and not self.is_expired
+
+    def to_dict(self):
+        lic = self.license
+        return {
+            'id': self.id,
+            'license_id': self.license_id,
+            'license_number': lic.license_number if lic else '',
+            'holder_name': lic.holder_name if lic else '',
+            'holder_firstname': lic.holder_firstname if lic else '',
+            'holder_island': lic.holder_island if lic else '',
+            'photo_url': lic.photo_url if lic else '',
+            'activite_type': self.activite_type or '',
+            'activite_label': LICENCE_PRO_ACTIVITES.get(self.activite_type, {}).get('label', ''),
+            'result': self.result,
+            'notes': self.notes or '',
+            'checked_by': self.checked_by,
+            'checked_at': self.checked_at.strftime('%d/%m/%Y %H:%M') if self.checked_at else '',
+            'expires_at': self.expires_at.strftime('%d/%m/%Y') if self.expires_at else '',
+            'is_expired': self.is_expired,
+            'attestation_number': self.attestation_number or '',
+            'consumed_at': self.consumed_at.strftime('%d/%m/%Y %H:%M') if self.consumed_at else '',
+            'is_usable': self.is_usable,
+        }
+
+
 class LicenceProSetting(db.Model):
     """Singleton: Directeur Général-configured validity duration (in years) for each
     Licence Professionnelle activité type. Drives the auto-computed validity_date on
@@ -2060,6 +2115,9 @@ class LicenceProSetting(db.Model):
     price_taxi_ville = db.Column(db.Float, nullable=False, default=0)
     price_transport_commun = db.Column(db.Float, nullable=False, default=0)
     price_proprietaire_exploitant = db.Column(db.Float, nullable=False, default=0)
+    # Durée de validité (en mois) d'une enquête de moralité validée par la police,
+    # avant qu'elle ne puisse plus être utilisée pour créer une demande de LP.
+    morality_validity_months = db.Column(db.Integer, nullable=False, default=6)
 
     @classmethod
     def get(cls):
@@ -2092,6 +2150,7 @@ class LicenceProSetting(db.Model):
             'price_taxi_ville': self.price_taxi_ville or 0,
             'price_transport_commun': self.price_transport_commun or 0,
             'price_proprietaire_exploitant': self.price_proprietaire_exploitant or 0,
+            'morality_validity_months': self.morality_validity_months or 6,
         }
 
 

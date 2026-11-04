@@ -979,11 +979,22 @@ def create_app():
                                 'price_taxi_ville':               "ALTER TABLE licence_pro_settings ADD COLUMN price_taxi_ville FLOAT NOT NULL DEFAULT 0",
                                 'price_transport_commun':         "ALTER TABLE licence_pro_settings ADD COLUMN price_transport_commun FLOAT NOT NULL DEFAULT 0",
                                 'price_proprietaire_exploitant':  "ALTER TABLE licence_pro_settings ADD COLUMN price_proprietaire_exploitant FLOAT NOT NULL DEFAULT 0",
+                                'morality_validity_months':       "ALTER TABLE licence_pro_settings ADD COLUMN morality_validity_months INTEGER NOT NULL DEFAULT 6",
                             }
                             for col, sql in lps_price_col_defs.items():
                                 if col not in lps_cols:
                                     conn.execute(text(sql))
                                     logger.info(f"Added licence_pro_settings.{col} column")
+
+                        # morality_inquiries patches
+                        mi_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='morality_inquiries'")
+                        ).first() is not None
+                        if mi_table_exists:
+                            mi_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(morality_inquiries)")).fetchall()}
+                            if 'activite_type' not in mi_cols:
+                                conn.execute(text("ALTER TABLE morality_inquiries ADD COLUMN activite_type VARCHAR(30)"))
+                                logger.info("Added morality_inquiries.activite_type column")
 
             elif 'postgresql' in str(app.config.get('SQLALCHEMY_DATABASE_URI', '')):
                     pg_patches = [
@@ -1216,6 +1227,9 @@ def create_app():
                         "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_taxi_ville FLOAT NOT NULL DEFAULT 0",
                         "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_transport_commun FLOAT NOT NULL DEFAULT 0",
                         "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS price_proprietaire_exploitant FLOAT NOT NULL DEFAULT 0",
+                        "ALTER TABLE licence_pro_settings ADD COLUMN IF NOT EXISTS morality_validity_months INTEGER NOT NULL DEFAULT 6",
+                        # morality_inquiries
+                        "ALTER TABLE morality_inquiries ADD COLUMN IF NOT EXISTS activite_type VARCHAR(30)",
                         # license_add_requests
                         "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS verified_by VARCHAR(100)",
                         "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP",

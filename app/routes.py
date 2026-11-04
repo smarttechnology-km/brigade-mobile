@@ -1970,6 +1970,29 @@ def avertissements_page():
     return render_template('avertissements.html')
 
 
+@main_bp.route('/enquete-moralite')
+@roles_required('administrateur', 'policier')
+def enquete_moralite_page():
+    """Enquête de moralité — préalable requis à une demande de Licence Professionnelle."""
+    return render_template('enquete_moralite.html')
+
+
+@main_bp.route('/enquete-moralite/attestation/<int:inquiry_id>')
+@roles_required('administrateur', 'policier')
+def attestation_moralite_print(inquiry_id):
+    """Attestation imprimable du résultat d'une enquête de moralité."""
+    from app.models import MoralityInquiry, LICENCE_PRO_ACTIVITES
+    inquiry = MoralityInquiry.query.get_or_404(inquiry_id)
+    lic = inquiry.license
+    issue_city = {
+        'Grande Comore': 'Moroni',
+        'Anjouan': 'Mutsamudu',
+        'Moheli': 'Fomboni',
+    }.get(lic.holder_island if lic else None, 'Moroni')
+    activite_label = LICENCE_PRO_ACTIVITES.get(inquiry.activite_type, {}).get('label', '')
+    return render_template('attestation_moralite.html', inquiry=inquiry, lic=lic, issue_city=issue_city, activite_label=activite_label)
+
+
 @main_bp.route('/api/avertissements')
 @roles_required('administrateur', 'policier')
 def api_avertissements():
