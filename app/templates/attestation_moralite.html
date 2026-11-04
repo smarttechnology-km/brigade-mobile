@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Attestation de moralité {{ inquiry.attestation_number or '' }}</title>
+  <style>
+    html { color-scheme: light; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Arial', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; padding: 32px 16px; -webkit-font-smoothing: antialiased; }
+
+    .toolbar { max-width: 780px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+    .toolbar-title { font-size: 13px; color: #666; }
+    .btn-print { display: flex; align-items: center; gap: 8px; padding: 9px 20px; background: #1a56db; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+    .document { max-width: 780px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.12); position: relative; }
+
+    .doc-watermark {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 480px; height: 480px; object-fit: contain;
+      opacity: .11; pointer-events: none; z-index: 0;
+    }
+    .doc-header, .doc-body, .doc-footer { position: relative; z-index: 1; }
+
+    .doc-header { background: linear-gradient(135deg, #1a3a6c 0%, #1a56db 100%); color: #fff; padding: 24px 48px; }
+    .doc-header-row { display: flex; align-items: center; justify-content: space-between; }
+    .doc-header-left { display: flex; align-items: center; gap: 14px; }
+    .doc-header-flag-wrap { display: inline-flex; isolation: isolate; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+    .doc-header-flag { width: 62px; height: 42px; object-fit: cover; display: block; mix-blend-mode: screen; }
+    .doc-header-text h1 { font-size: 16px; font-weight: 700; letter-spacing: .03em; }
+    .doc-header-text p { font-size: 11px; opacity: .8; margin-top: 2px; letter-spacing: .08em; text-transform: uppercase; }
+    .doc-header-stars { display: flex; align-items: center; gap: 10px; font-size: 18px; }
+    .doc-header-stars span:nth-child(1) { color: #f5e50b; }
+    .doc-header-stars span:nth-child(2) { color: #fff; }
+    .doc-header-stars span:nth-child(3) { color: #e41414; }
+    .doc-header-stars span:nth-child(4) { color: #2a5ff3; }
+    .doc-header-arabic { text-align: right; font-size: 13px; font-weight: 700; color: rgba(255,255,255,.9); line-height: 1.45; }
+
+    .doc-subheader {
+      color: #1a3a6c; text-align: center; padding: 14px 16px;
+      font-size: 19px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      {% if inquiry.result == 'passed' %}background: #d1fae5;{% else %}background: #fee2e2;{% endif %}
+    }
+
+    .doc-body { padding: 40px 48px; }
+
+    .identity { display: flex; align-items: center; gap: 24px; margin-bottom: 32px; }
+    .identity-photo img, .identity-photo .photo-placeholder {
+      width: 90px; height: 110px; object-fit: cover; border-radius: 8px; border: 3px solid #e8edf5;
+      display: flex; align-items: center; justify-content: center; background: #f5f7fb; color: #c0c8d8; font-size: 2.8rem;
+    }
+    .identity-photo-num { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700; color: #1a3a6c; letter-spacing: .04em; text-align: center; margin-top: 6px; }
+    .identity-name { font-size: 22px; font-weight: 700; color: #1a3a6c; line-height: 1.2; }
+    .identity-sub { font-size: 13px; color: #666; margin-top: 4px; }
+
+    .attestation-text { font-size: 15.5px; line-height: 2; color: #1a1a2e; margin: 28px 0 34px; text-align: justify; text-indent: 28px; }
+    .attestation-text strong { color: #1a3a6c; }
+
+    .info-table { width: 100%; border-collapse: collapse; margin-bottom: 34px; font-size: 14.5px; }
+    .info-table td { border: 1px solid #cbd5e1; padding: 12px 18px; line-height: 1.4; }
+    .info-table td:first-child { width: 42%; color: #334155; background: #f8fafc; font-weight: 600; }
+    .info-table td:last-child { font-weight: 700; color: #1a1a2e; }
+    .info-table tr.info-highlight td { background: #eef4ff; }
+
+    .signoff-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-top: 44px; }
+    .signoff-place { font-size: 13.5px; color: #374151; font-style: italic; }
+    .signoff-box { text-align: center; min-width: 230px; }
+    .signoff-box-label { font-size: 10.5px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .signoff-box-area { height: 90px; }
+    .signoff-name { font-size: 13px; font-weight: 700; color: #1a3a6c; border-top: 1.5px solid #cbd5e1; padding-top: 6px; }
+    .signoff-title { font-size: 10.5px; color: #6b7280; margin-top: 2px; }
+
+    .doc-footer { border-top: 1px solid #e8edf5; padding: 16px 48px; font-size: 10.5px; color: #b91c1c; font-weight: 600; text-align: center; background: #fafbff; }
+
+    @media print {
+      body { background: #fff; padding: 0; }
+      .toolbar { display: none; }
+      .document {
+        box-shadow: none; border-radius: 0; max-width: 100%; margin: 0;
+        display: flex; flex-direction: column; min-height: 100vh;
+      }
+      .doc-body { flex: 1 0 auto; }
+      .signoff-row { page-break-inside: avoid; break-inside: avoid; }
+      @page { size: A4; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="toolbar">
+  <span class="toolbar-title">Aperçu avant impression</span>
+  <button class="btn-print" onclick="window.print()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    Imprimer
+  </button>
+</div>
+
+<div class="document">
+
+  <img class="doc-watermark" src="/static/img/logo_comores.png" alt="">
+
+  <div class="doc-header">
+    <div class="doc-header-row">
+      <div class="doc-header-left">
+        <span class="doc-header-flag-wrap"><img class="doc-header-flag" src="/static/img/logo_comores_flag.png" alt="Drapeau Comores"></span>
+        <div class="doc-header-text">
+          <h1>UNION DES COMORES</h1>
+          <p>Police Nationale</p>
+        </div>
+      </div>
+      <div class="doc-header-stars">
+        <span>★</span><span>★</span><span>★</span><span>★</span>
+      </div>
+      <div class="doc-header-arabic" dir="rtl">
+        <span>جمهورية القمر المتحدة</span><br>
+        <span>الشرطة الوطنية</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="doc-subheader">
+    {% if inquiry.result == 'passed' %}Attestation de Moralité{% else %}Enquête de Moralité — Refusée{% endif %}
+  </div>
+
+  <div class="doc-body">
+
+    <div class="identity">
+      <div class="identity-photo">
+        {% if lic.photo_filename %}
+          <img src="{{ lic.photo_url }}" alt="Photo">
+        {% else %}
+          <div class="photo-placeholder">👤</div>
+        {% endif %}
+        <div class="identity-photo-num">{{ lic.license_number }}</div>
+      </div>
+      <div>
+        <div class="identity-name">{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</div>
+        <div class="identity-sub">{{ lic.holder_island or '—' }}</div>
+      </div>
+    </div>
+
+    {% if inquiry.result == 'passed' %}
+    <div class="attestation-text">
+      Nous, Police Nationale de l'Union des Comores, attestons par la présente que
+      <strong>{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</strong>, titulaire du permis de
+      conduire n° <strong>{{ lic.license_number }}</strong>, a satisfait à l'enquête de moralité
+      menée le {{ inquiry.checked_at.strftime('%d/%m/%Y') }} pour l'activité professionnelle de
+      <strong>{{ activite_label or '—' }}</strong>, et peut en conséquence poursuivre sa
+      demande de Licence Professionnelle auprès de la Direction Générale des Régies et Transports Routiers (DGRTR).
+    </div>
+    {% else %}
+    <div class="attestation-text">
+      L'enquête de moralité menée le {{ inquiry.checked_at.strftime('%d/%m/%Y') }} concernant
+      <strong>{{ lic.holder_firstname or '' }} {{ lic.holder_name }}</strong>, titulaire du permis de
+      conduire n° <strong>{{ lic.license_number }}</strong>, pour l'activité professionnelle de
+      <strong>{{ activite_label or '—' }}</strong>, n'a pas été concluante. Le motif est
+      indiqué ci-dessous.
+    </div>
+    {% endif %}
+
+    <table class="info-table">
+      <tr><td>Activité professionnelle demandée</td><td>{{ activite_label or '—' }}</td></tr>
+      <tr><td>Résultat</td><td>{{ 'Validée' if inquiry.result == 'passed' else 'Refusée' }}</td></tr>
+      {% if inquiry.result == 'passed' %}
+      <tr><td>N° d'attestation</td><td>{{ inquiry.attestation_number or '—' }}</td></tr>
+      <tr class="info-highlight"><td>Valable jusqu'au</td><td>{{ inquiry.expires_at.strftime('%d/%m/%Y') if inquiry.expires_at else '—' }}</td></tr>
+      {% else %}
+      <tr><td>Motif du refus</td><td>{{ inquiry.notes or '—' }}</td></tr>
+      {% endif %}
+      <tr><td>Effectuée par</td><td>{{ inquiry.checked_by }}</td></tr>
+      <tr><td>Date</td><td>{{ inquiry.checked_at.strftime('%d/%m/%Y à %H:%M') }}</td></tr>
+    </table>
+
+    <div class="signoff-row">
+      <div class="signoff-place">Fait à {{ issue_city }}, le {{ inquiry.checked_at.strftime('%d/%m/%Y') }}</div>
+      <div class="signoff-box">
+        <div class="signoff-box-label">Signature et cachet</div>
+        <div class="signoff-box-area"></div>
+        <div class="signoff-name">{{ inquiry.checked_by }}</div>
+        <div class="signoff-title">Officier de police</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="doc-footer">⚠ Toute falsification de ce document est passible de sanctions pénales.</div>
+
+</div>
+
+<script>setTimeout(function() { window.print(); }, 400);</script>
+</body>
+</html>

@@ -157,6 +157,7 @@
             {% if current_user.is_authenticated and (current_user.role == 'policier') %}
             <a class="nav-link text-white {% if request.path.startswith('/recherche') %}active{% endif %}" href="/recherche"><i class="fas fa-search me-2"></i> Recherche</a>
             <a class="nav-link text-white {% if request.path.startswith('/avertissements') %}active{% endif %}" href="/avertissements"><i class="fas fa-exclamation-triangle me-2"></i> Avertissements</a>
+            <a class="nav-link text-white {% if request.path.startswith('/enquete-moralite') %}active{% endif %}" href="/enquete-moralite"><i class="fas fa-user-shield me-2"></i> Enquête de Moralité</a>
             {% endif %}
 
             {% if current_user.is_authenticated and (current_user.role == 'dgrtr') %}

@@ -73,7 +73,7 @@
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-lp-validated" type="button" role="tab">
-            <i class="fas fa-check-circle me-2"></i>Validées — en attente d'impression
+            <i class="fas fa-check-circle me-2"></i>Validées
             <span class="lp-tab-badge" id="tab-badge-validated">0</span>
           </button>
         </li>
@@ -86,13 +86,17 @@
       <!-- Nouvelle demande (DT) -->
       <div class="tab-pane {{ 'show active' if is_dt_default else '' }}" id="tab-lp-new" role="tabpanel">
         <div class="card-body">
-          <div class="mb-3">
-            <label class="form-label small text-muted">Rechercher un titulaire par N° de permis</label>
-            <div class="d-flex gap-2">
-              <input type="text" id="lp-search" class="form-control" placeholder="N° de permis" style="max-width:320px;" onkeydown="if(event.key==='Enter'){event.preventDefault();lpSearch();}">
-              <button type="button" class="btn btn-primary" onclick="lpSearch()"><i class="fas fa-search me-2"></i>Rechercher</button>
+          <div class="mb-4">
+            <label class="form-label small text-muted fw-semibold d-flex align-items-center gap-2">
+              <i class="fas fa-user-shield text-primary"></i>Enquêtes de moralité validées — prêtes pour une demande
+            </label>
+            <div class="d-flex gap-2 mb-2">
+              <input type="text" id="lp-search" class="form-control" placeholder="Filtrer par N° de permis ou nom..." style="max-width:320px;" oninput="lpSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+              <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('lp-search').value='';lpSearch();" title="Effacer"><i class="fas fa-times"></i></button>
             </div>
-            <div id="lp-search-results" class="mt-2 d-flex flex-column gap-2"></div>
+            <div id="lp-morality-queue" class="d-flex flex-column gap-2">
+              <div class="text-muted small"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+            </div>
           </div>
 
           <div id="lp-form-section" class="d-none">
@@ -122,6 +126,7 @@
                   <label class="form-check-label small" for="lp-activite-proprio">Conducteur propriétaire exploitant</label>
                 </div>
               </div>
+              <div id="lp-activite-locked-note" class="form-text d-none"><i class="fas fa-lock me-1"></i>Déterminée par l'enquête de moralité de la police.</div>
             </div>
             <div class="row g-3">
               <div class="col-md-6">
@@ -213,53 +218,6 @@
 
 </div>
 
-{% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_technique' %}
-<!-- Modal: modifier une demande en attente -->
-<div class="modal fade" id="lp-edit-modal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Modifier la demande</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <input type="hidden" id="lp-edit-id">
-        <div class="mb-3">
-          <label class="form-label small text-muted">N° de licence (LP)</label>
-          <input type="text" id="lp-edit-number" class="form-control">
-        </div>
-        <div class="mb-3">
-          <label class="form-label small text-muted d-block">Activité professionnelle demandée</label>
-          <div class="d-flex flex-column gap-1">
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="lp-edit-activite" id="lp-edit-activite-taxi" value="taxi_ville">
-              <label class="form-check-label small" for="lp-edit-activite-taxi">Taxi ville</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="lp-edit-activite" id="lp-edit-activite-transport" value="transport_commun">
-              <label class="form-check-label small" for="lp-edit-activite-transport">Transport en commun de personnes</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="lp-edit-activite" id="lp-edit-activite-proprio" value="proprietaire_exploitant">
-              <label class="form-check-label small" for="lp-edit-activite-proprio">Conducteur propriétaire exploitant</label>
-            </div>
-          </div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label small text-muted">Zone d'activité</label>
-          <input type="text" id="lp-edit-zone" class="form-control">
-        </div>
-        <div class="form-text"><i class="fas fa-circle-info me-1"></i>La date de fin de validité sera recalculée automatiquement selon la durée fixée par le Directeur Général pour l'activité choisie.</div>
-        <span id="lp-edit-error" class="text-danger small"></span>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-primary" onclick="lpSaveEdit()"><i class="fas fa-save me-2"></i>Enregistrer</button>
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
 
 {% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general' %}
 <!-- Modal: paramètres durée de validité par activité (DG) -->
@@ -281,6 +239,11 @@
           <li class="nav-item">
             <button class="nav-link" id="lp-tab-tarif-btn" data-bs-toggle="tab" data-bs-target="#lp-tab-tarif" type="button">
               <i class="fas fa-money-bill-wave me-1"></i>Tarif
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" id="lp-tab-moralite-btn" data-bs-toggle="tab" data-bs-target="#lp-tab-moralite" type="button">
+              <i class="fas fa-user-shield me-1"></i>Enquête de moralité
             </button>
           </li>
         </ul>
@@ -339,6 +302,18 @@
             </div>
           </div>
 
+          <!-- Enquête de moralité -->
+          <div class="tab-pane" id="lp-tab-moralite">
+            <p class="small text-muted">Durée de validité d'une enquête de moralité validée par la police, avant qu'elle ne puisse plus être utilisée pour une nouvelle demande de Licence Professionnelle.</p>
+            <div class="mb-0">
+              <label class="form-label small text-muted">Durée de validité</label>
+              <div class="input-group">
+                <input type="number" min="1" step="1" id="lp-settings-morality-months" class="form-control">
+                <span class="input-group-text">mois</span>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <span id="lp-settings-error" class="text-danger small"></span>
@@ -359,41 +334,67 @@ var lpSelectedLicense = null;
 
 document.addEventListener('DOMContentLoaded', function () {
     loadLpLists();
+    lpLoadMoralityQueue();
 });
 
-function lpSearch() {
-    var q = document.getElementById('lp-search').value.trim();
-    var results = document.getElementById('lp-search-results');
-    if (!q) { results.innerHTML = '<div class="text-danger small">Veuillez saisir un numéro de permis.</div>'; return; }
-    results.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-2"></i>Recherche…</div>';
-    fetch('/api/licence-pro/search-license?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+var lpMoralityQueueCache = [];
+
+function lpLoadMoralityQueue() {
+    fetch('/api/licence-pro/morality-inquiries/pending', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (items) {
-            if (!items.length) {
-                results.innerHTML = '<div class="text-danger small"><i class="fas fa-times-circle me-1"></i>Aucun permis trouvé pour ce numéro.</div>';
-                return;
-            }
-            if (items.length === 1) {
-                results.innerHTML = '';
-                lpSelectLicense(items[0]);
-                return;
-            }
-            results.innerHTML = items.map(function (l) {
-                return `<div class="lp-result-card d-flex align-items-center justify-content-between" style="cursor:pointer;" onclick='lpSelectLicense(${JSON.stringify(l).replace(/'/g, "&apos;")})'>
-                    <div>
-                        <div class="fw-semibold">${l.holder_firstname || ''} ${l.holder_name || ''}</div>
-                        <div class="text-muted small font-monospace">${l.license_number}</div>
-                    </div>
-                    <i class="fas fa-chevron-right text-muted"></i>
-                </div>`;
-            }).join('');
+            lpMoralityQueueCache = Array.isArray(items) ? items : [];
+            lpSearch();
+        })
+        .catch(function () {
+            var el = document.getElementById('lp-morality-queue');
+            el.innerHTML = '<div class="text-danger small">Erreur de chargement.</div>';
         });
+}
+
+function lpSearch() {
+    var q = (document.getElementById('lp-search').value || '').trim().toLowerCase();
+    var el = document.getElementById('lp-morality-queue');
+    var items = !q ? lpMoralityQueueCache : lpMoralityQueueCache.filter(function (i) {
+        return (i.license_number || '').toLowerCase().includes(q)
+            || (i.holder_name || '').toLowerCase().includes(q)
+            || (i.holder_firstname || '').toLowerCase().includes(q);
+    });
+
+    if (!items.length) {
+        el.innerHTML = q
+            ? '<div class="text-muted small">Aucune enquête de moralité validée ne correspond à "' + q + '".</div>'
+            : '<div class="text-muted small">Aucune enquête de moralité validée en attente.</div>';
+        return;
+    }
+    el.innerHTML = items.map(function (i) {
+        return `<div class="lp-result-card d-flex align-items-center justify-content-between" style="cursor:pointer;" onclick='lpSelectFromMorality(${JSON.stringify(i).replace(/'/g, "&apos;")})'>
+            <div class="d-flex align-items-center gap-3">
+                <img src="${i.photo_url || ''}" style="width:36px;height:46px;object-fit:cover;border-radius:4px;" onerror="this.style.display='none'">
+                <div>
+                    <div class="fw-semibold">${i.holder_firstname || ''} ${i.holder_name || ''}</div>
+                    <div class="text-muted small font-monospace">${i.license_number}</div>
+                    ${i.activite_label ? '<div class="text-muted small">' + i.activite_label + '</div>' : ''}
+                </div>
+            </div>
+            <span class="badge bg-success">Validée le ${i.checked_at}</span>
+        </div>`;
+    }).join('');
+}
+
+function lpSelectFromMorality(inquiry) {
+    lpSelectLicense({
+        id: inquiry.license_id,
+        holder_firstname: inquiry.holder_firstname,
+        holder_name: inquiry.holder_name,
+        license_number: inquiry.license_number,
+        photo_url: inquiry.photo_url,
+        activite_type: inquiry.activite_type,
+    });
 }
 
 function lpSelectLicense(lic) {
     lpSelectedLicense = lic;
-    document.getElementById('lp-search-results').innerHTML = '';
-    document.getElementById('lp-search').value = '';
     document.getElementById('lp-form-section').classList.remove('d-none');
     document.getElementById('lp-form-name').textContent = (lic.holder_firstname || '') + ' ' + (lic.holder_name || '');
     document.getElementById('lp-form-license-number').textContent = lic.license_number;
@@ -401,7 +402,18 @@ function lpSelectLicense(lic) {
     document.getElementById('lp-license-id').value = lic.id;
     document.getElementById('lp-number').value = '';
     document.getElementById('lp-zone').value = '';
-    document.querySelectorAll('input[name="lp-activite"]').forEach(function (r) { r.checked = false; });
+    var activiteRadios = document.querySelectorAll('input[name="lp-activite"]');
+    var lockNote = document.getElementById('lp-activite-locked-note');
+    if (lic.activite_type) {
+        activiteRadios.forEach(function (r) {
+            r.checked = (r.value === lic.activite_type);
+            r.disabled = true;
+        });
+        lockNote.classList.remove('d-none');
+    } else {
+        activiteRadios.forEach(function (r) { r.checked = false; r.disabled = false; });
+        lockNote.classList.add('d-none');
+    }
     document.getElementById('lp-form-error').textContent = '';
 }
 
@@ -435,6 +447,7 @@ function lpSubmitRequest() {
         if (!res.ok) { errEl.textContent = res.data.error || 'Erreur'; return; }
         lpResetForm();
         loadLpLists();
+        lpLoadMoralityQueue();
     });
 }
 
@@ -459,12 +472,7 @@ function renderAttentePaiement(items) {
         return;
     }
     tbody.innerHTML = items.map(function (d) {
-        var actions = [];
-        if (IS_DT) {
-            actions.push(`<button class="btn btn-sm btn-outline-secondary" onclick='lpEditRequest(${JSON.stringify(d).replace(/'/g, "&apos;")})'><i class="fas fa-edit"></i></button>`);
-            actions.push(`<button class="btn btn-sm btn-outline-danger" onclick="lpDeleteRequest(${d.id})"><i class="fas fa-trash"></i></button>`);
-        }
-        var actionBtn = actions.length ? actions.join(' ') : '<span class="text-muted small">En attente du paiement</span>';
+        var actionBtn = '<span class="text-muted small">En attente du paiement</span>';
         return `<tr>
             <td class="ps-4 fw-bold font-monospace text-primary">${d.lp_number}</td>
             <td>${d.holder_firstname || ''} ${d.holder_name || ''}</td>
@@ -489,10 +497,6 @@ function renderPending(items) {
         var actions = [];
         if (IS_DG) {
             actions.push(`<button class="btn btn-sm btn-success" onclick="lpValidate(${d.id})"><i class="fas fa-check me-1"></i>Valider</button>`);
-        }
-        if (IS_DT) {
-            actions.push(`<button class="btn btn-sm btn-outline-secondary" onclick='lpEditRequest(${JSON.stringify(d).replace(/'/g, "&apos;")})'><i class="fas fa-edit"></i></button>`);
-            actions.push(`<button class="btn btn-sm btn-outline-danger" onclick="lpDeleteRequest(${d.id})"><i class="fas fa-trash"></i></button>`);
         }
         var actionBtn = actions.length ? actions.join(' ') : '<span class="text-muted small">En attente du DG</span>';
         return `<tr>
@@ -537,55 +541,6 @@ function lpValidate(id) {
         .then(function () { loadLpLists(); });
 }
 
-function lpEditRequest(d) {
-    document.getElementById('lp-edit-id').value = d.id;
-    document.getElementById('lp-edit-number').value = d.lp_number;
-    document.getElementById('lp-edit-zone').value = d.zone_activite;
-    document.querySelectorAll('input[name="lp-edit-activite"]').forEach(function (r) {
-        r.checked = (r.value === d.activite_type);
-    });
-    document.getElementById('lp-edit-error').textContent = '';
-    var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('lp-edit-modal'));
-    modal.show();
-}
-
-function lpSaveEdit() {
-    var id = document.getElementById('lp-edit-id').value;
-    var errEl = document.getElementById('lp-edit-error');
-    errEl.textContent = '';
-    var activiteEl = document.querySelector('input[name="lp-edit-activite"]:checked');
-    var payload = {
-        lp_number: document.getElementById('lp-edit-number').value.trim(),
-        activite_type: activiteEl ? activiteEl.value : '',
-        zone_activite: document.getElementById('lp-edit-zone').value.trim(),
-    };
-    if (!payload.activite_type) {
-        errEl.textContent = "Veuillez choisir l'activité professionnelle demandée.";
-        return;
-    }
-    fetch('/api/licence-pro/' + id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload),
-    })
-    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-    .then(function (res) {
-        if (!res.ok) { errEl.textContent = res.data.error || 'Erreur'; return; }
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('lp-edit-modal')).hide();
-        loadLpLists();
-    });
-}
-
-function lpDeleteRequest(id) {
-    if (!confirm('Supprimer définitivement cette demande de licence professionnelle ?')) return;
-    fetch('/api/licence-pro/' + id, { method: 'DELETE', credentials: 'same-origin' })
-        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-            if (!res.ok) { alert(res.data.error || 'Erreur'); return; }
-            loadLpLists();
-        });
-}
 
 function lpOpenSettings() {
     var errEl = document.getElementById('lp-settings-error');
@@ -599,6 +554,7 @@ function lpOpenSettings() {
             document.getElementById('lp-settings-price-taxi').value = d.price_taxi_ville || 0;
             document.getElementById('lp-settings-price-transport').value = d.price_transport_commun || 0;
             document.getElementById('lp-settings-price-proprio').value = d.price_proprietaire_exploitant || 0;
+            document.getElementById('lp-settings-morality-months').value = d.morality_validity_months || 6;
         });
     var dureeTab = document.getElementById('lp-tab-duree-btn');
     if (dureeTab) bootstrap.Tab.getOrCreateInstance(dureeTab).show();
@@ -614,6 +570,7 @@ function lpSaveSettings() {
         price_taxi_ville: document.getElementById('lp-settings-price-taxi').value,
         price_transport_commun: document.getElementById('lp-settings-price-transport').value,
         price_proprietaire_exploitant: document.getElementById('lp-settings-price-proprio').value,
+        morality_validity_months: document.getElementById('lp-settings-morality-months').value,
     };
     fetch('/api/licence-pro/settings', {
         method: 'PUT',

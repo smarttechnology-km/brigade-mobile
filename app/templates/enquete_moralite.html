@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+
+{% block title %}Enquête de Moralité - Contrôle Policier{% endblock %}
+
+{% block content %}
+<style>
+.em-result-card { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; padding:10px 14px; cursor:pointer; }
+.em-result-card:hover { background:#eef2ff; }
+.em-history-row { font-size: 0.85rem; }
+</style>
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-md-8">
+      <h1 class="mb-2">
+        <i class="fas fa-user-shield text-primary"></i> Enquête de Moralité
+      </h1>
+      <p class="text-muted">
+        Vérification préalable requise avant toute demande de Licence Professionnelle.
+        Recherchez le conducteur par son numéro de permis, puis validez ou refusez l'enquête.
+        Une fois validée, une attestation est imprimée et la demande devient disponible côté
+        Directeur Technique dans "Licence Professionnelle → Nouvelle demande".
+      </p>
+    </div>
+    {% if current_user.role == 'administrateur' %}
+    <div class="col-md-4 text-md-end">
+      <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#em-settings-modal" onclick="emOpenSettings()">
+        <i class="fas fa-cog me-2"></i>Paramètres
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+  <ul class="nav nav-tabs mb-3" id="em-tabs">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#em-tab-new" type="button">
+        <i class="fas fa-search me-2"></i>Nouvelle enquête
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#em-tab-validated" type="button" onclick="emLoadValidated()">
+        <i class="fas fa-check-circle me-2"></i>Validées
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <div class="tab-pane show active" id="em-tab-new" role="tabpanel">
+
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+          <label class="form-label small text-muted">Rechercher un conducteur par N° de permis</label>
+          <div class="d-flex gap-2">
+            <input type="text" id="em-search" class="form-control" placeholder="N° de permis" style="max-width:320px;" onkeydown="if(event.key==='Enter'){event.preventDefault();emSearch();}">
+            <button type="button" class="btn btn-primary" onclick="emSearch()"><i class="fas fa-search me-2"></i>Rechercher</button>
+          </div>
+          <div id="em-search-results" class="mt-2 d-flex flex-column gap-2"></div>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm d-none" id="em-detail-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <img id="em-photo" src="" style="width:64px;height:80px;object-fit:cover;border-radius:6px;border:2px solid #e5e7eb;" onerror="this.style.display='none'">
+            <div>
+              <div class="fw-bold" id="em-name"></div>
+              <div class="text-muted small font-monospace" id="em-license-number"></div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" onclick="emResetForm()"><i class="fas fa-times me-1"></i>Fermer</button>
+          </div>
+          <input type="hidden" id="em-license-id">
+
+          <div id="em-history-wrap" class="mb-3 d-none">
+            <div class="small text-muted fw-semibold mb-1">Historique des enquêtes pour ce permis</div>
+            <div id="em-history-list"></div>
+          </div>
+
+          <div id="em-already-valid-section" class="d-none">
+            <hr>
+            <div class="alert alert-info d-flex align-items-center gap-2 mb-2">
+              <i class="fas fa-info-circle fa-lg"></i>
+              <div id="em-already-valid-text"></div>
+            </div>
+            <button type="button" class="btn btn-outline-primary" id="em-already-valid-print-btn">
+              <i class="fas fa-print me-2"></i>Imprimer l'attestation
+            </button>
+            <button type="button" class="btn btn-outline-danger ms-2 d-none" id="em-already-valid-delete-btn">
+              <i class="fas fa-trash-alt me-2"></i>Supprimer l'enquête
+            </button>
+          </div>
+
+          <div id="em-decision-section">
+            <hr>
+            <div class="mb-3">
+              <label class="form-label small text-muted d-block">Activité professionnelle demandée</label>
+              <div class="d-flex flex-wrap gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="em-activite" id="em-activite-taxi" value="taxi_ville">
+                  <label class="form-check-label small" for="em-activite-taxi">Taxi ville</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="em-activite" id="em-activite-transport" value="transport_commun">
+                  <label class="form-check-label small" for="em-activite-transport">Transport en commun de personnes</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="em-activite" id="em-activite-proprio" value="proprietaire_exploitant">
+                  <label class="form-check-label small" for="em-activite-proprio">Conducteur propriétaire exploitant</label>
+                </div>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small text-muted d-block">Motif (requis uniquement en cas de refus)</label>
+              <textarea id="em-notes" class="form-control" rows="2" placeholder="Motif du refus, le cas échéant..."></textarea>
+            </div>
+            <button type="button" class="btn btn-success" onclick="emSubmitDecision('passed')">
+              <i class="fas fa-check-circle me-2"></i>Valider l'enquête
+            </button>
+            <button type="button" class="btn btn-outline-danger ms-2" onclick="emSubmitDecision('failed')">
+              <i class="fas fa-times-circle me-2"></i>Refuser
+            </button>
+            <span id="em-form-error" class="text-danger small ms-2"></span>
+          </div>
+
+          <div id="em-success-section" class="d-none">
+            <hr>
+            <div class="alert alert-success d-flex align-items-center gap-2 mb-2" id="em-success-alert">
+              <i class="fas fa-check-circle fa-lg"></i>
+              <div id="em-success-text"></div>
+            </div>
+            <button type="button" class="btn btn-outline-primary d-none" id="em-print-btn">
+              <i class="fas fa-print me-2"></i>Imprimer l'attestation
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="tab-pane" id="em-tab-validated" role="tabpanel">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex gap-2 mb-3">
+            <input type="text" id="em-validated-search" class="form-control" placeholder="Rechercher par N° de permis ou nom..." style="max-width:320px;" oninput="emRenderValidated()">
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>N° de permis</th>
+                  <th>Titulaire</th>
+                  <th>Activité demandée</th>
+                  <th>N° attestation</th>
+                  <th>Validée par</th>
+                  <th>Date</th>
+                  <th>Expire le</th>
+                  <th>Statut</th>
+                  <th class="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody id="em-validated-tbody">
+                <tr><td colspan="9" class="text-center text-muted py-4">Chargement...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if current_user.role == 'administrateur' %}
+<div class="modal fade" id="em-settings-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-cog me-2"></i>Paramètres — Enquête de Moralité</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">Durée de validité d'une enquête de moralité validée, avant qu'elle ne puisse plus être utilisée pour une demande de Licence Professionnelle.</p>
+        <div class="mb-0">
+          <label class="form-label small text-muted">Durée de validité</label>
+          <div class="input-group">
+            <input type="number" min="1" step="1" id="em-settings-months" class="form-control">
+            <span class="input-group-text">mois</span>
+          </div>
+        </div>
+        <span id="em-settings-error" class="text-danger small"></span>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="emSaveSettings()"><i class="fas fa-save me-2"></i>Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+var IS_ADMIN = {{ (current_user.role == 'administrateur') | tojson }};
+var CAN_DELETE_INQUIRY = true; // page is already restricted to policier/administrateur
+let emSelectedLicense = null;
+let emCurrentInquiryId = null;
+
+function emEsc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function emSearch() {
+  const q = document.getElementById('em-search').value.trim();
+  const results = document.getElementById('em-search-results');
+  if (!q) { results.innerHTML = '<div class="text-danger small">Veuillez saisir un numéro de permis.</div>'; return; }
+  results.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-2"></i>Recherche…</div>';
+  fetch('/api/morality-inquiries/search-license?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(items => {
+      if (!items.length) {
+        results.innerHTML = '<div class="text-danger small"><i class="fas fa-times-circle me-1"></i>Aucun permis trouvé pour ce numéro.</div>';
+        return;
+      }
+      results.innerHTML = items.map(l => `
+        <div class="em-result-card d-flex align-items-center justify-content-between" onclick='emSelectLicense(${JSON.stringify(l).replace(/'/g, "&apos;")})'>
+          <div class="d-flex align-items-center gap-3">
+            <img src="${emEsc(l.photo_url || '')}" style="width:36px;height:46px;object-fit:cover;border-radius:4px;" onerror="this.style.display='none'">
+            <div>
+              <div class="fw-semibold">${emEsc(l.holder_firstname)} ${emEsc(l.holder_name)}</div>
+              <div class="text-muted small font-monospace">${emEsc(l.license_number)}</div>
+            </div>
+          </div>
+          <i class="fas fa-chevron-right text-muted"></i>
+        </div>
+      `).join('');
+    })
+    .catch(() => { results.innerHTML = '<div class="text-danger small">Erreur réseau.</div>'; });
+}
+
+function emSelectLicense(lic) {
+  emSelectedLicense = lic;
+  document.getElementById('em-search-results').innerHTML = '';
+  document.getElementById('em-search').value = '';
+  document.getElementById('em-license-id').value = lic.id;
+  document.getElementById('em-photo').src = lic.photo_url || '';
+  document.getElementById('em-photo').style.display = '';
+  document.getElementById('em-name').textContent = ((lic.holder_firstname || '') + ' ' + (lic.holder_name || '')).trim();
+  document.getElementById('em-license-number').textContent = lic.license_number;
+  document.getElementById('em-notes').value = '';
+  document.querySelectorAll('input[name="em-activite"]').forEach(r => { r.checked = false; });
+  document.getElementById('em-form-error').textContent = '';
+  document.getElementById('em-success-section').classList.add('d-none');
+  document.getElementById('em-detail-card').classList.remove('d-none');
+  emLoadHistory(lic.id);
+}
+
+function emToggleAlreadyValid(usableInquiry) {
+  const decisionSection = document.getElementById('em-decision-section');
+  const alreadyValidSection = document.getElementById('em-already-valid-section');
+  if (usableInquiry) {
+    decisionSection.classList.add('d-none');
+    alreadyValidSection.classList.remove('d-none');
+    const statusLabel = usableInquiry.consumed_at
+      ? 'déjà utilisée pour une demande de Licence Professionnelle'
+      : 'déjà validée';
+    document.getElementById('em-already-valid-text').innerHTML =
+      `Ce conducteur a une enquête de moralité ${statusLabel} — attestation n° <strong>${emEsc(usableInquiry.attestation_number)}</strong>, valable jusqu'au ${emEsc(usableInquiry.expires_at)}.`;
+    document.getElementById('em-already-valid-print-btn').onclick = () => window.open('/enquete-moralite/attestation/' + usableInquiry.id, '_blank');
+    const deleteBtn = document.getElementById('em-already-valid-delete-btn');
+    if (CAN_DELETE_INQUIRY && !usableInquiry.consumed_at) {
+      deleteBtn.classList.remove('d-none');
+      deleteBtn.onclick = () => emDeleteInquiry(usableInquiry.id, () => emLoadHistory(usableInquiry.license_id));
+    } else {
+      deleteBtn.classList.add('d-none');
+    }
+  } else {
+    alreadyValidSection.classList.add('d-none');
+    decisionSection.classList.remove('d-none');
+  }
+}
+
+function emLoadHistory(licenseId) {
+  const wrap = document.getElementById('em-history-wrap');
+  const list = document.getElementById('em-history-list');
+  fetch('/api/morality-inquiries?license_id=' + licenseId, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(items => {
+      if (!Array.isArray(items) || !items.length) {
+        wrap.classList.add('d-none');
+        emToggleAlreadyValid(null);
+        return;
+      }
+      wrap.classList.remove('d-none');
+      list.innerHTML = items.map(i => {
+        const badge = i.result === 'passed'
+          ? (i.is_expired
+              ? '<span class="badge bg-secondary">Validée (expirée)</span>'
+              : (i.consumed_at ? '<span class="badge bg-info text-dark">Utilisée</span>' : '<span class="badge bg-success">Validée</span>'))
+          : '<span class="badge bg-danger">Refusée</span>';
+        const extra = i.result === 'failed' && i.notes ? ` — ${emEsc(i.notes)}` : '';
+        const activite = i.activite_label ? ` — ${emEsc(i.activite_label)}` : '';
+        return `<div class="em-history-row text-muted mb-1">${badge} le ${emEsc(i.checked_at)} par ${emEsc(i.checked_by)}${activite}${extra}</div>`;
+      }).join('');
+      // items are sorted most-recent-first; the latest 'passed' one blocks a new
+      // validation as long as it isn't expired, whether it's been consumed or not.
+      emToggleAlreadyValid(items.find(i => i.result === 'passed' && !i.is_expired) || null);
+    })
+    .catch(() => { wrap.classList.add('d-none'); });
+}
+
+function emResetForm() {
+  emSelectedLicense = null;
+  emCurrentInquiryId = null;
+  document.getElementById('em-detail-card').classList.add('d-none');
+  document.getElementById('em-search-results').innerHTML = '';
+  document.getElementById('em-search').value = '';
+}
+
+function emSubmitDecision(result) {
+  const licenseId = document.getElementById('em-license-id').value;
+  const notes = document.getElementById('em-notes').value.trim();
+  const activiteEl = document.querySelector('input[name="em-activite"]:checked');
+  const errorEl = document.getElementById('em-form-error');
+  errorEl.textContent = '';
+
+  if (!activiteEl) {
+    errorEl.textContent = "Veuillez choisir l'activité professionnelle demandée.";
+    return;
+  }
+  if (result === 'failed' && !notes) {
+    errorEl.textContent = 'Le motif du refus est requis.';
+    return;
+  }
+
+  fetch('/api/morality-inquiries', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ license_id: licenseId, activite_type: activiteEl.value, result: result, notes: notes }),
+  })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok) { errorEl.textContent = data.error || 'Erreur lors de l\'enregistrement.'; return; }
+      document.getElementById('em-decision-section').classList.add('d-none');
+      document.getElementById('em-success-section').classList.remove('d-none');
+      const successAlert = document.getElementById('em-success-alert');
+      const successText = document.getElementById('em-success-text');
+      const printBtn = document.getElementById('em-print-btn');
+      if (result === 'passed') {
+        successAlert.className = 'alert alert-success d-flex align-items-center gap-2 mb-2';
+        successText.innerHTML = `Enquête validée. Attestation n° <strong>${emEsc(data.attestation_number)}</strong>, valable jusqu'au ${emEsc(data.expires_at)}.`;
+        emCurrentInquiryId = data.id;
+        printBtn.classList.remove('d-none');
+        printBtn.onclick = () => window.open('/enquete-moralite/attestation/' + data.id, '_blank');
+      } else {
+        successAlert.className = 'alert alert-danger d-flex align-items-center gap-2 mb-2';
+        successText.textContent = 'Enquête refusée. Le conducteur ne pourra pas continuer avec cette demande.';
+        printBtn.classList.add('d-none');
+      }
+      emValidatedCache = null; // force reload next time the "Validées" tab is opened
+    })
+    .catch(() => { errorEl.textContent = 'Erreur réseau.'; });
+}
+
+// ── Onglet "Validées" ──────────────────
+let emValidatedCache = null;
+
+function emLoadValidated() {
+  if (emValidatedCache !== null) return; // already loaded for this session
+  const tbody = document.getElementById('em-validated-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>';
+  fetch('/api/morality-inquiries?result=passed', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(items => {
+      emValidatedCache = Array.isArray(items) ? items : [];
+      emRenderValidated();
+    })
+    .catch(() => { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur de chargement.</td></tr>'; });
+}
+
+function emDeleteInquiry(id, onSuccess) {
+  if (!confirm("Supprimer définitivement cette enquête de moralité ?")) return;
+  fetch('/api/morality-inquiries/' + id, { method: 'DELETE', credentials: 'same-origin' })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok) { alert(data.error || 'Erreur lors de la suppression.'); return; }
+      if (onSuccess) onSuccess();
+    })
+    .catch(() => alert('Erreur réseau.'));
+}
+
+function emRenderValidated() {
+  const tbody = document.getElementById('em-validated-tbody');
+  if (emValidatedCache === null) return;
+  const q = (document.getElementById('em-validated-search').value || '').trim().toLowerCase();
+  const items = !q ? emValidatedCache : emValidatedCache.filter(i =>
+    (i.license_number || '').toLowerCase().includes(q) ||
+    (i.holder_name || '').toLowerCase().includes(q) ||
+    (i.holder_firstname || '').toLowerCase().includes(q)
+  );
+
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Aucune enquête validée trouvée.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = items.map(i => {
+    let statusBadge;
+    if (i.consumed_at) {
+      statusBadge = '<span class="badge bg-secondary">Utilisée</span>';
+    } else if (i.is_expired) {
+      statusBadge = '<span class="badge bg-danger">Expirée</span>';
+    } else {
+      statusBadge = '<span class="badge bg-success">Disponible</span>';
+    }
+    return `<tr>
+      <td class="font-monospace">${emEsc(i.license_number)}</td>
+      <td>${emEsc(i.holder_firstname)} ${emEsc(i.holder_name)}</td>
+      <td>${emEsc(i.activite_label) || '—'}</td>
+      <td class="font-monospace">${emEsc(i.attestation_number)}</td>
+      <td>${emEsc(i.checked_by)}</td>
+      <td>${emEsc(i.checked_at)}</td>
+      <td>${emEsc(i.expires_at)}</td>
+      <td>${statusBadge}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-primary" onclick="window.open('/enquete-moralite/attestation/${i.id}', '_blank')"><i class="fas fa-print"></i></button>
+        ${CAN_DELETE_INQUIRY && !i.consumed_at ? `<button class="btn btn-sm btn-outline-danger ms-1" onclick="emDeleteInquiry(${i.id}, function(){ emValidatedCache = null; emLoadValidated(); })"><i class="fas fa-trash-alt"></i></button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Paramètres (admin) ─────────────────
+function emOpenSettings() {
+  document.getElementById('em-settings-error').textContent = '';
+  fetch('/api/licence-pro/settings', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(d => { document.getElementById('em-settings-months').value = d.morality_validity_months || 6; });
+}
+
+function emSaveSettings() {
+  const errEl = document.getElementById('em-settings-error');
+  errEl.textContent = '';
+  fetch('/api/licence-pro/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ morality_validity_months: document.getElementById('em-settings-months').value }),
+  })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok) { errEl.textContent = data.error || 'Erreur'; return; }
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('em-settings-modal')).hide();
+    })
+    .catch(() => { errEl.textContent = 'Erreur réseau.'; });
+}
+</script>
+{% endblock %}
