@@ -91,8 +91,20 @@ function setupAutoRefresh() {
         loadDashboardData();
     }
 
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) doRefresh(); });
-    window.addEventListener('focus', doRefresh);
+    // 'visibilitychange' and 'focus' commonly both fire when switching back
+    // to this tab — collapse any near-simultaneous triggers into one fetch
+    // instead of firing the request twice.
+    let debounceTimer = null;
+    function scheduleRefresh() {
+        if (debounceTimer) return;
+        debounceTimer = setTimeout(() => {
+            debounceTimer = null;
+            if (!document.hidden) doRefresh();
+        }, 150);
+    }
+
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleRefresh(); });
+    window.addEventListener('focus', scheduleRefresh);
     setInterval(doRefresh, 30000);
     _vigUpdateLiveBadge();
 }

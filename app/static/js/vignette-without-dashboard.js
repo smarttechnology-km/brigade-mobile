@@ -49,15 +49,27 @@ function refreshNoVignetteDashboard() {
     loadNoVignetteVehicles();
 }
 
+let _noVignetteRefreshTimer = null;
+function scheduleNoVignetteRefresh() {
+    // 'visibilitychange' and 'focus' commonly both fire when switching back
+    // to this tab — collapse any near-simultaneous triggers into one fetch
+    // instead of firing the request twice.
+    if (_noVignetteRefreshTimer) return;
+    _noVignetteRefreshTimer = setTimeout(function () {
+        _noVignetteRefreshTimer = null;
+        if (!document.hidden) loadNoVignetteVehicles();
+    }, 150);
+}
+
 function setupNoVignetteAutoRefresh() {
     document.addEventListener('visibilitychange', function() {
         if (!document.hidden) {
-            loadNoVignetteVehicles();
+            scheduleNoVignetteRefresh();
         }
     });
 
     window.addEventListener('focus', function() {
-        loadNoVignetteVehicles();
+        scheduleNoVignetteRefresh();
     });
 
     setInterval(() => {
