@@ -1586,6 +1586,74 @@ def dgrtr_licence_professionnelle():
     return render_template('dgrtr_licence_professionnelle.html')
 
 
+@main_bp.route('/dgrtr/auto-ecoles')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_auto_ecoles():
+    """Gestion des auto-écoles agréées — accessible au DG, DT et DR."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_general', 'directeur_technique', 'directeur_regional'):
+        abort(403)
+    return render_template('dgrtr_auto_ecoles.html')
+
+
+@main_bp.route('/dgrtr/auto-ecoles/nouvelle')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_auto_ecole_new():
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_general', 'directeur_technique', 'directeur_regional'):
+        abort(403)
+    return render_template('dgrtr_auto_ecole_form.html', auto_ecole=None, auto_ecole_data=None)
+
+
+@main_bp.route('/driving-test')
+def driving_test_page():
+    """Page publique où un candidat entre son NIN pour passer l'examen théorique.
+    Aucune authentification : inaccessible tant que la date fixée par le DG n'est
+    pas arrivée, et le lien doit porter le jeton (?t=...) du round actuellement ouvert."""
+    from app.models import ExamSetting
+    settings = ExamSetting.get()
+    token = (request.args.get('t') or '').strip()
+    has_date = settings.exam_date is not None
+    is_open = settings.is_open
+    link_valid = bool(settings.link_token) and token == settings.link_token
+    return render_template('driving_test.html',
+                            exam_active=is_open and link_valid,
+                            link_invalid=is_open and not link_valid,
+                            exam_not_open_yet=has_date and not is_open,
+                            exam_date=settings.exam_date.strftime('%d/%m/%Y') if settings.exam_date else '',
+                            exam_token=token,
+                            questions_per_exam=settings.questions_per_exam,
+                            session_duration_minutes=settings.session_duration_minutes,
+                            min_correct_to_pass=settings.min_correct_to_pass)
+
+
+@main_bp.route('/dgrtr/examen')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_examen():
+    """Banque de questions de l'examen théorique — accessible au DG et au DT uniquement."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_general', 'directeur_technique'):
+        abort(403)
+    return render_template('dgrtr_examen.html')
+
+
+@main_bp.route('/dgrtr/auto-ecoles/<int:auto_ecole_id>')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_auto_ecole_detail(auto_ecole_id):
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_general', 'directeur_technique', 'directeur_regional'):
+        abort(403)
+    from app.models import AutoEcole
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    return render_template('dgrtr_auto_ecole_detail.html', auto_ecole=ae, auto_ecole_data=ae.to_dict())
+
+
+@main_bp.route('/dgrtr/auto-ecoles/<int:auto_ecole_id>/modifier')
+@roles_required('administrateur', 'dgrtr')
+def dgrtr_auto_ecole_edit(auto_ecole_id):
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_general', 'directeur_technique', 'directeur_regional'):
+        abort(403)
+    from app.models import AutoEcole
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    return render_template('dgrtr_auto_ecole_form.html', auto_ecole=ae, auto_ecole_data=ae.to_dict())
+
+
 @main_bp.route('/dgrtr-licence-pro-complet')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_licence_pro_complet():

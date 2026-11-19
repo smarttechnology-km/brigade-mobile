@@ -2594,6 +2594,196 @@ def _alert_photo_delete_file(mapper, connection, target):
     _delete_upload_file(target.filename, 'alert_photos')
 
 
+class AutoEcole(db.Model):
+    """Auto-école agréée — gérée par le DG/DT/DR de DGRTR. Rattachée aux dossiers
+    'nouveau permis' pour savoir quelle auto-école a formé quel candidat, et pour
+    compter combien de ses candidats ont effectivement obtenu leur permis."""
+    __tablename__ = 'auto_ecoles'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False, unique=True)
+    agrement_number = db.Column(db.String(30), unique=True, nullable=True)  # ex: AE-2026-0001, auto-généré
+    agrement_date = db.Column(db.Date, nullable=True)
+    manager_name = db.Column(db.String(150), nullable=True)  # Responsable / gérant
+    email = db.Column(db.String(150), nullable=True)
+    instructors_count = db.Column(db.Integer, nullable=True)  # Nombre de moniteurs
+    island = db.Column(db.String(50), nullable=True)
+    address = db.Column(db.String(255), nullable=True)
+    phone = db.Column(db.String(30), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    created_by = db.Column(db.String(100), nullable=True)
+
+    def to_dict(self):
+        dossiers = self.dossiers.all()
+        completed = [d for d in dossiers if d.status == 'complet']
+        vehicules = self.vehicules.order_by(AutoEcoleVehicule.id.asc()).all()
+        return {
+            'id': self.id,
+            'name': self.name,
+            'agrement_number': self.agrement_number or '',
+            'agrement_date': self.agrement_date.strftime('%d/%m/%Y') if self.agrement_date else '',
+            'manager_name': self.manager_name or '',
+            'email': self.email or '',
+            'instructors_count': self.instructors_count if self.instructors_count is not None else 0,
+            'island': self.island or '',
+            'address': self.address or '',
+            'phone': self.phone or '',
+            'is_active': self.is_active,
+            'created_at': self.created_at.strftime('%d/%m/%Y') if self.created_at else '',
+            'created_by': self.created_by or '',
+            'total_candidats': len(dossiers),
+            'candidats_avec_permis': len(completed),
+            'vehicules': [v.to_dict() for v in vehicules],
+            'vehicules_count': len(vehicules),
+        }
+
+
+class AutoEcoleVehicule(db.Model):
+    """Véhicule (immatriculation) appartenant à une auto-école — saisi librement,
+    sans obligation qu'il soit déjà enregistré comme Vehicle dans le système."""
+    __tablename__ = 'auto_ecole_vehicules'
+    id = db.Column(db.Integer, primary_key=True)
+    auto_ecole_id = db.Column(db.Integer, db.ForeignKey('auto_ecoles.id'), nullable=False, index=True)
+    license_plate = db.Column(db.String(50), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+    auto_ecole = db.relationship('AutoEcole', backref=db.backref('vehicules', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'auto_ecole_id': self.auto_ecole_id,
+            'license_plate': self.license_plate,
+        }
+
+
+class ExamQuestion(db.Model):
+    """Question de l'examen théorique du permis de conduire (QCM à 4 choix, 1 seule
+    bonne réponse). Gérée par le DG/DT depuis la page Examen."""
+    __tablename__ = 'exam_questions'
+    id = db.Column(db.Integer, primary_key=True)
+    question_text = db.Column(db.Text, nullable=False)
+    image_filename = db.Column(db.String(255), nullable=True)
+    option_a = db.Column(db.String(255), nullable=False)
+    option_b = db.Column(db.String(255), nullable=False)
+    option_c = db.Column(db.String(255), nullable=False)
+    option_d = db.Column(db.String(255), nullable=False)
+    option_a_image = db.Column(db.String(255), nullable=True)
+    option_b_image = db.Column(db.String(255), nullable=True)
+    option_c_image = db.Column(db.String(255), nullable=True)
+    option_d_image = db.Column(db.String(255), nullable=True)
+    correct_option = db.Column(db.String(1), nullable=False)  # 'a' | 'b' | 'c' | 'd'
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    created_by = db.Column(db.String(100), nullable=True)
+
+    def to_dict(self, include_correct=False):
+        data = {
+            'id': self.id,
+            'question_text': self.question_text,
+            'image_filename': self.image_filename or '',
+            'image_url': _cloud_url(self.image_filename, 'exam_questions') if self.image_filename else '',
+            'option_a': self.option_a,
+            'option_b': self.option_b,
+            'option_c': self.option_c,
+            'option_d': self.option_d,
+            'option_a_image_url': _cloud_url(self.option_a_image, 'exam_questions') if self.option_a_image else '',
+            'option_b_image_url': _cloud_url(self.option_b_image, 'exam_questions') if self.option_b_image else '',
+            'option_c_image_url': _cloud_url(self.option_c_image, 'exam_questions') if self.option_c_image else '',
+            'option_d_image_url': _cloud_url(self.option_d_image, 'exam_questions') if self.option_d_image else '',
+            'is_active': self.is_active,
+            'created_at': self.created_at.strftime('%d/%m/%Y') if self.created_at else '',
+            'created_by': self.created_by or '',
+        }
+        if include_correct:
+            data['correct_option'] = self.correct_option
+        return data
+
+
+class ExamSetting(db.Model):
+    """Configuration unique (singleton) de l'examen théorique — nombre de questions
+    par session, date de l'examen (la page DrivingTest n'est accessible que si elle
+    est renseignée), durée de la session et minimum de bonnes réponses pour réussir."""
+    __tablename__ = 'exam_settings'
+    id = db.Column(db.Integer, primary_key=True)
+    questions_per_exam = db.Column(db.Integer, nullable=False, default=20)
+    exam_date = db.Column(db.Date, nullable=True)
+    session_duration_minutes = db.Column(db.Integer, nullable=False, default=30)
+    min_correct_to_pass = db.Column(db.Integer, nullable=False, default=15)
+    link_token = db.Column(db.String(32), nullable=True)  # jeton d'accès à la page DrivingTest — régénéré à chaque nouvelle ouverture d'examen
+    updated_at = db.Column(db.DateTime, nullable=True)
+    updated_by = db.Column(db.String(100), nullable=True)
+
+    @classmethod
+    def get(cls):
+        s = cls.query.first()
+        if not s:
+            s = cls()
+            db.session.add(s)
+            db.session.commit()
+        return s
+
+    @property
+    def is_open(self):
+        """La page DrivingTest n'est réellement accessible aux candidats qu'à partir
+        de la date fixée (pas avant), même si cette date est déjà enregistrée."""
+        return self.exam_date is not None and now_comoros().date() >= self.exam_date
+
+    def to_dict(self):
+        return {
+            'questions_per_exam': self.questions_per_exam,
+            'exam_date': self.exam_date.strftime('%Y-%m-%d') if self.exam_date else '',
+            'session_duration_minutes': self.session_duration_minutes,
+            'min_correct_to_pass': self.min_correct_to_pass,
+            'is_active': self.exam_date is not None,
+            'is_open': self.is_open,
+            'link_token': self.link_token or '',
+            'updated_at': self.updated_at.strftime('%d/%m/%Y %H:%M') if self.updated_at else '',
+            'updated_by': self.updated_by or '',
+        }
+
+
+class ExamAttempt(db.Model):
+    """Tentative d'examen théorique d'un candidat, identifié par son NIN. Une seule
+    tentative par NIN et par 'round' (exam_date de l'ExamSetting au moment du
+    démarrage, figée sur cette tentative) — en cas d'échec, le candidat doit
+    attendre que le DG fixe une nouvelle date pour retenter."""
+    __tablename__ = 'exam_attempts'
+    id = db.Column(db.Integer, primary_key=True)
+    nin = db.Column(db.String(50), nullable=False, index=True)
+    dossier_id = db.Column(db.Integer, db.ForeignKey('license_dossiers.id'), nullable=True)
+    candidate_name = db.Column(db.String(200), nullable=True)
+    exam_date = db.Column(db.Date, nullable=False, index=True)
+    question_ids = db.Column(db.Text, nullable=False)  # JSON [int, ...] — ordre figé de la session
+    answers = db.Column(db.Text, nullable=True)  # JSON {"<question_id>": "a"|"b"|"c"|"d"}
+    total_questions = db.Column(db.Integer, nullable=False)
+    min_correct_required = db.Column(db.Integer, nullable=False)  # seuil figé au démarrage
+    score = db.Column(db.Integer, nullable=True)
+    passed = db.Column(db.Boolean, nullable=True)
+    started_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    submitted_at = db.Column(db.DateTime, nullable=True)
+    paused_at = db.Column(db.DateTime, nullable=True)  # non-null tant que le candidat a quitté le quiz — le temps restant est figé
+
+    dossier = db.relationship('LicenseDossier', backref=db.backref('exam_attempts', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nin': self.nin,
+            'dossier_id': self.dossier_id,
+            'candidate_name': self.candidate_name or '',
+            'exam_date': self.exam_date.strftime('%Y-%m-%d') if self.exam_date else '',
+            'total_questions': self.total_questions,
+            'min_correct_required': self.min_correct_required,
+            'score': self.score,
+            'passed': self.passed,
+            'started_at': self.started_at.strftime('%d/%m/%Y %H:%M') if self.started_at else '',
+            'expires_at': self.expires_at.isoformat() if self.expires_at else '',
+            'submitted_at': self.submitted_at.strftime('%d/%m/%Y %H:%M') if self.submitted_at else '',
+        }
+
+
 class LicenseDossier(db.Model):
     """Dossier de demande de permis de conduire — workflow en 5 étapes.
     Le permis est créé dans DriverLicense uniquement quand toutes les étapes sont validées."""
@@ -2628,6 +2818,7 @@ class LicenseDossier(db.Model):
 
     # Étape 1 — Validation des documents
     doc_autoecole          = db.Column(db.Boolean, nullable=False, default=False)
+    auto_ecole_id          = db.Column(db.Integer, db.ForeignKey('auto_ecoles.id'), nullable=True)  # 'nouveau' uniquement
     doc_permis             = db.Column(db.Boolean, nullable=False, default=False)  # renouvellement : remplace doc_autoecole
     doc_medical            = db.Column(db.Boolean, nullable=False, default=False)
     doc_residence          = db.Column(db.Boolean, nullable=False, default=False)
@@ -2655,6 +2846,12 @@ class LicenseDossier(db.Model):
     step2_data         = db.Column(db.Text, nullable=True)
     step2_validated_at = db.Column(db.DateTime, nullable=True)
     step2_validated_by = db.Column(db.String(100), nullable=True)
+
+    # Détails du permis & Catégories autorisées — séparés des informations du
+    # candidat (step2) pour pouvoir y insérer la validation de l'examen théorique
+    # entre les deux (voir LicenseDossier.step2b_done / exam_passed).
+    step2b_validated_at = db.Column(db.DateTime, nullable=True)
+    step2b_validated_by = db.Column(db.String(100), nullable=True)
 
     step3_data         = db.Column(db.Text, nullable=True)
     step3_validated_at = db.Column(db.DateTime, nullable=True)
@@ -2690,6 +2887,7 @@ class LicenseDossier(db.Model):
 
     license = db.relationship('DriverLicense', foreign_keys=[license_id])
     renewal_license = db.relationship('DriverLicense', foreign_keys=[renewal_license_id])
+    auto_ecole = db.relationship('AutoEcole', backref=db.backref('dossiers', lazy='dynamic'))
 
     @property
     def all_docs_checked(self):
@@ -2718,14 +2916,36 @@ class LicenseDossier(db.Model):
     def awaiting_receipt_confirmation(self):
         return not self.step1_validated_at and self.paid and not self.doc_recu_paiement
 
+    @property
+    def exam_passed(self):
+        """Un 'nouveau' dossier ne peut avoir 'Détails du permis' / 'Catégories
+        autorisées' saisis qu'une fois que son candidat a réussi l'examen théorique
+        — une fois réussi, c'est définitif (indépendant des rounds suivants)."""
+        return self.exam_attempts.filter_by(passed=True).first() is not None
+
+    @property
+    def exam_last_attempt(self):
+        return self.exam_attempts.order_by(ExamAttempt.id.desc()).first()
+
+    @property
+    def step2b_done(self):
+        """Détails du permis & Catégories autorisées validés. Les dossiers créés
+        avant la séparation des étapes 3/4 n'ont pas de step2b_validated_at propre
+        mais ont déjà type_permis rempli (saisi en même temps que les informations
+        à l'époque) — on les traite comme complets pour ne pas les bloquer."""
+        return bool(self.step2b_validated_at) or (bool(self.step2_validated_at) and bool(self.type_permis))
+
     def _ui_current_step(self):
-        # Ordre UI : step1 → step3(photo) → step2(info) → step4(vérif) → step5(signature DG) → step6(impression)
+        # Ordre UI : 1=documents/paiement, 2=photo, 3=informations candidat,
+        # 4=détails du permis & catégories, 5=vérification, 6=signature DG, 7=impression
         if self.step5_validated_at:
-            return 6  # signature DG faite → en attente impression (ou déjà complet)
+            return 7  # signature DG faite → en attente impression (ou déjà complet)
         if self.step4_validated_at:
-            return 5  # vérification faite → en attente signature DG
+            return 6  # vérification faite → en attente signature DG
+        if self.step2b_done:
+            return 5  # détails/catégories validés → en attente vérification
         if self.step2_validated_at:
-            return 4
+            return 4  # informations validées → en attente examen/détails du permis
         if self.step3_validated_at:
             return 3
         if self.step1_validated_at:
@@ -2733,6 +2953,7 @@ class LicenseDossier(db.Model):
         return 1
 
     def to_dict(self):
+        last_attempt = self.exam_last_attempt
         return {
             'id': self.id,
             'dossier_number': self.dossier_number or '',
@@ -2763,6 +2984,17 @@ class LicenseDossier(db.Model):
             'photo_url': _cloud_url(self.photo_filename, 'license_photos') or '',
             'final_status': self.final_status or 'actif',
             'doc_autoecole': self.doc_autoecole,
+            'auto_ecole_id': self.auto_ecole_id,
+            'auto_ecole_name': self.auto_ecole.name if self.auto_ecole else '',
+            'exam_required': self.dossier_type == 'nouveau',
+            'exam_passed': self.exam_passed,
+            'exam_last_attempt': {
+                'score': last_attempt.score,
+                'total_questions': last_attempt.total_questions,
+                'passed': last_attempt.passed,
+                'exam_date': last_attempt.exam_date.strftime('%d/%m/%Y') if last_attempt.exam_date else '',
+                'submitted_at': last_attempt.submitted_at.strftime('%d/%m/%Y %H:%M') if last_attempt.submitted_at else '',
+            } if last_attempt else None,
             'doc_medical': self.doc_medical,
             'doc_residence': self.doc_residence,
             'doc_fiche_individuelle': self.doc_fiche_individuelle,
@@ -2780,6 +3012,9 @@ class LicenseDossier(db.Model):
             'step1_validated_by': self.step1_validated_by or '',
             'step2_validated_at': self.step2_validated_at.strftime('%d/%m/%Y %H:%M') if self.step2_validated_at else '',
             'step2_validated_by': self.step2_validated_by or '',
+            'step2b_validated_at': self.step2b_validated_at.strftime('%d/%m/%Y %H:%M') if self.step2b_validated_at else '',
+            'step2b_validated_by': self.step2b_validated_by or '',
+            'step2b_done': self.step2b_done,
             'step3_validated_at': self.step3_validated_at.strftime('%d/%m/%Y %H:%M') if self.step3_validated_at else '',
             'step3_validated_by': self.step3_validated_by or '',
             'step4_validated_at': self.step4_validated_at.strftime('%d/%m/%Y %H:%M') if self.step4_validated_at else '',

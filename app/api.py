@@ -12,6 +12,8 @@ import os
 import re
 import json
 import uuid
+import random
+import secrets
 from werkzeug.utils import secure_filename
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -2661,7 +2663,11 @@ def api_sidebar_pending_counts():
         vt_count = 0
 
     is_dg = getattr(current_user, 'is_admin', False) or (role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_general')
-    dossier_sig_count = LicenseDossier.query.filter_by(current_step=5, status='en_cours').count() if is_dg else 0
+    dossier_sig_count = LicenseDossier.query.filter(
+        LicenseDossier.step4_validated_at.isnot(None),
+        LicenseDossier.step5_validated_at.is_(None),
+        LicenseDossier.status == 'en_cours',
+    ).count() if is_dg else 0
 
     from app.models import LicenceProRequest
     is_dt = getattr(current_user, 'is_admin', False) or (role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_technique')
@@ -6191,6 +6197,858 @@ def list_dgrtr_users():
 
 
 # ─────────────────────────────────────────────
+#  DGRTR — Auto-écoles (DG, DT, DR)
+# ─────────────────────────────────────────────
+
+def _is_auto_ecole_manager():
+    return current_user.role == 'administrateur' or (
+        getattr(current_user, 'role', '') == 'dgrtr'
+        and getattr(current_user, 'dgrtr_type', None) in ('directeur_general', 'directeur_technique', 'directeur_regional')
+    )
+
+
+@api_bp.route('/auto-ecoles/check-vehicle', methods=['GET'])
+@login_required
+def check_vehicle_for_auto_ecole():
+    """Vérifie qu'une immatriculation existe bien dans le système, avant de
+    l'ajouter à la liste des véhicules d'une auto-école."""
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    plate = (request.args.get('plate') or '').strip()
+    if not plate:
+        return jsonify({'exists': False})
+    v = Vehicle.query.filter(Vehicle.license_plate.ilike(plate)).first()
+    if not v:
+        return jsonify({'exists': False})
+    return jsonify({'exists': True, 'license_plate': v.license_plate, 'owner_name': v.owner_name or ''})
+
+
+def _parse_date_or_none(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
+
+
+@api_bp.route('/auto-ecoles', methods=['GET'])
+@login_required
+def list_auto_ecoles():
+    """Liste des auto-écoles — un directeur_regional ne voit que celles de son île,
+    DT/DG/admin voient toutes les îles."""
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import AutoEcole
+    query = AutoEcole.query
+    q = (request.args.get('q') or '').strip()
+    if q:
+        query = query.filter(AutoEcole.name.ilike(f'%{q}%'))
+    user_country = getattr(current_user, 'country', None)
+    if getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional' and user_country:
+        query = query.filter(AutoEcole.island == user_country)
+    items = query.order_by(AutoEcole.name.asc()).all()
+    return jsonify([a.to_dict() for a in items])
+
+
+@api_bp.route('/auto-ecoles/<int:auto_ecole_id>', methods=['GET'])
+@login_required
+def get_auto_ecole(auto_ecole_id):
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import AutoEcole
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    return jsonify(ae.to_dict())
+
+
+@api_bp.route('/auto-ecoles/<int:auto_ecole_id>/dossiers', methods=['GET'])
+@login_required
+def list_auto_ecole_dossiers(auto_ecole_id):
+    """Liste légère des candidats (dossiers 'nouveau permis') rattachés à une auto-école,
+    pour la page de détail."""
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import AutoEcole, LicenseDossier
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    dossiers = ae.dossiers.order_by(LicenseDossier.created_at.desc()).all()
+
+    def _exam_attempt_dict(d):
+        a = d.exam_last_attempt
+        if not a or not a.submitted_at:
+            return None
+        return {
+            'score': a.score, 'total_questions': a.total_questions, 'passed': a.passed,
+            'submitted_at': a.submitted_at.strftime('%d/%m/%Y'),
+        }
+
+    return jsonify([{
+        'id': d.id,
+        'dossier_number': d.dossier_number or '',
+        'nom': d.nom or '',
+        'prenom': d.prenom or '',
+        'status': d.status,
+        'license_number': d.license.license_number if d.license else (d.license_number_proposed or ''),
+        'created_at': d.created_at.strftime('%d/%m/%Y') if d.created_at else '',
+        'completed_at': (d.step6_validated_at or d.step5_validated_at).strftime('%d/%m/%Y') if (d.step6_validated_at or d.step5_validated_at) else '',
+        'exam_passed': d.exam_passed,
+        'exam_last_attempt': _exam_attempt_dict(d),
+    } for d in dossiers])
+
+
+@api_bp.route('/auto-ecoles', methods=['POST'])
+@login_required
+def create_auto_ecole():
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import AutoEcole
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    agrement_number = (data.get('agrement_number') or '').strip()
+    island = (data.get('island') or '').strip()
+    address = (data.get('address') or '').strip()
+    phone = (data.get('phone') or '').strip()
+    manager_name = (data.get('manager_name') or '').strip()
+    email = (data.get('email') or '').strip()
+    agrement_date = _parse_date_or_none(data.get('agrement_date'))
+    instructors_count = data.get('instructors_count')
+    try:
+        instructors_count = int(instructors_count) if instructors_count not in (None, '') else None
+    except (ValueError, TypeError):
+        instructors_count = None
+
+    if not name:
+        return jsonify({'error': "Le nom de l'auto-école est requis."}), 400
+    if AutoEcole.query.filter(AutoEcole.name.ilike(name)).first():
+        return jsonify({'error': 'Une auto-école avec ce nom existe déjà.'}), 400
+    if not agrement_number:
+        return jsonify({'error': "Le numéro d'agrément est requis."}), 400
+    if AutoEcole.query.filter(AutoEcole.agrement_number.ilike(agrement_number)).first():
+        return jsonify({'error': 'Une auto-école avec ce numéro d\'agrément existe déjà.'}), 400
+
+    plates = [(p or '').strip().upper() for p in (data.get('vehicules') or []) if (p or '').strip()]
+    if not plates:
+        return jsonify({'error': 'Au moins un véhicule est requis.'}), 400
+    missing = [p for p in plates if not Vehicle.query.filter(Vehicle.license_plate.ilike(p)).first()]
+    if missing:
+        return jsonify({'error': "Véhicule(s) introuvable(s) dans le système : " + ', '.join(missing)}), 400
+
+    # Un directeur_regional ne peut créer que pour sa propre île.
+    if getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional':
+        island = getattr(current_user, 'country', None) or island
+
+    ae = AutoEcole(
+        name=name,
+        agrement_number=agrement_number,
+        agrement_date=agrement_date,
+        manager_name=manager_name or None,
+        email=email or None,
+        instructors_count=instructors_count,
+        island=island or None,
+        address=address or None,
+        phone=phone or None,
+        created_by=current_user.username,
+    )
+    db.session.add(ae)
+    db.session.flush()
+
+    from app.models import AutoEcoleVehicule
+    for plate in plates:
+        db.session.add(AutoEcoleVehicule(auto_ecole_id=ae.id, license_plate=plate))
+
+    db.session.commit()
+    return jsonify(ae.to_dict()), 201
+
+
+@api_bp.route('/auto-ecoles/<int:auto_ecole_id>', methods=['PUT'])
+@login_required
+def update_auto_ecole(auto_ecole_id):
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import AutoEcole
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    agrement_number = (data.get('agrement_number') or '').strip()
+    if not name:
+        return jsonify({'error': "Le nom de l'auto-école est requis."}), 400
+    if not agrement_number:
+        return jsonify({'error': "Le numéro d'agrément est requis."}), 400
+
+    existing = AutoEcole.query.filter(AutoEcole.name.ilike(name), AutoEcole.id != auto_ecole_id).first()
+    if existing:
+        return jsonify({'error': 'Une auto-école avec ce nom existe déjà.'}), 400
+
+    existing_num = AutoEcole.query.filter(
+        AutoEcole.agrement_number.ilike(agrement_number), AutoEcole.id != auto_ecole_id
+    ).first()
+    if existing_num:
+        return jsonify({'error': 'Une auto-école avec ce numéro d\'agrément existe déjà.'}), 400
+
+    instructors_count = data.get('instructors_count')
+    try:
+        instructors_count = int(instructors_count) if instructors_count not in (None, '') else None
+    except (ValueError, TypeError):
+        instructors_count = None
+
+    ae.name = name
+    ae.agrement_number = agrement_number
+    ae.island = (data.get('island') or '').strip() or None
+    ae.address = (data.get('address') or '').strip() or None
+    ae.phone = (data.get('phone') or '').strip() or None
+    ae.manager_name = (data.get('manager_name') or '').strip() or None
+    ae.email = (data.get('email') or '').strip() or None
+    ae.agrement_date = _parse_date_or_none(data.get('agrement_date'))
+    ae.instructors_count = instructors_count
+    db.session.commit()
+    return jsonify(ae.to_dict())
+
+
+@api_bp.route('/auto-ecoles/<int:auto_ecole_id>/toggle-active', methods=['POST'])
+@login_required
+def toggle_auto_ecole_active(auto_ecole_id):
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import AutoEcole
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    ae.is_active = not ae.is_active
+    db.session.commit()
+    return jsonify(ae.to_dict())
+
+
+def _can_delete_auto_ecole():
+    return current_user.role == 'administrateur' or (
+        getattr(current_user, 'role', '') == 'dgrtr'
+        and getattr(current_user, 'dgrtr_type', None) == 'directeur_general'
+    )
+
+
+@api_bp.route('/auto-ecoles/<int:auto_ecole_id>', methods=['DELETE'])
+@login_required
+def delete_auto_ecole(auto_ecole_id):
+    """Suppression d'une auto-école — réservée au DG (et admin). Bloquée si des
+    candidats (dossiers permis) y sont encore rattachés."""
+    if not _can_delete_auto_ecole():
+        return jsonify({'error': 'Accès refusé — seul le Directeur Général peut supprimer une auto-école.'}), 403
+    from app.models import AutoEcole, AutoEcoleVehicule
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    if ae.dossiers.count() > 0:
+        return jsonify({'error': 'Impossible de supprimer : des candidats sont rattachés à cette auto-école.'}), 400
+    AutoEcoleVehicule.query.filter_by(auto_ecole_id=ae.id).delete()
+    db.session.delete(ae)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@api_bp.route('/auto-ecoles/<int:auto_ecole_id>/vehicules', methods=['POST'])
+@login_required
+def add_auto_ecole_vehicule(auto_ecole_id):
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import AutoEcole, AutoEcoleVehicule
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    data = request.get_json() or {}
+    plate = (data.get('license_plate') or '').strip().upper()
+    if not plate:
+        return jsonify({'error': "L'immatriculation est requise."}), 400
+    if not Vehicle.query.filter(Vehicle.license_plate.ilike(plate)).first():
+        return jsonify({'error': f"Aucun véhicule avec l'immatriculation '{plate}' n'existe dans le système."}), 400
+    if AutoEcoleVehicule.query.filter_by(auto_ecole_id=ae.id, license_plate=plate).first():
+        return jsonify({'error': 'Ce véhicule est déjà enregistré pour cette auto-école.'}), 400
+    v = AutoEcoleVehicule(auto_ecole_id=ae.id, license_plate=plate)
+    db.session.add(v)
+    db.session.commit()
+    return jsonify(ae.to_dict()), 201
+
+
+@api_bp.route('/auto-ecoles/<int:auto_ecole_id>/vehicules/<int:vehicule_id>', methods=['DELETE'])
+@login_required
+def delete_auto_ecole_vehicule(auto_ecole_id, vehicule_id):
+    if not _is_auto_ecole_manager():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import AutoEcole, AutoEcoleVehicule
+    ae = AutoEcole.query.get_or_404(auto_ecole_id)
+    v = AutoEcoleVehicule.query.filter_by(id=vehicule_id, auto_ecole_id=ae.id).first_or_404()
+    db.session.delete(v)
+    db.session.commit()
+    return jsonify(ae.to_dict())
+
+
+# ─────────────────────────────────────────────
+#  DGRTR — Examen théorique (banque de questions + paramètres)
+#  Accessible uniquement au DG et au DT.
+# ─────────────────────────────────────────────
+
+def _can_manage_exam():
+    return current_user.role == 'administrateur' or (
+        getattr(current_user, 'role', '') == 'dgrtr'
+        and getattr(current_user, 'dgrtr_type', None) in ('directeur_general', 'directeur_technique')
+    )
+
+
+def _can_manage_exam_settings():
+    """Seul le DG peut modifier les paramètres de l'examen (nombre de questions,
+    date, durée, seuil de réussite) — le DT peut seulement les consulter."""
+    return current_user.role == 'administrateur' or (
+        getattr(current_user, 'role', '') == 'dgrtr'
+        and getattr(current_user, 'dgrtr_type', None) == 'directeur_general'
+    )
+
+
+@api_bp.route('/exam/questions', methods=['GET'])
+@login_required
+def list_exam_questions():
+    if not _can_manage_exam():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import ExamQuestion
+    items = ExamQuestion.query.order_by(ExamQuestion.id.desc()).all()
+    return jsonify([q.to_dict(include_correct=True) for q in items])
+
+
+def _validate_exam_question_payload(data):
+    errors = []
+    question_text = (data.get('question_text') or '').strip()
+    option_a = (data.get('option_a') or '').strip()
+    option_b = (data.get('option_b') or '').strip()
+    option_c = (data.get('option_c') or '').strip()
+    option_d = (data.get('option_d') or '').strip()
+    correct_option = (data.get('correct_option') or '').strip().lower()
+    if not question_text:
+        errors.append("L'énoncé de la question est requis.")
+    if not all([option_a, option_b, option_c, option_d]):
+        errors.append('Les 4 réponses sont requises.')
+    if correct_option not in ('a', 'b', 'c', 'd'):
+        errors.append('La bonne réponse doit être sélectionnée.')
+    return errors, {
+        'question_text': question_text,
+        'option_a': option_a, 'option_b': option_b,
+        'option_c': option_c, 'option_d': option_d,
+        'correct_option': correct_option,
+    }
+
+
+def _resize_exam_image(file_storage, max_dimension=700, quality=72):
+    """Redimensionne et recompresse une image uploadée (toujours réencodée en JPEG)
+    pour éviter les photos de plusieurs Mo prises directement avec un téléphone."""
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    import io as _io
+    try:
+        img = Image.open(file_storage)
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ('RGB', 'L'):
+            img = img.convert('RGB')
+        img.thumbnail((max_dimension, max_dimension), Image.LANCZOS)
+        buf = _io.BytesIO()
+        img.save(buf, format='JPEG', quality=quality, optimize=True)
+        buf.seek(0)
+        return buf, None
+    except UnidentifiedImageError:
+        return None, 'Fichier image invalide ou corrompu.'
+
+
+def _process_exam_image(file_key, remove_key, current_filename):
+    """Gère l'upload/suppression d'un champ image (question ou option) d'une
+    question d'examen. Retourne (nouveau_nom_de_fichier_ou_None, erreur_ou_None)."""
+    file = request.files.get(file_key)
+    if file and file.filename:
+        ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+        if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+            return current_filename, 'Format image non autorisé (jpg, png, webp)'
+
+        resized, resize_error = _resize_exam_image(file)
+        if resize_error:
+            return current_filename, resize_error
+
+        from app.cloudinary_utils import is_cloudinary_enabled, upload_file as cloud_upload, delete_file as cloud_delete
+        if current_filename:
+            cloud_delete(current_filename, local_folder='exam_questions')
+        if is_cloudinary_enabled():
+            return cloud_upload(resized, 'exam_questions'), None
+        upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'exam_questions')
+        os.makedirs(upload_dir, exist_ok=True)
+        new_filename = f'{uuid.uuid4().hex}.jpg'
+        with open(os.path.join(upload_dir, new_filename), 'wb') as f:
+            f.write(resized.getvalue())
+        return new_filename, None
+    if request.form.get(remove_key) == '1' and current_filename:
+        from app.cloudinary_utils import delete_file as cloud_delete
+        cloud_delete(current_filename, local_folder='exam_questions')
+        return None, None
+    return current_filename, None
+
+
+@api_bp.route('/exam/questions', methods=['POST'])
+@login_required
+def create_exam_question():
+    if not _can_manage_exam():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import ExamQuestion
+    errors, fields = _validate_exam_question_payload(request.form)
+    if errors:
+        return jsonify({'error': ' '.join(errors)}), 400
+
+    image_fields = {}
+    for key, (file_key, remove_key) in {
+        'image_filename': ('image', 'remove_image'),
+        'option_a_image': ('image_a', 'remove_image_a'),
+        'option_b_image': ('image_b', 'remove_image_b'),
+        'option_c_image': ('image_c', 'remove_image_c'),
+        'option_d_image': ('image_d', 'remove_image_d'),
+    }.items():
+        filename, error = _process_exam_image(file_key, remove_key, None)
+        if error:
+            return jsonify({'error': error}), 400
+        image_fields[key] = filename
+
+    q = ExamQuestion(
+        question_text=fields['question_text'],
+        option_a=fields['option_a'], option_b=fields['option_b'],
+        option_c=fields['option_c'], option_d=fields['option_d'],
+        correct_option=fields['correct_option'],
+        created_by=current_user.username,
+        **image_fields,
+    )
+    db.session.add(q)
+    db.session.commit()
+    return jsonify(q.to_dict(include_correct=True)), 201
+
+
+@api_bp.route('/exam/questions/<int:question_id>', methods=['PUT'])
+@login_required
+def update_exam_question(question_id):
+    if not _can_manage_exam():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import ExamQuestion
+    q = ExamQuestion.query.get_or_404(question_id)
+    errors, fields = _validate_exam_question_payload(request.form)
+    if errors:
+        return jsonify({'error': ' '.join(errors)}), 400
+
+    for attr, (file_key, remove_key) in {
+        'image_filename': ('image', 'remove_image'),
+        'option_a_image': ('image_a', 'remove_image_a'),
+        'option_b_image': ('image_b', 'remove_image_b'),
+        'option_c_image': ('image_c', 'remove_image_c'),
+        'option_d_image': ('image_d', 'remove_image_d'),
+    }.items():
+        filename, error = _process_exam_image(file_key, remove_key, getattr(q, attr))
+        if error:
+            return jsonify({'error': error}), 400
+        setattr(q, attr, filename)
+
+    q.question_text = fields['question_text']
+    q.option_a = fields['option_a']
+    q.option_b = fields['option_b']
+    q.option_c = fields['option_c']
+    q.option_d = fields['option_d']
+    q.correct_option = fields['correct_option']
+    db.session.commit()
+    return jsonify(q.to_dict(include_correct=True))
+
+
+@api_bp.route('/exam/questions/<int:question_id>/toggle-active', methods=['POST'])
+@login_required
+def toggle_exam_question_active(question_id):
+    if not _can_manage_exam():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import ExamQuestion
+    q = ExamQuestion.query.get_or_404(question_id)
+    q.is_active = not q.is_active
+    db.session.commit()
+    return jsonify(q.to_dict(include_correct=True))
+
+
+@api_bp.route('/exam/questions/<int:question_id>', methods=['DELETE'])
+@login_required
+def delete_exam_question(question_id):
+    if not _can_manage_exam():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import ExamQuestion
+    q = ExamQuestion.query.get_or_404(question_id)
+    images = [q.image_filename, q.option_a_image, q.option_b_image, q.option_c_image, q.option_d_image]
+    if any(images):
+        from app.cloudinary_utils import delete_file as cloud_delete
+        for filename in images:
+            if filename:
+                cloud_delete(filename, local_folder='exam_questions')
+    db.session.delete(q)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@api_bp.route('/exam/questions/import-csv', methods=['POST'])
+@login_required
+def import_exam_questions_csv():
+    """Import en masse de questions (texte uniquement, sans photo) depuis un CSV.
+    Colonnes attendues : question_text, option_a, option_b, option_c, option_d,
+    correct_option (a/b/c/d). Tout-ou-rien : si une ligne est invalide, rien n'est
+    importé — les doublons (énoncé déjà existant) sont simplement ignorés."""
+    if not _can_manage_exam():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import ExamQuestion
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return jsonify({'error': 'Aucun fichier reçu.'}), 400
+    if not file.filename.lower().endswith('.csv'):
+        return jsonify({'error': 'Le fichier doit être au format CSV.'}), 400
+
+    import csv
+    import io as _io
+    try:
+        raw = file.read().decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return jsonify({'error': "Impossible de lire le fichier (utilisez un encodage UTF-8)."}), 400
+
+    reader = csv.DictReader(_io.StringIO(raw))
+    required_cols = {'question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_option'}
+    found_cols = {(c or '').strip() for c in (reader.fieldnames or [])}
+    if not required_cols.issubset(found_cols):
+        return jsonify({'error': 'Colonnes attendues : ' + ', '.join(sorted(required_cols)) + '.'}), 400
+
+    rows = list(reader)
+    if not rows:
+        return jsonify({'error': 'Le fichier CSV ne contient aucune ligne.'}), 400
+
+    existing_texts = {q.question_text for q in ExamQuestion.query.all()}
+    seen_texts = set()
+    to_create = []
+    blocking_errors = []
+    skipped_duplicates = 0
+
+    for i, row in enumerate(rows, start=2):  # la ligne 1 est l'en-tête
+        text = (row.get('question_text') or '').strip()
+        a = (row.get('option_a') or '').strip()
+        b = (row.get('option_b') or '').strip()
+        c = (row.get('option_c') or '').strip()
+        d = (row.get('option_d') or '').strip()
+        correct = (row.get('correct_option') or '').strip().lower()
+
+        errs = []
+        if not text:
+            errs.append("l'énoncé est vide")
+        if not all([a, b, c, d]):
+            errs.append('une ou plusieurs réponses sont vides')
+        if correct not in ('a', 'b', 'c', 'd'):
+            errs.append("correct_option doit être 'a', 'b', 'c' ou 'd'")
+        if errs:
+            blocking_errors.append({'row': i, 'error': ', '.join(errs)})
+            continue
+        if text in existing_texts or text in seen_texts:
+            skipped_duplicates += 1
+            continue
+        seen_texts.add(text)
+        to_create.append(ExamQuestion(
+            question_text=text, option_a=a, option_b=b, option_c=c, option_d=d,
+            correct_option=correct, created_by=current_user.username,
+        ))
+
+    if blocking_errors:
+        return jsonify({
+            'error': "Le fichier contient des erreurs — rien n'a été importé. Corrigez-le et réessayez.",
+            'row_errors': blocking_errors,
+        }), 400
+
+    for q in to_create:
+        db.session.add(q)
+    db.session.commit()
+
+    return jsonify({'created': len(to_create), 'skipped_duplicates': skipped_duplicates})
+
+
+@api_bp.route('/exam/settings', methods=['GET'])
+@login_required
+def get_exam_settings():
+    if not _can_manage_exam():
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import ExamSetting
+    return jsonify(ExamSetting.get().to_dict())
+
+
+@api_bp.route('/exam/settings', methods=['PUT'])
+@login_required
+def update_exam_settings():
+    if not _can_manage_exam_settings():
+        return jsonify({'error': 'Accès refusé — seul le Directeur Général peut modifier les paramètres.'}), 403
+    from app.models import ExamSetting
+    data = request.get_json() or {}
+    s = ExamSetting.get()
+
+    try:
+        questions_per_exam = int(data.get('questions_per_exam'))
+        session_duration_minutes = int(data.get('session_duration_minutes'))
+        min_correct_to_pass = int(data.get('min_correct_to_pass'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Valeurs numériques invalides.'}), 400
+
+    if questions_per_exam <= 0 or session_duration_minutes <= 0 or min_correct_to_pass <= 0:
+        return jsonify({'error': 'Les valeurs doivent être supérieures à 0.'}), 400
+    if min_correct_to_pass > questions_per_exam:
+        return jsonify({'error': 'Le minimum de bonnes réponses ne peut pas dépasser le nombre de questions.'}), 400
+
+    exam_date_raw = (data.get('exam_date') or '').strip()
+    exam_date = None
+    if exam_date_raw:
+        try:
+            exam_date = datetime.strptime(exam_date_raw, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Date invalide.'}), 400
+
+    # Une nouvelle date = une nouvelle "ouverture" de l'examen : on régénère le
+    # jeton d'accès pour que l'ancien lien DrivingTest (déjà potentiellement
+    # partagé pour le round précédent) ne fonctionne plus.
+    if exam_date != s.exam_date:
+        s.link_token = secrets.token_urlsafe(16)
+
+    s.questions_per_exam = questions_per_exam
+    s.session_duration_minutes = session_duration_minutes
+    s.min_correct_to_pass = min_correct_to_pass
+    s.exam_date = exam_date
+    s.updated_at = now_comoros()
+    s.updated_by = current_user.username
+    db.session.commit()
+    return jsonify(s.to_dict())
+
+
+@api_bp.route('/exam/settings/regenerate-link', methods=['POST'])
+@login_required
+def regenerate_exam_link():
+    """Permet au DG d'invalider le lien DrivingTest actuel (ex : lien divulgué par
+    erreur) sans changer la date ni les autres paramètres de l'examen."""
+    if not _can_manage_exam_settings():
+        return jsonify({'error': 'Accès refusé — seul le Directeur Général peut modifier les paramètres.'}), 403
+    from app.models import ExamSetting
+    s = ExamSetting.get()
+    s.link_token = secrets.token_urlsafe(16)
+    s.updated_at = now_comoros()
+    s.updated_by = current_user.username
+    db.session.commit()
+    return jsonify(s.to_dict())
+
+
+# ─────────────────────────────────────────────
+#  DrivingTest — espace public candidat (pas d'authentification : le lien à
+#  jeton + le NIN du candidat font office de preuve d'accès, comme pour le
+#  suivi public des véhicules par track_token).
+# ─────────────────────────────────────────────
+
+def _finalize_expired_attempt(attempt):
+    """Si une session démarrée n'a jamais été soumise et que le temps imparti est
+    dépassé, on la clôture automatiquement en échec pour libérer le round. Ignoré
+    pendant une pause : expires_at est alors une valeur figée, pas une échéance réelle."""
+    if attempt.paused_at:
+        return attempt
+    if not attempt.submitted_at and now_comoros() > ensure_comoros(attempt.expires_at):
+        attempt.score = 0
+        attempt.passed = False
+        attempt.submitted_at = attempt.expires_at
+        db.session.commit()
+    return attempt
+
+
+def _resolve_pause(attempt):
+    """Si le candidat avait quitté le quiz (attempt.paused_at renseigné), calcule le
+    temps qu'il lui restait à cet instant-là et redémarre le chronomètre à partir de
+    maintenant avec ce même temps restant — sans jamais lui offrir de temps gratuit."""
+    if not attempt.paused_at or attempt.submitted_at:
+        return
+    remaining_at_pause = (ensure_comoros(attempt.expires_at) - ensure_comoros(attempt.paused_at)).total_seconds()
+    remaining_at_pause = max(0, remaining_at_pause)
+    if remaining_at_pause <= 0:
+        attempt.score = 0
+        attempt.passed = False
+        attempt.submitted_at = attempt.paused_at
+        attempt.paused_at = None
+    else:
+        attempt.expires_at = now_comoros() + timedelta(seconds=remaining_at_pause)
+        attempt.paused_at = None
+    db.session.commit()
+
+
+def _ordered_exam_questions(ids):
+    from app.models import ExamQuestion
+    qs = ExamQuestion.query.filter(ExamQuestion.id.in_(ids)).all()
+    by_id = {q.id: q for q in qs}
+    return [by_id[i].to_dict() for i in ids if i in by_id]
+
+
+@api_bp.route('/exam/driving-test/status', methods=['GET'])
+def driving_test_status():
+    from app.models import ExamSetting
+    s = ExamSetting.get()
+    return jsonify({
+        'is_active': s.exam_date is not None,
+        'exam_date': s.exam_date.strftime('%Y-%m-%d') if s.exam_date else '',
+    })
+
+
+@api_bp.route('/exam/driving-test/start', methods=['POST'])
+def driving_test_start():
+    from app.models import ExamSetting, ExamQuestion, ExamAttempt, LicenseDossier
+    data = request.get_json() or {}
+    nin = (data.get('nin') or '').strip()
+    token = (data.get('token') or '').strip()
+    if not nin:
+        return jsonify({'error': 'NIN requis.'}), 400
+
+    settings = ExamSetting.get()
+    if not settings.exam_date:
+        return jsonify({'error': "Aucun examen n'est actuellement programmé."}), 403
+    if not settings.is_open:
+        return jsonify({'error': "L'examen n'est pas encore ouvert. Il sera accessible le " + settings.exam_date.strftime('%d/%m/%Y') + "."}), 403
+    if not settings.link_token or token != settings.link_token:
+        return jsonify({'error': 'Lien invalide ou expiré. Demandez le lien à jour à la DGRTR.'}), 403
+
+    dossier = LicenseDossier.query.filter_by(nin=nin).order_by(LicenseDossier.id.desc()).first()
+    if not dossier:
+        return jsonify({'error': 'Aucun dossier de permis trouvé pour ce NIN.'}), 404
+
+    existing = (ExamAttempt.query
+                .filter_by(nin=nin, exam_date=settings.exam_date)
+                .order_by(ExamAttempt.id.desc())
+                .first())
+    if existing:
+        _resolve_pause(existing)
+        _finalize_expired_attempt(existing)
+        if existing.submitted_at:
+            return jsonify({
+                'status': 'already_passed' if existing.passed else 'already_failed',
+                'attempt': existing.to_dict(),
+            })
+        remaining = max(0, int((ensure_comoros(existing.expires_at) - now_comoros()).total_seconds()))
+        return jsonify({
+            'status': 'resume',
+            'attempt_id': existing.id,
+            'candidate_name': existing.candidate_name,
+            'candidate_photo_url': dossier.to_dict().get('photo_url') or '',
+            'remaining_seconds': remaining,
+            'questions': _ordered_exam_questions(json.loads(existing.question_ids)),
+            'answers': json.loads(existing.answers) if existing.answers else {},
+        })
+
+    active_qs = ExamQuestion.query.filter_by(is_active=True).all()
+    if len(active_qs) < settings.questions_per_exam:
+        return jsonify({'error': "Pas assez de questions actives configurées pour composer l'examen. Contactez le DG/DT."}), 400
+
+    chosen = random.sample(active_qs, settings.questions_per_exam)
+    question_ids = [q.id for q in chosen]
+    candidate_name = ((dossier.prenom or '') + ' ' + (dossier.nom or '')).strip()
+    now = now_comoros()
+    attempt = ExamAttempt(
+        nin=nin,
+        dossier_id=dossier.id,
+        candidate_name=candidate_name,
+        exam_date=settings.exam_date,
+        question_ids=json.dumps(question_ids),
+        total_questions=len(question_ids),
+        min_correct_required=settings.min_correct_to_pass,
+        started_at=now,
+        expires_at=now + timedelta(minutes=settings.session_duration_minutes),
+    )
+    db.session.add(attempt)
+    db.session.commit()
+
+    return jsonify({
+        'status': 'started',
+        'attempt_id': attempt.id,
+        'candidate_name': candidate_name,
+        'candidate_photo_url': dossier.to_dict().get('photo_url') or '',
+        'remaining_seconds': settings.session_duration_minutes * 60,
+        'questions': [q.to_dict() for q in chosen],
+    })
+
+
+@api_bp.route('/exam/driving-test/pause', methods=['POST'])
+def driving_test_pause():
+    """Appelé quand le candidat quitte la page du quiz (fermeture/rafraîchissement) —
+    gèle le temps restant jusqu'à ce qu'il revienne et reprenne l'examen."""
+    from app.models import ExamAttempt
+    data = request.get_json(silent=True) or {}
+    attempt = ExamAttempt.query.get(data.get('attempt_id'))
+    if not attempt or attempt.submitted_at or attempt.paused_at:
+        return jsonify({'success': True})
+    if now_comoros() > ensure_comoros(attempt.expires_at):
+        return jsonify({'success': True})
+    attempt.paused_at = now_comoros()
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@api_bp.route('/exam/driving-test/answer', methods=['POST'])
+def driving_test_save_answer():
+    """Enregistre la réponse à une question au fur et à mesure (et non seulement à
+    la fin), pour que le candidat ne perde pas sa progression s'il quitte/revient
+    sur la page avant d'avoir terminé."""
+    from app.models import ExamAttempt
+    data = request.get_json() or {}
+    attempt = ExamAttempt.query.get_or_404(data.get('attempt_id'))
+    question_id = data.get('question_id')
+    option = (data.get('option') or '').strip().lower()
+
+    if attempt.submitted_at:
+        return jsonify({'error': 'Cette tentative est déjà terminée.'}), 400
+    if option not in ('a', 'b', 'c', 'd'):
+        return jsonify({'error': 'Réponse invalide.'}), 400
+    try:
+        question_ids = json.loads(attempt.question_ids)
+    except (TypeError, ValueError):
+        question_ids = []
+    if question_id not in question_ids:
+        return jsonify({'error': 'Question invalide pour cette tentative.'}), 400
+    if now_comoros() > ensure_comoros(attempt.expires_at):
+        _finalize_expired_attempt(attempt)
+        return jsonify({'error': 'Le temps imparti est écoulé.'}), 400
+
+    answers = json.loads(attempt.answers) if attempt.answers else {}
+    answers[str(question_id)] = option
+    attempt.answers = json.dumps(answers)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@api_bp.route('/exam/driving-test/submit', methods=['POST'])
+def driving_test_submit():
+    from app.models import ExamAttempt, ExamQuestion
+    data = request.get_json() or {}
+    attempt = ExamAttempt.query.get_or_404(data.get('attempt_id'))
+    answers = data.get('answers') or {}
+
+    if attempt.submitted_at:
+        return jsonify({
+            'status': 'submitted',
+            'score': attempt.score,
+            'total_questions': attempt.total_questions,
+            'passed': attempt.passed,
+        })
+
+    ids = json.loads(attempt.question_ids)
+    qs = ExamQuestion.query.filter(ExamQuestion.id.in_(ids)).all()
+    correct_map = {q.id: q.correct_option for q in qs}
+
+    score = 0
+    for qid in ids:
+        given = answers.get(str(qid))
+        if given and correct_map.get(qid) == given:
+            score += 1
+
+    now = now_comoros()
+    time_expired = now > ensure_comoros(attempt.expires_at)
+    passed = (not time_expired) and score >= attempt.min_correct_required
+
+    attempt.answers = json.dumps(answers)
+    attempt.score = score
+    attempt.passed = passed
+    attempt.submitted_at = attempt.expires_at if time_expired else now
+    db.session.commit()
+
+    return jsonify({
+        'status': 'submitted',
+        'score': score,
+        'total_questions': attempt.total_questions,
+        'passed': passed,
+        'time_expired': time_expired,
+    })
+
+
+# ─────────────────────────────────────────────
 #  DGRTR — Dossiers de permis
 # ─────────────────────────────────────────────
 
@@ -6757,7 +7615,11 @@ def count_dossiers_pending_signature():
     )
     if not is_dg:
         return jsonify({'pending_count': 0})
-    count = LicenseDossier.query.filter_by(current_step=5, status='en_cours').count()
+    count = LicenseDossier.query.filter(
+        LicenseDossier.step4_validated_at.isnot(None),
+        LicenseDossier.step5_validated_at.is_(None),
+        LicenseDossier.status == 'en_cours',
+    ).count()
     return jsonify({'pending_count': count})
 
 
@@ -6804,10 +7666,21 @@ def create_dossier_permis():
         if not renewal_license:
             return jsonify({'error': 'Permis introuvable.'}), 404
 
+    auto_ecole_id = None
+    if dossier_type == 'nouveau' and data.get('doc_autoecole'):
+        from app.models import AutoEcole
+        auto_ecole_id = data.get('auto_ecole_id')
+        if not auto_ecole_id:
+            return jsonify({'error': "Veuillez sélectionner l'auto-école agréée."}), 400
+        auto_ecole = AutoEcole.query.get(auto_ecole_id)
+        if not auto_ecole or not auto_ecole.is_active:
+            return jsonify({'error': "Auto-école introuvable ou inactive."}), 400
+
     d = LicenseDossier(
         dossier_type=dossier_type,
         renewal_license_id=renewal_license.id if renewal_license else None,
         doc_autoecole=bool(data.get('doc_autoecole')),
+        auto_ecole_id=auto_ecole_id,
         doc_permis=bool(data.get('doc_permis')),
         doc_medical=bool(data.get('doc_medical')),
         doc_residence=bool(data.get('doc_residence')),
@@ -6866,9 +7739,25 @@ def get_dossier_permis(dossier_id):
     return jsonify(d.to_dict())
 
 
+@api_bp.route('/dossiers-permis/<int:dossier_id>/exam-status', methods=['GET'])
+@login_required
+def get_dossier_exam_status(dossier_id):
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    d = LicenseDossier.query.get_or_404(dossier_id)
+    data = d.to_dict()
+    return jsonify({
+        'exam_required': data['exam_required'],
+        'exam_passed': data['exam_passed'],
+        'exam_last_attempt': data['exam_last_attempt'],
+        'nin': d.nin or '',
+    })
+
+
 @api_bp.route('/dossiers-permis/<int:dossier_id>/step2', methods=['POST'])
 @login_required
 def validate_dossier_step2(dossier_id):
+    """Étape 3 — Informations du candidat (civil)."""
     if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
         return jsonify({'error': 'Accès refusé'}), 403
 
@@ -6883,30 +7772,59 @@ def validate_dossier_step2(dossier_id):
         try: return _date.fromisoformat(v)
         except: return None
 
-    d.nom                    = (data.get('nom') or '').strip() or None
-    d.prenom                 = (data.get('prenom') or '').strip() or None
-    d.date_naissance         = parse_date(data.get('date_naissance', ''))
-    d.lieu_naissance         = (data.get('lieu_naissance') or '').strip() or None
-    d.sexe                   = data.get('sexe') or None
-    d.blood_group            = data.get('blood_group') or None
-    d.nationalite            = (data.get('nationalite') or '').strip() or None
-    d.holder_address         = (data.get('holder_address') or '').strip() or None
-    d.telephone              = (data.get('telephone') or '').strip() or None
-    d.country                = (data.get('country') or '').strip() or None
+    d.nom            = (data.get('nom') or '').strip() or None
+    d.prenom         = (data.get('prenom') or '').strip() or None
+    d.date_naissance = parse_date(data.get('date_naissance', ''))
+    d.lieu_naissance = (data.get('lieu_naissance') or '').strip() or None
+    d.sexe           = data.get('sexe') or None
+    d.blood_group    = data.get('blood_group') or None
+    d.nationalite    = (data.get('nationalite') or '').strip() or None
+    d.holder_address = (data.get('holder_address') or '').strip() or None
+    d.telephone      = (data.get('telephone') or '').strip() or None
+    d.country        = (data.get('country') or '').strip() or None
+    d.notes          = (data.get('notes') or '').strip() or None
+
+    d.step2_validated_at = now_comoros()
+    d.step2_validated_by = current_user.username
+
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>/step2b', methods=['POST'])
+@login_required
+def validate_dossier_step2b(dossier_id):
+    """Étape 4 — Détails du permis & Catégories autorisées. Pour un dossier
+    'nouveau', nécessite que le candidat ait réussi l'examen théorique."""
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    d    = LicenseDossier.query.get_or_404(dossier_id)
+    data = request.get_json() or {}
+
+    if not d.step2_validated_at:
+        return jsonify({'error': 'Étape 3 (informations du candidat) non validée'}), 400
+    if d.dossier_type == 'nouveau' and not d.exam_passed:
+        return jsonify({'error': "Le candidat doit d'abord réussir l'examen théorique avant que les détails du permis et les catégories autorisées puissent être saisis."}), 400
+
+    from datetime import date as _date
+    def parse_date(v):
+        try: return _date.fromisoformat(v)
+        except: return None
+
     d.type_permis            = data.get('type_permis') or None
     d.issue_date             = parse_date(data.get('issue_date', ''))
     d.expiry_date            = parse_date(data.get('expiry_date', ''))
     d.centre_immatriculation = (data.get('centre_immatriculation') or '').strip() or None
     d.categories             = (data.get('categories') or '').strip() or None
-    d.notes                  = (data.get('notes') or '').strip() or None
 
     import json as _json
     cat_details = data.get('category_details') or {}
     d.category_details = _json.dumps(cat_details) if cat_details else None
 
-    d.step2_validated_at = now_comoros()
-    d.step2_validated_by = current_user.username
-    d.current_step       = 4
+    d.step2b_validated_at = now_comoros()
+    d.step2b_validated_by = current_user.username
+    d.current_step        = 4
 
     db.session.commit()
     return jsonify(d.to_dict())
@@ -6957,8 +7875,8 @@ def validate_dossier_step4(dossier_id):
         return jsonify({'error': 'Accès refusé'}), 403
     d    = LicenseDossier.query.get_or_404(dossier_id)
     data = request.get_json() or {}
-    if not d.step2_validated_at:
-        return jsonify({'error': 'Étape 3 (informations) non validée'}), 400
+    if not d.step2b_done:
+        return jsonify({'error': 'Étape 4 (détails du permis) non validée'}), 400
 
     license_num = (data.get('license_number') or '').strip()
     if not license_num:
@@ -7185,6 +8103,19 @@ def update_dossier_permis(dossier_id):
                   'doc_fiche_individuelle', 'doc_carte_nationale', 'doc_recu_paiement'):
         if field in data:
             setattr(d, field, bool(data[field]))
+
+    if d.dossier_type == 'nouveau' and d.doc_autoecole:
+        from app.models import AutoEcole
+        auto_ecole_id = data.get('auto_ecole_id', d.auto_ecole_id)
+        if not auto_ecole_id:
+            return jsonify({'error': "Veuillez sélectionner l'auto-école agréée."}), 400
+        auto_ecole = AutoEcole.query.get(auto_ecole_id)
+        if not auto_ecole or not auto_ecole.is_active:
+            return jsonify({'error': "Auto-école introuvable ou inactive."}), 400
+        d.auto_ecole_id = auto_ecole_id
+    elif not d.doc_autoecole:
+        d.auto_ecole_id = None
+
     if 'country' in data:
         d.country = (data.get('country') or '').strip() or None
     if 'telephone' in data:

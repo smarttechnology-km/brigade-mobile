@@ -896,11 +896,73 @@ def create_app():
                             'dossier_type':         "ALTER TABLE license_dossiers ADD COLUMN dossier_type VARCHAR(20) NOT NULL DEFAULT 'nouveau'",
                             'doc_permis':           "ALTER TABLE license_dossiers ADD COLUMN doc_permis BOOLEAN NOT NULL DEFAULT 0",
                             'renewal_license_id':   "ALTER TABLE license_dossiers ADD COLUMN renewal_license_id INTEGER REFERENCES driver_licenses(id)",
+                            'auto_ecole_id':        "ALTER TABLE license_dossiers ADD COLUMN auto_ecole_id INTEGER REFERENCES auto_ecoles(id)",
+                            'step2b_validated_at':  "ALTER TABLE license_dossiers ADD COLUMN step2b_validated_at DATETIME",
+                            'step2b_validated_by':  "ALTER TABLE license_dossiers ADD COLUMN step2b_validated_by VARCHAR(100)",
                         }
                         for col, sql in ld_col_defs.items():
                             if col not in ld_cols:
                                 conn.execute(text(sql))
                                 logger.info(f"Added license_dossiers.{col} column")
+
+                        # auto_ecoles patches
+                        ae_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='auto_ecoles'")
+                        ).first() is not None
+                        if ae_table_exists:
+                            ae_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(auto_ecoles)")).fetchall()}
+                            ae_col_defs = {
+                                'agrement_number':   "ALTER TABLE auto_ecoles ADD COLUMN agrement_number VARCHAR(30)",
+                                'agrement_date':     "ALTER TABLE auto_ecoles ADD COLUMN agrement_date DATE",
+                                'manager_name':      "ALTER TABLE auto_ecoles ADD COLUMN manager_name VARCHAR(150)",
+                                'email':             "ALTER TABLE auto_ecoles ADD COLUMN email VARCHAR(150)",
+                                'instructors_count': "ALTER TABLE auto_ecoles ADD COLUMN instructors_count INTEGER",
+                            }
+                            for col, sql in ae_col_defs.items():
+                                if col not in ae_cols:
+                                    conn.execute(text(sql))
+                                    logger.info(f"Added auto_ecoles.{col} column")
+
+                        # exam_settings patches
+                        es_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='exam_settings'")
+                        ).first() is not None
+                        if es_table_exists:
+                            es_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(exam_settings)")).fetchall()}
+                            es_col_defs = {
+                                'link_token': "ALTER TABLE exam_settings ADD COLUMN link_token VARCHAR(32)",
+                            }
+                            for col, sql in es_col_defs.items():
+                                if col not in es_cols:
+                                    conn.execute(text(sql))
+                                    logger.info(f"Added exam_settings.{col} column")
+
+                        # exam_questions patches
+                        eq_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='exam_questions'")
+                        ).first() is not None
+                        if eq_table_exists:
+                            eq_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(exam_questions)")).fetchall()}
+                            eq_col_defs = {
+                                'option_a_image': "ALTER TABLE exam_questions ADD COLUMN option_a_image VARCHAR(255)",
+                                'option_b_image': "ALTER TABLE exam_questions ADD COLUMN option_b_image VARCHAR(255)",
+                                'option_c_image': "ALTER TABLE exam_questions ADD COLUMN option_c_image VARCHAR(255)",
+                                'option_d_image': "ALTER TABLE exam_questions ADD COLUMN option_d_image VARCHAR(255)",
+                            }
+                            for col, sql in eq_col_defs.items():
+                                if col not in eq_cols:
+                                    conn.execute(text(sql))
+                                    logger.info(f"Added exam_questions.{col} column")
+
+                        # exam_attempts patches
+                        ea_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='exam_attempts'")
+                        ).first() is not None
+                        if ea_table_exists:
+                            ea_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(exam_attempts)")).fetchall()}
+                            if 'paused_at' not in ea_cols:
+                                conn.execute(text("ALTER TABLE exam_attempts ADD COLUMN paused_at DATETIME"))
+                                logger.info("Added exam_attempts.paused_at column")
 
                         # carte_grise_setting patches
                         cgs_cols_res = conn.execute(text("PRAGMA table_info(carte_grise_setting)"))
@@ -1184,6 +1246,24 @@ def create_app():
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS dossier_type VARCHAR(20) NOT NULL DEFAULT 'nouveau'",
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS doc_permis BOOLEAN NOT NULL DEFAULT FALSE",
                         "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS renewal_license_id INTEGER",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS auto_ecole_id INTEGER",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step2b_validated_at TIMESTAMP",
+                        "ALTER TABLE license_dossiers ADD COLUMN IF NOT EXISTS step2b_validated_by VARCHAR(100)",
+                        # auto_ecoles
+                        "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS agrement_number VARCHAR(30)",
+                        "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS agrement_date DATE",
+                        "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS manager_name VARCHAR(150)",
+                        "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS email VARCHAR(150)",
+                        "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS instructors_count INTEGER",
+                        # exam_settings
+                        "ALTER TABLE exam_settings ADD COLUMN IF NOT EXISTS link_token VARCHAR(32)",
+                        # exam_questions
+                        "ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS option_a_image VARCHAR(255)",
+                        "ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS option_b_image VARCHAR(255)",
+                        "ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS option_c_image VARCHAR(255)",
+                        "ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS option_d_image VARCHAR(255)",
+                        # exam_attempts
+                        "ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS paused_at TIMESTAMP",
                         # carte_grise_setting
                         "ALTER TABLE carte_grise_setting ADD COLUMN IF NOT EXISTS signature_filename VARCHAR(255)",
                         "ALTER TABLE carte_grise_setting ADD COLUMN IF NOT EXISTS island VARCHAR(50) NOT NULL DEFAULT 'Grande Comore'",
