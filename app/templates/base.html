@@ -176,6 +176,7 @@
             <a class="nav-link text-white {% if request.path == '/dgrtr/photo-permis' %}active{% endif %}" href="/dgrtr/photo-permis"><i class="fas fa-camera me-2"></i> Photo permis</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/rechercher-permis' %}active{% endif %}" href="/dgrtr/rechercher-permis"><i class="fas fa-search me-2"></i> Modifier un permis</a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/demandes-modification-permis') %}active{% endif %}" href="/dgrtr/demandes-modification-permis"><i class="fas fa-edit me-2"></i> Mes demandes <span id="ler-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr/examen' %}active{% endif %}" href="/dgrtr/examen"><i class="fas fa-file-circle-question me-2"></i> Examen</a>
             {% elif current_user.dgrtr_type in ('directeur_technique', 'directeur_general') %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis <span id="dossier-sig-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             {% if current_user.dgrtr_type == 'directeur_technique' %}
