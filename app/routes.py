@@ -1628,8 +1628,8 @@ def driving_test_page():
 @main_bp.route('/dgrtr/examen')
 @roles_required('administrateur', 'dgrtr')
 def dgrtr_examen():
-    """Banque de questions de l'examen théorique — accessible au DG et au DT uniquement."""
-    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_general', 'directeur_technique'):
+    """Banque de questions de l'examen théorique — accessible au DG, au DT et aux employés DGRTR."""
+    if current_user.role == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) not in ('directeur_general', 'directeur_technique', 'employe'):
         abort(403)
     return render_template('dgrtr_examen.html')
 

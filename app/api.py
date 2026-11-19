@@ -6481,7 +6481,7 @@ def delete_auto_ecole_vehicule(auto_ecole_id, vehicule_id):
 def _can_manage_exam():
     return current_user.role == 'administrateur' or (
         getattr(current_user, 'role', '') == 'dgrtr'
-        and getattr(current_user, 'dgrtr_type', None) in ('directeur_general', 'directeur_technique')
+        and getattr(current_user, 'dgrtr_type', None) in ('directeur_general', 'directeur_technique', 'employe')
     )
 
 
