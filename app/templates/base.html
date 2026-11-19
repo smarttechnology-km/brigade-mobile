@@ -242,6 +242,8 @@
             {% if current_user.is_authenticated and current_user.is_admin %}
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/recettes') %}active{% endif %}" href="/dgrtr/recettes"><i class="fas fa-coins me-2"></i> Recettes</a>
             <a class="nav-link text-white {% if request.path.startswith('/vignette-finance') %}active{% endif %}" href="/vignette-finance"><i class="fas fa-chart-bar me-2"></i> Finance Vignettes</a>
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/auto-ecoles') %}active{% endif %}" href="/dgrtr/auto-ecoles"><i class="fas fa-graduation-cap me-2"></i> Auto-écoles</a>
+            <a class="nav-link text-white {% if request.path.startswith('/dgrtr/examen') %}active{% endif %}" href="/dgrtr/examen"><i class="fas fa-file-circle-question me-2"></i> Examen</a>
             <a class="nav-link text-white {% if request.path.startswith('/users') %}active{% endif %}" href="/users"><i class="fas fa-users me-2"></i> Utilisateurs</a>
             <a class="nav-link text-white {% if request.path.startswith('/payment-settings') %}active{% endif %}" href="/payment-settings"><i class="fas fa-mobile-screen-button me-2"></i> Numéros Paiements</a>
             {% endif %}
