@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.ae-section-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px 24px; margin-bottom:20px; }
+.ae-section-head { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+.ae-section-icon {
+  width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+  font-size:15px; flex-shrink:0;
+}
+.ae-section-icon.ae-icon-blue   { background:#e0ecff; color:#1a56db; }
+.ae-section-icon.ae-icon-purple { background:#ede9fe; color:#6d28d9; }
+.ae-section-icon.ae-icon-amber  { background:#fef3c7; color:#b45309; }
+.ae-section-title { font-weight:700; font-size:15px; color:#1a1a2e; margin:0; }
+.ae-section-sub { font-size:12.5px; color:#8a8f98; margin:0; }
+.ae-field label { font-size:12.5px; color:#6b7280; font-weight:600; margin-bottom:4px; display:block; }
+.ae-vehicule-zone { border:2px dashed #d8dee8; border-radius:10px; padding:16px; background:#f9fafc; }
+.ae-vehicule-chip {
+  display:inline-flex; align-items:center; gap:8px; background:#fff; border:1px solid #e5e7eb;
+  border-radius:20px; padding:6px 10px 6px 14px; font-size:13.5px; font-weight:600; color:#1a1a2e;
+}
+.ae-vehicule-chip .ae-chip-close {
+  width:18px; height:18px; border-radius:50%; border:none; background:#f1f3f6; color:#8a8f98;
+  font-size:10px; line-height:1; cursor:pointer;
+}
+.ae-vehicule-chip .ae-chip-close:hover { background:#fee2e2; color:#b91c1c; }
+
+.ae-step-dot {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:30px; height:30px; border-radius:50%; font-size:12px; font-weight:700; flex-shrink:0; border:2px solid;
+}
+.ae-step-dot.done   { background:#16a34a; border-color:#16a34a; color:#fff; }
+.ae-step-dot.active { background:#2563eb; border-color:#2563eb; color:#fff; }
+.ae-step-dot.todo   { background:#fff; border-color:#d1d5db; color:#9ca3af; }
+.ae-step-label { font-size:13px; font-weight:600; color:#9ca3af; margin:0 10px; }
+.ae-step-label.active { color:#1a1a2e; }
+.ae-step-connector { width:50px; height:2px; flex-shrink:0; }
+.ae-step-connector.done { background:#16a34a; }
+.ae-step-connector.todo { background:#e5e7eb; }
+.ae-stepper { display:flex; align-items:center; justify-content:center; margin-bottom:28px; flex-wrap:wrap; }
+</style>
+
+<div class="container-fluid py-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-graduation-cap me-2"></i>{{ 'Modifier l\'auto-école' if auto_ecole else 'Nouvelle auto-école' }}</h2>
+      {% if auto_ecole %}
+      <small class="text-muted">{{ auto_ecole.name }}</small>
+      {% if auto_ecole.agrement_number %}
+      <span class="badge bg-light text-dark border ms-2 font-monospace">N° {{ auto_ecole.agrement_number }}</span>
+      {% endif %}
+      {% endif %}
+    </div>
+    <a href="/dgrtr/auto-ecoles" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-2"></i>Retour à la liste
+    </a>
+  </div>
+
+  <input type="hidden" id="ae-id" value="{{ auto_ecole.id if auto_ecole else '' }}">
+
+  {% if not auto_ecole %}
+  <div class="ae-stepper" id="ae-stepper">
+    <span class="ae-step-dot active" data-step-dot="1">1</span>
+    <span class="ae-step-label active" data-step-label="1">Identité</span>
+    <span class="ae-step-connector todo" data-step-connector="1"></span>
+    <span class="ae-step-dot todo" data-step-dot="2">2</span>
+    <span class="ae-step-label" data-step-label="2">Contact</span>
+    <span class="ae-step-connector todo" data-step-connector="2"></span>
+    <span class="ae-step-dot todo" data-step-dot="3">3</span>
+    <span class="ae-step-label" data-step-label="3">Véhicules</span>
+  </div>
+  {% endif %}
+
+  <div class="ae-section-card" id="ae-step-1">
+    <div class="ae-section-head">
+      <span class="ae-section-icon ae-icon-blue"><i class="fas fa-id-card"></i></span>
+      <div>
+        <p class="ae-section-title">Identité</p>
+        <p class="ae-section-sub">Nom et reconnaissance officielle de l'auto-école</p>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-4 ae-field">
+        <label>Nom de l'auto-école</label>
+        <input type="text" id="ae-name" class="form-control" placeholder="Ex: Auto-École Moroni" value="{{ auto_ecole.name if auto_ecole else '' }}">
+      </div>
+      <div class="col-md-4 ae-field">
+        <label>Numéro d'agrément</label>
+        <input type="text" id="ae-agrement-number" class="form-control" placeholder="Ex: AE-2026-0001" value="{{ auto_ecole.agrement_number if auto_ecole else '' }}">
+      </div>
+      <div class="col-md-4 ae-field">
+        <label>Île</label>
+        <select id="ae-island" class="form-select" {% if current_user.dgrtr_type == 'directeur_regional' %}disabled{% endif %}>
+          <option value="">-- Sélectionner --</option>
+          <option value="Grande Comore">Grande Comore</option>
+          <option value="Anjouan">Anjouan</option>
+          <option value="Moheli">Mohéli</option>
+        </select>
+        {% if current_user.dgrtr_type == 'directeur_regional' %}
+        <div class="form-text">Fixée à votre île ({{ current_user.country }}).</div>
+        {% endif %}
+      </div>
+      <div class="col-md-4 ae-field">
+        <label>Date d'agrément</label>
+        <input type="date" id="ae-agrement-date" class="form-control" value="{{ auto_ecole.agrement_date.isoformat() if auto_ecole and auto_ecole.agrement_date else '' }}">
+      </div>
+      <div class="col-md-4 ae-field">
+        <label>Nombre de moniteurs</label>
+        <input type="number" min="0" id="ae-instructors" class="form-control" value="{{ auto_ecole.instructors_count if auto_ecole and auto_ecole.instructors_count is not none else '' }}">
+      </div>
+    </div>
+    {% if not auto_ecole %}
+    <div class="d-flex align-items-center gap-2 mt-4">
+      <button type="button" class="btn btn-primary" onclick="aeGoToStep(2)">Suivant<i class="fas fa-arrow-right ms-2"></i></button>
+      <span id="ae-step1-error" class="text-danger small"></span>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="ae-section-card" id="ae-step-2">
+    <div class="ae-section-head">
+      <span class="ae-section-icon ae-icon-purple"><i class="fas fa-address-book"></i></span>
+      <div>
+        <p class="ae-section-title">Contact</p>
+        <p class="ae-section-sub">Responsable et coordonnées de l'établissement</p>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-4 ae-field">
+        <label>Responsable / Gérant</label>
+        <input type="text" id="ae-manager" class="form-control" value="{{ auto_ecole.manager_name if auto_ecole else '' }}">
+      </div>
+      <div class="col-md-4 ae-field">
+        <label>Téléphone</label>
+        <input type="text" id="ae-phone" class="form-control" value="{{ auto_ecole.phone if auto_ecole else '' }}">
+      </div>
+      <div class="col-md-4 ae-field">
+        <label>Email</label>
+        <input type="email" id="ae-email" class="form-control" value="{{ auto_ecole.email if auto_ecole else '' }}">
+      </div>
+      <div class="col-md-4 ae-field">
+        <label>Adresse</label>
+        <input type="text" id="ae-address" class="form-control" value="{{ auto_ecole.address if auto_ecole else '' }}">
+      </div>
+    </div>
+    {% if not auto_ecole %}
+    <div class="d-flex align-items-center gap-2 mt-4">
+      <button type="button" class="btn btn-outline-secondary" onclick="aeGoToStep(1)"><i class="fas fa-arrow-left me-2"></i>Précédent</button>
+      <button type="button" class="btn btn-primary" onclick="aeGoToStep(3)">Suivant<i class="fas fa-arrow-right ms-2"></i></button>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="ae-section-card mb-0" id="ae-step-3">
+    <div class="ae-section-head">
+      <span class="ae-section-icon ae-icon-amber"><i class="fas fa-car"></i></span>
+      <div>
+        <p class="ae-section-title">Véhicules <span class="text-danger">*</span></p>
+        <p class="ae-section-sub">Immatriculations des véhicules utilisés pour la formation — doivent déjà exister dans le système, au moins un requis</p>
+      </div>
+    </div>
+
+    <div class="ae-vehicule-zone">
+      <div class="d-flex gap-2 mb-3">
+        <input type="text" id="ae-vehicule-plate" class="form-control text-uppercase" placeholder="Ex: GC-1234" style="max-width:260px;" onkeydown="if(event.key==='Enter'){event.preventDefault();aeAddVehicule();}">
+        <button type="button" class="btn btn-outline-primary" onclick="aeAddVehicule()"><i class="fas fa-plus me-2"></i>Ajouter</button>
+      </div>
+      <span id="ae-vehicule-error" class="text-danger small d-block mb-2"></span>
+
+      <div id="ae-vehicules-list" class="d-flex flex-wrap gap-2"></div>
+    </div>
+    {% if not auto_ecole %}
+    <div class="form-text mt-2">Les véhicules ajoutés ici seront enregistrés en même temps que l'auto-école, lors de la création.</div>
+    <div class="d-flex align-items-center gap-2 mt-4">
+      <button type="button" class="btn btn-outline-secondary" onclick="aeGoToStep(2)"><i class="fas fa-arrow-left me-2"></i>Précédent</button>
+      <button type="button" class="btn btn-primary" onclick="aeSaveInfo()">
+        <i class="fas fa-save me-2"></i>Créer l'auto-école
+      </button>
+      <span id="ae-form-error" class="text-danger small"></span>
+    </div>
+    {% else %}
+    <div class="d-flex align-items-center gap-2 mt-4">
+      <button type="button" class="btn btn-primary" onclick="aeSaveInfo()">
+        <i class="fas fa-save me-2"></i>Enregistrer les modifications
+      </button>
+      <span id="ae-form-error" class="text-danger small"></span>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+var AE_ID = {{ (auto_ecole.id if auto_ecole else None) | tojson }};
+var AE_IS_EDIT = {{ (auto_ecole is not none) | tojson }};
+var AE_ISLAND_VALUE = {{ (auto_ecole.island if auto_ecole else (current_user.country or '')) | tojson }};
+
+document.getElementById('ae-island').value = AE_ISLAND_VALUE;
+
+var aePendingVehicules = {{ (auto_ecole_data.vehicules if auto_ecole_data else []) | tojson }};
+
+// ── Étapes (mode création uniquement) ──
+var AE_CURRENT_STEP = 1;
+
+function aeUpdateStepper() {
+  for (var i = 1; i <= 3; i++) {
+    var dot = document.querySelector('[data-step-dot="' + i + '"]');
+    var label = document.querySelector('[data-step-label="' + i + '"]');
+    var cls = i < AE_CURRENT_STEP ? 'done' : (i === AE_CURRENT_STEP ? 'active' : 'todo');
+    dot.className = 'ae-step-dot ' + cls;
+    label.className = 'ae-step-label' + (cls === 'todo' ? '' : ' active');
+  }
+  for (var j = 1; j <= 2; j++) {
+    var conn = document.querySelector('[data-step-connector="' + j + '"]');
+    conn.className = 'ae-step-connector ' + (j < AE_CURRENT_STEP ? 'done' : 'todo');
+  }
+  document.getElementById('ae-step-1').classList.toggle('d-none', AE_CURRENT_STEP !== 1);
+  document.getElementById('ae-step-2').classList.toggle('d-none', AE_CURRENT_STEP !== 2);
+  document.getElementById('ae-step-3').classList.toggle('d-none', AE_CURRENT_STEP !== 3);
+}
+
+function aeGoToStep(n) {
+  if (n === 2 && AE_CURRENT_STEP === 1) {
+    var step1Err = document.getElementById('ae-step1-error');
+    step1Err.textContent = '';
+    if (!document.getElementById('ae-name').value.trim()) {
+      step1Err.textContent = "Le nom de l'auto-école est requis.";
+      return;
+    }
+  }
+  AE_CURRENT_STEP = n;
+  aeUpdateStepper();
+}
+
+if (!AE_IS_EDIT) aeUpdateStepper();
+
+function aeEsc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function aeRenderVehicules() {
+  var el = document.getElementById('ae-vehicules-list');
+  if (!aePendingVehicules.length) {
+    el.innerHTML = '<span class="text-muted small">Aucun véhicule enregistré.</span>';
+    return;
+  }
+  el.innerHTML = aePendingVehicules.map(function (v, idx) {
+    var removeCall = AE_IS_EDIT ? "aeRemoveVehicule(" + v.id + ")" : "aeRemovePendingVehicule(" + idx + ")";
+    return '<span class="ae-vehicule-chip"><i class="fas fa-car text-muted"></i>' + aeEsc(v.license_plate) +
+      '<button type="button" class="ae-chip-close" onclick="' + removeCall + '">&times;</button>' +
+      '</span>';
+  }).join('');
+}
+aeRenderVehicules();
+
+function aeAddVehicule() {
+  var input = document.getElementById('ae-vehicule-plate');
+  var plate = input.value.trim().toUpperCase();
+  var errEl = document.getElementById('ae-vehicule-error');
+  errEl.textContent = '';
+  if (!plate) { errEl.textContent = "L'immatriculation est requise."; return; }
+
+  if (AE_IS_EDIT) {
+    fetch('/api/auto-ecoles/' + AE_ID + '/vehicules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ license_plate: plate }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) { errEl.textContent = res.data.error || 'Erreur'; return; }
+        aePendingVehicules = res.data.vehicules;
+        aeRenderVehicules();
+        input.value = '';
+      })
+      .catch(function () { errEl.textContent = 'Erreur réseau.'; });
+  } else {
+    if (aePendingVehicules.some(function (v) { return v.license_plate === plate; })) {
+      errEl.textContent = 'Ce véhicule est déjà dans la liste.';
+      return;
+    }
+    fetch('/api/auto-ecoles/check-vehicle?plate=' + encodeURIComponent(plate), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.exists) {
+          errEl.textContent = "Aucun véhicule avec l'immatriculation '" + plate + "' n'existe dans le système.";
+          return;
+        }
+        aePendingVehicules.push({ license_plate: res.license_plate });
+        aeRenderVehicules();
+        input.value = '';
+      })
+      .catch(function () { errEl.textContent = 'Erreur réseau.'; });
+  }
+}
+
+function aeRemovePendingVehicule(idx) {
+  aePendingVehicules.splice(idx, 1);
+  aeRenderVehicules();
+}
+
+function aeRemoveVehicule(vehiculeId) {
+  if (!confirm('Retirer ce véhicule de la liste ?')) return;
+  fetch('/api/auto-ecoles/' + AE_ID + '/vehicules/' + vehiculeId, { method: 'DELETE', credentials: 'same-origin' })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (!res.ok) { alert(res.data.error || 'Erreur'); return; }
+      aePendingVehicules = res.data.vehicules;
+      aeRenderVehicules();
+    })
+    .catch(function () { alert('Erreur réseau.'); });
+}
+
+function aeSaveInfo() {
+  var errEl = document.getElementById('ae-form-error');
+  errEl.textContent = '';
+  var payload = {
+    name: document.getElementById('ae-name').value.trim(),
+    agrement_number: document.getElementById('ae-agrement-number').value.trim(),
+    island: document.getElementById('ae-island').value,
+    address: document.getElementById('ae-address').value.trim(),
+    phone: document.getElementById('ae-phone').value.trim(),
+    manager_name: document.getElementById('ae-manager').value.trim(),
+    email: document.getElementById('ae-email').value.trim(),
+    agrement_date: document.getElementById('ae-agrement-date').value,
+    instructors_count: document.getElementById('ae-instructors').value,
+  };
+  if (!payload.name) { errEl.textContent = "Le nom de l'auto-école est requis."; return; }
+  if (!payload.agrement_number) { errEl.textContent = "Le numéro d'agrément est requis."; return; }
+
+  if (!AE_IS_EDIT) {
+    if (!aePendingVehicules.length) {
+      errEl.textContent = 'Au moins un véhicule est requis.';
+      return;
+    }
+    payload.vehicules = aePendingVehicules.map(function (v) { return v.license_plate; });
+  }
+
+  var url = AE_IS_EDIT ? '/api/auto-ecoles/' + AE_ID : '/api/auto-ecoles';
+  var method = AE_IS_EDIT ? 'PUT' : 'POST';
+  fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(payload),
+  })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (!res.ok) { errEl.textContent = res.data.error || 'Erreur'; return; }
+      window.location.href = '/dgrtr/auto-ecoles';
+    })
+    .catch(function () { errEl.textContent = 'Erreur réseau.'; });
+}
+</script>
+{% endblock %}

@@ -169,6 +169,7 @@
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/recettes') %}active{% endif %}" href="/dgrtr/recettes"><i class="fas fa-coins me-2"></i> Recettes</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/demandes-modification' %}active{% endif %}" href="/dgrtr/demandes-modification"><i class="fas fa-edit me-2"></i> Demandes  <span id="ver-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/imprimer-permis-temporaire' %}active{% endif %}" href="/dgrtr/imprimer-permis-temporaire"><i class="fas fa-id-card me-2"></i> Permis Temporaire</a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr/auto-ecoles' %}active{% endif %}" href="/dgrtr/auto-ecoles"><i class="fas fa-graduation-cap me-2"></i> Auto-écoles</a>
             {% elif current_user.dgrtr_type == 'employe' %}
             <a class="nav-link text-white {% if request.path == '/dgrtr-dashboard' %}active{% endif %}" href="/dgrtr-dashboard"><i class="fas fa-folder-open me-2"></i> Dossiers Permis</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/ajouter-permis' %}active{% endif %}" href="/dgrtr/ajouter-permis"><i class="fas fa-plus-circle me-2"></i> Ajouter un permis</a>
@@ -182,6 +183,8 @@
             {% endif %}
             <a class="nav-link text-white {% if request.path == '/dgrtr/licence-professionnelle' %}active{% endif %}" href="/dgrtr/licence-professionnelle"><i class="fas fa-id-badge me-2"></i> Licence Pro <span id="lp-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             <a class="nav-link text-white {% if request.path == '/dgrtr-licence-pro-complet' %}active{% endif %}" href="/dgrtr-licence-pro-complet"><i class="fas fa-check-double me-2"></i> Licence Pro Complet</a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr/auto-ecoles' %}active{% endif %}" href="/dgrtr/auto-ecoles"><i class="fas fa-graduation-cap me-2"></i> Auto-écoles</a>
+            <a class="nav-link text-white {% if request.path == '/dgrtr/examen' %}active{% endif %}" href="/dgrtr/examen"><i class="fas fa-file-circle-question me-2"></i> Examen</a>
             <a class="nav-link text-white {% if request.path == '/licenses' %}active{% endif %}" href="/licenses"><i class="fas fa-id-card me-2"></i> Permis</a>
             <a class="nav-link text-white {% if request.path == '/dgrtr/validation-permis-existant' %}active{% endif %}" href="/dgrtr/validation-permis-existant"><i class="fas fa-user-check me-2"></i> Permis à valider <span id="license-add-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>
             <a class="nav-link text-white {% if request.path.startswith('/dgrtr/demandes-modification-permis') %}active{% endif %}" href="/dgrtr/demandes-modification-permis"><i class="fas fa-edit me-2"></i> Demandes permis <span id="ler-count-badge" class="badge bg-danger ms-1" style="display:none;">0</span></a>

@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.stat-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 16px 20px;
+}
+.stat-card .stat-num { font-size: 28px; font-weight: 800; color: #0f172a; }
+.stat-card .stat-lbl { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: .06em; }
+</style>
+
+<div class="container-fluid py-4 px-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-0"><i class="fas fa-graduation-cap me-2"></i>{{ auto_ecole.name }}</h2>
+      <small class="text-muted">
+        {% if auto_ecole.agrement_number %}N° {{ auto_ecole.agrement_number }} · {% endif %}
+        {{ auto_ecole.island or 'Île non renseignée' }}
+        {% if auto_ecole.is_active %} · <span class="text-success">Active</span>{% else %} · <span class="text-secondary">Inactive</span>{% endif %}
+      </small>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/dgrtr/auto-ecoles/{{ auto_ecole.id }}/modifier" class="btn btn-primary">
+        <i class="fas fa-edit me-2"></i>Modifier
+      </a>
+      {% if current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general' %}
+      <button type="button" class="btn btn-outline-danger" onclick="aedDelete()">
+        <i class="fas fa-trash me-2"></i>Supprimer
+      </button>
+      {% endif %}
+      <a href="/dgrtr/auto-ecoles" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>Retour à la liste
+      </a>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="stat-num" id="aed-stat-vehicules">—</div>
+        <div class="stat-lbl">Véhicules</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="stat-num text-primary" id="aed-stat-candidats">—</div>
+        <div class="stat-lbl">Candidats</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="stat-num" id="aed-stat-exam-attempted">—</div>
+        <div class="stat-lbl">Ont passé l'examen</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="stat-num text-success" id="aed-stat-exam-passed">—</div>
+        <div class="stat-lbl">Réussi l'examen</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="stat-num text-info" id="aed-stat-exam-taux">—</div>
+        <div class="stat-lbl">Taux de réussite (examen)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="stat-num text-success" id="aed-stat-permis">—</div>
+        <div class="stat-lbl">Permis obtenus</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Candidats -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body pb-0">
+      <h6 class="text-muted mb-3"><i class="fas fa-users me-2"></i>Candidats</h6>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>N° dossier</th>
+            <th>Candidat</th>
+            <th>Examen</th>
+            <th>Statut dossier</th>
+            <th>N° permis</th>
+            <th>Date dossier</th>
+            <th>Permis obtenu le</th>
+          </tr>
+        </thead>
+        <tbody id="aed-dossiers-tbody">
+          <tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Identité & Contact -->
+    <div class="col-lg-8">
+      <div class="card border-0 shadow-sm mb-3 h-100">
+        <div class="card-body">
+          <h6 class="text-muted mb-4"><i class="fas fa-id-card me-2"></i>Identité</h6>
+          <div class="row mb-4">
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Numéro d'agrément</small></label>
+              <p class="h6 mb-0 font-monospace">{{ auto_ecole.agrement_number or '—' }}</p>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Date d'agrément</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.agrement_date.strftime('%d/%m/%Y') if auto_ecole.agrement_date else '—' }}</p>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Île</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.island or '—' }}</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Nombre de moniteurs</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.instructors_count if auto_ecole.instructors_count is not none else '—' }}</p>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Enregistrée le</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.created_at.strftime('%d/%m/%Y') if auto_ecole.created_at else '—' }}</p>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Enregistrée par</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.created_by or '—' }}</p>
+            </div>
+          </div>
+
+          <hr class="my-4"/>
+
+          <h6 class="text-muted mb-4"><i class="fas fa-address-book me-2"></i>Contact</h6>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Responsable / Gérant</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.manager_name or '—' }}</p>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Téléphone</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.phone or '—' }}</p>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Email</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.email or '—' }}</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-12 mb-3">
+              <label class="form-label text-muted fw-semibold"><small>Adresse</small></label>
+              <p class="h6 mb-0">{{ auto_ecole.address or '—' }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Véhicules -->
+    <div class="col-lg-4">
+      <div class="card border-0 shadow-sm mb-3 h-100">
+        <div class="card-body">
+          <h6 class="text-muted mb-3"><i class="fas fa-car me-2"></i>Véhicules</h6>
+          <div id="aed-vehicules-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var AE_ID = {{ auto_ecole.id }};
+var AE_DATA = {{ auto_ecole_data | tojson }};
+
+function aeEsc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function aedDelete() {
+  if (!confirm('Supprimer définitivement "' + AE_DATA.name + '" ? Cette action est irréversible.')) return;
+  fetch('/api/auto-ecoles/' + AE_ID, { method: 'DELETE', credentials: 'same-origin' })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (!res.ok) { alert(res.data.error || 'Erreur'); return; }
+      window.location.href = '/dgrtr/auto-ecoles';
+    })
+    .catch(function () { alert('Erreur réseau.'); });
+}
+
+function aedRenderVehicules() {
+  var el = document.getElementById('aed-vehicules-list');
+  var vehicules = AE_DATA.vehicules || [];
+  if (!vehicules.length) {
+    el.innerHTML = '<span class="text-muted small">Aucun véhicule enregistré.</span>';
+    return;
+  }
+  el.innerHTML = vehicules.map(function (v) {
+    return '<span class="badge bg-light text-dark border font-monospace me-2 mb-2 py-2 px-3"><i class="fas fa-car text-muted me-1"></i>' + aeEsc(v.license_plate) + '</span>';
+  }).join('');
+}
+
+function aedStatusBadge(status) {
+  if (status === 'complet') return '<span class="badge bg-success">Permis obtenu</span>';
+  if (status === 'rejete') return '<span class="badge bg-danger">Rejeté</span>';
+  return '<span class="badge bg-info text-dark">En cours</span>';
+}
+
+function aedExamBadge(d) {
+  if (d.exam_passed) {
+    var a = d.exam_last_attempt;
+    return '<span class="badge bg-success">Réussi</span>' + (a ? ' <span class="small text-muted">' + a.score + '/' + a.total_questions + '</span>' : '');
+  }
+  if (d.exam_last_attempt) {
+    var a2 = d.exam_last_attempt;
+    return '<span class="badge bg-danger">Échoué</span> <span class="small text-muted">' + a2.score + '/' + a2.total_questions + '</span>';
+  }
+  return '<span class="badge bg-secondary">Non passé</span>';
+}
+
+function aedLoadDossiers() {
+  fetch('/api/auto-ecoles/' + AE_ID + '/dossiers', { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (items) {
+      items = Array.isArray(items) ? items : [];
+      document.getElementById('aed-stat-candidats').textContent = items.length;
+
+      var obtenus = items.filter(function (d) { return d.status === 'complet'; }).length;
+      document.getElementById('aed-stat-permis').textContent = obtenus;
+
+      var attempted = items.filter(function (d) { return d.exam_last_attempt; });
+      var passed = items.filter(function (d) { return d.exam_passed; });
+      document.getElementById('aed-stat-exam-attempted').textContent = attempted.length;
+      document.getElementById('aed-stat-exam-passed').textContent = passed.length;
+      document.getElementById('aed-stat-exam-taux').textContent = attempted.length
+        ? Math.round(passed.length / attempted.length * 100) + '%' : '—';
+
+      var tbody = document.getElementById('aed-dossiers-tbody');
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Aucun candidat rattaché à cette auto-école.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items.map(function (d) {
+        return '<tr>' +
+          '<td class="font-monospace small">' + (aeEsc(d.dossier_number) || '—') + '</td>' +
+          '<td class="fw-semibold">' + aeEsc((d.prenom + ' ' + d.nom).trim() || '—') + '</td>' +
+          '<td>' + aedExamBadge(d) + '</td>' +
+          '<td>' + aedStatusBadge(d.status) + '</td>' +
+          '<td class="font-monospace small">' + (aeEsc(d.license_number) || '—') + '</td>' +
+          '<td>' + (aeEsc(d.created_at) || '—') + '</td>' +
+          '<td>' + (aeEsc(d.completed_at) || '—') + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .catch(function () {
+      document.getElementById('aed-dossiers-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
+    });
+}
+
+document.getElementById('aed-stat-vehicules').textContent = (AE_DATA.vehicules || []).length;
+aedRenderVehicules();
+aedLoadDossiers();
+</script>
+{% endblock %}

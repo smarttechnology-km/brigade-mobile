@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Examen Théorique — Permis de Conduire</title>
+<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+<link rel="icon" type="image/png" sizes="256x256" href="{{ url_for('static', filename='favicon.png') }}">
+<style>
+  html { color-scheme: light; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: #eef1f6;
+    min-height: 100vh;
+    padding: 32px 16px;
+    display: flex;
+    justify-content: center;
+    -webkit-font-smoothing: antialiased;
+  }
+  .dt-wrap { width: 100%; max-width: 1360px; }
+  .dt-card {
+    background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 2px 14px rgba(15,23,42,.08); margin-bottom: 18px;
+  }
+  .dt-card-narrow { max-width: 540px; margin-left:auto; margin-right:auto; }
+
+  .dt-header {
+    background: linear-gradient(135deg, #1a3a6c 0%, #1a56db 100%); color:#fff;
+    padding: 22px 26px; text-align:center;
+  }
+  .dt-header .org { font-size:11.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; opacity:.8; }
+  .dt-header .title { font-size:18px; font-weight:800; margin-top:6px; letter-spacing:.01em; }
+  .dt-header .partner { font-size:11px; opacity:.72; margin-top:7px; letter-spacing:.02em; }
+
+  .dt-body { padding: 32px 36px; }
+
+  .dt-field label {
+    display:block; font-size:11.5px; font-weight:700; color:#64748b; margin-bottom:7px;
+    text-transform:uppercase; letter-spacing:.06em;
+  }
+  .dt-field input[type=text] {
+    width:100%; padding:12px 14px; border:1.5px solid #d6dbe4; border-radius:6px;
+    font-size:16px; letter-spacing:.5px; color:#1a1a2e;
+  }
+  .dt-field input[type=text]:focus { outline:none; border-color:#1a56db; }
+  .dt-btn {
+    width:100%; padding:13px; border:none; border-radius:6px; background:#1a3a6c; color:#fff;
+    font-size:14.5px; font-weight:700; letter-spacing:.02em; cursor:pointer; margin-top:16px;
+  }
+  .dt-btn:hover { background:#142e56; }
+  .dt-btn:disabled { background:#9ca3af; cursor:not-allowed; }
+  .dt-error { color:#b91c1c; font-size:13px; margin-top:12px; text-align:center; }
+  .dt-icon { font-size:38px; text-align:center; margin-bottom:12px; }
+  .dt-muted-box { text-align:center; color:#64748b; font-size:14px; line-height:1.7; }
+
+  .dt-intro { font-size:13.5px; color:#475569; line-height:1.65; margin-bottom:18px; }
+  .dt-info-list { background:#f8f9fb; border:1px solid #e2e6ee; border-radius:6px; padding:14px 16px; margin-bottom:22px; }
+  .dt-info-item { display:flex; align-items:center; gap:10px; font-size:13.5px; color:#1a3a6c; font-weight:600; padding:5px 0; }
+  .dt-info-icon { font-size:15px; flex-shrink:0; width:20px; text-align:center; }
+  .dt-info-note { font-size:12px; color:#64748b; line-height:1.6; margin-top:16px; padding-top:14px; border-top:1px solid #eef0f4; }
+  .dt-info-note strong { color:#1a3a6c; }
+
+  .dt-quiz-layout { display:flex; gap:24px; align-items:flex-start; }
+  .dt-quiz-main { flex: 1.6; min-width:0; }
+  .dt-quiz-side { flex: 1; min-width:260px; max-width:400px; }
+  @media (max-width: 720px) {
+    .dt-quiz-layout { flex-direction: column; }
+    .dt-quiz-side { max-width:none; width:100%; order:-1; }
+  }
+
+  .dt-side-block { background:#f8f9fb; border:1px solid #e2e6ee; border-radius:6px; padding:14px; margin-bottom:16px; }
+  .dt-side-label { font-size:10.5px; font-weight:700; color:#8a93a3; text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+
+  .dt-candidate-card { display:flex; align-items:center; gap:12px; }
+  .dt-candidate-photo, .dt-candidate-photo-ph {
+    width:52px; height:52px; border-radius:6px; object-fit:cover; flex-shrink:0; border:1px solid #d6dbe4;
+  }
+  .dt-candidate-photo-ph {
+    background:#e7eaf1; color:#9aa3b2; display:flex; align-items:center; justify-content:center; font-size:20px;
+  }
+  .dt-candidate-name { font-size:13.5px; font-weight:700; color:#1a3a6c; line-height:1.3; }
+
+  .dt-timer-bar {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .dt-timer-bar .timer { font-size:22px; font-weight:800; color:#1a56db; font-family: 'Courier New', monospace; }
+  .dt-timer-bar .timer.low { color:#b91c1c; }
+
+  .dt-progress-row { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .dt-progress-track { flex:1; height:6px; background:#e7eaf1; border-radius:3px; overflow:hidden; }
+  .dt-progress-fill { height:100%; background:#1a56db; border-radius:3px; transition: width .25s ease; }
+  .dt-progress-label { font-size:12px; font-weight:700; color:#1a3a6c; white-space:nowrap; }
+
+  .dt-qnav { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:20px; }
+  .dt-qnav-dot {
+    width:28px; height:28px; border-radius:50%; border:1.5px solid #d6dbe4; background:#fff;
+    font-size:11.5px; font-weight:700; color:#64748b; cursor:pointer; display:flex;
+    align-items:center; justify-content:center; flex-shrink:0; padding:0;
+  }
+  .dt-qnav-dot.answered { background:#eef3fc; border-color:#9bb6e8; color:#1a56db; }
+  .dt-qnav-dot.current { border-color:#1a3a6c; border-width:2px; color:#1a3a6c; }
+
+  .dt-question { border:1px solid #e2e6ee; border-radius:6px; padding:28px 32px; margin-bottom:22px; animation: dtFadeIn .2s ease; }
+  @keyframes dtFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+  .dt-question .q-num { font-size:12.5px; font-weight:700; color:#8a8f98; text-transform:uppercase; letter-spacing:.08em; margin-bottom:9px; }
+  .dt-question .q-text { font-size:20px; font-weight:600; color:#1a1a2e; margin-bottom:20px; line-height:1.45; }
+  .dt-question img { max-width:100%; max-height:420px; width:auto; height:auto; object-fit:contain; border-radius:4px; margin:0 auto 16px; display:block; border:1px solid #e2e6ee; }
+
+  .dt-quiz-nav { display:flex; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  .dt-btn-sec {
+    flex:1; padding:13px; border:1.5px solid #d6dbe4; border-radius:6px; background:#fff; color:#374151;
+    font-size:14.5px; font-weight:700; cursor:pointer;
+  }
+  .dt-btn-sec:hover { border-color:#1a56db; color:#1a56db; }
+  .dt-btn-sec:disabled { opacity:.4; cursor:not-allowed; }
+  .dt-option {
+    display:flex; align-items:center; gap:14px; padding:15px 18px; border:1.5px solid #e2e6ee;
+    border-radius:6px; margin-bottom:11px; cursor:pointer; font-size:16px;
+  }
+  .dt-option:hover { border-color:#9bb6e8; }
+  .dt-option.selected { border-color:#1a56db; background:#eef3fc; }
+  .dt-option input { margin:0; width:17px; height:17px; flex-shrink:0; }
+  .dt-option img.dt-option-img { width:84px; height:84px; max-width:84px; object-fit:cover; border-radius:4px; margin:0; flex-shrink:0; border:1px solid #e2e6ee; }
+
+  .dt-result-icon { font-size:52px; text-align:center; margin-bottom:14px; }
+  .dt-result-title { text-align:center; font-size:19px; font-weight:800; margin-bottom:16px; color:#1a3a6c; }
+  .dt-result-note { text-align:center; font-size:13.5px; color:#64748b; line-height:1.7; }
+
+  .dt-footer { text-align:center; font-size:11px; color:#8a93a3; letter-spacing:.03em; }
+
+  .d-none { display:none; }
+</style>
+</head>
+<body>
+<div class="dt-wrap">
+
+  {% macro header() %}
+  <div class="dt-header">
+    <div class="org">République des Comores</div>
+    <div class="title">Examen Théorique — Permis de Conduire</div>
+    <div class="partner">DGRTR · en partenariat avec Smart Development</div>
+  </div>
+  {% endmacro %}
+
+  {% if link_invalid %}
+  <div class="dt-card dt-card-narrow">
+    {{ header() }}
+    <div class="dt-body">
+      <div class="dt-icon">🔒</div>
+      <div class="dt-muted-box">Ce lien n'est plus valide.<br>Demandez le lien à jour de l'examen à la DGRTR.</div>
+    </div>
+  </div>
+  {% elif exam_not_open_yet %}
+  <div class="dt-card dt-card-narrow">
+    {{ header() }}
+    <div class="dt-body">
+      <div class="dt-icon">📅</div>
+      <div class="dt-muted-box">L'examen est programmé pour le <strong>{{ exam_date }}</strong>.<br>Revenez à cette date pour pouvoir le passer.</div>
+    </div>
+  </div>
+  {% elif not exam_active %}
+  <div class="dt-card dt-card-narrow">
+    {{ header() }}
+    <div class="dt-body">
+      <div class="dt-icon">📅</div>
+      <div class="dt-muted-box">Aucun examen n'est actuellement programmé.<br>Veuillez revenir plus tard ou contacter la DGRTR.</div>
+    </div>
+  </div>
+  {% else %}
+
+  <!-- NIN entry -->
+  <div class="dt-card dt-card-narrow" id="view-nin">
+    {{ header() }}
+    <div class="dt-body">
+      <p class="dt-intro">Cet examen théorique évalue vos connaissances du code de la route. Il est obligatoire : votre dossier de permis ne peut continuer son traitement qu'une fois l'examen réussi.</p>
+
+      <div class="dt-info-list">
+        <div class="dt-info-item"><span class="dt-info-icon">📝</span><span>{{ questions_per_exam }} questions à choix multiples</span></div>
+        <div class="dt-info-item"><span class="dt-info-icon">⏱️</span><span>{{ session_duration_minutes }} minutes pour répondre à toutes les questions</span></div>
+        <div class="dt-info-item"><span class="dt-info-icon">✅</span><span>{{ min_correct_to_pass }} bonnes réponses minimum sur {{ questions_per_exam }} pour réussir</span></div>
+      </div>
+
+      <div class="dt-field">
+        <label>Numéro d'identification nationale (NIN)</label>
+        <input type="text" id="nin-input" placeholder="Entrez votre NIN tel qu'il figure sur votre dossier" autocomplete="off">
+      </div>
+      <button class="dt-btn" id="btn-start" onclick="startExam()">Commencer l'examen</button>
+      <div class="dt-error" id="nin-error"></div>
+
+      <div class="dt-info-note">
+        <strong>À savoir —</strong> une fois commencé, le temps ne peut pas être mis en pause ; si vous quittez la page, vous pourrez reprendre là où vous en étiez, sans perdre de temps supplémentaire. En cas d'échec ou de temps écoulé, vous pourrez repasser l'examen à la prochaine date fixée par le Directeur Général.
+      </div>
+    </div>
+  </div>
+
+  <!-- Quiz -->
+  <div class="dt-card d-none" id="view-quiz">
+    {{ header() }}
+    <div class="dt-body">
+      <div class="dt-quiz-layout">
+
+        <div class="dt-quiz-main">
+          <div class="dt-progress-row">
+            <div class="dt-progress-track"><div class="dt-progress-fill" id="quiz-progress-fill"></div></div>
+            <div class="dt-progress-label" id="quiz-progress-label"></div>
+          </div>
+
+          <div id="quiz-questions"></div>
+
+          <div class="dt-quiz-nav">
+            <button type="button" class="dt-btn-sec" id="btn-prev" onclick="goToQuestion(currentQuestionIndex - 1)">&larr; Précédent</button>
+            <button type="button" class="dt-btn-sec" id="btn-next" onclick="goToQuestion(currentQuestionIndex + 1)">Suivant &rarr;</button>
+          </div>
+
+          <button class="dt-btn d-none" id="btn-submit" onclick="submitExam()">Terminer l'examen</button>
+        </div>
+
+        <div class="dt-quiz-side">
+          <div class="dt-side-block">
+            <div class="dt-side-label">Candidat</div>
+            <div class="dt-candidate-card">
+              <img id="quiz-candidate-photo" class="dt-candidate-photo d-none" src="" alt="">
+              <div id="quiz-candidate-photo-ph" class="dt-candidate-photo-ph">👤</div>
+              <div class="dt-candidate-name" id="quiz-candidate"></div>
+            </div>
+          </div>
+
+          <div class="dt-side-block">
+            <div class="dt-side-label">Temps restant</div>
+            <div class="dt-timer-bar">
+              <span class="timer" id="quiz-timer">--:--</span>
+            </div>
+          </div>
+
+          <div class="dt-side-block">
+            <div class="dt-side-label">Questions</div>
+            <div class="dt-qnav" id="quiz-qnav"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="dt-card dt-card-narrow d-none" id="view-result">
+    {{ header() }}
+    <div class="dt-body">
+      <div class="dt-result-icon" id="result-icon"></div>
+      <div class="dt-result-title" id="result-title"></div>
+      <div class="dt-result-note" id="result-note"></div>
+    </div>
+  </div>
+
+  {% endif %}
+
+  <div class="dt-footer">Smart Development &middot; DGRTR Comores</div>
+</div>
+
+<script>
+var EXAM_TOKEN = {{ exam_token | tojson }};
+var attemptId = null;
+var remainingSeconds = 0;
+var timerInterval = null;
+var answers = {};
+var currentQuestions = [];
+
+function dtEsc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showView(id) {
+  ['view-nin', 'view-quiz', 'view-result'].forEach(function (v) {
+    var el = document.getElementById(v);
+    if (el) el.classList.add('d-none');
+  });
+  var target = document.getElementById(id);
+  if (target) target.classList.remove('d-none');
+}
+
+function resetToNinView() {
+  if (timerInterval) clearInterval(timerInterval);
+  attemptId = null;
+  remainingSeconds = 0;
+  answers = {};
+  currentQuestions = [];
+  currentQuestionIndex = 0;
+  var ninInput = document.getElementById('nin-input');
+  if (ninInput) ninInput.value = '';
+  var ninError = document.getElementById('nin-error');
+  if (ninError) ninError.textContent = '';
+  if (document.getElementById('view-nin')) showView('view-nin');
+}
+
+// Un rafraîchissement (ou un retour depuis le cache du navigateur) ramène
+// toujours le candidat à la saisie du NIN — jamais en plein milieu du quiz
+// avec un minuteur qui ne tourne plus.
+resetToNinView();
+window.addEventListener('pageshow', function (event) {
+  if (event.persisted) resetToNinView();
+});
+
+// Si le candidat quitte la page (rafraîchissement, fermeture, retour en arrière)
+// alors qu'il est en plein examen, on gèle le temps restant côté serveur jusqu'à
+// ce qu'il revienne et reprenne — via sendBeacon, plus fiable qu'un fetch pendant
+// le déchargement de la page.
+window.addEventListener('pagehide', function () {
+  if (!attemptId) return;
+  var payload = JSON.stringify({ attempt_id: attemptId });
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon('/api/exam/driving-test/pause', new Blob([payload], { type: 'application/json' }));
+  } else {
+    fetch('/api/exam/driving-test/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(function () {});
+  }
+});
+
+function startExam() {
+  var nin = document.getElementById('nin-input').value.trim();
+  var errEl = document.getElementById('nin-error');
+  errEl.textContent = '';
+  if (!nin) { errEl.textContent = 'Veuillez entrer votre NIN.'; return; }
+
+  var btn = document.getElementById('btn-start');
+  btn.disabled = true;
+  btn.textContent = 'Chargement…';
+
+  fetch('/api/exam/driving-test/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nin: nin, token: EXAM_TOKEN }),
+  })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      btn.disabled = false;
+      btn.textContent = "Commencer l'examen";
+      if (!res.ok) { errEl.textContent = res.data.error || 'Erreur'; return; }
+      handleStartResponse(res.data);
+    })
+    .catch(function () {
+      btn.disabled = false;
+      btn.textContent = "Commencer l'examen";
+      errEl.textContent = 'Erreur réseau.';
+    });
+}
+
+var currentQuestionIndex = 0;
+
+function handleStartResponse(data) {
+  if (data.status === 'already_passed') {
+    showResult({ passed: true, score: data.attempt.score, total_questions: data.attempt.total_questions, already: true });
+    return;
+  }
+  if (data.status === 'already_failed') {
+    showResult({ passed: false, score: data.attempt.score, total_questions: data.attempt.total_questions, already: true });
+    return;
+  }
+  // started or resume
+  attemptId = data.attempt_id;
+  remainingSeconds = data.remaining_seconds;
+  currentQuestions = data.questions || [];
+  answers = data.answers || {};
+  currentQuestionIndex = 0;
+  for (var i = 0; i < currentQuestions.length; i++) {
+    if (!answers[currentQuestions[i].id]) { currentQuestionIndex = i; break; }
+  }
+  document.getElementById('quiz-candidate').textContent = data.candidate_name || '';
+
+  var photoEl = document.getElementById('quiz-candidate-photo');
+  var photoPh = document.getElementById('quiz-candidate-photo-ph');
+  if (data.candidate_photo_url) {
+    photoEl.src = data.candidate_photo_url;
+    photoEl.classList.remove('d-none');
+    photoPh.classList.add('d-none');
+  } else {
+    photoEl.classList.add('d-none');
+    photoPh.classList.remove('d-none');
+  }
+
+  renderQNav();
+  renderCurrentQuestion();
+  showView('view-quiz');
+  startTimer();
+}
+
+function renderQNav() {
+  var nav = document.getElementById('quiz-qnav');
+  nav.innerHTML = currentQuestions.map(function (q, idx) {
+    var cls = 'dt-qnav-dot' + (idx === currentQuestionIndex ? ' current' : '') + (answers[q.id] ? ' answered' : '');
+    return '<button type="button" class="' + cls + '" id="qnav-' + idx + '" onclick="goToQuestion(' + idx + ')">' + (idx + 1) + '</button>';
+  }).join('');
+}
+
+function renderCurrentQuestion() {
+  var total = currentQuestions.length;
+  var q = currentQuestions[currentQuestionIndex];
+  var container = document.getElementById('quiz-questions');
+
+  var img = q.image_url ? '<img src="' + q.image_url + '" alt="">' : '';
+  var options = ['a', 'b', 'c', 'd'].map(function (opt) {
+    var label = q['option_' + opt];
+    var optImg = q['option_' + opt + '_image_url'];
+    var optImgHtml = optImg ? '<img src="' + optImg + '" class="dt-option-img" alt="">' : '';
+    var selected = answers[q.id] === opt;
+    return '<label class="dt-option' + (selected ? ' selected' : '') + '" id="opt-' + q.id + '-' + opt + '" onclick="selectAnswer(' + q.id + ',\'' + opt + '\')">' +
+      '<input type="radio" name="q-' + q.id + '" value="' + opt + '"' + (selected ? ' checked' : '') + '>' +
+      optImgHtml +
+      '<span>' + dtEsc(label) + '</span>' +
+      '</label>';
+  }).join('');
+
+  container.innerHTML = '<div class="dt-question">' +
+    '<div class="q-text">' + dtEsc(q.question_text) + '</div>' +
+    img +
+    options +
+    '</div>';
+
+  document.getElementById('quiz-progress-fill').style.width = Math.round(((currentQuestionIndex + 1) / total) * 100) + '%';
+  document.getElementById('quiz-progress-label').textContent = 'Question ' + (currentQuestionIndex + 1) + ' / ' + total;
+
+  document.getElementById('btn-prev').disabled = currentQuestionIndex === 0;
+  document.getElementById('btn-next').disabled = currentQuestionIndex === total - 1;
+
+  renderQNav();
+  updateSubmitButtonVisibility();
+}
+
+function updateSubmitButtonVisibility() {
+  var allAnswered = currentQuestions.length > 0 && currentQuestions.every(function (q) { return !!answers[q.id]; });
+  document.getElementById('btn-submit').classList.toggle('d-none', !allAnswered);
+}
+
+function goToQuestion(idx) {
+  if (idx < 0 || idx >= currentQuestions.length) return;
+  currentQuestionIndex = idx;
+  renderCurrentQuestion();
+}
+
+function selectAnswer(questionId, opt) {
+  answers[questionId] = opt;
+  ['a', 'b', 'c', 'd'].forEach(function (o) {
+    var el = document.getElementById('opt-' + questionId + '-' + o);
+    if (!el) return;
+    el.classList.toggle('selected', o === opt);
+    var input = el.querySelector('input');
+    if (input) input.checked = (o === opt);
+  });
+  renderQNav();
+  updateSubmitButtonVisibility();
+  saveAnswerToServer(questionId, opt);
+
+  // Avance automatiquement à la question suivante, comme dans un examen en ligne —
+  // sauf sur la dernière question, où le candidat doit cliquer "Terminer l'examen".
+  var answeredIndex = currentQuestionIndex;
+  if (answeredIndex < currentQuestions.length - 1) {
+    setTimeout(function () {
+      if (currentQuestionIndex === answeredIndex) goToQuestion(answeredIndex + 1);
+    }, 350);
+  }
+}
+
+function saveAnswerToServer(questionId, opt) {
+  // Enregistrement en arrière-plan — si ça échoue (réseau), la réponse reste en
+  // mémoire locale et sera quand même envoyée au moment du "Terminer l'examen".
+  fetch('/api/exam/driving-test/answer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ attempt_id: attemptId, question_id: questionId, option: opt }),
+  }).catch(function () {});
+}
+
+function startTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  updateTimerDisplay();
+  timerInterval = setInterval(function () {
+    remainingSeconds--;
+    updateTimerDisplay();
+    if (remainingSeconds <= 0) {
+      clearInterval(timerInterval);
+      submitExam();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  var el = document.getElementById('quiz-timer');
+  var m = Math.max(0, Math.floor(remainingSeconds / 60));
+  var s = Math.max(0, remainingSeconds % 60);
+  el.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  el.classList.toggle('low', remainingSeconds <= 60);
+}
+
+function submitExam() {
+  if (timerInterval) clearInterval(timerInterval);
+  var btn = document.getElementById('btn-submit');
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
+
+  fetch('/api/exam/driving-test/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ attempt_id: attemptId, answers: answers }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      showResult(data);
+    })
+    .catch(function () {
+      if (btn) { btn.disabled = false; btn.textContent = "Terminer l'examen"; }
+      alert('Erreur réseau. Veuillez réessayer.');
+    });
+}
+
+function showResult(data) {
+  var icon = document.getElementById('result-icon');
+  var title = document.getElementById('result-title');
+  var note = document.getElementById('result-note');
+
+  // Par choix délibéré, le candidat ne voit ni son score ni s'il a réussi ou
+  // échoué sur cette page — seule la DGRTR communique le résultat.
+  icon.textContent = '📨';
+  title.textContent = data.already ? 'Examen déjà soumis' : 'Examen terminé';
+  note.textContent = "Vos réponses ont été enregistrées et transmises à la DGRTR. Les résultats vous seront communiqués par les services compétents, et votre dossier de permis sera mis à jour en conséquence.";
+
+  showView('view-result');
+}
+</script>
+</body>
+</html>
