@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Development — Examen</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --st-bg: #0d1117;
+            --st-surface: #161b22;
+            --st-border: rgba(255,255,255,0.08);
+            --st-cyan: #00d4ff;
+            --st-green: #3fb950;
+            --st-yellow: #f0b429;
+            --st-red: #f85149;
+            --st-blue: #58a6ff;
+            --st-purple: #bc8cff;
+            --sidebar-w: 260px;
+        }
+        * { box-sizing: border-box; }
+        body { background: var(--st-bg); color: #e6edf3; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; }
+
+        /* ── Sidebar ── */
+        .st-sidebar {
+            background: linear-gradient(180deg, #1a1a2e 0%, #0f3460 100%);
+            width: var(--sidebar-w); position: fixed; top: 0; left: 0; bottom: 0;
+            padding: 1.4rem 1rem;
+            border-right: 1px solid rgba(0,212,255,0.1);
+            z-index: 100; display: flex; flex-direction: column;
+        }
+        .st-brand { display: flex; align-items: center; gap: 10px; padding-bottom: 1.2rem; border-bottom: 1px solid rgba(0,212,255,0.15); margin-bottom: 1.5rem; }
+        .st-brand-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--st-cyan), #0080ff); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; color: #fff; flex-shrink: 0; }
+        .st-brand-name { font-weight: 700; font-size: 0.92rem; color: #fff; line-height: 1.2; }
+        .st-brand-sub  { font-size: 0.7rem; color: var(--st-cyan); font-weight: 400; }
+        .st-nav { flex: 1; overflow-y: auto; min-height: 0; }
+        .st-nav-item { display: flex; align-items: center; gap: 11px; padding: 0.7rem 1rem; border-radius: 10px; color: rgba(255,255,255,0.6); text-decoration: none; font-size: 0.9rem; margin-bottom: 4px; transition: all 0.18s; }
+        .st-nav-item:hover, .st-nav-item.active { background: rgba(0,212,255,0.1); color: #fff; }
+        .st-nav-item.active { border-left: 3px solid var(--st-cyan); }
+        .st-nav-icon { width: 20px; text-align: center; color: var(--st-cyan); flex-shrink: 0; font-size: 1rem; }
+        .st-nav-divider { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.7px; color: rgba(255,255,255,0.3); padding: 1rem 1rem 0.35rem; }
+        .st-bottom-row { display: flex; border-top: 1px solid rgba(255,255,255,0.07); }
+        .st-bottom-row .st-nav-item { flex: 1; justify-content: center; padding: 0.7rem 0.4rem; font-size: 0.8rem; border-left: none !important; }
+
+        /* ── Main ── */
+        .st-main { margin-left: var(--sidebar-w); padding: 1.5rem 2rem; min-height: 100vh; }
+
+        /* ── Topbar ── */
+        .st-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.6rem; flex-wrap: wrap; gap: 0.75rem; }
+        .st-page-title { font-size: 1.2rem; font-weight: 700; color: #fff; }
+        .st-page-sub   { font-size: 0.78rem; color: rgba(255,255,255,0.4); margin-top: 1px; }
+        .st-user-pill { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(0,212,255,0.15); border-radius: 30px; padding: 0.3rem 0.9rem; font-size: 0.8rem; color: rgba(255,255,255,0.7); }
+        .st-user-pill:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.08);color:var(--st-cyan);}
+
+        /* ── Section ── */
+        .st-section { background: var(--st-surface); border: 1px solid var(--st-border); border-radius: 14px; overflow: hidden; margin-bottom: 1.5rem; }
+        .st-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; padding: 0.9rem 1.2rem; border-bottom: 1px solid var(--st-border); }
+        .st-section-title { font-size: 0.88rem; font-weight: 600; color: #fff; white-space: nowrap; }
+
+        /* ── Toolbar ── */
+        .st-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .st-search-wrap { position: relative; }
+        .st-search-wrap .fa-search { position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.3); font-size: 0.75rem; pointer-events: none; }
+        .st-search-clear {
+            position: absolute; right: 0.45rem; top: 50%; transform: translateY(-50%);
+            width: 18px; height: 18px; border-radius: 50%;
+            background: rgba(255,255,255,0.12); border: none;
+            color: rgba(255,255,255,0.55); font-size: 0.6rem;
+            align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.15s; padding: 0;
+        }
+        .st-search-clear:hover { background: rgba(248,81,73,0.25); color: #f85149; }
+        .st-input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #e6edf3;
+            font-size: 0.8rem;
+            padding: 0.38rem 0.7rem;
+            outline: none;
+            transition: border-color 0.18s;
+        }
+        .st-input:focus { border-color: var(--st-cyan); }
+        .st-input::placeholder { color: rgba(255,255,255,0.28); }
+        .st-search-input { padding-left: 1.9rem; padding-right: 1.8rem; width: 220px; }
+        option { background: #1e2736; }
+
+        .nav-badge { margin-left: auto; background: var(--st-yellow); color: #000;
+            border-radius: 20px; font-size: 0.65rem; font-weight: 700; padding: 0.15em 0.55em; }
+        html[data-theme="light"] .nav-badge { background: #9a6700; color: #fff; }
+
+        /* ── Pills ── */
+        .pill { display: inline-block; font-size: 0.7rem; font-weight: 500; padding: 0.2em 0.65em; border-radius: 20px; }
+        .pill-activation  { background: rgba(0,212,255,0.13); color: var(--st-cyan); border: 1px solid rgba(0,212,255,0.28); }
+        .pill-renewal     { background: rgba(188,140,255,0.13); color: var(--st-purple); border: 1px solid rgba(188,140,255,0.28); }
+        .pill-total       { background: rgba(88,166,255,0.13); color: var(--st-blue); border: 1px solid rgba(88,166,255,0.28); }
+        .pill-active-exp  { background: rgba(63,185,80,0.13); color: var(--st-green); border: 1px solid rgba(63,185,80,0.28); }
+
+        /* ── Theme toggle ── */
+        .st-theme-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.75); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; flex-shrink: 0; }
+        .st-theme-btn:hover { background: rgba(0,212,255,0.15); border-color: var(--st-cyan); color: var(--st-cyan); }
+
+        .btn-st-primary {
+            background: linear-gradient(135deg, var(--st-cyan), #0080ff);
+            border: none; color: #04202b; font-weight: 700; font-size: 0.82rem;
+            border-radius: 8px; padding: 0.42rem 0.95rem; display: inline-flex; align-items: center; gap: 6px;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .btn-st-primary:hover { filter: brightness(1.08); }
+
+        /* ── Stat cards (rapport de participation) ── */
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.9rem; margin-bottom: 1.5rem; }
+        .stat-card { background: var(--st-surface); border: 1px solid var(--st-border); border-radius: 14px; padding: 1rem 1.1rem; }
+        .stat-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1rem; margin-bottom: 0.6rem; }
+        .stat-icon-cyan   { background: rgba(0,212,255,0.13); color: var(--st-cyan); }
+        .stat-icon-green  { background: rgba(63,185,80,0.13); color: var(--st-green); }
+        .stat-icon-purple { background: rgba(188,140,255,0.13); color: var(--st-purple); }
+        .stat-icon-yellow { background: rgba(240,180,41,0.13); color: var(--st-yellow); }
+        .stat-label { font-size: 0.72rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 0.3rem; }
+        .stat-value { font-size: 1.5rem; font-weight: 800; color: #fff; }
+        .stat-sub { font-size: 0.74rem; color: rgba(255,255,255,0.35); margin-top: 0.2rem; }
+        html[data-theme="light"] .stat-card { background: #fff; border-color: rgba(0,0,0,0.08); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        html[data-theme="light"] .stat-label { color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .stat-value { color: #1a1a2e; }
+        html[data-theme="light"] .stat-sub { color: rgba(0,0,0,0.35); }
+
+        /* ── Question cards ── */
+        .q-grid { padding: 1.1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
+        .q-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 1rem; }
+        .q-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.6rem; }
+        .q-num { font-size: 0.68rem; color: rgba(255,255,255,0.35); font-weight: 700; letter-spacing: 0.4px; }
+        .q-badge { font-size: 0.65rem; padding: 0.15em 0.55em; border-radius: 20px; flex-shrink: 0; }
+        .q-badge-active   { background: rgba(63,185,80,0.13); color: var(--st-green); border: 1px solid rgba(63,185,80,0.28); }
+        .q-badge-inactive { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.45); border: 1px solid rgba(255,255,255,0.12); }
+        .q-text { font-size: 0.9rem; color: #e6edf3; font-weight: 600; margin-bottom: 0.7rem; line-height: 1.4; }
+        .q-img { max-width: 100%; border-radius: 8px; margin-bottom: 0.7rem; display: block; }
+        .q-options { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+        .q-opt { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: rgba(255,255,255,0.65); background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 0.4rem 0.6rem; }
+        .q-opt-letter { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.55); font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; text-transform: uppercase; }
+        .q-opt.correct { background: rgba(63,185,80,0.1); border-color: rgba(63,185,80,0.3); color: #e6edf3; }
+        .q-opt.correct .q-opt-letter { background: var(--st-green); color: #04260f; }
+        .q-opt.correct::after { content: '✓'; margin-left: auto; color: var(--st-green); font-weight: 700; }
+        .q-opt-img { max-width: 70px; max-height: 44px; border-radius: 6px; margin-left: 0.3rem; }
+        .q-empty { text-align: center; color: rgba(255,255,255,0.35); font-size: 0.85rem; padding: 3rem 1rem; }
+
+        /* ── Pagination ── */
+        .st-pagination { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.2rem; border-top: 1px solid var(--st-border); font-size: 0.8rem; color: rgba(255,255,255,0.45); flex-wrap: wrap; gap: 0.5rem; }
+        .page-link { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.65); border-radius: 7px; padding: 0.3rem 0.75rem; font-size: 0.8rem; text-decoration: none; transition: all 0.15s; cursor: pointer; }
+        .page-link:hover { background: rgba(0,212,255,0.12); border-color: var(--st-cyan); color: #fff; }
+        .page-link.active { background: rgba(0,212,255,0.18); border-color: var(--st-cyan); color: var(--st-cyan); font-weight: 600; }
+        .page-link.disabled { opacity: 0.3; pointer-events: none; }
+        html[data-theme="light"] .st-pagination { border-top-color: rgba(0,0,0,0.08); color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .page-link { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: #555; }
+        html[data-theme="light"] .page-link:hover { background: rgba(0,149,179,0.08); border-color: #0095b3; color: #0095b3; }
+        html[data-theme="light"] .page-link.active { background: rgba(0,149,179,0.12); border-color: #0095b3; color: #0095b3; }
+
+        /* ── Modal ── */
+        .st-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 1050; align-items: center; justify-content: center; }
+        .st-modal-backdrop.open { display: flex; }
+        .st-modal {
+            background: #1a1f2e;
+            border: 1px solid rgba(0,212,255,0.18);
+            border-radius: 14px;
+            width: 100%; max-width: 440px;
+            padding: 1.5rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        .st-modal-title { font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 8px; }
+        .st-modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: rgba(255,255,255,0.45); font-size: 1.1rem; cursor: pointer; transition: color 0.15s; }
+        .st-modal-close:hover { color: #fff; }
+        .st-field-label { font-size: 0.78rem; color: rgba(255,255,255,0.55); margin-bottom: 0.35rem; display: block; }
+        .st-field { margin-bottom: 1rem; }
+        .st-modal-note { font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: -0.3rem; margin-bottom: 1rem; }
+        #params-feedback { font-size: 0.8rem; margin-top: 0.4rem; min-height: 1.1em; }
+
+        /* ── Light mode ── */
+        html[data-theme="light"] body { background: #f0f2f5; color: #1a1a2e; }
+        html[data-theme="light"] .st-section { background: #ffffff; border-color: rgba(0,0,0,0.08); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        html[data-theme="light"] .st-section-header { border-bottom-color: rgba(0,0,0,0.08); }
+        html[data-theme="light"] .st-section-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-input { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: #1a1a2e; }
+        html[data-theme="light"] .st-search-clear { background: rgba(0,0,0,0.1); color: rgba(0,0,0,0.45); }
+        html[data-theme="light"] .st-search-clear:hover { background: rgba(207,34,46,0.12); color: #cf222e; }
+        html[data-theme="light"] .st-input::placeholder { color: rgba(0,0,0,0.3); }
+        html[data-theme="light"] .st-input:focus { border-color: #0095b3; }
+        html[data-theme="light"] option { background: #fff; color: #1a1a2e; }
+        html[data-theme="light"] .st-page-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-page-sub { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .st-user-pill { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.12); color: #1a1a2e; }
+        html[data-theme="light"] .st-theme-btn { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); color: #555; }
+        html[data-theme="light"] .st-theme-btn:hover { background: rgba(0,150,180,0.1); border-color: #0095b3; color: #0095b3; }
+        html[data-theme="light"] .q-card { background: rgba(0,0,0,0.025); border-color: rgba(0,0,0,0.08); }
+        html[data-theme="light"] .q-num { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .q-text { color: #1a1a2e; }
+        html[data-theme="light"] .q-opt { color: rgba(0,0,0,0.65); background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.07); }
+        html[data-theme="light"] .q-opt-letter { background: rgba(0,0,0,0.08); color: rgba(0,0,0,0.55); }
+        html[data-theme="light"] .q-badge-inactive { background: rgba(0,0,0,0.06); color: rgba(0,0,0,0.45); border-color: rgba(0,0,0,0.1); }
+        html[data-theme="light"] .q-empty { color: rgba(0,0,0,0.35); }
+        html[data-theme="light"] .st-modal { background: #fff; border-color: rgba(0,0,0,0.12); }
+        html[data-theme="light"] .st-modal-title { color: #1a1a2e; }
+        html[data-theme="light"] .st-modal-close { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .st-modal-close:hover { color: #1a1a2e; }
+        html[data-theme="light"] .st-field-label { color: rgba(0,0,0,0.55); }
+        html[data-theme="light"] .st-modal-note { color: rgba(0,0,0,0.4); }
+        html[data-theme="light"] .st-modal-backdrop { background: rgba(0,0,0,0.4); }
+
+        @media (max-width: 768px) {
+            .mob-menu-btn{display:flex!important;}
+            .st-sidebar{transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);}
+            .st-sidebar.mob-open{transform:translateX(0);z-index:101;}
+            .st-main{margin-left:0;padding:1rem;}
+            .st-search-input{width:160px;}
+            .q-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ── Mobile nav drawer ── */
+        .mob-menu-btn{display:none;width:36px;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;flex-shrink:0;transition:all .18s;}
+        .mob-menu-btn:hover{border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--st-cyan);}
+        .mob-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;}
+        .mob-overlay.active{opacity:1;pointer-events:all;}
+        html[data-theme="light"] .mob-menu-btn{border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.05);color:rgba(0,0,0,0.6);}
+        html[data-theme="light"] .mob-overlay{background:rgba(0,0,0,0.35);}
+    </style>
+    <script>(function(){ const t = localStorage.getItem('st_theme') || 'dark'; document.documentElement.setAttribute('data-theme', t); })();</script>
+</head>
+<body>
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+
+<!-- ── Sidebar ── -->
+<aside class="st-sidebar">
+    <div class="st-brand">
+        <div class="st-brand-icon"><i class="fas fa-qrcode"></i></div>
+        <div>
+            <div class="st-brand-name">SIGVA Administration</div>
+            <div class="st-brand-sub">QR Code Dashboard</div>
+        </div>
+    </div>
+    <nav class="st-nav">
+        <div class="st-nav-divider">Navigation</div>
+        <a href="{{ url_for('smart_tech.dashboard') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-home"></i></span>Vue d'ensemble
+        </a>
+        <a href="{{ url_for('smart_tech.vehicles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car-side"></i></span>Véhicules
+        </a>
+{% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.gestion_vehicules_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-car"></i></span>Gestion des Véhicules
+            <span class="nav-badge" id="nav-gv-badge" style="{{ '' if gv_pending_count > 0 else 'display:none;' }}">{{ gv_pending_count }}</span>
+        </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.visite_technique_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-clipboard-check"></i></span>Visite Technique
+            <span class="nav-badge" id="nav-vt-badge" style="{{ '' if vt_pending_count > 0 else 'display:none;' }}">{{ vt_pending_count }}</span>
+        </a>
+        {% endif %}
+{% if current_user.role in ['admin', 'employe'] %}
+        <a href="{{ url_for('smart_tech.licences_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-id-card"></i></span>Licences
+            <span class="nav-badge" id="nav-lic-badge" style="{{ "" if pending_count > 0 else "display:none;" }}">{{ pending_count }}</span>
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'employe', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.assurance_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-shield-alt"></i></span>Agence Assurance
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.subscriptions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-file-invoice-dollar"></i></span>Abonnements
+        </a>
+        <a href="{{ url_for('smart_tech.depenses_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-receipt"></i></span>Dépenses
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.stock_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-boxes-stacked"></i></span>Stock
+        </a>
+        {% endif %}
+        <a href="{{ url_for('smart_tech.recettes_stock_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-cash-register"></i></span>Recettes
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.employes_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-users"></i></span>Employés
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.suppressions_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-trash-alt"></i></span>Suppressions
+            {% if deletion_pending_count > 0 %}
+            <span class="nav-badge ms-auto" style="background:#ef4444;color:#fff;">{{ deletion_pending_count }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.rapport_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-chart-bar"></i></span>Rapport
+        </a>
+        {% endif %}
+        {% if current_user.role in ['admin', 'secretaire'] %}
+        <a href="{{ url_for('smart_tech.stats_iles_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
+        </a>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.examen_page') }}" class="st-nav-item active">
+            <span class="st-nav-icon"><i class="fas fa-graduation-cap"></i></span>Examen
+        </a>
+        {% endif %}
+    </nav>
+    <div class="st-bottom-row">
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.parametres_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-sliders-h"></i></span>Paramètres
+        </a>
+        {% endif %}
+        <a href="{{ url_for('smart_tech.logout') }}" class="st-nav-item" style="color:rgba(248,81,73,0.75);">
+            <span class="st-nav-icon" style="color:var(--st-red);"><i class="fas fa-sign-out-alt"></i></span>Déconnexion
+        </a>
+    </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="st-main">
+
+    <!-- Topbar -->
+    <div class="st-topbar">
+        <div>
+            <div class="st-page-title"><i class="fas fa-graduation-cap me-2" style="color:var(--st-cyan);"></i>Examen</div>
+            <div class="st-page-sub">Banque de questions de l'examen théorique DGRTR (lecture) — alimente la pratique du Code de la route de l'app citoyenne</div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button class="mob-menu-btn" id="mob-menu-btn" onclick="openSidebar()" title="Menu"><i class="fas fa-bars"></i></button>
+            <button id="theme-toggle" class="st-theme-btn" title="Changer le thème">
+                <i class="fas fa-sun" id="theme-icon"></i>
+            </button>
+            <a href="{{ url_for('smart_tech.profil') }}" class="st-user-pill" style="text-decoration:none;">
+                <i class="fas fa-user-circle" style="color:var(--st-cyan);"></i>
+                {{ current_user.full_name or current_user.username }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Rapport de participation -->
+    <div class="stat-grid" id="stat-grid">
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-cyan"><i class="fas fa-users"></i></div>
+            <div class="stat-label">Personnes ayant pratiqué</div>
+            <div class="stat-value" id="stat-participants">—</div>
+            <div class="stat-sub" id="stat-sessions-sub">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-green"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-label">Taux de réussite</div>
+            <div class="stat-value" id="stat-pass-rate">—</div>
+            <div class="stat-sub" id="stat-passed-sub">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-purple"><i class="fas fa-wallet"></i></div>
+            <div class="stat-label">Personnes ayant payé</div>
+            <div class="stat-value" id="stat-paying">—</div>
+            <div class="stat-sub" id="stat-paid-sessions-sub">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-yellow"><i class="fas fa-coins"></i></div>
+            <div class="stat-label">Revenu généré</div>
+            <div class="stat-value" id="stat-revenue">—</div>
+            <div class="stat-sub">Pratique du Code — paiements</div>
+        </div>
+    </div>
+
+    <!-- Question bank -->
+    <div class="st-section">
+        <div class="st-section-header">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="st-section-title">
+                    <i class="fas fa-list me-2" style="color:var(--st-cyan);"></i>Banque de questions
+                </div>
+                <span class="pill pill-total" id="q-total-pill">—</span>
+                <span class="pill pill-active-exp" id="q-active-pill">—</span>
+                <span class="pill pill-activation" id="free-count-pill" title="Pratiques gratuites avant paiement">—</span>
+                <span class="pill pill-renewal" id="price-pill" title="Prix par pratique supplémentaire">—</span>
+            </div>
+            <div class="st-toolbar">
+                <div class="st-search-wrap">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="search-input" class="st-input st-search-input" placeholder="Rechercher une question…" autocomplete="off">
+                    <button id="search-clear" class="st-search-clear" title="Effacer" style="display:none"><i class="fas fa-times"></i></button>
+                </div>
+                <button class="btn-st-primary" onclick="openParams()">
+                    <i class="fas fa-sliders-h"></i>Paramètres
+                </button>
+            </div>
+        </div>
+
+        <div id="q-grid-wrap">
+            <div class="q-empty"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</div>
+        </div>
+        <div class="st-pagination" id="q-pagination" style="display:none;"></div>
+    </div>
+</main>
+
+<!-- ── Paramètres modal ── -->
+<div class="st-modal-backdrop" id="params-modal">
+    <div class="st-modal">
+        <button class="st-modal-close" onclick="closeParams()"><i class="fas fa-times"></i></button>
+        <div class="st-modal-title"><i class="fas fa-sliders-h" style="color:var(--st-cyan);"></i>Paramètres — Pratique du Code</div>
+
+        <div class="st-field">
+            <label class="st-field-label">Nombre de pratiques gratuites (par véhicule)</label>
+            <input type="number" min="0" step="1" id="input-free-count" class="st-input" style="width:100%;">
+        </div>
+        <div class="st-field">
+            <label class="st-field-label">Prix par pratique supplémentaire (KMF)</label>
+            <input type="number" min="0" step="1" id="input-price" class="st-input" style="width:100%;">
+        </div>
+        <div class="st-modal-note">Au-delà du nombre de pratiques gratuites, chaque nouvelle session de pratique sera facturée ce montant via Huri Money avant d'être lancée.</div>
+
+        <button class="btn-st-primary" style="width:100%; justify-content:center;" onclick="saveParams()">
+            <i class="fas fa-save"></i>Enregistrer
+        </button>
+        <div id="params-feedback"></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    /* ── Theme ── */
+    const html      = document.documentElement;
+    const themeBtn  = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+
+    function applyTheme(t) {
+        html.setAttribute('data-theme', t);
+        localStorage.setItem('st_theme', t);
+        themeIcon.className = t === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        themeBtn.title = t === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre';
+    }
+    applyTheme(localStorage.getItem('st_theme') || 'dark');
+    themeBtn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    /* ── Question bank ── */
+    let allQuestions = [];
+    let currentFiltered = [];
+    let currentPage = 1;
+    const PER_PAGE = 9;
+
+    function optionRow(q, letter) {
+        const text = q['option_' + letter];
+        const imgUrl = q['option_' + letter + '_image_url'];
+        const isCorrect = q.correct_option === letter;
+        return (
+            '<li class="q-opt' + (isCorrect ? ' correct' : '') + '">' +
+                '<span class="q-opt-letter">' + letter + '</span>' +
+                '<span>' + (text || '') + '</span>' +
+                (imgUrl ? '<img class="q-opt-img" src="' + imgUrl + '" alt="">' : '') +
+            '</li>'
+        );
+    }
+
+    function renderQuestions(list) {
+        const wrap = document.getElementById('q-grid-wrap');
+        const paginationEl = document.getElementById('q-pagination');
+        if (!list.length) {
+            wrap.innerHTML = '<div class="q-empty"><i class="fas fa-inbox me-2"></i>Aucune question trouvée.</div>';
+            paginationEl.style.display = 'none';
+            return;
+        }
+
+        const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
+        if (currentPage > pages) currentPage = pages;
+        const startIdx = (currentPage - 1) * PER_PAGE;
+        const pageItems = list.slice(startIdx, startIdx + PER_PAGE);
+
+        let html = '<div class="q-grid">';
+        pageItems.forEach(function (q, idx) {
+            html += '<div class="q-card">' +
+                '<div class="q-card-head">' +
+                    '<span class="q-num">Q' + (startIdx + idx + 1) + ' · #' + q.id + '</span>' +
+                    '<span class="q-badge ' + (q.is_active ? 'q-badge-active' : 'q-badge-inactive') + '">' +
+                        (q.is_active ? 'Active' : 'Inactive') +
+                    '</span>' +
+                '</div>' +
+                '<div class="q-text">' + q.question_text + '</div>' +
+                (q.image_url ? '<img class="q-img" src="' + q.image_url + '" alt="">' : '') +
+                '<ul class="q-options">' +
+                    optionRow(q, 'a') + optionRow(q, 'b') + optionRow(q, 'c') + optionRow(q, 'd') +
+                '</ul>' +
+            '</div>';
+        });
+        html += '</div>';
+        wrap.innerHTML = html;
+
+        renderPagination(list.length, pages);
+    }
+
+    function goToPage(p) {
+        currentPage = p;
+        renderQuestions(currentFiltered);
+    }
+    window.goToPage = goToPage;
+
+    function renderPagination(total, pages) {
+        const paginationEl = document.getElementById('q-pagination');
+        if (pages <= 1) {
+            paginationEl.style.display = 'none';
+            return;
+        }
+        paginationEl.style.display = 'flex';
+
+        const startItem = (currentPage - 1) * PER_PAGE + 1;
+        const endItem = Math.min(total, currentPage * PER_PAGE);
+
+        // Same windowed range as the other Smart Tech pages (vehicles, etc.):
+        // at most ~5 page numbers centered on the current page, not every page.
+        const windowStart = Math.max(1, currentPage - 2);
+        const windowEnd = Math.min(pages, currentPage + 2);
+
+        let h = '<span>' + startItem + '–' + endItem + ' sur ' + total + '</span><div class="d-flex gap-1 flex-wrap">';
+        h += '<a onclick="goToPage(1)" class="page-link' + (currentPage === 1 ? ' disabled' : '') + '">«</a>';
+        h += '<a onclick="goToPage(' + (currentPage - 1) + ')" class="page-link' + (currentPage <= 1 ? ' disabled' : '') + '">‹</a>';
+        for (let p = windowStart; p <= windowEnd; p++) {
+            h += '<a onclick="goToPage(' + p + ')" class="page-link' + (p === currentPage ? ' active' : '') + '">' + p + '</a>';
+        }
+        h += '<a onclick="goToPage(' + (currentPage + 1) + ')" class="page-link' + (currentPage >= pages ? ' disabled' : '') + '">›</a>';
+        h += '<a onclick="goToPage(' + pages + ')" class="page-link' + (currentPage === pages ? ' disabled' : '') + '">»</a>';
+        h += '</div>';
+        paginationEl.innerHTML = h;
+    }
+
+    function applyFilter() {
+        const term = (document.getElementById('search-input').value || '').trim().toLowerCase();
+        currentFiltered = term
+            ? allQuestions.filter(function (q) { return (q.question_text || '').toLowerCase().includes(term); })
+            : allQuestions;
+        currentPage = 1;
+        renderQuestions(currentFiltered);
+    }
+
+    function loadQuestions() {
+        fetch('{{ url_for("smart_tech.api_examen_questions") }}')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                allQuestions = data || [];
+                currentFiltered = allQuestions;
+                currentPage = 1;
+                document.getElementById('q-total-pill').textContent = allQuestions.length + ' question' + (allQuestions.length !== 1 ? 's' : '');
+                document.getElementById('q-active-pill').textContent = allQuestions.filter(function (q) { return q.is_active; }).length + ' actives';
+                renderQuestions(currentFiltered);
+            })
+            .catch(function () {
+                document.getElementById('q-grid-wrap').innerHTML = '<div class="q-empty">Erreur de chargement.</div>';
+            });
+    }
+
+    const searchInput = document.getElementById('search-input');
+    const searchClear = document.getElementById('search-clear');
+    searchInput.addEventListener('input', function () {
+        searchClear.style.display = searchInput.value ? 'flex' : 'none';
+        applyFilter();
+    });
+    searchClear.addEventListener('click', function () {
+        searchInput.value = '';
+        searchClear.style.display = 'none';
+        applyFilter();
+    });
+
+    /* ── Rapport de participation ── */
+    function loadStats() {
+        fetch('{{ url_for("smart_tech.api_examen_stats") }}')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                document.getElementById('stat-participants').textContent = data.participants;
+                document.getElementById('stat-sessions-sub').textContent =
+                    data.total_sessions + ' session' + (data.total_sessions !== 1 ? 's' : '') + ' au total';
+
+                document.getElementById('stat-pass-rate').textContent = data.pass_rate + '%';
+                document.getElementById('stat-passed-sub').textContent =
+                    data.total_passed + ' / ' + data.total_sessions + ' réussie' + (data.total_passed !== 1 ? 's' : '');
+
+                document.getElementById('stat-paying').textContent = data.paying_participants;
+                document.getElementById('stat-paid-sessions-sub').textContent =
+                    data.total_paid_sessions + ' session' + (data.total_paid_sessions !== 1 ? 's' : '') + ' payante' + (data.total_paid_sessions !== 1 ? 's' : '');
+
+                document.getElementById('stat-revenue').textContent =
+                    Math.round(data.total_revenue_kmf).toLocaleString('fr-FR') + ' KMF';
+            })
+            .catch(function () {});
+    }
+
+    /* ── Paramètres ── */
+    function loadParams() {
+        fetch('{{ url_for("smart_tech.api_examen_parametres_get") }}')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                document.getElementById('free-count-pill').textContent = data.practice_free_count + ' gratuites';
+                document.getElementById('price-pill').textContent = Number(data.practice_price_kmf).toLocaleString('fr-FR') + ' KMF / suppl.';
+                document.getElementById('input-free-count').value = data.practice_free_count;
+                document.getElementById('input-price').value = data.practice_price_kmf;
+            });
+    }
+
+    window.openParams = function () {
+        document.getElementById('params-feedback').textContent = '';
+        document.getElementById('params-modal').classList.add('open');
+    };
+    window.closeParams = function () {
+        document.getElementById('params-modal').classList.remove('open');
+    };
+    window.saveParams = function () {
+        const feedback = document.getElementById('params-feedback');
+        feedback.style.color = '';
+        feedback.textContent = 'Enregistrement…';
+        fetch('{{ url_for("smart_tech.api_examen_parametres_update") }}', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                practice_free_count: document.getElementById('input-free-count').value,
+                practice_price_kmf: document.getElementById('input-price').value,
+            }),
+        })
+            .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+            .then(function (res) {
+                if (!res.ok) {
+                    feedback.style.color = 'var(--st-red)';
+                    feedback.textContent = res.data.error || 'Erreur.';
+                    return;
+                }
+                feedback.style.color = 'var(--st-green)';
+                feedback.textContent = 'Enregistré.';
+                loadParams();
+                setTimeout(closeParams, 700);
+            })
+            .catch(function () {
+                feedback.style.color = 'var(--st-red)';
+                feedback.textContent = 'Erreur réseau.';
+            });
+    };
+    document.getElementById('params-modal').addEventListener('click', function (e) {
+        if (e.target === this) closeParams();
+    });
+
+    loadQuestions();
+    loadParams();
+    loadStats();
+})();
+
+    /* ── Mobile sidebar ── */
+    (function(){
+        function openSidebar(){
+            document.querySelector('.st-sidebar').classList.add('mob-open');
+            document.getElementById('mob-overlay').classList.add('active');
+        }
+        function closeSidebar(){
+            document.querySelector('.st-sidebar').classList.remove('mob-open');
+            document.getElementById('mob-overlay').classList.remove('active');
+        }
+        window.openSidebar = openSidebar;
+        window.closeSidebar = closeSidebar;
+        document.querySelectorAll('.st-nav-item').forEach(function(a){
+            a.addEventListener('click', closeSidebar);
+        });
+    })();
+</script>
+</body>
+</html>

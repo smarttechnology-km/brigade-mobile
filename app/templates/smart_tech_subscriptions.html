@@ -260,6 +260,11 @@
             <span class="st-nav-icon"><i class="fas fa-map-marked-alt"></i></span>Stats par île
         </a>
         {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('smart_tech.examen_page') }}" class="st-nav-item">
+            <span class="st-nav-icon"><i class="fas fa-graduation-cap"></i></span>Examen
+        </a>
+        {% endif %}
     </nav>
     <div class="st-bottom-row">
         {% if current_user.role == 'admin' %}
