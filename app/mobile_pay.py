@@ -776,6 +776,58 @@ def create_payment():
             'vehicle': vehicle.to_dict(),
         })
 
+    if payment_type == 'practice_exam':
+        from app.models import PracticeAttempt
+
+        attempt_id = data.get('attempt_id')
+        if not attempt_id:
+            return jsonify({'error': 'attempt_id is required for practice exam payments'}), 400
+
+        attempt = PracticeAttempt.query.get(attempt_id)
+        if not attempt:
+            return jsonify({'error': 'Attempt not found'}), 404
+        if attempt.status != 'pending_payment':
+            return jsonify({'error': "Cette session n'est plus en attente de paiement."}), 400
+
+        vehicle = Vehicle.query.get(attempt.vehicle_id) if attempt.vehicle_id else None
+        amount = float(attempt.price_kmf) if attempt.price_kmf else float(SmartTechSetting.get('practice_price_kmf', 500))
+        payload = {
+            'type': 'practice_exam_payment_request',
+            'payment_type': 'practice_exam',
+            'attempt_id': attempt.id,
+            'vehicle_id': attempt.vehicle_id,
+            'amount': amount,
+        }
+
+        # Payment.license_plate/owner_name are NOT NULL — practice-exam payments
+        # aren't vehicle-bound (and an anonymous/device_id attempt has no vehicle
+        # at all), so fall back to a neutral label instead of leaving them empty.
+        payment = Payment(
+            amount=amount,
+            currency='KMF',
+            status='pending',
+            license_plate=vehicle.license_plate if vehicle else 'N/A',
+            owner_name=vehicle.owner_name if vehicle else (payer_name or 'Pratique Code de la route'),
+            payer_name=payer_name,
+            payer_email=payer_email,
+            destination_phone=HuriDestinationSetting.get().phone_for('permis'),
+            fines=json.dumps(payload)
+        )
+        db.session.add(payment)
+        db.session.commit()
+
+        checkout_url = url_for('mobile_pay.checkout_page', payment_id=payment.id, _external=True)
+
+        return jsonify({
+            'payment_id': payment.id,
+            'confirm_token': payment.confirm_token,
+            'checkout_url': checkout_url,
+            'amount': round(amount, 2),
+            'currency': 'KMF',
+            'status': 'pending',
+            'payment_type': 'practice_exam',
+        })
+
     if payment_type == 'license_fines':
         license_id = data.get('license_id')
         if not license_id:
@@ -1085,6 +1137,38 @@ def webhook():
                     officer='App Mobile',
                     notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF (par {citizen_label})"
                 ))
+                db.session.commit()
+        elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'practice_exam_payment_request':
+            from app.models import PracticeAttempt, ExamSetting, ExamQuestion
+            import random as _random
+
+            attempt_id = fine_payload.get('attempt_id')
+            attempt = PracticeAttempt.query.get(int(attempt_id)) if attempt_id else None
+            if attempt and attempt.status == 'pending_payment':
+                settings = ExamSetting.get()
+                active_qs = ExamQuestion.query.filter_by(is_active=True).all()
+                payment_time = payment.paid_at or now_comoros()
+                citizen_label = f"App Citoyen / {payment.payer_name or payment.phone_number or 'Inconnu'}"
+                if settings.questions_per_exam > 0 and len(active_qs) >= settings.questions_per_exam:
+                    chosen = _random.sample(active_qs, settings.questions_per_exam)
+                    attempt.question_ids = json.dumps([q.id for q in chosen])
+                    attempt.total_questions = len(chosen)
+                    attempt.min_correct_required = settings.min_correct_to_pass
+                    attempt.status = 'ready'
+                    attempt.started_at = payment_time
+                attempt.is_paid = True
+                attempt.payment_id = payment.id
+                attempt.price_kmf = float(payment.amount or 0.0)
+
+                # Anonymous (device_id) attempts have no vehicle to attach a VehicleHistory
+                # entry to — the Payment record itself is the audit trail for those.
+                if attempt.vehicle_id:
+                    db.session.add(VehicleHistory(
+                        vehicle_id=attempt.vehicle_id,
+                        action='Pratique du Code de la route payée via mobile citoyen',
+                        officer='App Mobile',
+                        notes=f"Montant: {round(float(payment.amount or 0.0), 2)} KMF (par {citizen_label})"
+                    ))
                 db.session.commit()
         elif isinstance(fine_payload, dict) and fine_payload.get('type') == 'license_fine_request':
             payment_time = payment.paid_at or now_comoros()

@@ -1564,3 +1564,284 @@ def citizen_cancel_technical_inspection_appointment(appointment_id):
     appointment.updated_at = now_comoros()
     db.session.commit()
     return jsonify(appointment.to_dict())
+
+
+# ─────────────────────────────────────────────
+#  Pratique du Code de la route (app citoyen)
+#  — même banque de questions / barème que l'examen DGRTR, mais sans NIN/dossier
+#    ni minuteur : X sessions gratuites (réglage Smart Tech), puis paiement
+#    Huri Money par session supplémentaire.
+# ─────────────────────────────────────────────
+
+_practice_otp_store = {}  # normalized phone -> {otp, expires_at, attempts}
+
+
+def _practice_identity():
+    """Resolve who's practicing: a logged-in citizen (vehicle_id, from the JWT) or
+    an anonymous one, identified by a phone number verified by SMS OTP (not by
+    device_id — a device id is lost the moment the app is reinstalled, which
+    would silently reset the free-practice quota; a verified phone number isn't).
+    Returns (field_name, value) or (None, None) if neither is present. The JWT is
+    optional on every practice-exam route so logged-out citizens can use the
+    feature too, once their phone is verified."""
+    from app.models import PracticePhoneVerification
+
+    try:
+        identity = get_jwt_identity()
+    except Exception:
+        identity = None
+    if identity:
+        vehicle_id = identity.get('vehicle_id') if isinstance(identity, dict) else identity
+        if vehicle_id:
+            return 'vehicle_id', int(vehicle_id)
+
+    phone = request.args.get('phone')
+    if not phone:
+        body = request.get_json(silent=True) or {}
+        phone = body.get('phone')
+    phone = _normalize_phone(phone) if phone else ''
+    if phone and PracticePhoneVerification.query.filter_by(phone=phone).first():
+        return 'phone', phone
+
+    return None, None
+
+
+@citizen_auth_bp.route('/practice-exam/send-otp', methods=['POST'])
+@limiter.limit('5/minute')
+def citizen_practice_exam_send_otp():
+    """First step of anonymous phone verification: send a 6-digit OTP to the
+    phone number the citizen wants to practice under."""
+    data = request.get_json() or {}
+    raw_phone = (data.get('phone') or '').strip()
+    if not raw_phone:
+        return jsonify({'error': 'Numéro de téléphone requis.'}), 400
+
+    phone = _normalize_phone(raw_phone)
+    if not phone:
+        return jsonify({'error': 'Numéro de téléphone invalide.'}), 400
+
+    otp = generate_otp(6)
+    _practice_otp_store[phone] = {
+        'otp': otp,
+        'expires_at': now_comoros() + timedelta(minutes=10),
+        'attempts': 0,
+    }
+
+    print(f"\n{'='*60}\n🔐 PRACTICE OTP for {phone}: {otp}\n{'='*60}\n")
+
+    if not send_otp_via_sms(raw_phone, otp):
+        return jsonify({'error': "Impossible d'envoyer le code. Réessayez."}), 500
+
+    return jsonify({
+        'message': 'Code envoyé par SMS.',
+        'phone_masked': phone[:3] + '*' * max(0, len(phone) - 6) + phone[-3:],
+        'expires_in': 600,
+    }), 200
+
+
+@citizen_auth_bp.route('/practice-exam/verify-otp', methods=['POST'])
+@limiter.limit('10/minute')
+def citizen_practice_exam_verify_otp():
+    """Second step: confirm the OTP and mark the phone as verified — from then
+    on it's a valid identity for practice-exam quota tracking."""
+    from app.models import PracticePhoneVerification
+
+    data = request.get_json() or {}
+    raw_phone = (data.get('phone') or '').strip()
+    otp = (data.get('otp') or '').strip()
+    phone = _normalize_phone(raw_phone)
+    if not phone or not otp:
+        return jsonify({'error': 'Numéro et code requis.'}), 400
+
+    entry = _practice_otp_store.get(phone)
+    if not entry:
+        return jsonify({'error': 'Aucun code envoyé pour ce numéro. Demandez un nouveau code.'}), 400
+    if now_comoros() > entry['expires_at']:
+        del _practice_otp_store[phone]
+        return jsonify({'error': 'Ce code a expiré. Demandez un nouveau code.'}), 400
+    entry['attempts'] += 1
+    if entry['attempts'] > 5:
+        del _practice_otp_store[phone]
+        return jsonify({'error': 'Trop de tentatives. Demandez un nouveau code.'}), 429
+    if otp != entry['otp']:
+        return jsonify({'error': 'Code incorrect.'}), 400
+
+    del _practice_otp_store[phone]
+
+    verification = PracticePhoneVerification.query.filter_by(phone=phone).first()
+    if verification:
+        verification.verified_at = now_comoros()
+    else:
+        db.session.add(PracticePhoneVerification(phone=phone))
+    db.session.commit()
+
+    return jsonify({'verified': True, 'phone': phone}), 200
+
+
+def _practice_questions_for_ids(ids):
+    from app.models import ExamQuestion
+    qs = ExamQuestion.query.filter(ExamQuestion.id.in_(ids)).all()
+    by_id = {q.id: q for q in qs}
+    return [by_id[i].to_dict() for i in ids if i in by_id]
+
+
+@citizen_auth_bp.route('/practice-exam/status', methods=['GET'])
+@jwt_required(optional=True)
+def citizen_practice_exam_status():
+    from app.models import ExamSetting, ExamQuestion, PracticeAttempt, SmartTechSetting
+
+    field, value = _practice_identity()
+    if not field:
+        return jsonify({'error': 'Vérification du numéro requise.', 'code': 'phone_verification_required'}), 401
+
+    settings = ExamSetting.get()
+    active_count = ExamQuestion.query.filter_by(is_active=True).count()
+    configured = settings.questions_per_exam > 0 and active_count >= settings.questions_per_exam
+
+    free_total = int(SmartTechSetting.get('practice_free_count', 2))
+    price_kmf = float(SmartTechSetting.get('practice_price_kmf', 500))
+
+    used = PracticeAttempt.query.filter(
+        getattr(PracticeAttempt, field) == value,
+        PracticeAttempt.submitted_at.isnot(None),
+    ).count()
+    free_remaining = max(0, free_total - used)
+
+    pending = (PracticeAttempt.query
+               .filter_by(status='pending_payment', **{field: value})
+               .order_by(PracticeAttempt.id.desc())
+               .first())
+
+    return jsonify({
+        'configured': configured,
+        'questions_per_session': settings.questions_per_exam,
+        'min_correct_to_pass': settings.min_correct_to_pass,
+        'free_total': free_total,
+        'free_remaining': free_remaining,
+        'price_kmf': price_kmf,
+        'pending_attempt_id': pending.id if pending else None,
+    })
+
+
+@citizen_auth_bp.route('/practice-exam/start', methods=['POST'])
+@jwt_required(optional=True)
+def citizen_practice_exam_start():
+    from app.models import ExamSetting, ExamQuestion, PracticeAttempt, SmartTechSetting
+
+    field, value = _practice_identity()
+    if not field:
+        return jsonify({'error': 'Vérification du numéro requise.', 'code': 'phone_verification_required'}), 401
+
+    settings = ExamSetting.get()
+    active_qs = ExamQuestion.query.filter_by(is_active=True).all()
+    if settings.questions_per_exam <= 0 or len(active_qs) < settings.questions_per_exam:
+        return jsonify({'error': "La pratique du Code de la route n'est pas encore configurée. Réessayez plus tard."}), 400
+
+    free_total = int(SmartTechSetting.get('practice_free_count', 2))
+    used = PracticeAttempt.query.filter(
+        getattr(PracticeAttempt, field) == value,
+        PracticeAttempt.submitted_at.isnot(None),
+    ).count()
+
+    if used >= free_total:
+        # Reuse an already-created-but-unpaid session instead of charging twice for it.
+        existing = (PracticeAttempt.query
+                    .filter_by(status='pending_payment', **{field: value})
+                    .order_by(PracticeAttempt.id.desc())
+                    .first())
+        if existing:
+            return jsonify({'status': 'pending_payment', 'attempt_id': existing.id, 'price_kmf': existing.price_kmf})
+
+        price_kmf = float(SmartTechSetting.get('practice_price_kmf', 500))
+        attempt = PracticeAttempt(status='pending_payment', price_kmf=price_kmf, **{field: value})
+        db.session.add(attempt)
+        db.session.commit()
+        return jsonify({'status': 'pending_payment', 'attempt_id': attempt.id, 'price_kmf': price_kmf})
+
+    chosen = random.sample(active_qs, settings.questions_per_exam)
+    question_ids = [q.id for q in chosen]
+    attempt = PracticeAttempt(
+        status='ready',
+        is_paid=False,
+        question_ids=json.dumps(question_ids),
+        total_questions=len(question_ids),
+        min_correct_required=settings.min_correct_to_pass,
+        started_at=now_comoros(),
+        **{field: value},
+    )
+    db.session.add(attempt)
+    db.session.commit()
+
+    return jsonify({
+        'status': 'ready',
+        'attempt_id': attempt.id,
+        'questions': [q.to_dict() for q in chosen],
+        'total_questions': len(question_ids),
+        'min_correct_required': settings.min_correct_to_pass,
+    })
+
+
+@citizen_auth_bp.route('/practice-exam/attempts/<int:attempt_id>', methods=['GET'])
+@jwt_required(optional=True)
+def citizen_practice_exam_get_attempt(attempt_id):
+    from app.models import PracticeAttempt
+
+    field, value = _practice_identity()
+    attempt = PracticeAttempt.query.get_or_404(attempt_id)
+    if not field or getattr(attempt, field) != value:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    data = attempt.to_dict()
+    if attempt.status == 'ready' and not attempt.submitted_at:
+        ids = json.loads(attempt.question_ids or '[]')
+        data['questions'] = _practice_questions_for_ids(ids)
+    return jsonify(data)
+
+
+@citizen_auth_bp.route('/practice-exam/attempts/<int:attempt_id>/submit', methods=['POST'])
+@jwt_required(optional=True)
+def citizen_practice_exam_submit(attempt_id):
+    from app.models import PracticeAttempt, ExamQuestion
+
+    field, value = _practice_identity()
+    attempt = PracticeAttempt.query.get_or_404(attempt_id)
+    if not field or getattr(attempt, field) != value:
+        return jsonify({'error': 'Accès refusé'}), 403
+    if attempt.status != 'ready':
+        return jsonify({'error': "Cette session n'est pas disponible."}), 400
+    if attempt.submitted_at:
+        return jsonify({
+            'status': 'submitted',
+            'score': attempt.score,
+            'total_questions': attempt.total_questions,
+            'min_correct_required': attempt.min_correct_required,
+            'passed': attempt.passed,
+        })
+
+    data = request.get_json() or {}
+    answers = data.get('answers') or {}
+    ids = json.loads(attempt.question_ids or '[]')
+    qs = ExamQuestion.query.filter(ExamQuestion.id.in_(ids)).all()
+    correct_map = {q.id: q.correct_option for q in qs}
+
+    score = 0
+    for qid in ids:
+        given = answers.get(str(qid))
+        if given and correct_map.get(qid) == given:
+            score += 1
+
+    passed = score >= attempt.min_correct_required
+    attempt.answers = json.dumps(answers)
+    attempt.score = score
+    attempt.passed = passed
+    attempt.submitted_at = now_comoros()
+    attempt.status = 'completed'
+    db.session.commit()
+
+    return jsonify({
+        'status': 'submitted',
+        'score': score,
+        'total_questions': attempt.total_questions,
+        'min_correct_required': attempt.min_correct_required,
+        'passed': passed,
+    })

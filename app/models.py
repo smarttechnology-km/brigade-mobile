@@ -2784,6 +2784,64 @@ class ExamAttempt(db.Model):
         }
 
 
+class PracticeAttempt(db.Model):
+    """Session de pratique du Code de la route pour un citoyen (app mobile), tirée
+    de la même banque de questions que l'examen DGRTR mais sans lien avec un
+    dossier/NIN — un simple entraînement. Les X premières sessions sont gratuites
+    (seuil réglé par Smart Tech), au-delà chaque nouvelle session nécessite un
+    paiement (Huri Money) avant que les questions ne soient tirées.
+    Accessible sans connexion : un citoyen connecté est identifié par vehicle_id,
+    un citoyen anonyme par son numéro vérifié par SMS (phone) — device_id reste en
+    base pour l'historique mais n'est plus utilisé pour compter le quota, un
+    device_id étant perdu à chaque désinstallation de l'app alors qu'un numéro
+    vérifié ne l'est pas."""
+    __tablename__ = 'practice_attempts'
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True, index=True)
+    device_id = db.Column(db.String(120), nullable=True, index=True)
+    phone = db.Column(db.String(30), nullable=True, index=True)
+    status = db.Column(db.String(20), nullable=False, default='pending_payment')  # 'pending_payment' | 'ready' | 'completed'
+    is_paid = db.Column(db.Boolean, nullable=False, default=False)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id'), nullable=True)
+    price_kmf = db.Column(db.Float, nullable=True)  # figé si payante
+    question_ids = db.Column(db.Text, nullable=True)  # JSON [int, ...] — renseigné une fois 'ready'
+    answers = db.Column(db.Text, nullable=True)  # JSON {"<question_id>": "a"|"b"|"c"|"d"}
+    total_questions = db.Column(db.Integer, nullable=True)
+    min_correct_required = db.Column(db.Integer, nullable=True)  # seuil figé au moment où les questions sont tirées
+    score = db.Column(db.Integer, nullable=True)
+    passed = db.Column(db.Boolean, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+    started_at = db.Column(db.DateTime, nullable=True)  # renseigné quand les questions sont tirées (session 'ready')
+    submitted_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'vehicle_id': self.vehicle_id,
+            'device_id': self.device_id,
+            'status': self.status,
+            'is_paid': self.is_paid,
+            'price_kmf': self.price_kmf,
+            'total_questions': self.total_questions,
+            'min_correct_required': self.min_correct_required,
+            'score': self.score,
+            'passed': self.passed,
+            'created_at': self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else '',
+            'started_at': self.started_at.strftime('%d/%m/%Y %H:%M') if self.started_at else '',
+            'submitted_at': self.submitted_at.strftime('%d/%m/%Y %H:%M') if self.submitted_at else '',
+        }
+
+
+class PracticePhoneVerification(db.Model):
+    """Numéro de téléphone vérifié par SMS (OTP) pour pratiquer le Code de la
+    route sans compte/véhicule. Remplace device_id comme identité de quota une
+    fois vérifié, car un numéro survit à une désinstallation de l'app."""
+    __tablename__ = 'practice_phone_verifications'
+    id = db.Column(db.Integer, primary_key=True)
+    phone = db.Column(db.String(30), unique=True, nullable=False, index=True)
+    verified_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
+
+
 class LicenseDossier(db.Model):
     """Dossier de demande de permis de conduire — workflow en 5 étapes.
     Le permis est créé dans DriverLicense uniquement quand toutes les étapes sont validées."""

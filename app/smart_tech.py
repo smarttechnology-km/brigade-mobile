@@ -258,6 +258,104 @@ def api_parametres_update():
     })
 
 
+@smart_tech_bp.route('/examen')
+@st_admin_required
+def examen_page():
+    return render_template('smart_tech_examen.html')
+
+
+@smart_tech_bp.route('/api/examen/questions')
+@st_admin_required
+def api_examen_questions():
+    from app.models import ExamQuestion
+    questions = ExamQuestion.query.order_by(ExamQuestion.id.desc()).all()
+    return jsonify([q.to_dict(include_correct=True) for q in questions])
+
+
+@smart_tech_bp.route('/api/examen/stats')
+@st_admin_required
+def api_examen_stats():
+    """Rapport de participation à la pratique du Code de la route : combien de
+    personnes ont pratiqué, combien ont réussi, combien ont payé, et le revenu
+    généré par les sessions payantes."""
+    from app.models import PracticeAttempt
+    from sqlalchemy import func
+
+    # Each attempt is tied to either a vehicle_id (logged-in citizen) or a device_id
+    # (anonymous one) — never both — so distinct counts over each add up cleanly.
+    def _distinct_identities(query):
+        vehicles = query.filter(PracticeAttempt.vehicle_id.isnot(None)) \
+            .with_entities(func.count(func.distinct(PracticeAttempt.vehicle_id))).scalar() or 0
+        # device_id-only rows predate phone verification — still counted for history.
+        devices = query.filter(PracticeAttempt.vehicle_id.is_(None), PracticeAttempt.phone.is_(None), PracticeAttempt.device_id.isnot(None)) \
+            .with_entities(func.count(func.distinct(PracticeAttempt.device_id))).scalar() or 0
+        phones = query.filter(PracticeAttempt.phone.isnot(None)) \
+            .with_entities(func.count(func.distinct(PracticeAttempt.phone))).scalar() or 0
+        return vehicles + devices + phones
+
+    completed = PracticeAttempt.query.filter(PracticeAttempt.submitted_at.isnot(None))
+    total_sessions = completed.count()
+    total_passed = completed.filter(PracticeAttempt.passed == True).count()
+    participants = _distinct_identities(completed)
+
+    paid_attempts = PracticeAttempt.query.filter(PracticeAttempt.is_paid == True)
+    total_paid_sessions = paid_attempts.count()
+    paying_participants = _distinct_identities(paid_attempts)
+    total_revenue = db.session.query(func.coalesce(func.sum(PracticeAttempt.price_kmf), 0.0)) \
+        .filter(PracticeAttempt.is_paid == True).scalar() or 0.0
+
+    pass_rate = round((total_passed / total_sessions) * 100, 1) if total_sessions else 0
+
+    return jsonify({
+        'participants': participants,
+        'total_sessions': total_sessions,
+        'total_passed': total_passed,
+        'pass_rate': pass_rate,
+        'paying_participants': paying_participants,
+        'total_paid_sessions': total_paid_sessions,
+        'total_revenue_kmf': float(total_revenue),
+    })
+
+
+@smart_tech_bp.route('/api/examen/parametres', methods=['GET'])
+@st_admin_required
+def api_examen_parametres_get():
+    return jsonify({
+        'practice_free_count': int(SmartTechSetting.get('practice_free_count', 2)),
+        'practice_price_kmf': float(SmartTechSetting.get('practice_price_kmf', 500)),
+    })
+
+
+@smart_tech_bp.route('/api/examen/parametres', methods=['PUT'])
+@st_admin_required
+def api_examen_parametres_update():
+    data = request.get_json(silent=True) or {}
+    errors = []
+    if 'practice_free_count' in data:
+        try:
+            v = int(data['practice_free_count'])
+            if v < 0:
+                raise ValueError
+            SmartTechSetting.set('practice_free_count', v)
+        except (ValueError, TypeError):
+            errors.append('Nombre de pratiques gratuites invalide')
+    if 'practice_price_kmf' in data:
+        try:
+            v = float(data['practice_price_kmf'])
+            if v < 0:
+                raise ValueError
+            SmartTechSetting.set('practice_price_kmf', v)
+        except (ValueError, TypeError):
+            errors.append('Prix invalide')
+    if errors:
+        return jsonify({'error': ' | '.join(errors)}), 400
+    return jsonify({
+        'ok': True,
+        'practice_free_count': int(SmartTechSetting.get('practice_free_count', 2)),
+        'practice_price_kmf': float(SmartTechSetting.get('practice_price_kmf', 500)),
+    })
+
+
 @smart_tech_bp.route('/profil')
 @smart_tech_required
 def profil():

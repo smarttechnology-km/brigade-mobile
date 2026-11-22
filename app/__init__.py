@@ -964,6 +964,53 @@ def create_app():
                                 conn.execute(text("ALTER TABLE exam_attempts ADD COLUMN paused_at DATETIME"))
                                 logger.info("Added exam_attempts.paused_at column")
 
+                        # practice_attempts patches (pratique du Code accessible sans connexion :
+                        # vehicle_id devient optionnel, un device_id identifie les sessions
+                        # anonymes. SQLite ne sait pas relâcher une contrainte NOT NULL en
+                        # place, d'où la reconstruction de table ci-dessous.)
+                        pa_table_exists = conn.execute(
+                            text("SELECT name FROM sqlite_master WHERE type='table' AND name='practice_attempts'")
+                        ).first() is not None
+                        if pa_table_exists:
+                            pa_info = conn.execute(text("PRAGMA table_info(practice_attempts)")).fetchall()
+                            pa_cols = {r[1] for r in pa_info}
+                            if 'device_id' not in pa_cols:
+                                conn.execute(text("ALTER TABLE practice_attempts ADD COLUMN device_id VARCHAR(120)"))
+                                logger.info("Added practice_attempts.device_id column")
+                            if 'phone' not in pa_cols:
+                                conn.execute(text("ALTER TABLE practice_attempts ADD COLUMN phone VARCHAR(30)"))
+                                logger.info("Added practice_attempts.phone column")
+                            pa_vehicle_notnull = any(r[1] == 'vehicle_id' and r[3] == 1 for r in pa_info)
+                            if pa_vehicle_notnull:
+                                conn.execute(text("""
+                                    CREATE TABLE practice_attempts_new (
+                                        id INTEGER PRIMARY KEY,
+                                        vehicle_id INTEGER REFERENCES vehicles(id),
+                                        device_id VARCHAR(120),
+                                        phone VARCHAR(30),
+                                        status VARCHAR(20) NOT NULL DEFAULT 'pending_payment',
+                                        is_paid BOOLEAN NOT NULL DEFAULT 0,
+                                        payment_id INTEGER REFERENCES payments(id),
+                                        price_kmf FLOAT,
+                                        question_ids TEXT,
+                                        answers TEXT,
+                                        total_questions INTEGER,
+                                        min_correct_required INTEGER,
+                                        score INTEGER,
+                                        passed BOOLEAN,
+                                        created_at DATETIME NOT NULL,
+                                        started_at DATETIME,
+                                        submitted_at DATETIME
+                                    )
+                                """))
+                                conn.execute(text("""
+                                    INSERT INTO practice_attempts_new (id, vehicle_id, device_id, phone, status, is_paid, payment_id, price_kmf, question_ids, answers, total_questions, min_correct_required, score, passed, created_at, started_at, submitted_at)
+                                    SELECT id, vehicle_id, device_id, phone, status, is_paid, payment_id, price_kmf, question_ids, answers, total_questions, min_correct_required, score, passed, created_at, started_at, submitted_at FROM practice_attempts
+                                """))
+                                conn.execute(text("DROP TABLE practice_attempts"))
+                                conn.execute(text("ALTER TABLE practice_attempts_new RENAME TO practice_attempts"))
+                                logger.info("Rebuilt practice_attempts table to make vehicle_id nullable (anonymous practice)")
+
                         # carte_grise_setting patches
                         cgs_cols_res = conn.execute(text("PRAGMA table_info(carte_grise_setting)"))
                         cgs_cols = {r[1] for r in cgs_cols_res.fetchall()}
@@ -1318,6 +1365,10 @@ def create_app():
                         "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
                         "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS approved_by VARCHAR(100)",
                         "ALTER TABLE license_add_requests ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP",
+                        # practice_attempts (pratique du Code accessible sans connexion)
+                        "ALTER TABLE practice_attempts ADD COLUMN IF NOT EXISTS device_id VARCHAR(120)",
+                        "ALTER TABLE practice_attempts ADD COLUMN IF NOT EXISTS phone VARCHAR(30)",
+                        "ALTER TABLE practice_attempts ALTER COLUMN vehicle_id DROP NOT NULL",
                     ]
                     # Each patch runs in its own transaction: on Postgres, one failed
                     # statement poisons the rest of a shared transaction (every later
