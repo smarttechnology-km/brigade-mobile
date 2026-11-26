@@ -1039,9 +1039,12 @@ function filterDossiers() {
   var filtered = allDossiers.filter(function(d) {
     var matchSearch = !q || (d.nom + ' ' + d.prenom + ' ' + (d.dossier_number || '')).toLowerCase().includes(q);
     var matchIsland = !island || (d.country || '') === island;
-    var matchStep  = !currentStepFilter || (currentStepFilter === 1
-      ? d.awaiting_payment
-      : (d.current_step === currentStepFilter && d.status === 'en_cours'));
+    // Step 1 covers documents + paiement + confirmation du reçu — a dossier
+    // that's just been paid still reports current_step 1 (step1_validated_at
+    // isn't set until the receipt is confirmed too), so it must keep matching
+    // tab 1 instead of falling through every tab once awaiting_payment flips
+    // to false, which used to make it vanish from the whole dashboard.
+    var matchStep  = !currentStepFilter || (d.current_step === currentStepFilter && d.status === 'en_cours');
     return matchSearch && matchIsland && matchStep;
   });
 
