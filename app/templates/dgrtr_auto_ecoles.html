@@ -31,11 +31,12 @@
               <th>Responsable</th>
               <th>Téléphone</th>
               <th>Statut</th>
+              <th>Conformité</th>
               <th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody id="ae-tbody">
-            <tr><td colspan="7" class="text-center text-muted py-4">Chargement...</td></tr>
+            <tr><td colspan="8" class="text-center text-muted py-4">Chargement...</td></tr>
           </tbody>
         </table>
       </div>
@@ -57,7 +58,7 @@ function aeLoadList() {
   fetch('/api/auto-ecoles', { credentials: 'same-origin' })
     .then(r => r.json())
     .then(items => { aeAllSchools = Array.isArray(items) ? items : []; aeRenderList(); })
-    .catch(() => { document.getElementById('ae-tbody').innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Erreur de chargement.</td></tr>'; });
+    .catch(() => { document.getElementById('ae-tbody').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Erreur de chargement.</td></tr>'; });
 }
 
 function aeRenderList() {
@@ -66,7 +67,7 @@ function aeRenderList() {
   const items = !q ? aeAllSchools : aeAllSchools.filter(a => (a.name || '').toLowerCase().includes(q));
 
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Aucune auto-école trouvée.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Aucune auto-école trouvée.</td></tr>';
     return;
   }
 
@@ -78,6 +79,7 @@ function aeRenderList() {
       <td>${aeEsc(a.manager_name) || '—'}</td>
       <td>${aeEsc(a.phone) || '—'}</td>
       <td>${a.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+      <td>${a.is_conforme ? '<span class="badge bg-success">Conforme</span>' : '<span class="badge bg-danger">Non conforme</span>'}</td>
       <td class="text-end">
         <a class="btn btn-sm btn-outline-primary" href="/dgrtr/auto-ecoles/${a.id}" title="Voir le détail"><i class="fas fa-eye"></i></a>
         <a class="btn btn-sm btn-outline-secondary" href="/dgrtr/auto-ecoles/${a.id}/modifier" title="Modifier"><i class="fas fa-edit"></i></a>

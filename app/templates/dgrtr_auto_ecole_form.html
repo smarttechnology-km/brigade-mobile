@@ -90,7 +90,7 @@
         <input type="text" id="ae-agrement-number" class="form-control" placeholder="Ex: AE-2026-0001" value="{{ auto_ecole.agrement_number if auto_ecole else '' }}">
       </div>
       <div class="col-md-4 ae-field">
-        <label>Île <span class="text-danger">*</span></label>
+        <label>Île</label>
         <select id="ae-island" class="form-select" {% if current_user.dgrtr_type == 'directeur_regional' %}disabled{% endif %}>
           <option value="">-- Sélectionner --</option>
           <option value="Grande Comore">Grande Comore</option>
@@ -108,6 +108,13 @@
       <div class="col-md-4 ae-field">
         <label>Nombre de moniteurs</label>
         <input type="number" min="0" id="ae-instructors" class="form-control" value="{{ auto_ecole.instructors_count if auto_ecole and auto_ecole.instructors_count is not none else '' }}">
+      </div>
+      <div class="col-md-4 ae-field d-flex flex-column justify-content-end">
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input" id="ae-conforme" {% if auto_ecole and auto_ecole.is_conforme %}checked{% endif %}>
+          <label class="form-check-label" for="ae-conforme">Auto-école conforme</label>
+        </div>
+        <div class="form-text">Numéro d'agrément, île et véhicule sont optionnels, mais s'il en manque un, l'auto-école sera automatiquement marquée non conforme.</div>
       </div>
     </div>
     {% if not auto_ecole %}
@@ -156,8 +163,8 @@
     <div class="ae-section-head">
       <span class="ae-section-icon ae-icon-amber"><i class="fas fa-car"></i></span>
       <div>
-        <p class="ae-section-title">Véhicules <span class="text-danger">*</span></p>
-        <p class="ae-section-sub">Immatriculations des véhicules utilisés pour la formation — doivent déjà exister dans le système, au moins un requis</p>
+        <p class="ae-section-title">Véhicules</p>
+        <p class="ae-section-sub">Immatriculations des véhicules utilisés pour la formation — doivent déjà exister dans le système. Optionnel, mais sans véhicule l'auto-école sera marquée non conforme.</p>
       </div>
     </div>
 
@@ -226,10 +233,6 @@ function aeGoToStep(n) {
     step1Err.textContent = '';
     if (!document.getElementById('ae-name').value.trim()) {
       step1Err.textContent = "Le nom de l'auto-école est requis.";
-      return;
-    }
-    if (!document.getElementById('ae-island').value) {
-      step1Err.textContent = "L'île est requise.";
       return;
     }
   }
@@ -330,16 +333,11 @@ function aeSaveInfo() {
     email: document.getElementById('ae-email').value.trim(),
     agrement_date: document.getElementById('ae-agrement-date').value,
     instructors_count: document.getElementById('ae-instructors').value,
+    is_conforme: document.getElementById('ae-conforme').checked,
   };
   if (!payload.name) { errEl.textContent = "Le nom de l'auto-école est requis."; return; }
-  if (!payload.agrement_number) { errEl.textContent = "Le numéro d'agrément est requis."; return; }
-  if (!payload.island) { errEl.textContent = "L'île est requise."; return; }
 
   if (!AE_IS_EDIT) {
-    if (!aePendingVehicules.length) {
-      errEl.textContent = 'Au moins un véhicule est requis.';
-      return;
-    }
     payload.vehicules = aePendingVehicules.map(function (v) { return v.license_plate; });
   }
 

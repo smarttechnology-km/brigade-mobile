@@ -20,6 +20,7 @@
         {% if auto_ecole.agrement_number %}N° {{ auto_ecole.agrement_number }} · {% endif %}
         {{ auto_ecole.island or 'Île non renseignée' }}
         {% if auto_ecole.is_active %} · <span class="text-success">Active</span>{% else %} · <span class="text-secondary">Inactive</span>{% endif %}
+        · {% if auto_ecole.is_conforme %}<span class="badge bg-success">Conforme</span>{% else %}<span class="badge bg-danger">Non conforme</span>{% endif %}
       </small>
     </div>
     <div class="d-flex gap-2">
