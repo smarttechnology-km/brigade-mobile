@@ -90,7 +90,7 @@
         <input type="text" id="ae-agrement-number" class="form-control" placeholder="Ex: AE-2026-0001" value="{{ auto_ecole.agrement_number if auto_ecole else '' }}">
       </div>
       <div class="col-md-4 ae-field">
-        <label>Île</label>
+        <label>Île <span class="text-danger">*</span></label>
         <select id="ae-island" class="form-select" {% if current_user.dgrtr_type == 'directeur_regional' %}disabled{% endif %}>
           <option value="">-- Sélectionner --</option>
           <option value="Grande Comore">Grande Comore</option>
@@ -228,6 +228,10 @@ function aeGoToStep(n) {
       step1Err.textContent = "Le nom de l'auto-école est requis.";
       return;
     }
+    if (!document.getElementById('ae-island').value) {
+      step1Err.textContent = "L'île est requise.";
+      return;
+    }
   }
   AE_CURRENT_STEP = n;
   aeUpdateStepper();
@@ -329,6 +333,7 @@ function aeSaveInfo() {
   };
   if (!payload.name) { errEl.textContent = "Le nom de l'auto-école est requis."; return; }
   if (!payload.agrement_number) { errEl.textContent = "Le numéro d'agrément est requis."; return; }
+  if (!payload.island) { errEl.textContent = "L'île est requise."; return; }
 
   if (!AE_IS_EDIT) {
     if (!aePendingVehicules.length) {
