@@ -2610,6 +2610,7 @@ class AutoEcole(db.Model):
     address = db.Column(db.String(255), nullable=True)
     phone = db.Column(db.String(30), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    is_conforme = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=now_comoros)
     created_by = db.Column(db.String(100), nullable=True)
 
@@ -2620,6 +2621,7 @@ class AutoEcole(db.Model):
         return {
             'id': self.id,
             'name': self.name,
+            'is_conforme': self.is_conforme,
             'agrement_number': self.agrement_number or '',
             'agrement_date': self.agrement_date.strftime('%d/%m/%Y') if self.agrement_date else '',
             'manager_name': self.manager_name or '',

@@ -6338,14 +6338,14 @@ def create_auto_ecole():
         return jsonify({'error': "Le nom de l'auto-école est requis."}), 400
     if AutoEcole.query.filter(AutoEcole.name.ilike(name)).first():
         return jsonify({'error': 'Une auto-école avec ce nom existe déjà.'}), 400
-    if not agrement_number:
-        return jsonify({'error': "Le numéro d'agrément est requis."}), 400
-    if AutoEcole.query.filter(AutoEcole.agrement_number.ilike(agrement_number)).first():
+    # Le reste (agrément, île, véhicules) n'est plus obligatoire pour créer
+    # l'auto-école — un dossier incomplet est juste marqué non conforme au lieu
+    # d'être bloqué, pour que l'enregistrement initial ne traîne pas en attendant
+    # chaque pièce.
+    if agrement_number and AutoEcole.query.filter(AutoEcole.agrement_number.ilike(agrement_number)).first():
         return jsonify({'error': 'Une auto-école avec ce numéro d\'agrément existe déjà.'}), 400
 
     plates = [(p or '').strip().upper() for p in (data.get('vehicules') or []) if (p or '').strip()]
-    if not plates:
-        return jsonify({'error': 'Au moins un véhicule est requis.'}), 400
     missing = [p for p in plates if not Vehicle.query.filter(Vehicle.license_plate.ilike(p)).first()]
     if missing:
         return jsonify({'error': "Véhicule(s) introuvable(s) dans le système : " + ', '.join(missing)}), 400
@@ -6354,12 +6354,11 @@ def create_auto_ecole():
     if getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional':
         island = getattr(current_user, 'country', None) or island
 
-    if not island:
-        return jsonify({'error': "L'île est requise."}), 400
+    is_complete = bool(agrement_number and island and plates)
 
     ae = AutoEcole(
         name=name,
-        agrement_number=agrement_number,
+        agrement_number=agrement_number or None,
         agrement_date=agrement_date,
         manager_name=manager_name or None,
         email=email or None,
@@ -6367,6 +6366,7 @@ def create_auto_ecole():
         island=island or None,
         address=address or None,
         phone=phone or None,
+        is_conforme=bool(data.get('is_conforme')) if is_complete else False,
         created_by=current_user.username,
     )
     db.session.add(ae)
@@ -6392,21 +6392,20 @@ def update_auto_ecole(auto_ecole_id):
     agrement_number = (data.get('agrement_number') or '').strip()
     if not name:
         return jsonify({'error': "Le nom de l'auto-école est requis."}), 400
-    if not agrement_number:
-        return jsonify({'error': "Le numéro d'agrément est requis."}), 400
     island = (data.get('island') or '').strip()
-    if not island:
-        return jsonify({'error': "L'île est requise."}), 400
+    # Agrément, île et véhicules restent optionnels ici aussi (voir create_auto_ecole) —
+    # un dossier incomplet est simplement non conforme plutôt que bloqué.
 
     existing = AutoEcole.query.filter(AutoEcole.name.ilike(name), AutoEcole.id != auto_ecole_id).first()
     if existing:
         return jsonify({'error': 'Une auto-école avec ce nom existe déjà.'}), 400
 
-    existing_num = AutoEcole.query.filter(
-        AutoEcole.agrement_number.ilike(agrement_number), AutoEcole.id != auto_ecole_id
-    ).first()
-    if existing_num:
-        return jsonify({'error': 'Une auto-école avec ce numéro d\'agrément existe déjà.'}), 400
+    if agrement_number:
+        existing_num = AutoEcole.query.filter(
+            AutoEcole.agrement_number.ilike(agrement_number), AutoEcole.id != auto_ecole_id
+        ).first()
+        if existing_num:
+            return jsonify({'error': 'Une auto-école avec ce numéro d\'agrément existe déjà.'}), 400
 
     instructors_count = data.get('instructors_count')
     try:
@@ -6414,15 +6413,18 @@ def update_auto_ecole(auto_ecole_id):
     except (ValueError, TypeError):
         instructors_count = None
 
+    is_complete = bool(agrement_number and island and ae.vehicules.count() > 0)
+
     ae.name = name
-    ae.agrement_number = agrement_number
-    ae.island = island
+    ae.agrement_number = agrement_number or None
+    ae.island = island or None
     ae.address = (data.get('address') or '').strip() or None
     ae.phone = (data.get('phone') or '').strip() or None
     ae.manager_name = (data.get('manager_name') or '').strip() or None
     ae.email = (data.get('email') or '').strip() or None
     ae.agrement_date = _parse_date_or_none(data.get('agrement_date'))
     ae.instructors_count = instructors_count
+    ae.is_conforme = bool(data.get('is_conforme')) if is_complete else False
     db.session.commit()
     return jsonify(ae.to_dict())
 

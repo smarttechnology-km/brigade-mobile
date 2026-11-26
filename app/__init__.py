@@ -922,6 +922,16 @@ def create_app():
                                 if col not in ae_cols:
                                     conn.execute(text(sql))
                                     logger.info(f"Added auto_ecoles.{col} column")
+                            # is_comfort was this column's working name for one commit before
+                            # settling on is_conforme — rename in place so early local DBs
+                            # that already ran that migration don't lose the column's data.
+                            if 'is_conforme' not in ae_cols:
+                                if 'is_comfort' in ae_cols:
+                                    conn.execute(text("ALTER TABLE auto_ecoles RENAME COLUMN is_comfort TO is_conforme"))
+                                    logger.info("Renamed auto_ecoles.is_comfort to is_conforme")
+                                else:
+                                    conn.execute(text("ALTER TABLE auto_ecoles ADD COLUMN is_conforme BOOLEAN NOT NULL DEFAULT 0"))
+                                    logger.info("Added auto_ecoles.is_conforme column")
 
                         # exam_settings patches
                         es_table_exists = conn.execute(
@@ -1302,6 +1312,7 @@ def create_app():
                         "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS manager_name VARCHAR(150)",
                         "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS email VARCHAR(150)",
                         "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS instructors_count INTEGER",
+                        "ALTER TABLE auto_ecoles ADD COLUMN IF NOT EXISTS is_conforme BOOLEAN NOT NULL DEFAULT FALSE",
                         # exam_settings
                         "ALTER TABLE exam_settings ADD COLUMN IF NOT EXISTS link_token VARCHAR(32)",
                         # exam_questions
