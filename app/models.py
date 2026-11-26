@@ -3047,6 +3047,7 @@ class LicenseDossier(db.Model):
             'exam_required': self.dossier_type == 'nouveau',
             'exam_passed': self.exam_passed,
             'exam_last_attempt': {
+                'id': last_attempt.id,
                 'score': last_attempt.score,
                 'total_questions': last_attempt.total_questions,
                 'passed': last_attempt.passed,

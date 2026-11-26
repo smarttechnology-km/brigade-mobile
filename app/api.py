@@ -6232,6 +6232,24 @@ def _parse_date_or_none(value):
         return None
 
 
+def _fetch_photo_bytes(stored_value, local_folder):
+    """Raw bytes for a stored photo (Cloudinary URL or local filename under
+    UPLOAD_FOLDER/<local_folder>), for embedding into a generated PDF. None if
+    missing or unreachable."""
+    if not stored_value:
+        return None
+    try:
+        if stored_value.startswith('https://'):
+            import urllib.request
+            with urllib.request.urlopen(stored_value, timeout=8) as resp:
+                return resp.read()
+        local_path = os.path.join(current_app.config['UPLOAD_FOLDER'], local_folder, stored_value)
+        with open(local_path, 'rb') as f:
+            return f.read()
+    except Exception:
+        return None
+
+
 @api_bp.route('/auto-ecoles', methods=['GET'])
 @login_required
 def list_auto_ecoles():
@@ -7758,6 +7776,145 @@ def get_dossier_exam_status(dossier_id):
         'exam_last_attempt': data['exam_last_attempt'],
         'nin': d.nin or '',
     })
+
+
+@api_bp.route('/dossiers-permis/<int:dossier_id>/exam-attempts/<int:attempt_id>/export.pdf', methods=['GET'])
+@login_required
+def export_dossier_exam_attempt(dossier_id, attempt_id):
+    """PDF récapitulatif des réponses du candidat à une tentative d'examen
+    théorique — une question par ligne avec sa réponse, la bonne réponse et
+    si c'était correct, pour archivage dans le dossier physique."""
+    if not hasattr(current_user, 'role') or current_user.role not in ('administrateur', 'dgrtr'):
+        return jsonify({'error': 'Accès refusé'}), 403
+    from app.models import ExamAttempt, ExamQuestion
+
+    d = LicenseDossier.query.get_or_404(dossier_id)
+    attempt = ExamAttempt.query.get_or_404(attempt_id)
+    if attempt.dossier_id != d.id:
+        return jsonify({'error': 'Cette tentative ne correspond pas à ce dossier.'}), 403
+
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from io import BytesIO
+
+        question_ids = json.loads(attempt.question_ids or '[]')
+        answers = json.loads(attempt.answers or '{}')
+        questions = {q.id: q for q in ExamQuestion.query.filter(ExamQuestion.id.in_(question_ids)).all()}
+        option_letters = ['a', 'b', 'c', 'd']
+
+        pdf_buffer = BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm,
+                                 leftMargin=1.5*cm, rightMargin=1.5*cm)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('Title', parent=styles['Normal'], fontSize=14, fontName='Helvetica-Bold',
+                                      alignment=TA_CENTER, spaceAfter=10)
+        meta_style = ParagraphStyle('Meta', parent=styles['Normal'], fontSize=10, alignment=TA_CENTER,
+                                     textColor=colors.grey, spaceAfter=14)
+        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=9, leading=12)
+        info_label_style = ParagraphStyle('InfoLabel', parent=styles['Normal'], fontSize=8.5,
+                                           textColor=colors.grey, alignment=TA_LEFT)
+        info_value_style = ParagraphStyle('InfoValue', parent=styles['Normal'], fontSize=10,
+                                           fontName='Helvetica-Bold', alignment=TA_LEFT, spaceAfter=6)
+
+        def info_pair(label, value):
+            return [Paragraph(label, info_label_style), Paragraph(value or '—', info_value_style)]
+
+        photo_cell = ''
+        photo_bytes = _fetch_photo_bytes(d.photo_filename, 'license_photos')
+        if photo_bytes:
+            try:
+                from PIL import Image as PILImage
+                # Force the decode now (lazy otherwise) so a corrupt file is
+                # caught here instead of crashing the whole PDF during build().
+                PILImage.open(BytesIO(photo_bytes)).load()
+                photo_cell = RLImage(BytesIO(photo_bytes), width=3*cm, height=4*cm)
+            except Exception:
+                photo_cell = ''
+
+        info_rows = [
+            info_pair('Nom et prénom', f"{d.nom or ''} {d.prenom or ''}".strip()),
+            info_pair('Date / lieu de naissance',
+                      f"{d.date_naissance.strftime('%d/%m/%Y') if d.date_naissance else '—'} à {d.lieu_naissance or '—'}"),
+            info_pair('Sexe / Nationalité', f"{d.sexe or '—'} / {d.nationalite or '—'}"),
+            info_pair('NIN', d.nin),
+            info_pair('Téléphone', d.telephone),
+            info_pair('Dossier', d.dossier_number or f'#{d.id}'),
+        ]
+        info_table_inner = Table(info_rows, colWidths=[6.5*cm, 6.5*cm])
+        info_table_inner.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ]))
+
+        header_table = Table([[photo_cell, info_table_inner]], colWidths=[3.5*cm, 13.5*cm])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+
+        elements = [
+            Paragraph("Réponses à l'examen théorique du Code de la route", title_style),
+            header_table,
+            Spacer(1, 10),
+            Paragraph(
+                f"Score {attempt.score}/{attempt.total_questions} "
+                f"({'Réussi' if attempt.passed else 'Échoué'}) — le {attempt.exam_date.strftime('%d/%m/%Y') if attempt.exam_date else ''}",
+                meta_style,
+            ),
+            Spacer(1, 6),
+        ]
+
+        table_data = [['#', 'Question', 'Réponse du candidat', 'Bonne réponse', 'Résultat']]
+        for idx, qid in enumerate(question_ids, start=1):
+            q = questions.get(qid)
+            if not q:
+                continue
+            given = answers.get(str(qid))
+            correct = given is not None and given == q.correct_option
+            given_text = f"{given.upper()}) {getattr(q, 'option_' + given, '')}" if given in option_letters else 'Sans réponse'
+            correct_text = f"{q.correct_option.upper()}) {getattr(q, 'option_' + q.correct_option, '')}"
+            table_data.append([
+                str(idx),
+                Paragraph(q.question_text, cell_style),
+                Paragraph(given_text, cell_style),
+                Paragraph(correct_text, cell_style),
+                '✓' if correct else '✗',
+            ])
+
+        table = Table(table_data, colWidths=[1*cm, 7*cm, 4.3*cm, 4.3*cm, 1.8*cm], repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f2937')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (4, 0), (4, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')]),
+        ]))
+        elements.append(table)
+
+        doc.build(elements)
+        pdf_buffer.seek(0)
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'reponses_examen_dossier_{d.id}.pdf',
+        )
+    except Exception as e:
+        import traceback
+        print(f"Exam attempt PDF export error: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': f"Impossible de générer le PDF : {e}"}), 500
 
 
 @api_bp.route('/dossiers-permis/<int:dossier_id>/step2', methods=['POST'])

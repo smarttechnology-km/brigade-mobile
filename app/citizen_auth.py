@@ -1798,6 +1798,103 @@ def citizen_practice_exam_get_attempt(attempt_id):
     return jsonify(data)
 
 
+@citizen_auth_bp.route('/practice-exam/attempts/<int:attempt_id>/export.pdf', methods=['GET'])
+@jwt_required(optional=True)
+def citizen_practice_exam_export(attempt_id):
+    """PDF récapitulatif des réponses d'une session de pratique — pas d'identité
+    du citoyen dedans (nom, photo, NIN…) puisque ce n'est pas l'examen officiel,
+    juste un entraînement."""
+    from app.models import PracticeAttempt, ExamQuestion
+
+    field, value = _practice_identity()
+    attempt = PracticeAttempt.query.get_or_404(attempt_id)
+    if not field or getattr(attempt, field) != value:
+        return jsonify({'error': 'Accès refusé'}), 403
+    if not attempt.submitted_at:
+        return jsonify({'error': "Cette session n'est pas encore terminée."}), 400
+
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        from flask import send_file
+        from io import BytesIO
+
+        question_ids = json.loads(attempt.question_ids or '[]')
+        answers = json.loads(attempt.answers or '{}')
+        questions = {q.id: q for q in ExamQuestion.query.filter(ExamQuestion.id.in_(question_ids)).all()}
+        option_letters = ['a', 'b', 'c', 'd']
+
+        pdf_buffer = BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm,
+                                 leftMargin=1.5*cm, rightMargin=1.5*cm)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('Title', parent=styles['Normal'], fontSize=14, fontName='Helvetica-Bold',
+                                      alignment=TA_CENTER, spaceAfter=4)
+        meta_style = ParagraphStyle('Meta', parent=styles['Normal'], fontSize=10, alignment=TA_CENTER,
+                                     textColor=colors.grey, spaceAfter=14)
+        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=9, leading=12)
+
+        elements = [
+            Paragraph("Réponses à l'examen théorique du Code de la route", title_style),
+            Paragraph(
+                f"Pratique — Score {attempt.score}/{attempt.total_questions} "
+                f"({'Réussi' if attempt.passed else 'Non réussi'}) — "
+                f"le {attempt.submitted_at.strftime('%d/%m/%Y') if attempt.submitted_at else ''}",
+                meta_style,
+            ),
+            Spacer(1, 6),
+        ]
+
+        table_data = [['#', 'Question', 'Votre réponse', 'Bonne réponse', 'Résultat']]
+        for idx, qid in enumerate(question_ids, start=1):
+            q = questions.get(qid)
+            if not q:
+                continue
+            given = answers.get(str(qid))
+            correct = given is not None and given == q.correct_option
+            given_text = f"{given.upper()}) {getattr(q, 'option_' + given, '')}" if given in option_letters else 'Sans réponse'
+            correct_text = f"{q.correct_option.upper()}) {getattr(q, 'option_' + q.correct_option, '')}"
+            table_data.append([
+                str(idx),
+                Paragraph(q.question_text, cell_style),
+                Paragraph(given_text, cell_style),
+                Paragraph(correct_text, cell_style),
+                '✓' if correct else '✗',
+            ])
+
+        table = Table(table_data, colWidths=[1*cm, 7*cm, 4.3*cm, 4.3*cm, 1.8*cm], repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f2937')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (4, 0), (4, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')]),
+        ]))
+        elements.append(table)
+
+        doc.build(elements)
+        pdf_buffer.seek(0)
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'reponses_pratique_code_route_{attempt.id}.pdf',
+        )
+    except Exception as e:
+        import traceback
+        print(f"Practice attempt PDF export error: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': f"Impossible de générer le PDF : {e}"}), 500
+
+
 @citizen_auth_bp.route('/practice-exam/attempts/<int:attempt_id>/submit', methods=['POST'])
 @jwt_required(optional=True)
 def citizen_practice_exam_submit(attempt_id):
