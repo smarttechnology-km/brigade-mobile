@@ -6336,6 +6336,9 @@ def create_auto_ecole():
     if getattr(current_user, 'role', '') == 'dgrtr' and getattr(current_user, 'dgrtr_type', None) == 'directeur_regional':
         island = getattr(current_user, 'country', None) or island
 
+    if not island:
+        return jsonify({'error': "L'île est requise."}), 400
+
     ae = AutoEcole(
         name=name,
         agrement_number=agrement_number,
@@ -6373,6 +6376,9 @@ def update_auto_ecole(auto_ecole_id):
         return jsonify({'error': "Le nom de l'auto-école est requis."}), 400
     if not agrement_number:
         return jsonify({'error': "Le numéro d'agrément est requis."}), 400
+    island = (data.get('island') or '').strip()
+    if not island:
+        return jsonify({'error': "L'île est requise."}), 400
 
     existing = AutoEcole.query.filter(AutoEcole.name.ilike(name), AutoEcole.id != auto_ecole_id).first()
     if existing:
@@ -6392,7 +6398,7 @@ def update_auto_ecole(auto_ecole_id):
 
     ae.name = name
     ae.agrement_number = agrement_number
-    ae.island = (data.get('island') or '').strip() or None
+    ae.island = island
     ae.address = (data.get('address') or '').strip() or None
     ae.phone = (data.get('phone') or '').strip() or None
     ae.manager_name = (data.get('manager_name') or '').strip() or None
