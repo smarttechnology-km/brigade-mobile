@@ -1740,17 +1740,26 @@ function applyStep2bExamGating(d) {
   saveBtn.title = locked ? "Disponible une fois l'examen théorique réussi" : '';
 }
 
+function examAttemptExportLink(dossierId, attempt) {
+  if (!attempt || !attempt.id) return '';
+  return ' <a href="/api/dossiers-permis/' + dossierId + '/exam-attempts/' + attempt.id + '/export.pdf" ' +
+    'class="btn btn-sm btn-outline-secondary ms-2" target="_blank" rel="noopener">' +
+    '<i class="fas fa-file-pdf me-1"></i>Réponses du candidat</a>';
+}
+
 function renderExamStatus(d) {
   var el = document.getElementById('s2-exam-status-text');
   if (d.exam_passed) {
     var a = d.exam_last_attempt;
     el.innerHTML = '<span class="badge bg-success me-2">Réussi</span>' +
-      (a ? ('Score ' + a.score + '/' + a.total_questions + (a.submitted_at ? ' — le ' + a.submitted_at : '')) : '');
+      (a ? ('Score ' + a.score + '/' + a.total_questions + (a.submitted_at ? ' — le ' + a.submitted_at : '')) : '') +
+      examAttemptExportLink(d.id, a);
   } else if (d.exam_last_attempt && d.exam_last_attempt.submitted_at) {
     var a2 = d.exam_last_attempt;
     el.innerHTML = '<span class="badge bg-danger me-2">Échoué</span>' +
       'Score ' + a2.score + '/' + a2.total_questions + ' le ' + a2.exam_date +
-      ' — le candidat repassera l\'examen à la prochaine date fixée par le Directeur Général.';
+      ' — le candidat repassera l\'examen à la prochaine date fixée par le Directeur Général.' +
+      examAttemptExportLink(d.id, a2);
   } else {
     el.innerHTML = '<span class="badge bg-secondary me-2">En attente</span>' +
       'Le candidat n\'a pas encore passé l\'examen théorique' + (d.nin ? ' (NIN : ' + d.nin + ')' : ' — NIN manquant sur le dossier') + '.';
