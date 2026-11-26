@@ -57,6 +57,10 @@
           </tbody>
         </table>
       </div>
+      <div class="card-footer bg-transparent d-flex align-items-center justify-content-between flex-wrap gap-2" id="exam-q-pagination" style="display:none;">
+        <span class="small text-muted" id="exam-q-pagination-info"></span>
+        <nav><ul class="pagination pagination-sm mb-0" id="exam-q-pagination-list"></ul></nav>
+      </div>
   </div>
 </div>
 
@@ -203,6 +207,8 @@
 <script>
 var EXAM_CAN_MANAGE_SETTINGS = {{ (current_user.role == 'administrateur' or current_user.dgrtr_type == 'directeur_general') | tojson }};
 var examQuestions = [];
+var examQPage = 1;
+var EXAM_Q_PER_PAGE = 20;
 var examSettings = null;
 var examImageFile = null;
 var examImageRemoved = false;
@@ -380,7 +386,11 @@ function saveExamSettings() {
 function loadExamQuestions() {
   fetch('/api/exam/questions', { credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
-    .then(function (items) { examQuestions = Array.isArray(items) ? items : []; renderExamQuestions(); })
+    .then(function (items) {
+      examQuestions = Array.isArray(items) ? items : [];
+      examQPage = 1;
+      renderExamQuestions();
+    })
     .catch(function () {
       document.getElementById('exam-q-tbody').innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Erreur de chargement.</td></tr>';
     });
@@ -395,9 +405,16 @@ function renderExamQuestions() {
   var tbody = document.getElementById('exam-q-tbody');
   if (!examQuestions.length) {
     tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Aucune question enregistrée.</td></tr>';
+    document.getElementById('exam-q-pagination').style.display = 'none';
     return;
   }
-  tbody.innerHTML = examQuestions.map(function (q) {
+
+  var pages = Math.max(1, Math.ceil(examQuestions.length / EXAM_Q_PER_PAGE));
+  if (examQPage > pages) examQPage = pages;
+  var startIdx = (examQPage - 1) * EXAM_Q_PER_PAGE;
+  var pageItems = examQuestions.slice(startIdx, startIdx + EXAM_Q_PER_PAGE);
+
+  tbody.innerHTML = pageItems.map(function (q) {
     var thumb = q.image_url ? '<img src="' + q.image_url + '" class="exam-q-thumb">' : '<span class="text-muted"><i class="fas fa-image"></i></span>';
     var correctText = q['option_' + q.correct_option] || '';
     var correctImgUrl = q['option_' + q.correct_option + '_image_url'];
@@ -414,6 +431,47 @@ function renderExamQuestions() {
       '</td>' +
       '</tr>';
   }).join('');
+
+  renderExamQPagination(examQuestions.length, pages, startIdx);
+}
+
+function goToExamQPage(p) {
+  examQPage = p;
+  renderExamQuestions();
+}
+window.goToExamQPage = goToExamQPage;
+
+function renderExamQPagination(total, pages, startIdx) {
+  var wrap = document.getElementById('exam-q-pagination');
+  if (pages <= 1) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'flex';
+
+  var startItem = startIdx + 1;
+  var endItem = Math.min(total, startIdx + EXAM_Q_PER_PAGE);
+  document.getElementById('exam-q-pagination-info').textContent = startItem + '–' + endItem + ' sur ' + total;
+
+  // Windowed page numbers (at most ~5 centered on the current page), same
+  // pattern as the other admin list pages in this app.
+  var windowStart = Math.max(1, examQPage - 2);
+  var windowEnd = Math.min(pages, examQPage + 2);
+
+  function item(label, page, disabled, active) {
+    var cls = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+    return '<li class="' + cls + '"><a class="page-link" href="#" onclick="event.preventDefault();goToExamQPage(' + page + ');">' + label + '</a></li>';
+  }
+
+  var h = '';
+  h += item('&laquo;', 1, examQPage === 1, false);
+  h += item('&lsaquo;', examQPage - 1, examQPage <= 1, false);
+  for (var p = windowStart; p <= windowEnd; p++) {
+    h += item(String(p), p, false, p === examQPage);
+  }
+  h += item('&rsaquo;', examQPage + 1, examQPage >= pages, false);
+  h += item('&raquo;', pages, examQPage === pages, false);
+  document.getElementById('exam-q-pagination-list').innerHTML = h;
 }
 
 var examOptionImageFile = { a: null, b: null, c: null, d: null };
